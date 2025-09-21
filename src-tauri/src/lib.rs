@@ -27,30 +27,14 @@ fn generate_log(){
  }
 
 
-use std::error::Error;
-
-fn db() -> Result<(), Box<dyn Error>> {
-    fs::create_dir_all("../data")?;
-    let conn = Connection::open("../data/app.db")?;
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS t (id INTEGER PRIMARY KEY, name TEXT)",
-        [],
-    )?;
-    conn.execute("INSERT INTO t (name) VALUES (?)", params!["Alice"])?;
-    let mut stmt = conn.prepare("SELECT id, name FROM t")?;
-    let rows = stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?;
-    for row in rows {
-        let (id, name) = row?;
-        println!("{id}: {name}");
-    }
-    Ok(())
-}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    if let Err(e) = db() {
+    let conn = db::open();
+    if let Err(e) =conn {
         eprintln!("DB error: {e}");
     }
+    
     generate_log();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
