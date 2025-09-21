@@ -1,25 +1,13 @@
-use std::error::Error;
 use std::fs;
-use std::fs::File;
-use std::path::{PathBuf, Path};
 use rusqlite::{params, Connection, Result};
-
+use crate::log::Log;
 const PATH_FOLDER: &str = "../data";
 const PATH: &str = "../data/app.db";
-
-pub struct Log {
-    pub id: i32,
-    pub app: String,
-    pub timestamp: u128,
-}
 
 pub fn open() -> Result<Connection, Box<dyn std::error::Error>> {
     fs::create_dir_all(PATH_FOLDER)?;
     Ok(Connection::open(PATH)?)
 }
-
-
-
 pub fn create_table(conn: &Connection) -> Result<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS log (
