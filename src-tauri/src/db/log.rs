@@ -1,13 +1,26 @@
+#[derive(Debug)]
+pub struct Log {
+    pub id: Option<i32>,
+    pub app: String,
+    pub timestamp: u128,
+}
+
+impl Log {
+    pub fn new(id:Option<i32>, app: String, timestamp: u128) -> Self {
+        Log {
+            id,
+            app,
+            timestamp,
+        }
+    }
+}
+
 use std::fs;
 use rusqlite::{params, Connection, Result};
-use crate::log::Log;
-const PATH_FOLDER: &str = "../data";
-const PATH: &str = "../data/app.db";
 
-pub fn open() -> Result<Connection, Box<dyn std::error::Error>> {
-    fs::create_dir_all(PATH_FOLDER)?;
-    Ok(Connection::open(PATH)?)
-}
+
+
+
 pub fn create_table(conn: &Connection) -> Result<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS log (
@@ -20,10 +33,7 @@ pub fn create_table(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-pub fn drop_all()->std::io::Result<()>{
-    fs::remove_file(PATH)?;
-    Ok(())
-}
+
 
 pub fn insert_log(conn:&Connection, log:Log) ->Result<()>{
     conn.execute(
