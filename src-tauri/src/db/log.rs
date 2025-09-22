@@ -1,3 +1,4 @@
+use rusqlite::{params, Connection, Result};
 #[derive(Debug)]
 pub struct Log {
     pub id: Option<i32>,
@@ -15,8 +16,6 @@ impl Log {
     }
 }
 
-use std::fs;
-use rusqlite::{params, Connection, Result};
 
 
 
@@ -57,3 +56,5 @@ pub fn get_logs(conn: &Connection) -> Result<Vec<Log>> {
     let logs: Vec<Log> = logs_iter.filter_map(|r| r.ok()).collect();
     Ok(logs)
 }
+
+//TODO - Add the ability to delete a range of logs
