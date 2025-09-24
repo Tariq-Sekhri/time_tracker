@@ -1,16 +1,25 @@
 mod db;
+
+use std::fmt::Debug;
 use db::log::Log;
 use db::log;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use chrono::{Local, TimeZone};
 use rusqlite::Connection;
+use serde_json::{to_string, to_string_pretty};
+use tauri::webview::cookie::time::Error::Format;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging as ws;
+use crate::db::log::JsonLog;
+
+
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 
 }
+
 
 
 fn generate_log()->Log{
@@ -23,27 +32,54 @@ fn generate_log()->Log{
     
     println!("{}", fore_ground_window);
     println!("{}", now.duration_since(UNIX_EPOCH).unwrap().as_millis());
-    Log::new(None,fore_ground_window, now.duration_since(UNIX_EPOCH).unwrap().as_millis())
+    Log::new(None,fore_ground_window, now.duration_since(UNIX_EPOCH).unwrap().as_secs())
  }
 //TODO - make this a background process
 fn background_process(){
-    let ret = db::open();
-    if let Err(e) =&ret {
-        eprintln!("DB error: {e}");
-    }
-    let conn:Connection = ret.unwrap();
-    let create_table_result = log::create_table(&conn);
-    match create_table_result{
-        Ok(())=>{println!("Successfully created log table ")}
-        Err(e) =>{println!("error creating log table: {e}")}
-    }
-    let log:Log = generate_log();
-    let result = log::insert_log(&conn, log);
+    let conn = match db::open(){
+        Ok(conn)=>conn,
+        Err(e)=> {eprintln!("Error connecting to database:{e}");return;}
+    };
 
-    match result{
-        Ok(())=>{println!("Successfully added log to log_model")}
-        Err(e) =>{println!("error adding log to log_model: {e}")}
+    match  db::create_tables(&conn){
+        Ok(())=>println!("Succsesfully created tables"),
+        Err(e)=>eprintln!("error creating tables: {e}")
+    };
+
+
+
+    match log::insert_log(&conn, generate_log()){
+        Ok(())=>{println!("Successfully added log to logs table")}
+        Err(e) =>{println!("error adding log to logs table: {e}")}
     }
+    db_to_json(&conn);
+}
+
+fn db_to_json(conn:&Connection){
+    let logs:Vec<Log>=match log::get_logs(&conn) {
+        Ok( logs)=> logs,
+        Err(e)=>{println!("Error getting Logs table: {e}"); return;}
+    };
+
+
+
+    let json_logs: Vec<JsonLog> = logs
+        .iter()
+        .map(|log| JsonLog::new(log.id, log.app.clone(), timestamp_to_string(log.timestamp)))
+        .collect();
+    let mut json_db:String = String::from("{\n");
+
+    match to_string_pretty(&json_logs) {
+        Ok(s) => {json_db.push_str(&format!("\"logs\":{s},"));}
+        Err(e)=>{println!("Error turn logs into json:{e}");return;}
+    }
+    json_db.push_str("\n}");
+    println!("{json_db}")
+
+}
+fn timestamp_to_string(timestamp:u64)->String{
+    Local.timestamp_opt(timestamp as i64, 0).single().unwrap().format("%Y-%m-%d %I:%M:%S %p").to_string()
+
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

@@ -14,11 +14,14 @@ impl Category{
         };
     }
 }
-pub fn create_table(conn:&Connection)->Result<()>{
-    conn.execute("CREATE TABLE IF NOT EXISTS category (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-);",[])?;
+pub fn create_table(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS category (
+            id   INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE
+        );",
+        [],
+    )?;
     Ok(())
 }
 pub fn insert(conn:&Connection, category:Category)->Result<()>{
