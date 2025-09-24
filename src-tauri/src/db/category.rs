@@ -1,6 +1,7 @@
 use rusqlite::{Result, Connection, params, Statement};
+use serde::Serialize;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Category{
     id:Option<i32>,
     name:String
