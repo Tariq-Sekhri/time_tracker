@@ -35,9 +35,6 @@ impl JsonLog {
 }
 
 
-
-
-
 pub fn create_table(conn: &Connection) -> Result<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS logs (

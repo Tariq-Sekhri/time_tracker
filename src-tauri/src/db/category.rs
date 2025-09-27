@@ -8,11 +8,11 @@ pub struct Category{
 }
 
 impl Category{
-    pub fn new(id:Option<i32>, name:String){
+    pub fn new(id:Option<i32>, name:String) -> Self {
         Category{
             id,
             name
-        };
+        }
     }
 }
 pub fn create_table(conn: &Connection) -> rusqlite::Result<()> {
@@ -25,7 +25,7 @@ pub fn create_table(conn: &Connection) -> rusqlite::Result<()> {
     )?;
     Ok(())
 }
-pub fn insert(conn:&Connection, category:Category)->Result<()>{
+pub fn insert(conn:&Connection, category: Category) ->Result<()>{
     conn.execute(
         "insert into category (name) VALUES (?)"
         ,params![category.name])?;

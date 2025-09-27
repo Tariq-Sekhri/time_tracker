@@ -6,10 +6,13 @@ import "./App.css";
 function App() {
   const [greetMsg, setGreetMsg] = useState("");
   const [name, setName] = useState("");
-
+ const [db, setDb] = useState("Missing Data");
   async function greet() {
     // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
     setGreetMsg(await invoke("greet", { name }));
+  }
+  async function db_to_json(){
+      setDb( await invoke("db_to_json"));
   }
 
   return (
@@ -44,6 +47,8 @@ function App() {
         <button type="submit">Greet</button>
       </form>
       <p>{greetMsg}</p>
+        <p className={"db"}>{db}</p>
+        <button className={"idk"} onClick={db_to_json} >Hello</button>
     </main>
   );
 }

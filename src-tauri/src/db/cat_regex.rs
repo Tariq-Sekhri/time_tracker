@@ -2,7 +2,7 @@ use rusqlite::{params, Connection, Result};
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
-struct CategoryRegex {
+pub struct CategoryRegex {
     id: Option<i32>,
     cat_id: i32,
     regex: String,

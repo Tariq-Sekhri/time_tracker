@@ -3,7 +3,7 @@ use rusqlite::Connection;
 
 pub mod log;
 pub mod category;
-mod cat_regex;
+pub mod cat_regex;
 
 const PATH_FOLDER: &str = "../data";
 const PATH: &str = "../data/app.db";
