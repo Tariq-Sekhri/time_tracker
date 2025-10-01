@@ -7,11 +7,9 @@ use db::category::Category;
 use db::category;
 use db::cat_regex::CategoryRegex;
 use db::cat_regex;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{ SystemTime, UNIX_EPOCH};
 use chrono::{Local, TimeZone};
-use rusqlite::Connection;
-use serde_json::{to_string, to_string_pretty};
-use tauri::webview::cookie::time::Error::Format;
+use serde_json::to_string_pretty;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging as ws;
 use crate::db::log::JsonLog;
@@ -22,7 +20,6 @@ use crate::db::log::JsonLog;
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
-
 }
 
 
