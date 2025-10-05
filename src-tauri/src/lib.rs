@@ -53,10 +53,10 @@ fn background_process(){
     // }
 
 
-    match log::insert_log(&conn, generate_log()){
-        Ok(())=>{println!("Successfully added log to logs table")}
-        Err(e) =>{println!("error adding log to logs table: {e}")}
-    }
+    // match log::insert_log(&conn, generate_log()){
+    //     Ok(())=>{println!("Successfully added log to logs table")}
+    //     Err(e) =>{println!("error adding log to logs table: {e}")}
+    // }
     db_to_json();
 }
 #[tauri::command]
