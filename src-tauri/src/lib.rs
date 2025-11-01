@@ -1,3 +1,4 @@
+#![cfg_attr(not(feature = "dev-warnings"), allow(dead_code, unused_imports))]
 mod db;
 
 use std::fmt::Debug;
