@@ -28,7 +28,8 @@ pub async fn insert(pool:&SqlitePool, new_category:NewCategory)->Result<(), Erro
 pub async fn get_by_id(pool:&SqlitePool, id:i32)->Result<Category,Error>{
     sqlx::query_as::<_,Category>("select * from Category where id = ?").bind(id).fetch_one(pool).await
 }
-pub async fn get_all(pool:&SqlitePool)->Result<Vec<Category>,Error>{
+
+pub async fn get_categories(pool:&SqlitePool)->Result<Vec<Category>,Error>{
     sqlx::query_as::<_,Category>("select * from Category").fetch_all(pool).await
 }
 

@@ -62,8 +62,7 @@ pub async fn delete_by_id(pool: &SqlitePool, id: i64) -> Result<(), Error> {
         .await?;
     Ok(())
 }
-
-pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Log>, Error> {
+pub async fn get_logs(pool: &SqlitePool) -> Result<Vec<Log>, Error> {
     sqlx::query_as::<_, Log>("SELECT *  FROM logs")
         .fetch_all(pool)
         .await
