@@ -2,17 +2,20 @@
 mod db;
 
 use std::fmt::Debug;
+use std::{thread, time};
+use std::thread::Thread;
 use db::log::Log;
 use db::log;
 use db::category::Category;
 use db::category;
 use db::cat_regex::CategoryRegex;
 use db::cat_regex;
-use std::time::{ SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use chrono::{Local, TimeZone};
 use serde_json::to_string_pretty;
 use windows::Win32::UI::WindowsAndMessaging as ws;
 use db::log::NewLog;
+use crate::db::log::increase_duration;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -30,8 +33,8 @@ fn generate_log()->NewLog{
     let fore_ground_window = String::from_utf16_lossy(&buf[..n as usize]);
     let now = SystemTime::now();
 
-    println!("{}", fore_ground_window);
-    println!("{}", now.duration_since(UNIX_EPOCH).unwrap().as_secs());
+    // println!("{}", fore_ground_window);
+    // println!("{}", now.duration_since(UNIX_EPOCH).unwrap().as_secs());
      NewLog{app:fore_ground_window, timestamp:now.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64}
  }
 
@@ -79,17 +82,44 @@ async fn db_to_json() -> String{
     json_db
 }
 
+async fn background_process(){
+    let pool = match db::get_pool().await {
+        Ok(pool)=>pool,
+        Err(e)=>{eprintln!("Error: {e}"); return}
+    };
+    let mut last_log_id  = -1;
+    loop{
+        let new_log = generate_log();
+        if last_log_id==-1{
+            last_log_id = log::insert(pool, new_log ).await.expect("TODO: panic message");
+        }else{
+            match log::get_by_id(pool,last_log_id).await {
+                Ok(last_log)=>{
+                    if last_log.app== new_log.app {
+                        increase_duration(pool, last_log.id).await.expect("increase");
+                    }else{
+                        last_log_id =  log::insert(pool, new_log ).await.expect("last_log");
+                    }
+                },
+                Err(e)=> {eprintln!("Error getting log {e}"); return}
+            };
 
+        }
+
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tokio::runtime::Runtime::new().unwrap().block_on(db_to_json());
-    // background_process();
-    println!("before");
     tauri::Builder::default()
+        .setup(|_app| {
+            tauri::async_runtime::spawn(background_process());
+            Ok(())
+        })
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![greet, db_to_json])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
-    println!("after");
 }
