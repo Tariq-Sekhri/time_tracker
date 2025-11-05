@@ -27,7 +27,8 @@ Tables:
 - logs
   - id INTEGER PRIMARY KEY
   - app TEXT (foreground window title)
-  - ts INTEGER (Unix time, seconds)
+  - timestamp INTEGER (Unix time, seconds)
+  - duration INTERGER (seconds)
 
 - category
   - id INTEGER PRIMARY KEY
@@ -37,12 +38,13 @@ Tables:
   - id INTEGER PRIMARY KEY
   - cat_id INTEGER REFERENCES category(id)
   - regex TEXT
+  - priority INTERGER
 
 ## Tech stack
 
 - Tauri 2 (Rust backend, system WebView)
 - React + Vite + TypeScript
-- SQLite via `rusqlite` (bundled)
+- SQLite via `sqlx` (bundled)
 - Windows API via `windows` crate
 - Time handling via `chrono`
 
