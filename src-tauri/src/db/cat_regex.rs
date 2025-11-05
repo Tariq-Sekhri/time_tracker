@@ -50,7 +50,8 @@ pub async fn update_by_id(pool:&SqlitePool, cat_regex:CategoryRegex)->Result<(),
 pub async fn get_by_id(pool:&SqlitePool)->Result<Option<CategoryRegex>,Error>{
     sqlx::query_as::<_, CategoryRegex>("").fetch_optional(pool).await
 }
-pub async fn get_all(pool:&SqlitePool)->Result<Vec<CategoryRegex>,Error>{
+
+pub async fn get_cat_regex(pool:&SqlitePool)->Result<Vec<CategoryRegex>,Error>{
     sqlx::query_as::<_, CategoryRegex>("select * from category_regex").fetch_all(pool).await
 }
 
