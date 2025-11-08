@@ -1,3 +1,6 @@
+#![cfg_attr(not(feature = "dev-warnings"), allow(dead_code, unused_imports))]
+
+
 use std::fs;
 use std::sync::OnceLock;
 use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
