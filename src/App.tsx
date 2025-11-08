@@ -21,7 +21,7 @@ function App() {
     }
 
     async function get_logs(){
-        const data = await invoke("get_logs_cmd");
+        const data:string = await invoke("get_logs_cmd");
         const logs = JSON.parse(data).slice(-20);
         setDb(logs);
     }

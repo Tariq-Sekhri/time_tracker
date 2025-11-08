@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "dev-warnings"), allow(dead_code, unused_imports))]
 mod db;
+mod tray;
 
 use std::fmt::Debug;
 use std::{thread, time};
@@ -19,6 +20,8 @@ use crate::db::log::increase_duration;
 use log::get_logs;
 use category::get_categories;
 use cat_regex::get_cat_regex;
+use tauri::Manager;
+
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
@@ -47,17 +50,17 @@ async fn db_to_json() -> String{
         Ok(pool) => pool,
         Err(e) => return format!("Error connecting to database: {e}"),
     };
-    let logs: Vec<Log> = match log::get_logs(&pool).await {
+    let logs: Vec<Log> = match get_logs(&pool).await {
         Ok(logs) => logs,
         Err(e) => return format!("Error getting Logs table: {e}"),
     };
 
-    let categories: Vec<Category> = match category::get_categories(&pool).await {
+    let categories: Vec<Category> = match get_categories(&pool).await {
         Ok(category)=>category,
         Err(e)=>return format!("Error getting category table: {e}"),
     };
 
-    let cat_regex : Vec<CategoryRegex> = match cat_regex::get_cat_regex(&pool).await{
+    let cat_regex : Vec<CategoryRegex> = match get_cat_regex(&pool).await{
         Ok(cat_regex)=>cat_regex,
         Err(e)=>return format!("Error getting Category Regex table: {e}"),
 
@@ -116,9 +119,9 @@ async fn background_process(){
 }
 #[tauri::command]
 async fn get_cat_regex_cmd()->String{
-    return match db::get_pool().await {
+     match db::get_pool().await {
         Ok(pool)=>{
-            match cat_regex::get_cat_regex(pool).await {
+            match get_cat_regex(pool).await {
                 Ok(cat_regex)=>{
                     to_string_pretty(&cat_regex).unwrap().to_string()
                 },
@@ -132,9 +135,9 @@ async fn get_cat_regex_cmd()->String{
 
 #[tauri::command]
 async fn get_logs_cmd() -> String {
-    return match db::get_pool().await {
+    match db::get_pool().await {
         Ok(pool) => {
-            match log::get_logs(&pool).await {
+            match get_logs(&pool).await {
                 Ok(logs) => {
                     to_string_pretty(&logs).unwrap().to_string()
                 },
@@ -147,9 +150,9 @@ async fn get_logs_cmd() -> String {
 
 #[tauri::command]
 async fn get_categories_cmd() -> String {
-    return match db::get_pool().await {
+    match db::get_pool().await {
         Ok(pool) => {
-            match category::get_categories(&pool).await {
+            match get_categories(&pool).await {
                 Ok(categories) => {
                     to_string_pretty(&categories).unwrap().to_string()
                 },
@@ -163,11 +166,18 @@ async fn get_categories_cmd() -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .setup(|_app| {
+        .setup(|app| {
+            // Add tray setup here
+            tray::setup_tray(app.handle())?;
             tauri::async_runtime::spawn(background_process());
             Ok(())
         })
+        .on_window_event(|_window, event| {
+            // Add window event handler
+            tray::handle_window_event(_window, event);
+        })
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet, db_to_json, get_cat_regex_cmd, get_logs_cmd, get_categories_cmd])        .run(tauri::generate_context!())
+        .invoke_handler(tauri::generate_handler![greet, db_to_json, get_cat_regex_cmd, get_logs_cmd, get_categories_cmd])
+        .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

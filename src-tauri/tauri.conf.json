@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Time Tracker",
         "width": 1920,
         "height": 1080
