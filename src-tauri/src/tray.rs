@@ -1,15 +1,14 @@
 use tauri::{
-    image::Image,
     tray::TrayIconBuilder,
     Manager,
     menu::{Menu, MenuItem},
     AppHandle,
     WindowEvent,
 };
-use std::fs;
 
 pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let show = MenuItem::with_id(app, "show", "Show", true, None::<String>)?;
+    //TODO: add pause/resume recording of logs
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<String>)?;
     let menu = Menu::with_items(app, &[&show, &quit])?;
 
