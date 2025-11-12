@@ -8,6 +8,7 @@ use api::{greet, get_cat_regex_cmd, get_logs_cmd, get_categories_cmd,  db_to_jso
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+
     let pool = tauri::async_runtime::block_on(db::get_pool())
         .expect("Failed to get DB pool");
     tauri::Builder::default()
