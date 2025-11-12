@@ -1,8 +1,9 @@
 use serde_json::to_string_pretty;
+
 use crate::db;
-use crate::db::cat_regex::{get_cat_regex, CategoryRegex};
-use crate::db::category::{get_categories, Category};
-use crate::db::log::{get_logs, Log};
+use db::cat_regex::{get_cat_regex, CategoryRegex};
+use db::category::{get_categories, Category};
+use db::log::{get_logs, Log};
 
 #[tauri::command]
 pub async fn get_cat_regex_cmd()->String{
