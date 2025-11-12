@@ -83,4 +83,4 @@ All help is welcome—issues, PRs, questions. No strict rules yet; guidelines wi
 
 ## License
 
-Polyform Noncommercial 1.0. See LICENSE. For commercial use, open an issue.
+Polyform Noncommercial 1.0. For commercial use, open an issue.
