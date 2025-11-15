@@ -1,16 +1,14 @@
-mod db;
-mod tray;
 mod api;
 mod core;
+mod db;
+mod tray;
 
-use core::{background_process};
-use api::{greet, get_cat_regex_cmd, get_logs_cmd, get_categories_cmd,  db_to_json};
+use api::{db_to_json, get_cat_regex_cmd, get_categories_cmd, get_logs_cmd, greet};
+use core::background_process;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-
-    let pool = tauri::async_runtime::block_on(db::get_pool())
-        .expect("Failed to get DB pool");
+    let pool = tauri::async_runtime::block_on(db::get_pool()).expect("Failed to get DB pool");
     tauri::Builder::default()
         .manage(pool)
         .setup(|app| {
@@ -22,7 +20,13 @@ pub fn run() {
             tray::handle_window_event(_window, event);
         })
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet, db_to_json, get_cat_regex_cmd, get_logs_cmd, get_categories_cmd])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            db_to_json,
+            get_cat_regex_cmd,
+            get_logs_cmd,
+            get_categories_cmd
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

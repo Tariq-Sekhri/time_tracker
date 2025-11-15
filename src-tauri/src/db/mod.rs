@@ -1,13 +1,13 @@
 #![cfg_attr(not(feature = "dev-warnings"), allow(dead_code, unused_imports))]
 
+use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
 use std::env;
 use std::path::PathBuf;
 use std::sync::OnceLock;
-use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
 
-pub mod log;
-pub mod category;
 pub mod cat_regex;
+pub mod category;
+pub mod log;
 
 static POOL: OnceLock<SqlitePool> = OnceLock::new();
 
@@ -31,8 +31,7 @@ pub async fn get_pool() -> Result<&'static SqlitePool, sqlx::Error> {
     }
 }
 
-fn ensure_db_path(db_path:&PathBuf)->Result<(), sqlx::Error>{
-
+fn ensure_db_path(db_path: &PathBuf) -> Result<(), sqlx::Error> {
     if let Some(parent) = db_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| sqlx::Error::Io(e))?;
     }
