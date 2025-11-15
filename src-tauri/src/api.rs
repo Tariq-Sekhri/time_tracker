@@ -56,7 +56,6 @@ pub async fn get_categories_cmd() -> String {
 
 #[tauri::command]
 pub async fn db_to_json() -> String{
-    println!("db to json called");
     let pool = match db::get_pool().await {
         Ok(pool) => pool,
         Err(e) => return format!("Error connecting to database: {e}"),
@@ -93,8 +92,6 @@ pub async fn db_to_json() -> String{
 
     json_db.push_str("\n}");
 
-    println!("{json_db}");
-    println!("db to json called");
     json_db
 }
 
