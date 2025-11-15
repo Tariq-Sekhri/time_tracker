@@ -1,15 +1,15 @@
-use serde::Serialize;
 use chrono::{Local, TimeZone};
-use sqlx::{SqlitePool, Error, FromRow};
+use serde::Serialize;
+use sqlx::{Error, FromRow, SqlitePool};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[derive(Debug, Serialize, FromRow,Clone)]
+#[derive(Debug, Serialize, FromRow, Clone)]
 pub struct Log {
     pub id: i64,
     pub app: String,
     #[serde(serialize_with = "serialize_timestamp")]
     pub timestamp: i64,
-    pub duration:i64
+    pub duration: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -38,15 +38,15 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), Error> {
             app TEXT NOT NULL,
             timestamp INTEGER NOT NULL,
             duration INTEGER NOT NULL default 0
-        )"
+        )",
     )
-        .execute(pool)
-        .await?;
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
-pub async fn insert(pool: &SqlitePool,log: NewLog) -> Result<i64, Error> {
-   let result =  sqlx::query("INSERT INTO logs (app, timestamp) VALUES (?, ?)")
+pub async fn insert(pool: &SqlitePool, log: NewLog) -> Result<i64, Error> {
+    let result = sqlx::query("INSERT INTO logs (app, timestamp) VALUES (?, ?)")
         .bind(log.app)
         .bind(log.timestamp.to_string())
         .execute(pool)
@@ -67,9 +67,11 @@ pub async fn get_logs(pool: &SqlitePool) -> Result<Vec<Log>, Error> {
         .fetch_all(pool)
         .await
 }
-pub async fn get_by_id(pool: &SqlitePool,id:i64 )->Result<Log, Error>{
+pub async fn get_by_id(pool: &SqlitePool, id: i64) -> Result<Log, Error> {
     sqlx::query_as::<_, Log>("select * from logs where id = ?")
-        .bind(id).fetch_one(pool).await
+        .bind(id)
+        .fetch_one(pool)
+        .await
 }
 pub async fn increase_duration(pool: &SqlitePool, id: i64) -> Result<(), Error> {
     sqlx::query("update logs set duration = duration + 1 where id = ?")

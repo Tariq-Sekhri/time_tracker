@@ -6,53 +6,49 @@ use db::category::{get_categories, Category};
 use db::log::{get_logs, Log};
 
 #[tauri::command]
-pub async fn get_cat_regex_cmd()->String{
+pub async fn get_cat_regex_cmd() -> String {
     match db::get_pool().await {
-        Ok(pool)=>{
-            match get_cat_regex(pool).await {
-                Ok(cat_regex)=>{
-                    to_string_pretty(&cat_regex).unwrap().to_string()
-                },
-                Err(e)=>{ format!("Error: {e}")}
-
+        Ok(pool) => match get_cat_regex(pool).await {
+            Ok(cat_regex) => to_string_pretty(&cat_regex).unwrap().to_string(),
+            Err(e) => {
+                format!("Error: {e}")
             }
         },
-        Err(e)=>{ format!("Error: {e}")}
+        Err(e) => {
+            format!("Error: {e}")
+        }
     }
 }
 
 #[tauri::command]
 pub async fn get_logs_cmd() -> String {
     match db::get_pool().await {
-        Ok(pool) => {
-            match get_logs(&pool).await {
-                Ok(logs) => {
-                    to_string_pretty(&logs).unwrap().to_string()
-                },
-                Err(e) => { format!("Error: {e}") }
+        Ok(pool) => match get_logs(&pool).await {
+            Ok(logs) => to_string_pretty(&logs).unwrap().to_string(),
+            Err(e) => {
+                format!("Error: {e}")
             }
         },
-        Err(e) => { format!("Error: {e}") }
+        Err(e) => {
+            format!("Error: {e}")
+        }
     }
 }
-
 
 #[tauri::command]
 pub async fn get_categories_cmd() -> String {
     match db::get_pool().await {
-        Ok(pool) => {
-
-            match get_categories(&pool).await {
-                Ok(categories) => {
-                    to_string_pretty(&categories).unwrap().to_string()
-                },
-                Err(e) => { format!("Error: {e}") }
+        Ok(pool) => match get_categories(&pool).await {
+            Ok(categories) => to_string_pretty(&categories).unwrap().to_string(),
+            Err(e) => {
+                format!("Error: {e}")
             }
         },
-        Err(e) => { format!("Error: {e}") }
+        Err(e) => {
+            format!("Error: {e}")
+        }
     }
 }
-
 
 #[tauri::command]
 pub async fn db_to_json() -> String{
@@ -66,28 +62,31 @@ pub async fn db_to_json() -> String{
     };
 
     let categories: Vec<Category> = match get_categories(&pool).await {
-        Ok(category)=>category,
-        Err(e)=>return format!("Error getting category table: {e}"),
+        Ok(category) => category,
+        Err(e) => return format!("Error getting category table: {e}"),
     };
 
-    let cat_regex : Vec<CategoryRegex> = match get_cat_regex(&pool).await{
-        Ok(cat_regex)=>cat_regex,
-        Err(e)=>return format!("Error getting Category Regex table: {e}"),
-
+    let cat_regex: Vec<CategoryRegex> = match get_cat_regex(&pool).await {
+        Ok(cat_regex) => cat_regex,
+        Err(e) => return format!("Error getting Category Regex table: {e}"),
     };
-    let mut json_db:String = String::from("{\n");
+    let mut json_db: String = String::from("{\n");
 
     match to_string_pretty(&logs) {
-        Ok(s) => {json_db.push_str(&format!("\"logs\":{s},\n"));}
-        Err(e)=>{return format!("Error turn logs into json:{e}");}
+        Ok(s) => {
+            json_db.push_str(&format!("\"logs\":{s},\n"));
+        }
+        Err(e) => {
+            return format!("Error turn logs into json:{e}");
+        }
     }
-    match to_string_pretty(&categories){
-        Ok(cat)=>{json_db.push_str(&format!("\"Category\":{cat},\n"))},
-        Err(e)=>{return format!("error turning categories into json: {e}")}
+    match to_string_pretty(&categories) {
+        Ok(cat) => json_db.push_str(&format!("\"Category\":{cat},\n")),
+        Err(e) => return format!("error turning categories into json: {e}"),
     }
-    match to_string_pretty(&cat_regex){
-        Ok(reg)=>{json_db.push_str(&format!("\"Category_Regex\":{reg}\n"))},
-        Err(e)=>{return format!("error turning category regex into json: {e}")}
+    match to_string_pretty(&cat_regex) {
+        Ok(reg) => json_db.push_str(&format!("\"Category_Regex\":{reg}\n")),
+        Err(e) => return format!("error turning category regex into json: {e}"),
     }
 
     json_db.push_str("\n}");
