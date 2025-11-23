@@ -38,6 +38,8 @@ function App() {
         <main className="container">
             <h1>Welcome to Tauri + React</h1>
 
+            <div className="w-32 h-32 bg-blue-500 rounded-lg shadow-lg mx-auto my-4"></div>
+
             <div className="row">
                 <a href="https://vite.dev" target="_blank">
                     <img src="/vite.svg" className="logo vite" alt="Vite logo" />
