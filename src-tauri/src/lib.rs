@@ -3,7 +3,7 @@ mod core;
 mod db;
 mod tray;
 
-use api::{db_to_json, get_cat_regex_cmd, get_categories_cmd, get_logs_cmd, greet};
+use api::*;
 use core::background_process;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -25,7 +25,8 @@ pub fn run() {
             db_to_json,
             get_cat_regex_cmd,
             get_logs_cmd,
-            get_categories_cmd
+            get_categories_cmd,
+            get_week
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
