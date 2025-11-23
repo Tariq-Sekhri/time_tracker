@@ -80,3 +80,8 @@ pub async fn increase_duration(pool: &SqlitePool, id: i64) -> Result<(), Error> 
         .await?;
     Ok(())
 }
+
+//sorted by timestamp
+// pub async fn get_logs_by_week_id(pool: &SqlitePool, week_id: i64) -> Result<Vec<Log>, Error> {
+//     sqlx::query_as::<_, Log>("select * from logs where time_stamp").fetch_all()
+// }

@@ -6,6 +6,7 @@ import "./App.css";
 function App() {
     const [greetMsg, setGreetMsg] = useState("");
     const [name, setName] = useState("");
+    const [weekNum, setWeekNum] = useState("");
     const [db, setDb] = useState("Missing Data");
 
     async function greet() {
@@ -28,6 +29,11 @@ function App() {
 
     async function get_categories(){
         setDb(await invoke("get_categories_cmd"));
+    }
+
+    async function get_week(){
+        const week = parseInt(weekNum) || 0;
+        setDb(await invoke("get_week", { week_num: week }));
     }
 
     useEffect(() => {
@@ -85,6 +91,16 @@ function App() {
             <button className="idk" onClick={get_cat_regex}>get_cat_regex</button>
             <button className="idk" onClick={get_logs}>get_logs</button>
             <button className="idk" onClick={get_categories}>get_categories</button>
+
+            <form className="row">
+                <input
+                    type="number"
+                    value={weekNum}
+                    onChange={(e) => setWeekNum(e.currentTarget.value)}
+                    placeholder="Enter week number..."
+                />
+                <button type="button" onClick={get_week}>get_week</button>
+            </form>
         </main>
     );
 }

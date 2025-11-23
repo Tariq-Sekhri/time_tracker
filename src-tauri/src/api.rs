@@ -1,9 +1,69 @@
+use serde::Serialize;
 use serde_json::to_string_pretty;
-
+use sqlx::FromRow;
+use sqlx::types::Json;
 use crate::db;
 use db::cat_regex::{get_cat_regex, CategoryRegex};
 use db::category::{get_categories, Category};
 use db::log::{get_logs, Log};
+
+#[derive(Serialize)]
+struct TimeBlock {
+    id:i32,
+    icon_path:String,
+    category:String,
+    color:String,
+    logs: Vec<IdkLog>,
+    start_time:i64,
+    end_time:i64,
+}
+
+#[derive(Debug, Serialize, FromRow, Clone)]
+ struct IdkLog {
+    app: String,
+    duration: i64,
+}
+
+
+#[tauri::command]
+pub async fn get_week(week_num:u8)->String{
+    let mut index :i32= 0;
+    match db::get_pool().await{
+        Ok(pool) =>  {
+
+           let logs =  get_logs(pool).await.unwrap();
+            let cat_regex = get_cat_regex(pool).await.unwrap();
+            let categories = get_categories(pool).await.unwrap();
+
+            let week_start_time:i64 = 100;
+            let week_end_time:i64 = 100;
+            let mut idkLogs:Vec<IdkLog>;
+            let logs_from_this_week:Vec<Log> = logs.into_iter().filter(|log| log.timestamp > week_start_time && log.timestamp< week_end_time ).collect();
+            let asd = to_string_pretty(&logs_from_this_week).unwrap();
+            println!("{}", asd);
+            let min = 15;
+
+            let resilutino =  min * 60;
+            // for i in (week_start_time..week_end_time).step_by(resilutino) {
+            //     logs_from_this_week.
+            // }
+
+          let a =   TimeBlock{
+              id: 0,
+              icon_path: "".to_string(),
+              category: "".to_string(),
+              color: "".to_string(),
+              logs: vec![],
+              start_time: 0,
+              end_time: 0,
+          };
+            "hey".to_string()
+        },
+        Err(e) => {
+            format!("Error: {e}")
+        }
+    }
+}
 
 #[tauri::command]
 pub async fn get_cat_regex_cmd() -> String {
