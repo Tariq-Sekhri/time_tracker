@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use crate::db::{
     self,
     log::{self, increase_duration, NewLog},
@@ -5,6 +6,8 @@ use crate::db::{
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use windows::Win32::UI::WindowsAndMessaging as ws;
+
+pub static IS_SUSPENDED: AtomicBool = AtomicBool::new(false);
 
 fn generate_log() -> NewLog {
     let hwnd = unsafe { ws::GetForegroundWindow() };
@@ -23,6 +26,7 @@ fn generate_log() -> NewLog {
 }
 
 pub async fn background_process() {
+
     let pool = match db::get_pool().await {
         Ok(pool) => pool,
         Err(e) => {
@@ -31,30 +35,39 @@ pub async fn background_process() {
         }
     };
     let mut last_log_id = -1;
-    loop {
-        let new_log = generate_log();
-        if last_log_id == -1 {
-            last_log_id = log::insert(pool, new_log)
-                .await
-                .expect("TODO: panic message");
-        } else {
-            match log::get_by_id(pool, last_log_id).await {
-                Ok(last_log) => {
-                    if last_log.app == new_log.app {
-                        increase_duration(pool, last_log.id)
-                            .await
-                            .expect("increase");
-                    } else {
-                        last_log_id = log::insert(pool, new_log).await.expect("last_log");
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Error getting log {e}");
-                    return;
-                }
-            };
-        }
 
+    loop{
+        if !IS_SUSPENDED.load(Ordering::Relaxed){
+
+            let new_log = generate_log();
+            if new_log.app=="".to_string() {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+            if last_log_id == -1 {
+                last_log_id = log::insert(pool, new_log)
+                    .await
+                    .expect("TODO: panic message");
+            } else {
+                match log::get_by_id(pool, last_log_id).await {
+                    Ok(last_log) => {
+                        if last_log.app == new_log.app {
+                            increase_duration(pool, last_log.id)
+                                .await
+                                .expect("increase");
+                        } else {
+
+                            last_log_id = log::insert(pool, new_log).await.expect("last_log");
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Error getting log {e}");
+                        return;
+                    }
+                };
+            }
+
+        }
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }
