@@ -26,7 +26,7 @@ struct TimeBlock {
 
 
 #[tauri::command]
-pub async fn get_week(week_num:u8)->String{
+pub async fn get_week()->String{
     let mut index :i32= 0;
     match db::get_pool().await{
         Ok(pool) =>  {
@@ -47,16 +47,6 @@ pub async fn get_week(week_num:u8)->String{
             // for i in (week_start_time..week_end_time).step_by(resilutino) {
             //     logs_from_this_week.
             // }
-
-          let a =   TimeBlock{
-              id: 0,
-              icon_path: "".to_string(),
-              category: "".to_string(),
-              color: "".to_string(),
-              logs: vec![],
-              start_time: 0,
-              end_time: 0,
-          };
             "hey".to_string()
         },
         Err(e) => {

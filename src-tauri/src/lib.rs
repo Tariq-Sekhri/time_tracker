@@ -8,6 +8,7 @@ use core::background_process;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+
     let pool = tauri::async_runtime::block_on(db::get_pool()).expect("Failed to get DB pool");
     tauri::Builder::default()
         .manage(pool)
