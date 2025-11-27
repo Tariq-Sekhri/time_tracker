@@ -44,11 +44,11 @@ function App() {
     }
 
     async function getWeek(){
-       const {week_start,week_end} = getWeekRange(new Date())
-    const data:string = await invoke("get_week", {weekStart:week_start,weekEnd:week_end})
-        const logs = JSON.parse(data).slice(-30);
-    console.log(logs);
-        setDisplayText(logs);
+        const {week_start,week_end} = getWeekRange(new Date())
+        const data: string = await invoke("get_week", {weekStart:week_start,weekEnd:week_end})
+        const asd = JSON.parse(data).slice(-30);
+        console.log(asd);
+        setDisplayText(asd);
     }
     // useEffect(() => {
     //     console.log(displayText);
@@ -69,15 +69,9 @@ function App() {
 
 
             <div>
-                {Array.isArray(displayText) ? (
-                    displayText.map(log => (
-                        <div key={log.id}>
-                            {log.app} - {log.duration}s
-                        </div>
-                    ))
-                ) : (
-                    <p className="db">{displayText}</p>
-                )}
+    <pre className="db">
+        {JSON.stringify(displayText, null, 2)}
+    </pre>
             </div>
 
 

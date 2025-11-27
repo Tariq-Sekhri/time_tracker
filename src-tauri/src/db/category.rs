@@ -2,8 +2,8 @@ use serde::Serialize;
 use sqlx::{Error, FromRow, Sqlite, SqlitePool};
 #[derive(Debug, Serialize, FromRow)]
 pub struct Category {
-    id: i32,
-    name: String,
+  pub  id: i32,
+    pub name: String,
 }
 
 #[derive(Debug, Serialize)]

@@ -1,3 +1,4 @@
+use regex::Regex;
 use serde::Serialize;
 use serde_json::to_string_pretty;
 use sqlx::FromRow;
@@ -30,40 +31,48 @@ struct HalfWayLogs {
      app: String,
     #[serde(serialize_with = "serialize_timestamp")]
      start_timestamp: i64,
-     end_timestamp: i64,
+    #[serde(serialize_with = "serialize_timestamp")]
+    end_timestamp: i64,
      duration: i64,
-      category:String,
+     category:String,
+}
+fn derive_category(app:&str, categories:&Vec<Category>, cat_regex:&Vec<CategoryRegex>)->String{
+    let   asd: &CategoryRegex =  cat_regex.iter().find(
+        |regex|{ let re = Regex::new(&regex.regex);
+            re.unwrap().is_match(app)
+        }).unwrap();
+    println!("{:?}",asd);
+
+        let idk = categories.iter().find(|cat| cat.id == asd.cat_id).unwrap();
+    println!("{:?}",idk);
+    idk.name.clone()
 }
 
 #[tauri::command]
 pub async fn get_week( week_start: i64, week_end:i64)->String{
-    /*
-    we are returning json
-    we want arbitary sized time blocks
-    the minimum block size/resulution is 10 min
-    if two time blocks have the same category we merge them
-
-    we have a vec of logs
-    each log reposends an arbitary lenth of time, from 0 duration to infinity
-
-    idea 1
-        we can get a logs until we have reached
-            category will be calcated at the end conce we see witch category has the biggest time share
-
-
-    */
-
-    let mut index :i32= 0;
     match db::get_pool().await{
         Ok(pool) =>  {
 
            let logs =  get_logs(pool).await.unwrap();
             let logs_from_this_week:Vec<Log> = logs.into_iter().filter(|log| log.timestamp > week_start && log.timestamp< week_end ).collect();
-            let asd = to_string_pretty(&logs_from_this_week).unwrap();
+            // let asd = to_string_pretty(&logs_from_this_week).unwrap();
             let cat_regex = get_cat_regex(pool).await.unwrap();
             let categories = get_categories(pool).await.unwrap();
+            let uh:Vec<HalfWayLogs> = logs_from_this_week.iter()
+                .map(|log|
+                    HalfWayLogs{
+                        id: log.id,
+                        app: log.app.clone(),
+                        start_timestamp: log.timestamp,
+                        end_timestamp: log.timestamp+log.duration,
+                        duration: log.duration,
+                        category: derive_category(&log.app, &categories, &cat_regex),
+                    }
+                )
+                .collect();
 
-
+           let asd =  to_string_pretty( &uh).unwrap();
+            println!("{}",asd);
             asd
         },
         Err(e) => {
