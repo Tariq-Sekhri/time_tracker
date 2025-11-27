@@ -36,28 +36,35 @@ struct HalfWayLogs {
      duration: i64,
      category:String,
 }
-fn derive_category(app:&str, categories:&Vec<Category>, cat_regex:&Vec<CategoryRegex>)->String{
-    let   asd: &CategoryRegex =  cat_regex.iter().find(
-        |regex|{ let re = Regex::new(&regex.regex);
-            re.unwrap().is_match(app)
-        }).unwrap();
-    println!("{:?}",asd);
+fn derive_category(app:&str, idk:&Vec<regexStuff>)->String{
+    idk.iter().find(|regex| regex.regex.is_match(app)).unwrap().category.clone()
+}
 
-        let idk = categories.iter().find(|cat| cat.id == asd.cat_id).unwrap();
-    println!("{:?}",idk);
-    idk.name.clone()
+struct regexStuff{
+    regex:Regex,
+    category:String
+
 }
 
 #[tauri::command]
 pub async fn get_week( week_start: i64, week_end:i64)->String{
     match db::get_pool().await{
         Ok(pool) =>  {
-
+//todo merge these so ther run together
            let logs =  get_logs(pool).await.unwrap();
-            let logs_from_this_week:Vec<Log> = logs.into_iter().filter(|log| log.timestamp > week_start && log.timestamp< week_end ).collect();
-            // let asd = to_string_pretty(&logs_from_this_week).unwrap();
             let cat_regex = get_cat_regex(pool).await.unwrap();
             let categories = get_categories(pool).await.unwrap();
+
+            let hgf: Vec<regexStuff> = cat_regex.iter().map(
+                |regex|
+                    regexStuff{regex: Regex::new(&regex.regex).unwrap(),
+                    category:categories.iter()
+                        .find(|cat| cat.id == regex.cat_id).unwrap().name.clone()
+                }).collect();
+
+            //todo make this a db function
+            let logs_from_this_week:Vec<Log> = logs.into_iter().filter(|log| log.timestamp > week_start && log.timestamp< week_end ).collect();
+
             let uh:Vec<HalfWayLogs> = logs_from_this_week.iter()
                 .map(|log|
                     HalfWayLogs{
@@ -66,7 +73,7 @@ pub async fn get_week( week_start: i64, week_end:i64)->String{
                         start_timestamp: log.timestamp,
                         end_timestamp: log.timestamp+log.duration,
                         duration: log.duration,
-                        category: derive_category(&log.app, &categories, &cat_regex),
+                        category: derive_category(&log.app, &hgf),
                     }
                 )
                 .collect();
