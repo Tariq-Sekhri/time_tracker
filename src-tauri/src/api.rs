@@ -5,7 +5,7 @@ use sqlx::types::Json;
 use crate::db;
 use db::cat_regex::{get_cat_regex, CategoryRegex};
 use db::category::{get_categories, Category};
-use db::log::{get_logs, Log};
+use db::log::{get_logs, Log, serialize_timestamp};
 
 #[derive(Serialize)]
 struct TimeBlock {
@@ -23,31 +23,48 @@ struct TimeBlock {
     app: String,
     duration: i64,
 }
+#[derive(Debug, Serialize, FromRow, Clone)]
 
+struct HalfWayLogs {
+     id: i64,
+     app: String,
+    #[serde(serialize_with = "serialize_timestamp")]
+     start_timestamp: i64,
+     end_timestamp: i64,
+     duration: i64,
+      category:String,
+}
 
 #[tauri::command]
-pub async fn get_week()->String{
+pub async fn get_week( week_start: i64, week_end:i64)->String{
+    /*
+    we are returning json
+    we want arbitary sized time blocks
+    the minimum block size/resulution is 10 min
+    if two time blocks have the same category we merge them
+
+    we have a vec of logs
+    each log reposends an arbitary lenth of time, from 0 duration to infinity
+
+    idea 1
+        we can get a logs until we have reached
+            category will be calcated at the end conce we see witch category has the biggest time share
+
+
+    */
+
     let mut index :i32= 0;
     match db::get_pool().await{
         Ok(pool) =>  {
 
            let logs =  get_logs(pool).await.unwrap();
+            let logs_from_this_week:Vec<Log> = logs.into_iter().filter(|log| log.timestamp > week_start && log.timestamp< week_end ).collect();
+            let asd = to_string_pretty(&logs_from_this_week).unwrap();
             let cat_regex = get_cat_regex(pool).await.unwrap();
             let categories = get_categories(pool).await.unwrap();
 
-            let week_start_time:i64 = 100;
-            let week_end_time:i64 = 100;
-            let mut idkLogs:Vec<IdkLog>;
-            let logs_from_this_week:Vec<Log> = logs.into_iter().filter(|log| log.timestamp > week_start_time && log.timestamp< week_end_time ).collect();
-            let asd = to_string_pretty(&logs_from_this_week).unwrap();
-            println!("{}", asd);
-            let min = 15;
 
-            let resilutino =  min * 60;
-            // for i in (week_start_time..week_end_time).step_by(resilutino) {
-            //     logs_from_this_week.
-            // }
-            "hey".to_string()
+            asd
         },
         Err(e) => {
             format!("Error: {e}")

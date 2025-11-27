@@ -3,6 +3,8 @@ use serde::Serialize;
 use sqlx::{Error, FromRow, SqlitePool};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+pub static SKIPPED_APPS:[&str;2] = ["Windows Default Lock Screen","asd"];
+
 #[derive(Debug, Serialize, FromRow, Clone)]
 pub struct Log {
     pub id: i64,
@@ -18,7 +20,7 @@ pub struct NewLog {
     pub timestamp: i64,
 }
 
-fn serialize_timestamp<S>(ts: &i64, ser: S) -> Result<S::Ok, S::Error>
+pub fn serialize_timestamp<S>(ts: &i64, ser: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {
