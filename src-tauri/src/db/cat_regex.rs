@@ -4,10 +4,10 @@ use sqlx::{Error, FromRow, SqlitePool};
 
 #[derive(Debug, Serialize, FromRow)]
 pub struct CategoryRegex {
-    id: i32,
-    cat_id: i32,
-    regex: String,
-    priority: i32,
+   pub id: i32,
+    pub cat_id: i32,
+    pub regex: String,
+    pub priority: i32,
 }
 #[derive(Debug, Serialize)]
 pub struct NewCategoryRegex {
