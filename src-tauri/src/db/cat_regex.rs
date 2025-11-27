@@ -24,8 +24,7 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), Error> {
     cat_id   INTEGER not null,
     regex    TEXT    not null,
     priority integer
-);",
-    )
+);",    )// TODO make interger unqiue
     .execute(pool)
     .await?;
     Ok(())
