@@ -2,7 +2,7 @@ use chrono::{Local, TimeZone};
 use serde::Serialize;
 use sqlx::{Error, FromRow, SqlitePool};
 use std::time::{SystemTime, UNIX_EPOCH};
-
+//todo add skipping
 pub static SKIPPED_APPS:[&str;2] = ["Windows Default Lock Screen","asd"];
 
 #[derive(Debug, Serialize, FromRow, Clone)]
