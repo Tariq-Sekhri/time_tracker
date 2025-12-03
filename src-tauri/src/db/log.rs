@@ -3,12 +3,22 @@ use serde::Serialize;
 use sqlx::{Error, FromRow, SqlitePool};
 use std::time::{SystemTime, UNIX_EPOCH};
 //todo add skipping
-pub static SKIPPED_APPS:[&str;2] = ["Windows Default Lock Screen","asd"];
+pub static SKIPPED_APPS: [&str; 6] = [
+    "",
+    "Windows Default Lock Screen",
+    "Task View",
+    "Search",
+    "Task Switching",
+    "System tray overflow window.",
+];
+//Program Manager
 
 #[derive(Debug, Serialize, FromRow, Clone)]
 pub struct Log {
     pub id: i64,
     pub app: String,
+    // pub app_name: String, RustRover
+    // pub app_process_name: String, time tracker - lib.rs
     #[serde(serialize_with = "serialize_timestamp")]
     pub timestamp: i64,
     pub duration: i64,

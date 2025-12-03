@@ -1,8 +1,8 @@
-use std::sync::atomic::{AtomicBool, Ordering};
 use crate::db::{
     self,
     log::{self, increase_duration, NewLog},
 };
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use windows::Win32::UI::WindowsAndMessaging as ws;
@@ -26,7 +26,6 @@ fn generate_log() -> NewLog {
 }
 
 pub async fn background_process() {
-
     let pool = match db::get_pool().await {
         Ok(pool) => pool,
         Err(e) => {
@@ -36,11 +35,14 @@ pub async fn background_process() {
     };
     let mut last_log_id = -1;
 
-    loop{
-        if !IS_SUSPENDED.load(Ordering::Relaxed){
-
+    loop {
+        if !IS_SUSPENDED.load(Ordering::Relaxed) {
             let new_log = generate_log();
-            if new_log.app=="".to_string() {
+            if log::SKIPPED_APPS
+                .into_iter()
+                .find(|app| app == &new_log.app)
+                != None
+            {
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
             }
@@ -56,7 +58,6 @@ pub async fn background_process() {
                                 .await
                                 .expect("increase");
                         } else {
-
                             last_log_id = log::insert(pool, new_log).await.expect("last_log");
                         }
                     }
@@ -66,7 +67,6 @@ pub async fn background_process() {
                     }
                 };
             }
-
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
     }

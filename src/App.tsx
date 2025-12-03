@@ -1,10 +1,11 @@
-import { useState} from "react";
-import { invoke } from "@tauri-apps/api/core";
+import {useState} from "react";
+import {invoke} from "@tauri-apps/api/core";
 import "./App.css";
 
 function App() {
     const [weekNum, setWeekNum] = useState("");
     const [displayText, setDisplayText] = useState("Missing Data");
+
     function getWeekRange(date: Date): { week_start: number; week_end: number } {
         const d = new Date(date);
 
@@ -25,55 +26,54 @@ function App() {
         };
     }
 
-    async function db_to_json(){
-        setDisplayText(await invoke("db_to_json"));
+    async function db_to_json() {
+        setDisplayText(JSON.parse(await invoke("db_to_json")));
+
     }
 
-    async function get_cat_regex(){
-        setDisplayText(await invoke("get_cat_regex_cmd"));
+    async function get_cat_regex() {
+        setDisplayText(JSON.parse(await invoke("get_cat_regex_cmd")));
     }
 
-    async function get_logs(){
-        const data:string = await invoke("get_logs_cmd");
-        const logs = JSON.parse(data).slice(-50);
+    async function get_logs() {
+        const data: string = await invoke("get_logs_cmd");
+        const logs = JSON.parse(data).slice(-4);
         setDisplayText(logs);
     }
 
-    async function get_categories(){
-        setDisplayText(await invoke("get_categories_cmd"));
+    async function get_categories() {
+        setDisplayText(JSON.parse(await invoke("get_categories_cmd")));
     }
 
-    async function getWeek(){
-        const {week_start,week_end} = getWeekRange(new Date())
-        const data: string = await invoke("get_week", {weekStart:week_start,weekEnd:week_end})
-        const asd = JSON.parse(data).slice(-30);
+    async function getWeek() {
+        const {week_start, week_end} = getWeekRange(new Date())
+        const data: string = await invoke("get_week", {weekStart: week_start, weekEnd: week_end})
+        const asd = JSON.parse(data);
         console.log(asd);
         setDisplayText(asd);
     }
+
     // useEffect(() => {
     //     console.log(displayText);
     // }, [displayText]);
 
     return (
         <main className="bg-black text-white ">
-            <button className="bg-red-500" onClick={db_to_json}>db_to_json</button><br/>
-            <button className="bg-red-500" onClick={get_cat_regex}>get_cat_regex</button><br/>
-            <button className="bg-red-500" onClick={get_logs}>get_logs</button><br/>
-            <button className="bg-red-500" onClick={get_categories}>get_categories</button><br/>
-            <button className="bg-blue-500" onClick={getWeek}>get_week</button>
-
-
-
-
-
-
+            <button className="bg-red-500 text-xl" onClick={db_to_json}>db_to_json</button>
+            <br/>
+            <button className="bg-red-500 text-xl" onClick={get_cat_regex}>get_cat_regex</button>
+            <br/>
+            <button className="bg-red-500 text-xl" onClick={get_logs}>get_logs</button>
+            <br/>
+            <button className="bg-red-500 text-xl" onClick={get_categories}>get_categories</button>
+            <br/>
+            <button className="bg-blue-500 text-2xl" onClick={getWeek}>get_week</button>
 
             <div>
-    <pre className="db">
+    <pre className="text-xl">
         {JSON.stringify(displayText, null, 2)}
     </pre>
             </div>
-
 
 
         </main>

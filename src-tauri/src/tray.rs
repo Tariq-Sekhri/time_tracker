@@ -1,17 +1,17 @@
+use crate::core::IS_SUSPENDED;
 use std::sync::atomic::Ordering;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
     AppHandle, Manager, WindowEvent,
 };
-use crate::core::IS_SUSPENDED;
 
 pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let show = MenuItem::with_id(app, "show", "Show", true, None::<String>)?;
     let pause = MenuItem::with_id(app, "pause", "Pause", true, None::<String>)?;
     let resume = MenuItem::with_id(app, "resume", "Resume", true, None::<String>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<String>)?;
-    let menu = Menu::with_items(app, &[&show,&resume,&pause,&quit])?;
+    let menu = Menu::with_items(app, &[&show, &resume, &pause, &quit])?;
 
     TrayIconBuilder::new()
         .icon(app.default_window_icon().unwrap().clone())
@@ -20,10 +20,10 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             "quit" => {
                 app.exit(0);
             }
-            "pause"=>{
+            "pause" => {
                 IS_SUSPENDED.store(true, Ordering::Relaxed);
             }
-            "resume"=>{
+            "resume" => {
                 IS_SUSPENDED.store(false, Ordering::Relaxed);
             }
             "show" => {
@@ -37,7 +37,6 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .build(app)?;
     Ok(())
 }
-
 
 pub fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
     if let WindowEvent::CloseRequested { api, .. } = event {
