@@ -34,12 +34,13 @@ Manual time tracking is tedious and inconsistent. Time Tracker runs in the backg
 **category**
 - `id` INTEGER PRIMARY KEY AUTOINCREMENT
 - `name` TEXT NOT NULL UNIQUE
+- `priority` INTEGER
 
 **category_regex**
 - `id` INTEGER PRIMARY KEY AUTOINCREMENT
 - `cat_id` INTEGER NOT NULL (references category.id)
 - `regex` TEXT NOT NULL
-- `priority` INTEGER
+
 
 ## Tech Stack
 
