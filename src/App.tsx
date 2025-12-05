@@ -67,7 +67,7 @@ function App() {
             <br/>
             <button className="bg-red-500 text-xl" onClick={get_categories}>get_categories</button>
             <br/>
-            <button className="bg-blue-500 text-2xl" onClick={getWeek}>get_week</button>
+            <button className="bg-blue-500 text-2xl fixed left-30 top-0" onClick={getWeek}>get_week</button>
 
             <div>
     <pre className="text-xl">

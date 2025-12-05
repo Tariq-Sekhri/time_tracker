@@ -2,6 +2,7 @@ use crate::db;
 use db::cat_regex::{get_cat_regex, CategoryRegex};
 use db::category::{get_categories, Category};
 use db::log::{get_logs, serialize_timestamp, Log};
+
 use regex::Regex;
 use serde::Serialize;
 use serde_json::to_string_pretty;
@@ -27,21 +28,12 @@ struct TimeBlock {
 struct HalfWayLogs {
     id: i64,
     app: String,
-
     #[serde(serialize_with = "serialize_timestamp")]
     start_timestamp: i64,
     #[serde(serialize_with = "serialize_timestamp")]
     end_timestamp: i64,
     duration: i64,
     category: String,
-}
-fn derive_category(app: &str, regexes: &Vec<RegexStuff>) -> String {
-    regexes
-        .iter()
-        .find(|regex| regex.regex.is_match(app))
-        .unwrap()
-        .category
-        .clone()
 }
 
 struct RegexStuff {
@@ -50,69 +42,84 @@ struct RegexStuff {
     priority: i32,
 }
 
+fn derive_category(app: &str, regexes: &Vec<RegexStuff>) -> String {
+    regexes
+        .iter()
+        .find(|regex| regex.regex.is_match(app))
+        .unwrap()
+        .category
+        .clone()
+}
+#[derive(Debug)]
+enum MyError {
+    RegexError(regex::Error),
+    MissingRegex,
+}
+
+impl From<regex::Error> for MyError {
+    fn from(err: regex::Error) -> Self {
+        MyError::RegexError(err)
+    }
+}
+
+fn get_regexies(
+    categories: &Vec<Category>,
+    cat_regex: &Vec<CategoryRegex>,
+) -> Result<Vec<RegexStuff>, MyError> {
+    let mut regex: Vec<RegexStuff> = categories
+        .iter()
+        .map(|cat| {
+            let reg = cat_regex
+                .iter()
+                .find(|reg| reg.cat_id == cat.id)
+                .ok_or(MyError::MissingRegex)?;
+
+            let regex = Regex::new(&reg.regex)?;
+
+            Ok(RegexStuff {
+                category: cat.name.clone(),
+                priority: cat.priority,
+                regex,
+            })
+        })
+        .collect::<Result<Vec<_>, MyError>>()?;
+
+    regex.sort_by_key(|r| std::cmp::Reverse(r.priority));
+    Ok(regex)
+}
 #[tauri::command]
 pub async fn get_week(week_start: i64, week_end: i64) -> String {
     match db::get_pool().await {
         Ok(pool) => {
-            //todo merge these so ther run together
             let logs = get_logs(pool).await.unwrap();
             let cat_regex = get_cat_regex(pool).await.unwrap();
             let categories = get_categories(pool).await.unwrap();
+            let regex = get_regexies(&categories, &cat_regex).unwrap();
 
-            let mut regex: Vec<RegexStuff> = categories
-                .iter()
-                .map(|cat| RegexStuff {
-                    category: cat.name.clone(),
-                    priority: cat.priority,
-                    regex: Regex::new(
-                        cat_regex
-                            .iter()
-                            .find(|reg| reg.cat_id == cat.id)
-                            .unwrap()
-                            .regex
-                            .as_str(),
-                    )
-                    .unwrap(),
-                })
-                .collect();
-            regex.sort_by_key(|r| std::cmp::Reverse(r.priority));
             //todo make this a db function
-            // let logs_from_this_week:Vec<Log> = logs.into_iter().filter(|log| log.timestamp > week_start && log.timestamp< week_end && log.duration==0 ).collect();
-            let logs_from_this_week: Vec<Log> = logs;
-            let half_way_logs: Vec<HalfWayLogs> = logs_from_this_week
-                .iter()
-                .map(|log| HalfWayLogs {
-                    id: log.id,
-                    app: log.app.clone(),
-                    start_timestamp: log.timestamp,
-                    end_timestamp: log.timestamp + log.duration,
-                    duration: log.duration,
-                    category: derive_category(&log.app, &regex),
-                })
-                .collect();
+            // let logs_from_this_week:Vec<Log> = logs.into_iter().filter(|log| log.timestamp > week_start && log.timestamp< week_end ).collect();
 
             let mut time_blocks: Vec<TimeBlock> = Vec::new();
-            let first = half_way_logs.get(0).unwrap();
+            let first = logs.get(0).unwrap();
             time_blocks.push(TimeBlock {
                 id: 0,
-                category: first.category.clone(),
-                start_time: first.start_timestamp,
+                category: derive_category(&first.app, &regex),
+                start_time: first.timestamp,
                 apps: vec![TimeBlockLogs {
                     app: first.app.clone(),
                     total_duration: first.duration,
                 }],
-                end_time: first.end_timestamp,
+                end_time: first.timestamp + first.duration,
             });
 
             let mut timeblockindex = 0;
-            for i in 1..half_way_logs.len() {
-                let log = half_way_logs.get(i).unwrap();
+            for i in 1..logs.len() {
+                let log = logs.get(i).unwrap();
+                let log_cat = derive_category(&log.app, &regex);
 
                 if let Some(current_time_block) = time_blocks.get_mut(timeblockindex) {
-                    if current_time_block.category == log.category
-                        || log.category == "Miscellaneous"
-                    {
-                        current_time_block.end_time = log.end_timestamp;
+                    if current_time_block.category == log_cat || log_cat == "Miscellaneous" {
+                        current_time_block.end_time = log.timestamp + log.duration;
                         if let Some(matching_app) = current_time_block
                             .apps
                             .iter_mut()
@@ -129,26 +136,26 @@ pub async fn get_week(week_start: i64, week_end: i64) -> String {
                         timeblockindex += 1;
                         time_blocks.push(TimeBlock {
                             id: timeblockindex as i32,
-                            category: log.category.clone(),
-                            start_time: log.start_timestamp,
+                            category: log_cat,
+                            start_time: log.timestamp,
                             apps: vec![TimeBlockLogs {
                                 app: log.app.clone(),
                                 total_duration: log.duration,
                             }],
-                            end_time: log.end_timestamp,
+                            end_time: log.timestamp + log.duration,
                         });
                     }
                 } else {
                     timeblockindex += 1;
                     time_blocks.push(TimeBlock {
                         id: timeblockindex as i32,
-                        category: log.category.clone(),
-                        start_time: log.start_timestamp,
+                        category: log_cat,
+                        start_time: log.timestamp,
                         apps: vec![TimeBlockLogs {
                             app: log.app.clone(),
                             total_duration: log.duration,
                         }],
-                        end_time: log.end_timestamp,
+                        end_time: log.timestamp + log.duration,
                     });
                 }
             }
