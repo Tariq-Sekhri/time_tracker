@@ -3,13 +3,14 @@ use serde::Serialize;
 use sqlx::{Error, FromRow, SqlitePool};
 use std::time::{SystemTime, UNIX_EPOCH};
 //todo add skipping
-pub static SKIPPED_APPS: [&str; 6] = [
+pub static SKIPPED_APPS: [&str; 7] = [
     "",
     "Windows Default Lock Screen",
     "Task View",
     "Search",
     "Task Switching",
     "System tray overflow window.",
+    "Program Manager",
 ];
 //Program Manager
 

@@ -21,8 +21,6 @@ pub fn run() {
         })
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            greet,
-            db_to_json,
             get_cat_regex_cmd,
             get_logs_cmd,
             get_categories_cmd,
