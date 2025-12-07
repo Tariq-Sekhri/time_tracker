@@ -1,13 +1,34 @@
 #![cfg_attr(not(feature = "dev-warnings"), allow(dead_code, unused_imports))]
 
+use serde::{Deserialize, Serialize};
 use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
 use std::env;
 use std::path::PathBuf;
 use std::sync::OnceLock;
+use thiserror::Error;
 
 pub mod cat_regex;
 pub mod category;
 pub mod log;
+#[derive(Debug, Serialize, Deserialize, Error)]
+#[serde(tag = "type", content = "data")]
+pub enum AppError {
+    #[error("db error: {0}")]
+    Db(String),
+    #[error("not found")]
+    NotFound,
+    #[error("{0}")]
+    Other(String),
+}
+
+impl From<sqlx::Error> for AppError {
+    fn from(e: sqlx::Error) -> Self {
+        match e {
+            sqlx::Error::RowNotFound => AppError::NotFound,
+            other => AppError::Db(other.to_string()),
+        }
+    }
+}
 
 static POOL: OnceLock<SqlitePool> = OnceLock::new();
 

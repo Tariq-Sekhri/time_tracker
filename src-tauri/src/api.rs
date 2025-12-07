@@ -2,10 +2,13 @@ use crate::db;
 use db::cat_regex::{get_cat_regex, CategoryRegex};
 use db::category::{get_categories, Category};
 use db::log::{get_logs, serialize_timestamp, Log};
+use std::fmt::Formatter;
 
+use crate::db::AppError;
 use regex::Regex;
 use serde::Serialize;
 use serde_json::to_string_pretty;
+use sqlx;
 
 #[derive(Serialize, Clone, Debug)]
 struct TimeBlockLogs {
@@ -44,16 +47,27 @@ struct CachedCategoryRegex {
     category: String,
     priority: i32,
 }
-
+#[derive(Debug)]
+enum DatabaseError {
+    Sqlx(sqlx::Error),
+    AppError(AppError),
+}
 #[derive(Debug)]
 enum WeekProcessError {
-    Database(sqlx::Error),
+    Database(DatabaseError),
     Regex(regex::Error),
     MissingCategory,
     NoLogs,
     Serialization(serde_json::Error),
 }
-
+impl std::fmt::Display for DatabaseError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DatabaseError::Sqlx(e) => write!(f, "Database error: {}", e),
+            DatabaseError::AppError(e) => write!(f, "Database error: {}", e),
+        }
+    }
+}
 impl std::fmt::Display for WeekProcessError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -68,7 +82,13 @@ impl std::fmt::Display for WeekProcessError {
 
 impl From<sqlx::Error> for WeekProcessError {
     fn from(err: sqlx::Error) -> Self {
-        WeekProcessError::Database(err)
+        WeekProcessError::Database(DatabaseError::Sqlx(err))
+    }
+}
+
+impl From<AppError> for WeekProcessError {
+    fn from(err: AppError) -> Self {
+        WeekProcessError::Database(DatabaseError::AppError(err))
     }
 }
 
@@ -123,13 +143,14 @@ fn build_regex_table(
     regex.sort_by_key(|r| std::cmp::Reverse(r.priority));
     Ok(regex)
 }
+
 #[tauri::command]
 pub async fn get_week(week_start: i64, week_end: i64) -> Result<String, String> {
     async fn inner(week_start: i64, week_end: i64) -> Result<String, WeekProcessError> {
         let pool = db::get_pool().await?;
         let logs = get_logs(pool).await?;
         let cat_regex = get_cat_regex(pool).await?;
-        let categories = get_categories(pool).await?;
+        let categories = get_categories().await?;
         let regex = build_regex_table(&categories, &cat_regex)?;
 
         let logs: Vec<Log> = logs
@@ -164,10 +185,11 @@ pub async fn get_week(week_start: i64, week_end: i64) -> Result<String, String> 
                             total_duration: log.duration,
                         })
                     }
+                } else {
+                    time_block_index += 1;
+                    time_blocks.push(TimeBlock::new(log, time_block_index as i32, log_cat));
                 }
             }
-            time_block_index += 1;
-            time_blocks.push(TimeBlock::new(log, time_block_index as i32, log_cat));
         }
 
         let json = to_string_pretty(&time_blocks)?;
@@ -190,13 +212,5 @@ pub async fn get_logs_cmd() -> Result<String, String> {
     let pool = db::get_pool().await.map_err(|e| e.to_string())?;
     let logs = get_logs(&pool).await.map_err(|e| e.to_string())?;
     let json = to_string_pretty(&logs).map_err(|e| e.to_string())?;
-    Ok(json)
-}
-
-#[tauri::command]
-pub async fn get_categories_cmd() -> Result<String, String> {
-    let pool = db::get_pool().await.map_err(|e| e.to_string())?;
-    let categories = get_categories(&pool).await.map_err(|e| e.to_string())?;
-    let json = to_string_pretty(&categories).map_err(|e| e.to_string())?;
     Ok(json)
 }

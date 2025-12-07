@@ -4519,6 +4519,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-opener",
+ "thiserror 2.0.16",
  "tokio",
  "windows 0.62.2",
 ]

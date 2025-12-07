@@ -35,7 +35,9 @@ function App() {
     }
 
     async function get_categories() {
-        setDisplayText(JSON.parse(await invoke("get_categories_cmd")));
+        const data: any = await invoke("get_categories")
+        console.log(data)
+        setDisplayText(data);
     }
 
     async function getWeek() {
