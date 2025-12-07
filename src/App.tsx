@@ -25,13 +25,14 @@ function App() {
 
 
     async function get_cat_regex() {
-        setDisplayText(JSON.parse(await invoke("get_cat_regex_cmd")));
+        const data: any = await invoke("get_cat_regex");
+        setDisplayText(data);
     }
 
     async function get_logs() {
-        const data: string = await invoke("get_logs_cmd");
-        const logs = JSON.parse(data).slice(-4);
-        setDisplayText(logs);
+        const data: any = await invoke("get_logs");
+
+        setDisplayText(data.slice(-4));
     }
 
     async function get_categories() {
@@ -48,9 +49,6 @@ function App() {
         setDisplayText(asd);
     }
 
-    // useEffect(() => {
-    //     console.log(displayText);
-    // }, [displayText]);
 
     return (
         <main className="bg-black text-white ">
