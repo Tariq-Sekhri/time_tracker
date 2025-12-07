@@ -148,8 +148,8 @@ fn build_regex_table(
 pub async fn get_week(week_start: i64, week_end: i64) -> Result<String, String> {
     async fn inner(week_start: i64, week_end: i64) -> Result<String, WeekProcessError> {
         let pool = db::get_pool().await?;
-        let logs = get_logs(pool).await?;
-        let cat_regex = get_cat_regex(pool).await?;
+        let logs = get_logs().await?;
+        let cat_regex = get_cat_regex().await?;
         let categories = get_categories().await?;
         let regex = build_regex_table(&categories, &cat_regex)?;
 
@@ -197,20 +197,4 @@ pub async fn get_week(week_start: i64, week_end: i64) -> Result<String, String> 
     }
 
     inner(week_start, week_end).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn get_cat_regex_cmd() -> Result<String, String> {
-    let pool = db::get_pool().await.map_err(|e| e.to_string())?;
-    let cat_regex = get_cat_regex(pool).await.map_err(|e| e.to_string())?;
-    let json = to_string_pretty(&cat_regex).map_err(|e| e.to_string())?;
-    Ok(json)
-}
-
-#[tauri::command]
-pub async fn get_logs_cmd() -> Result<String, String> {
-    let pool = db::get_pool().await.map_err(|e| e.to_string())?;
-    let logs = get_logs(&pool).await.map_err(|e| e.to_string())?;
-    let json = to_string_pretty(&logs).map_err(|e| e.to_string())?;
-    Ok(json)
 }

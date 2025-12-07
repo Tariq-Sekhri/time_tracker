@@ -1,23 +1,23 @@
 use crate::db;
-use crate::db::AppError;
-use serde::Serialize;
+use crate::db::AppError as Error;
+use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteQueryResult;
-use sqlx::{Error, FromRow, Sqlite, SqlitePool};
+use sqlx::{FromRow, Sqlite, SqlitePool};
 
-#[derive(Debug, Serialize, FromRow)]
+#[derive(Debug, Serialize, FromRow, Deserialize)]
 pub struct Category {
     pub id: i32,
     pub name: String,
     pub priority: i32,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct NewCategory {
     name: String,
     priority: i32,
 }
 
-pub async fn create_table(pool: &SqlitePool) -> Result<(), Error> {
+pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS category (
             id   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,7 +30,8 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), Error> {
     .await?;
     Ok(())
 }
-pub async fn insert(new_category: NewCategory) -> Result<i64, Error> {
+#[tauri::command]
+pub async fn insert_category(new_category: NewCategory) -> Result<i64, Error> {
     let pool = db::get_pool().await?;
     Ok(
         sqlx::query("insert into category (name, priority) values (?,?)")
@@ -41,26 +42,28 @@ pub async fn insert(new_category: NewCategory) -> Result<i64, Error> {
             .last_insert_rowid(),
     )
 }
+#[tauri::command]
 
-pub async fn get_by_id(id: i32) -> Result<Category, Error> {
+pub async fn get_category_by_id(id: i32) -> Result<Category, Error> {
     let pool = db::get_pool().await?;
-    sqlx::query_as::<_, Category>("select * from Category where id = ?")
+    let cat = sqlx::query_as::<_, Category>("select * from Category where id = ?")
         .bind(id)
         .fetch_one(pool)
-        .await
+        .await?;
+    Ok(cat)
 }
 
 #[tauri::command]
-pub async fn get_categories() -> Result<Vec<Category>, AppError> {
-    // return Err(AppError::Db("synthetic test error".into()));
+pub async fn get_categories() -> Result<Vec<Category>, Error> {
     let pool = db::get_pool().await?;
     let cats = sqlx::query_as::<_, Category>("select * from Category")
         .fetch_all(pool)
         .await?;
     Ok(cats)
 }
+#[tauri::command]
 
-pub async fn update_by_id(cat: Category) -> Result<(), Error> {
+pub async fn update_category_by_id(cat: Category) -> Result<(), Error> {
     let pool = db::get_pool().await?;
     sqlx::query("update category where id= ? set name = ?, priority = ?")
         .bind(cat.id)
@@ -70,8 +73,9 @@ pub async fn update_by_id(cat: Category) -> Result<(), Error> {
         .await?;
     Ok(())
 }
+#[tauri::command]
 
-pub async fn delete_by_id(id: i32) -> Result<(), Error> {
+pub async fn delete_category_by_id(id: i32) -> Result<(), Error> {
     let pool = db::get_pool().await?;
     sqlx::query("delete from category where id= ?")
         .bind(id)

@@ -1,7 +1,4 @@
-use crate::db::{
-    self,
-    log::{self, increase_duration, NewLog},
-};
+use crate::db::log::{self, increase_duration, NewLog};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -24,16 +21,9 @@ fn generate_log() -> NewLog {
         timestamp: now.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64,
     }
 }
-
+// todo if process creases the frontend should know
 pub async fn background_process() {
-    let pool = match db::get_pool().await {
-        Ok(pool) => pool,
-        Err(e) => {
-            eprintln!("Error: {e}");
-            return;
-        }
-    };
-    let mut last_log_id = -1;
+    let mut last_log_id: i64 = -1;
 
     loop {
         if !IS_SUSPENDED.load(Ordering::Relaxed) {
@@ -47,25 +37,21 @@ pub async fn background_process() {
                 continue;
             }
             if last_log_id == -1 {
-                last_log_id = log::insert(pool, new_log)
-                    .await
-                    .expect("TODO: panic message");
+                last_log_id = log::insert_log(new_log).await.unwrap()
             } else {
-                match log::get_by_id(pool, last_log_id).await {
+                match log::get_log_by_id(last_log_id).await {
                     Ok(last_log) => {
                         if last_log.app == new_log.app {
-                            increase_duration(pool, last_log.id)
-                                .await
-                                .expect("increase");
+                            increase_duration(last_log.id).await.unwrap();
                         } else {
-                            last_log_id = log::insert(pool, new_log).await.expect("last_log");
+                            last_log_id = log::insert_log(new_log).await.unwrap();
                         }
                     }
                     Err(e) => {
                         eprintln!("Error getting log {e}");
                         return;
                     }
-                };
+                }
             }
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
