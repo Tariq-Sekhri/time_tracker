@@ -1,8 +1,7 @@
-mod api;
 mod core;
 mod db;
 mod tray;
-use api::*;
+
 use core::background_process;
 use db::cat_regex::{
     delete_cat_regex_by_id, get_cat_regex, get_cat_regex_by_id, insert_cat_regex,
@@ -13,6 +12,7 @@ use db::category::{
     update_category_by_id,
 };
 use db::log::{delete_log_by_id, get_log_by_id, get_logs};
+use db::queries::get_week;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

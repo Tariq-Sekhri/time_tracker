@@ -1,10 +1,11 @@
 use crate::db;
+use crate::db::error::AppError;
+use crate::db::pool::get_pool;
 use db::cat_regex::{get_cat_regex, CategoryRegex};
 use db::category::{get_categories, Category};
 use db::log::{get_logs, serialize_timestamp, Log};
 use std::fmt::Formatter;
 
-use crate::db::AppError;
 use regex::Regex;
 use serde::Serialize;
 use serde_json::to_string_pretty;
@@ -47,11 +48,13 @@ struct CachedCategoryRegex {
     category: String,
     priority: i32,
 }
+
 #[derive(Debug)]
 enum DatabaseError {
     Sqlx(sqlx::Error),
     AppError(AppError),
 }
+
 #[derive(Debug)]
 enum WeekProcessError {
     Database(DatabaseError),
@@ -60,6 +63,7 @@ enum WeekProcessError {
     NoLogs,
     Serialization(serde_json::Error),
 }
+
 impl std::fmt::Display for DatabaseError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -68,6 +72,7 @@ impl std::fmt::Display for DatabaseError {
         }
     }
 }
+
 impl std::fmt::Display for WeekProcessError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -147,7 +152,7 @@ fn build_regex_table(
 #[tauri::command]
 pub async fn get_week(week_start: i64, week_end: i64) -> Result<String, String> {
     async fn inner(week_start: i64, week_end: i64) -> Result<String, WeekProcessError> {
-        let pool = db::get_pool().await?;
+        let _pool = get_pool().await?;
         let logs = get_logs().await?;
         let cat_regex = get_cat_regex().await?;
         let categories = get_categories().await?;
