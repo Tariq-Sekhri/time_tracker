@@ -3,16 +3,16 @@ mod db;
 mod tray;
 
 use core::background_process;
-use db::cat_regex::{
+use db::queries::get_week;
+use db::tables::cat_regex::{
     delete_cat_regex_by_id, get_cat_regex, get_cat_regex_by_id, insert_cat_regex,
     update_cat_regex_by_id,
 };
-use db::category::{
+use db::tables::category::{
     delete_category_by_id, get_categories, get_category_by_id, insert_category,
     update_category_by_id,
 };
-use db::log::{delete_log_by_id, get_log_by_id, get_logs};
-use db::queries::get_week;
+use db::tables::log::{delete_log_by_id, get_log_by_id, get_logs};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

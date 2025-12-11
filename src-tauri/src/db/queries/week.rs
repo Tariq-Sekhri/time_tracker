@@ -1,9 +1,9 @@
 use crate::db;
 use crate::db::error::AppError;
 use crate::db::pool::get_pool;
-use db::cat_regex::{get_cat_regex, CategoryRegex};
-use db::category::{get_categories, Category};
-use db::log::{get_logs, serialize_timestamp, Log};
+use crate::db::tables::cat_regex::{get_cat_regex, CategoryRegex};
+use crate::db::tables::category::{get_categories, Category};
+use crate::db::tables::log::{get_logs, serialize_timestamp, Log};
 use std::fmt::Formatter;
 
 use regex::Regex;

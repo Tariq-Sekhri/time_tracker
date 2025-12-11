@@ -3,9 +3,9 @@ use std::env;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
-use crate::db::cat_regex;
-use crate::db::category;
-use crate::db::log;
+use crate::db::tables::cat_regex;
+use crate::db::tables::category;
+use crate::db::tables::log;
 
 static POOL: OnceLock<SqlitePool> = OnceLock::new();
 

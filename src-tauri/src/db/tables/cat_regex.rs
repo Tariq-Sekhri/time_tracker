@@ -1,5 +1,5 @@
 use crate::db;
-use crate::db::category::NewCategory;
+use crate::db::tables::category::NewCategory;
 use crate::db::AppError as Error;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
