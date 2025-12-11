@@ -1,4 +1,4 @@
-use crate::db::log::{self, increase_duration, NewLog};
+use crate::db::tables::log::{self, increase_duration, NewLog};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
