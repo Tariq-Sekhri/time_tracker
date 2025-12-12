@@ -1,15 +1,16 @@
-import { AppError, invokeWithResult, Result } from "../types/types.ts";
+import { invokeWithResult } from "../utils.ts";
+import { AppError, Result } from "../types/common.ts";
 
 export type Category = {
-    id: number,
-    name: string,
-    priority: number
-}
+    id: number;
+    name: string;
+    priority: number;
+};
 
 export type NewCategory = {
-    name: string,
-    priority: number
-}
+    name: string;
+    priority: number;
+};
 
 export async function get_categories(): Promise<Result<Category[], AppError>> {
     return invokeWithResult<Category[]>("get_categories");

@@ -1,12 +1,12 @@
-import {invoke} from "@tauri-apps/api/core";
-import {AppError, Result, invokeWithResult} from "../types/types.ts";
+import { invokeWithResult } from "../utils.ts";
+import { AppError, Result } from "../types/common.ts";
 
 export type Log = {
-    id: number,
-    app: string,
-    timestamp: Date,
-    duration: number,
-}
+    id: number;
+    app: string;
+    timestamp: Date;
+    duration: number;
+};
 
 export async function delete_log_by_id(id: number): Promise<Result<null, AppError>> {
     return invokeWithResult<null>("delete_log_by_id", {id});
