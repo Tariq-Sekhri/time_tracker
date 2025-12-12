@@ -1,15 +1,16 @@
-import { AppError, invokeWithResult, Result } from "../types/types.ts";
+import { invokeWithResult } from "../utils.ts";
+import { AppError, Result } from "../types/common.ts";
 
 export type CategoryRegex = {
-    id: number,
-    cat_id: number,
-    regex: string,
-}
+    id: number;
+    cat_id: number;
+    regex: string;
+};
 
 export type NewCategoryRegex = {
-    cat_id: number,
-    regex: string,
-}
+    cat_id: number;
+    regex: string;
+};
 
 export async function get_cat_regex(): Promise<Result<CategoryRegex[], AppError>> {
     return invokeWithResult<CategoryRegex[]>("get_cat_regex");
