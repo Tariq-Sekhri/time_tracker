@@ -2,6 +2,7 @@ import {useState} from "react";
 import {invoke} from "@tauri-apps/api/core";
 import "./App.css";
 import {get_logs, Log} from "./api/Log.ts";
+import {get_categories, Category} from "./api/Category.ts";
 import {AppError, Result} from "./types/types.ts";
 
 function App() {
@@ -42,10 +43,14 @@ function App() {
         }
     }
 
-    async function get_categories() {
-        const data: any = await invoke("get_categories");
-        console.log(data);
-        setDisplayText(data);
+    async function getCategories() {
+        const result: Result<Category[], AppError> = await get_categories();
+        if (result.success) {
+            setDisplayText(result.data);
+        } else {
+            setDisplayText(JSON.stringify(result.error));
+            console.error(result.error);
+        }
     }
 
     async function getWeek() {
@@ -61,10 +66,13 @@ function App() {
 
     return (
         <main className="bg-black text-white">
-            <button className="bg-red-500 text-xl" onClick={get_cat_regex}>get_cat_regex</button>
-            <button className="bg-red-500 text-xl" onClick={getLogs}>get_logs</button>
-            <button className="bg-red-500 text-xl" onClick={get_categories}>get_categories</button>
-            <button className="bg-blue-500 text-2xl fixed left-30 top-0" onClick={getWeek}>get_week</button>
+            <button className="bg-red-500 text-xl fixed left-0 top-0" onClick={get_cat_regex}>get_cat_regex</button>
+            <br/>
+            <button className="bg-red-500 text-xl  fixed left-50 top-0" onClick={getLogs}>get_logs</button>
+            <br/>
+            <button className="bg-red-500 text-xl  fixed left-100 top-0" onClick={getCategories}>get_categories</button>
+            <br/>
+            <button className="bg-blue-500 text-2xl fixed left-200 top-0" onClick={getWeek}>get_week</button>
             <div>
                 <pre className="text-xl">{JSON.stringify(displayText, null, 2)}</pre>
             </div>
