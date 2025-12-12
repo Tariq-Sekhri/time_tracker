@@ -15,3 +15,8 @@ export async function delete_log_by_id(id: number): Promise<Result<null, AppErro
 export async function get_logs(): Promise<Result<Log[], AppError>> {
     return invokeWithResult<Log[]>("get_logs");
 }
+
+export async function get_log_by_id(id: number): Promise<Result<Log, AppError>> {
+    return invokeWithResult<Log>("get_log_by_id", {id});
+}
+
