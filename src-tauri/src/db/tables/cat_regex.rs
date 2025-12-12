@@ -33,7 +33,7 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 
 pub async fn insert_cat_regex(new_category_regex: NewCategoryRegex) -> Result<i64, Error> {
     let pool = db::get_pool().await?;
-    let new_id = sqlx::query("INSERT INTO category_regex (cat_id, regex) values (?, ?, ?)")
+    let new_id = sqlx::query("INSERT INTO category_regex (cat_id, regex) values (?, ?)")
         .bind(new_category_regex.cat_id)
         .bind(new_category_regex.regex)
         .execute(pool)
@@ -55,9 +55,10 @@ pub async fn update_cat_regex_by_id(cat_regex: CategoryRegex) -> Result<(), Erro
 }
 #[tauri::command]
 
-pub async fn get_cat_regex_by_id() -> Result<CategoryRegex, Error> {
+pub async fn get_cat_regex_by_id(id: i32) -> Result<CategoryRegex, Error> {
     let pool = db::get_pool().await?;
-    let regex = sqlx::query_as::<_, CategoryRegex>("")
+    let regex = sqlx::query_as::<_, CategoryRegex>("select * from category_regex where id = ?")
+        .bind(id)
         .fetch_one(pool)
         .await?;
     Ok(regex)
@@ -74,7 +75,7 @@ pub async fn get_cat_regex() -> Result<Vec<CategoryRegex>, Error> {
 #[tauri::command]
 pub async fn delete_cat_regex_by_id(id: i32) -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    sqlx::query("delete category category_regex where id=?")
+    sqlx::query("delete from category_regex where id=?")
         .bind(id)
         .execute(pool)
         .await?;

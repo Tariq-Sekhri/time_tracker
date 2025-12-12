@@ -12,13 +12,13 @@ use serde_json::to_string_pretty;
 use sqlx;
 
 #[derive(Serialize, Clone, Debug)]
-struct TimeBlockLogs {
+pub struct TimeBlockLogs {
     app: String,
     total_duration: i64,
 }
 
 #[derive(Serialize)]
-struct TimeBlock {
+pub struct TimeBlock {
     id: i32,
     category: String,
     apps: Vec<TimeBlockLogs>,
@@ -115,6 +115,12 @@ impl From<WeekProcessError> for String {
     }
 }
 
+impl From<WeekProcessError> for AppError {
+    fn from(err: WeekProcessError) -> Self {
+        AppError::Other(err.to_string())
+    }
+}
+
 fn derive_category(app: &str, regexes: &[CachedCategoryRegex]) -> Result<String, WeekProcessError> {
     regexes
         .iter()
@@ -150,56 +156,51 @@ fn build_regex_table(
 }
 
 #[tauri::command]
-pub async fn get_week(week_start: i64, week_end: i64) -> Result<String, String> {
-    async fn inner(week_start: i64, week_end: i64) -> Result<String, WeekProcessError> {
-        let _pool = get_pool().await?;
-        let logs = get_logs().await?;
-        let cat_regex = get_cat_regex().await?;
-        let categories = get_categories().await?;
-        let regex = build_regex_table(&categories, &cat_regex)?;
+pub async fn get_week(week_start: i64, week_end: i64) -> Result<Vec<TimeBlock>, AppError> {
+    let _pool = get_pool().await?;
+    let logs = get_logs().await?;
+    let cat_regex = get_cat_regex().await?;
+    let categories = get_categories().await?;
+    let regex = build_regex_table(&categories, &cat_regex)?;
 
-        let logs: Vec<Log> = logs
-            .into_iter()
-            .filter(|log| log.timestamp > week_start && log.timestamp < week_end)
-            .collect();
+    let logs: Vec<Log> = logs
+        .into_iter()
+        .filter(|log| log.timestamp > week_start && log.timestamp < week_end)
+        .collect();
 
-        let mut time_blocks: Vec<TimeBlock> = Vec::new();
-        let first = logs.get(0).ok_or(WeekProcessError::NoLogs)?;
-        time_blocks.push(TimeBlock::new(
-            first,
-            0,
-            derive_category(&first.app, &regex)?,
-        ));
+    let mut time_blocks: Vec<TimeBlock> = Vec::new();
+    let first = logs.get(0).ok_or(WeekProcessError::NoLogs)?;
+    time_blocks.push(TimeBlock::new(
+        first,
+        0,
+        derive_category(&first.app, &regex)?,
+    ));
 
-        let mut time_block_index = 0;
-        for log in &logs[1..] {
-            let log_cat = derive_category(&log.app, &regex)?;
+    let mut time_block_index = 0;
+    for log in &logs[1..] {
+        let log_cat = derive_category(&log.app, &regex)?;
 
-            if let Some(current_time_block) = time_blocks.get_mut(time_block_index) {
-                if current_time_block.category == log_cat || log_cat == "Miscellaneous" {
-                    current_time_block.end_time += log.duration;
-                    if let Some(matching_app) = current_time_block
-                        .apps
-                        .iter_mut()
-                        .find(|s| s.app == log.app)
-                    {
-                        matching_app.total_duration += log.duration;
-                    } else {
-                        current_time_block.apps.push(TimeBlockLogs {
-                            app: log.app.clone(),
-                            total_duration: log.duration,
-                        })
-                    }
+        if let Some(current_time_block) = time_blocks.get_mut(time_block_index) {
+            if current_time_block.category == log_cat || log_cat == "Miscellaneous" {
+                current_time_block.end_time += log.duration;
+                if let Some(matching_app) = current_time_block
+                    .apps
+                    .iter_mut()
+                    .find(|s| s.app == log.app)
+                {
+                    matching_app.total_duration += log.duration;
                 } else {
-                    time_block_index += 1;
-                    time_blocks.push(TimeBlock::new(log, time_block_index as i32, log_cat));
+                    current_time_block.apps.push(TimeBlockLogs {
+                        app: log.app.clone(),
+                        total_duration: log.duration,
+                    })
                 }
+            } else {
+                time_block_index += 1;
+                time_blocks.push(TimeBlock::new(log, time_block_index as i32, log_cat));
             }
         }
-
-        let json = to_string_pretty(&time_blocks)?;
-        Ok(json)
     }
 
-    inner(week_start, week_end).await.map_err(|e| e.to_string())
+    Ok(time_blocks)
 }

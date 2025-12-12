@@ -1,25 +1,22 @@
 use crate::db::tables::log::{self, increase_duration, NewLog};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, SystemTimeError, UNIX_EPOCH};
 
 use windows::Win32::UI::WindowsAndMessaging as ws;
 
 pub static IS_SUSPENDED: AtomicBool = AtomicBool::new(false);
 
-fn generate_log() -> NewLog {
+fn generate_log() -> Result<NewLog, SystemTimeError> {
     let hwnd = unsafe { ws::GetForegroundWindow() };
 
     let mut buf: [u16; 1024] = [0; 1024];
     let n = unsafe { ws::GetWindowTextW(hwnd, &mut buf) };
     let fore_ground_window = String::from_utf16_lossy(&buf[..n as usize]);
-    let now = SystemTime::now();
-
-    // println!("{}", fore_ground_window);
-    // println!("{}", now.duration_since(UNIX_EPOCH).unwrap().as_secs());
-    NewLog {
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
+    Ok(NewLog {
         app: fore_ground_window,
-        timestamp: now.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64,
-    }
+        timestamp: now,
+    })
 }
 // todo if process creases the frontend should know
 pub async fn background_process() {
@@ -27,7 +24,7 @@ pub async fn background_process() {
 
     loop {
         if !IS_SUSPENDED.load(Ordering::Relaxed) {
-            let new_log = generate_log();
+            let new_log = generate_log().unwrap();
             if log::SKIPPED_APPS
                 .into_iter()
                 .find(|app| app == &new_log.app)
