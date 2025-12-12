@@ -1,90 +1,63 @@
-import {useEffect, useState} from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
+import { useState } from "react";
 import "./App.css";
+import { get_logs, Log } from "./api/Log.ts";
+import { get_categories, Category } from "./api/Category.ts";
+import { get_week, TimeBlock } from "./api/week.ts";
+import { CategoryRegex, get_cat_regex } from "./api/CategoryRegex.ts";
+import { AppError, Result } from "./types/common.ts";
 
 function App() {
-    const [greetMsg, setGreetMsg] = useState("");
-    const [name, setName] = useState("");
-    const [db, setDb] = useState("Missing Data");
+    const [displayText, setDisplayText] = useState<string>("Missing Data");
 
-    async function greet() {
-        setGreetMsg(await invoke("greet", { name }));
+    async function getCatRegex() {
+        const result: Result<CategoryRegex[], AppError> = await get_cat_regex();
+        if (result.success) {
+            setDisplayText(JSON.stringify(result.data, null, 2));
+        } else {
+            setDisplayText(JSON.stringify(result.error, null, 2));
+        }
     }
 
-    async function db_to_json(){
-        setDb(await invoke("db_to_json"));
+    async function getLogs() {
+        const result: Result<Log[], AppError> = await get_logs();
+        if (result.success) {
+            setDisplayText(JSON.stringify(result.data.slice(-20), null, 2));
+        } else {
+            setDisplayText(JSON.stringify(result.error, null, 2));
+        }
     }
 
-    async function get_cat_regex(){
-        setDb(await invoke("get_cat_regex_cmd"));
+    async function getCategories() {
+        const result: Result<Category[], AppError> = await get_categories();
+        if (result.success) {
+            setDisplayText(JSON.stringify(result.data, null, 2));
+        } else {
+            setDisplayText(JSON.stringify(result.error, null, 2));
+        }
     }
 
-    async function get_logs(){
-        const data:string = await invoke("get_logs_cmd");
-        const logs = JSON.parse(data).slice(-20);
-        setDb(logs);
+    async function getWeek() {
+        const result: Result<TimeBlock[], AppError> = await get_week();
+        if (result.success) {
+            setDisplayText(JSON.stringify(result.data.slice(-20), null, 2));
+        } else {
+            setDisplayText(JSON.stringify(result.error, null, 2));
+        }
     }
-
-    async function get_categories(){
-        setDb(await invoke("get_categories_cmd"));
-    }
-
-    useEffect(() => {
-        console.log(db);
-    }, [db]);
 
     return (
-        <main className="container">
-            <h1>Welcome to Tauri + React</h1>
-
-            <div className="w-32 h-32 bg-blue-500 rounded-lg shadow-lg mx-auto my-4"></div>
-
-            <div className="row">
-                <a href="https://vite.dev" target="_blank">
-                    <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-                </a>
-                <a href="https://tauri.app" target="_blank">
-                    <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-                </a>
-                <a href="https://react.dev" target="_blank">
-                    <img src={reactLogo} className="logo react" alt="React logo" />
-                </a>
-            </div>
-            <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-            <form
-                className="row"
-                onSubmit={(e) => {
-                    e.preventDefault();
-                    greet();
-                }}
-            >
-                <input
-                    id="greet-input"
-                    onChange={(e) => setName(e.currentTarget.value)}
-                    placeholder="Enter a name..."
-                />
-                <button type="submit">Greet</button>
-            </form>
-            <p>{greetMsg}</p>
+        <main className="bg-black text-white">
+            <button className="text-xl fixed left-0 top-0 px-2 bg-purple-500" onClick={getCatRegex}>get_cat_regex
+            </button>
+            <button className="text-xl fixed left-33 top-0 px-2 bg-orange-500" onClick={getLogs}>get_logs</button>
+            <button className="text-xl fixed left-55 top-0 px-2 bg-red-500" onClick={getCategories}>get_categories
+            </button>
+            <button className="text-2xl fixed left-100 top-0 px-2 bg-blue-500" onClick={getWeek}>get_week</button>
+            <br /><br />
 
             <div>
-                {Array.isArray(db) ? (
-                    db.map(log => (
-                        <div key={log.id}>
-                            {log.app} - {log.duration}s
-                        </div>
-                    ))
-                ) : (
-                    <p className="db">{db}</p>
-                )}
+                <pre className="text-xl whitespace-pre-wrap">{displayText}</pre>
             </div>
-
-            <button className="idk" onClick={db_to_json}>db_to_json</button>
-            <button className="idk" onClick={get_cat_regex}>get_cat_regex</button>
-            <button className="idk" onClick={get_logs}>get_logs</button>
-            <button className="idk" onClick={get_categories}>get_categories</button>
         </main>
     );
 }
