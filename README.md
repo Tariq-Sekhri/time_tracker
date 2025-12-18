@@ -21,27 +21,6 @@ Manual time tracking is tedious and inconsistent. Time Tracker runs in the backg
 - No cloud, no telemetry, no third‑party services
 - Offline by design. The app does not make network requests
 
-## Data Model
-
-### Tables
-
-**logs**
-- `id` INTEGER PRIMARY KEY AUTOINCREMENT
-- `app` TEXT NOT NULL (foreground window title)
-- `timestamp` INTEGER NOT NULL (Unix time, seconds)
-- `duration` INTEGER NOT NULL DEFAULT 0 (seconds)
-
-**category**
-- `id` INTEGER PRIMARY KEY AUTOINCREMENT
-- `name` TEXT NOT NULL UNIQUE
-- `priority` INTEGER
-
-**category_regex**
-- `id` INTEGER PRIMARY KEY AUTOINCREMENT
-- `cat_id` INTEGER NOT NULL (references category.id)
-- `regex` TEXT NOT NULL
-
-
 ## Tech Stack
 
 - **Tauri 2**: Rust backend with system WebView
