@@ -9,3 +9,7 @@ export type AppError =
     | { type: "NotFound" }
     | { type: "Other"; data: string };
 
+
+
+
+

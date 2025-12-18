@@ -1,8 +1,9 @@
-use sqlx;
-use thiserror::Error;
 use serde::{Deserialize, Serialize};
+use sqlx;
+use std::time::SystemTimeError;
+use thiserror::Error;
 
-#[derive(Debug, Serialize, Deserialize, Error)]
+#[derive(Debug, Serialize, Deserialize, Error, Clone)]
 #[serde(tag = "type", content = "data")]
 pub enum AppError {
     #[error("db error: {0}")]
@@ -19,5 +20,11 @@ impl From<sqlx::Error> for AppError {
             sqlx::Error::RowNotFound => AppError::NotFound,
             other => AppError::Db(other.to_string()),
         }
+    }
+}
+
+impl From<SystemTimeError> for AppError {
+    fn from(e: SystemTimeError) -> Self {
+        AppError::Other(e.to_string())
     }
 }

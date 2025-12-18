@@ -74,7 +74,7 @@ impl std::fmt::Display for DatabaseError {
 }
 
 impl std::fmt::Display for WeekProcessError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             WeekProcessError::Database(e) => write!(f, "Database error: {}", e),
             WeekProcessError::Regex(e) => write!(f, "Regex error: {}", e),

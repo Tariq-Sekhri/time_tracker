@@ -13,8 +13,15 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<String>)?;
     let menu = Menu::with_items(app, &[&show, &resume, &pause, &quit])?;
 
+    let icon = app.default_window_icon()
+        .ok_or_else(|| std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Failed to get default window icon"
+        ))?
+        .clone();
+    
     TrayIconBuilder::new()
-        .icon(app.default_window_icon().unwrap().clone())
+        .icon(icon)
         .menu(&menu)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "quit" => {
@@ -28,8 +35,12 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             }
             "show" => {
                 if let Some(window) = app.get_window("main") {
-                    window.show().unwrap();
-                    window.set_focus().unwrap();
+                    if let Err(e) = window.show() {
+                        eprintln!("Failed to show window: {}", e);
+                    }
+                    if let Err(e) = window.set_focus() {
+                        eprintln!("Failed to set window focus: {}", e);
+                    }
                 }
             }
             _ => {}
@@ -40,7 +51,9 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
 pub fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
     if let WindowEvent::CloseRequested { api, .. } = event {
-        window.hide().unwrap();
+        if let Err(e) = window.hide() {
+            eprintln!("Failed to hide window: {}", e);
+        }
         api.prevent_close();
     }
 }
