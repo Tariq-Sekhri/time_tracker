@@ -36,7 +36,7 @@ where
     let formatted = Local
         .timestamp_opt(*ts, 0)
         .single()
-        .unwrap()
+        .ok_or_else(|| serde::ser::Error::custom(format!("Invalid timestamp: {}", ts)))?
         .format("%Y-%m-%d %I:%M:%S %p")
         .to_string();
     ser.serialize_str(&formatted)

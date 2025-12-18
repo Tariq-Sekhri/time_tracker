@@ -2,7 +2,7 @@ mod core;
 mod db;
 mod tray;
 
-use core::background_process;
+use core::supervisor;
 use db::queries::get_week;
 use db::tables::cat_regex::{
     delete_cat_regex_by_id, get_cat_regex, get_cat_regex_by_id, insert_cat_regex,
@@ -16,12 +16,10 @@ use db::tables::log::{delete_log_by_id, get_log_by_id, get_logs};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    //    let pool = tauri::async_runtime::block_on(db::get_pool()).expect("Failed to get DB pool");
     tauri::Builder::default()
-        // .manage(pool)
         .setup(|app| {
             tray::setup_tray(app.handle())?;
-            tauri::async_runtime::spawn(background_process());
+            tauri::async_runtime::spawn(supervisor(app.handle().clone()));
             Ok(())
         })
         .on_window_event(|_window, event| {

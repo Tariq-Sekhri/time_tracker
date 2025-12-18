@@ -1,7 +1,8 @@
 use crate::db::tables::log::{self, increase_duration, NewLog};
+use crate::db::AppError;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, SystemTimeError, UNIX_EPOCH};
-
+use tauri::{AppHandle, Emitter};
 use windows::Win32::UI::WindowsAndMessaging as ws;
 
 pub static IS_SUSPENDED: AtomicBool = AtomicBool::new(false);
@@ -11,46 +12,50 @@ fn generate_log() -> Result<NewLog, SystemTimeError> {
 
     let mut buf: [u16; 1024] = [0; 1024];
     let n = unsafe { ws::GetWindowTextW(hwnd, &mut buf) };
-    let fore_ground_window = String::from_utf16_lossy(&buf[..n as usize]);
+    let foreground_window = String::from_utf16_lossy(&buf[..n as usize]);
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
     Ok(NewLog {
-        app: fore_ground_window,
+        app: foreground_window,
         timestamp: now,
     })
 }
-// todo if process creases the frontend should know
-pub async fn background_process() {
-    let mut last_log_id: i64 = -1;
-
+pub async fn supervisor(app: AppHandle) {
+    tokio::time::sleep(Duration::from_secs(10)).await;
     loop {
-        if !IS_SUSPENDED.load(Ordering::Relaxed) {
-            let new_log = generate_log().unwrap();
-            if log::SKIPPED_APPS
-                .into_iter()
-                .find(|app| app == &new_log.app)
-                != None
-            {
-                tokio::time::sleep(Duration::from_secs(1)).await;
-                continue;
+        if let Err(e) = background_process().await {
+            // Emit error to frontend, log if emission fails
+            if let Err(emit_err) = app.emit("BackgroundProcessError", &e) {
+                eprintln!("Failed to emit error event: {}", emit_err);
             }
-            if last_log_id == -1 {
-                last_log_id = log::insert_log(new_log).await.unwrap()
+            eprintln!("Background process error: {}", e);
+            // TODO: Add proper logger
+        }
+    }
+}
+
+async fn background_process() -> Result<(), AppError> {
+    let mut last_log_id: i64 = -1;
+    loop {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        if IS_SUSPENDED.load(Ordering::Relaxed) {
+            continue;
+        }
+        let new_log = generate_log()?;
+
+        if log::SKIPPED_APPS.iter().any(|&app| app == new_log.app) {
+            continue;
+        }
+
+        if last_log_id == -1 {
+            last_log_id = log::insert_log(new_log).await?;
+        } else {
+            let last_log = log::get_log_by_id(last_log_id).await?;
+            if last_log.app == new_log.app {
+                increase_duration(last_log.id).await?;
             } else {
-                match log::get_log_by_id(last_log_id).await {
-                    Ok(last_log) => {
-                        if last_log.app == new_log.app {
-                            increase_duration(last_log.id).await.unwrap();
-                        } else {
-                            last_log_id = log::insert_log(new_log).await.unwrap();
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Error getting log {e}");
-                        return;
-                    }
-                }
+                last_log_id = log::insert_log(new_log).await?;
             }
         }
-        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }

@@ -1,13 +1,15 @@
-import { useState } from "react";
+import {useState} from "react";
 import "./App.css";
-import { get_logs, Log } from "./api/Log.ts";
-import { get_categories, Category } from "./api/Category.ts";
-import { get_week, TimeBlock } from "./api/week.ts";
-import { CategoryRegex, get_cat_regex } from "./api/CategoryRegex.ts";
-import { AppError, Result } from "./types/common.ts";
+import {get_logs, Log} from "./api/Log.ts";
+import {get_categories, Category} from "./api/Category.ts";
+import {get_week, TimeBlock} from "./api/week.ts";
+import {CategoryRegex, get_cat_regex} from "./api/CategoryRegex.ts";
+import {AppError, Result} from "./types/common.ts";
+import {listen} from "@tauri-apps/api/event";
 
 function App() {
     const [displayText, setDisplayText] = useState<string>("Missing Data");
+    listen("BackgroundProcessError", e => console.error(e.payload));
 
     async function getCatRegex() {
         const result: Result<CategoryRegex[], AppError> = await get_cat_regex();
@@ -53,7 +55,7 @@ function App() {
             <button className="text-xl fixed left-55 top-0 px-2 bg-red-500" onClick={getCategories}>get_categories
             </button>
             <button className="text-2xl fixed left-100 top-0 px-2 bg-blue-500" onClick={getWeek}>get_week</button>
-            <br /><br />
+            <br/><br/>
 
             <div>
                 <pre className="text-xl whitespace-pre-wrap">{displayText}</pre>

@@ -65,10 +65,10 @@ pub async fn get_categories() -> Result<Vec<Category>, Error> {
 
 pub async fn update_category_by_id(cat: Category) -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    sqlx::query("update category where id= ? set name = ?, priority = ?")
-        .bind(cat.id)
+    sqlx::query("UPDATE category SET name = ?, priority = ? WHERE id = ?")
         .bind(cat.name)
         .bind(cat.priority)
+        .bind(cat.id)
         .execute(pool)
         .await?;
     Ok(())
