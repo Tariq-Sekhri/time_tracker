@@ -11,11 +11,26 @@ import {
 } from "../api/CategoryRegex.ts";
 import { unwrapResult } from "../utils.ts";
 
+// Validate regex pattern - returns error message or null if valid
+function validateRegex(pattern: string): string | null {
+    if (!pattern.trim()) {
+        return "Pattern cannot be empty";
+    }
+    try {
+        new RegExp(pattern);
+        return null;
+    } catch (e) {
+        return `Invalid regex: ${e instanceof Error ? e.message : "Unknown error"}`;
+    }
+}
+
 export default function CategoryRegexView() {
     const queryClient = useQueryClient();
     const [editingRegex, setEditingRegex] = useState<CategoryRegex | null>(null);
     const [newRegexCatId, setNewRegexCatId] = useState<number | "">("");
     const [newRegexPattern, setNewRegexPattern] = useState("");
+    const [regexError, setRegexError] = useState<string | null>(null);
+    const [editRegexError, setEditRegexError] = useState<string | null>(null);
 
     const { data: categories = [] } = useQuery({
         queryKey: ["categories"],
@@ -62,6 +77,13 @@ export default function CategoryRegexView() {
     });
 
     const handleCreateRegex = () => {
+        const error = validateRegex(newRegexPattern);
+        if (error) {
+            setRegexError(error);
+            return;
+        }
+        setRegexError(null);
+
         if (typeof newRegexCatId === "number" && newRegexPattern.trim()) {
             createRegexMutation.mutate({
                 cat_id: newRegexCatId,
@@ -71,6 +93,12 @@ export default function CategoryRegexView() {
     };
 
     const handleUpdateRegex = (regex: CategoryRegex) => {
+        const error = validateRegex(regex.regex);
+        if (error) {
+            setEditRegexError(error);
+            return;
+        }
+        setEditRegexError(null);
         updateRegexMutation.mutate(regex);
     };
 
@@ -117,8 +145,11 @@ export default function CategoryRegexView() {
                         type="text"
                         placeholder="Regex pattern"
                         value={newRegexPattern}
-                        onChange={(e) => setNewRegexPattern(e.target.value)}
-                        className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
+                        onChange={(e) => {
+                            setNewRegexPattern(e.target.value);
+                            setRegexError(null);
+                        }}
+                        className={`flex-1 px-3 py-2 bg-gray-800 border rounded text-white ${regexError ? 'border-red-500' : 'border-gray-700'}`}
                     />
                     <button
                         onClick={handleCreateRegex}
@@ -127,6 +158,9 @@ export default function CategoryRegexView() {
                         Add
                     </button>
                 </div>
+                {regexError && (
+                    <div className="mt-2 text-red-400 text-sm">{regexError}</div>
+                )}
             </div>
 
             {/* Regex List */}
@@ -148,12 +182,20 @@ export default function CategoryRegexView() {
                                             </option>
                                         ))}
                                     </select>
-                                    <input
-                                        type="text"
-                                        value={editingRegex.regex}
-                                        onChange={(e) => setEditingRegex({ ...editingRegex, regex: e.target.value })}
-                                        className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
-                                    />
+                                    <div className="flex-1 flex flex-col">
+                                        <input
+                                            type="text"
+                                            value={editingRegex.regex}
+                                            onChange={(e) => {
+                                                setEditingRegex({ ...editingRegex, regex: e.target.value });
+                                                setEditRegexError(null);
+                                            }}
+                                            className={`px-3 py-2 bg-gray-800 border rounded text-white ${editRegexError ? 'border-red-500' : 'border-gray-700'}`}
+                                        />
+                                        {editRegexError && (
+                                            <div className="mt-1 text-red-400 text-sm">{editRegexError}</div>
+                                        )}
+                                    </div>
                                     <button
                                         onClick={() => handleUpdateRegex(editingRegex)}
                                         className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded"
@@ -161,7 +203,10 @@ export default function CategoryRegexView() {
                                         Save
                                     </button>
                                     <button
-                                        onClick={() => setEditingRegex(null)}
+                                        onClick={() => {
+                                            setEditingRegex(null);
+                                            setEditRegexError(null);
+                                        }}
                                         className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded"
                                     >
                                         Cancel

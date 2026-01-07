@@ -15,7 +15,7 @@ pub fn drop_all() -> std::io::Result<()> {
     Ok(())
 }
 
-fn get_db_path() -> PathBuf {
+pub fn get_db_path() -> PathBuf {
     let appdata = env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
     PathBuf::from(appdata).join("time-tracker").join("app.db")
 }
