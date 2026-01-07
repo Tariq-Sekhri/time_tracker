@@ -5,11 +5,13 @@ export type Category = {
     id: number;
     name: string;
     priority: number;
+    color?: string | null;
 };
 
 export type NewCategory = {
     name: string;
     priority: number;
+    color?: string | null;
 };
 
 export async function get_categories(): Promise<Result<Category[], AppError>> {

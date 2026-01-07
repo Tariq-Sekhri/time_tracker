@@ -4,16 +4,6 @@ use chrono::{Local, TimeZone};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
 
-pub static SKIPPED_APPS: [&str; 7] = [
-    "",
-    "Windows Default Lock Screen",
-    "Task View",
-    "Search",
-    "Task Switching",
-    "System tray overflow window.",
-    "Program Manager",
-];
-
 #[derive(Debug, Serialize, FromRow, Clone, Deserialize)]
 pub struct Log {
     pub id: i64,

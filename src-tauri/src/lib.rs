@@ -13,6 +13,9 @@ use db::tables::category::{
     update_category_by_id,
 };
 use db::tables::log::{delete_log_by_id, get_log_by_id, get_logs};
+use db::tables::skipped_app::{
+    delete_skipped_app_by_id, get_skipped_apps, insert_skipped_app,
+};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -41,6 +44,9 @@ pub fn run() {
             get_logs,
             get_log_by_id,
             delete_log_by_id,
+            get_skipped_apps,
+            insert_skipped_app,
+            delete_skipped_app_by_id,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
