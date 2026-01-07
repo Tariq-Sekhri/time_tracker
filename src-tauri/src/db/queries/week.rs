@@ -93,6 +93,11 @@ struct CachedCategoryRegex {
 }
 
 fn derive_category(app: &str, regexes: &[CachedCategoryRegex]) -> Result<String, WeekProcessError> {
+    // If no regexes available, default to Miscellaneous
+    if regexes.is_empty() {
+        return Ok("Miscellaneous".to_string());
+    }
+    
     regexes
         .iter()
         .find(|regex| regex.regex.is_match(app))
@@ -137,8 +142,21 @@ fn get_time_blocks(
     logs: &[Log],
     regex: &[CachedCategoryRegex],
 ) -> Result<Vec<TimeBlock>, WeekProcessError> {
+    if logs.is_empty() {
+        return Ok(Vec::new());
+    }
+    
+    let min_log_duration = 60; 
+    
+    let long_logs: Vec<&Log> = logs.iter().filter(|log| log.duration >= min_log_duration).collect();
+    let short_logs: Vec<&Log> = logs.iter().filter(|log| log.duration < min_log_duration).collect();
+    
+    if long_logs.is_empty() {
+        return Ok(Vec::new());
+    }
+    
     let mut time_blocks: Vec<TimeBlock> = Vec::new();
-    let first = logs.get(0).ok_or(WeekProcessError::NoLogs)?;
+    let first = long_logs[0];
     time_blocks.push(TimeBlock::new(
         first,
         0,
@@ -146,7 +164,7 @@ fn get_time_blocks(
     ));
 
     let mut time_block_index = 0;
-    for log in &logs[1..] {
+    for log in &long_logs[1..] {
         let log_cat = derive_category(&log.app, regex)?;
         let log_end_time = log.timestamp + log.duration;
 
@@ -175,6 +193,60 @@ fn get_time_blocks(
                 time_blocks.push(TimeBlock::new(log, time_block_index as i32, log_cat));
             }
         }
+    }
+    
+    // Attach short logs to same-category blocks within 10 minutes, else discard
+    let max_attach_distance = 10 * 60; // 10 minutes in seconds
+    
+    for short_log in short_logs {
+        if time_blocks.is_empty() {
+            break;
+        }
+        
+        let short_log_cat = match derive_category(&short_log.app, regex) {
+            Ok(cat) => cat,
+            Err(_) => continue, // Skip if can't determine category
+        };
+        
+        // Find a same-category block within 10 minutes
+        let mut best_match: Option<usize> = None;
+        let mut min_distance = i64::MAX;
+        
+        for (idx, block) in time_blocks.iter().enumerate() {
+            // Only consider blocks of the same category
+            if block.category != short_log_cat {
+                continue;
+            }
+            
+            // Distance from short log to block
+            let distance = if short_log.timestamp < block.start_time {
+                block.start_time - short_log.timestamp
+            } else if short_log.timestamp > block.end_time {
+                short_log.timestamp - block.end_time
+            } else {
+                0 // Log is within the block's time range
+            };
+            
+            if distance <= max_attach_distance && distance < min_distance {
+                min_distance = distance;
+                best_match = Some(idx);
+            }
+        }
+        
+        // Only attach if we found a matching block within 10 min, else discard
+        if let Some(idx) = best_match {
+            if let Some(block) = time_blocks.get_mut(idx) {
+                if let Some(matching_app) = block.apps.iter_mut().find(|a| a.app == short_log.app) {
+                    matching_app.total_duration += short_log.duration;
+                } else {
+                    block.apps.push(TimeBlockLogs {
+                        app: short_log.app.clone(),
+                        total_duration: short_log.duration,
+                    });
+                }
+            }
+        }
+        // If no matching block found, short log is discarded (user said they don't mind)
     }
 
     Ok(time_blocks)
@@ -210,8 +282,13 @@ pub async fn get_week(week_start: i64, week_end: i64) -> Result<Vec<TimeBlock>, 
 
     let logs: Vec<Log> = logs
         .into_iter()
-        .filter(|log| log.timestamp > week_start && log.timestamp < week_end)
+        .filter(|log| log.timestamp >= week_start && log.timestamp <= week_end)
         .collect();
+
+    // If no logs in this week, return empty array
+    if logs.is_empty() {
+        return Ok(Vec::new());
+    }
 
     transform_time_blocks(get_time_blocks(&logs, &regex)?)
 }
@@ -267,19 +344,11 @@ fn transform_time_blocks(time_blocks: Vec<TimeBlock>) -> Result<Vec<TimeBlock>, 
     let lookahead_window = 10 * 60; // 10 minutes in seconds - how far ahead to look for same category
     let min_duration = 60; // 1 minute in seconds - minimum duration for a time block
 
-    // Pre-filter: only keep blocks longer than 1 minute
-    let mut result: Vec<TimeBlock> = time_blocks
-        .into_iter()
-        .filter(|block| {
-            let duration = block.end_time - block.start_time;
-            duration >= min_duration
-        })
-        .collect();
-
-    if result.is_empty() {
-        return Ok(result);
+    if time_blocks.is_empty() {
+        return Ok(Vec::new());
     }
 
+    let mut result: Vec<TimeBlock> = time_blocks;
     result.sort_by_key(|b| b.start_time);
     let mut to_remove = std::collections::HashSet::new();
 
@@ -345,6 +414,15 @@ fn transform_time_blocks(time_blocks: Vec<TimeBlock>) -> Result<Vec<TimeBlock>, 
     for idx in indices_to_remove {
         result.remove(idx);
     }
+
+    // Post-filter: only keep blocks longer than 1 minute AFTER merging
+    let result: Vec<TimeBlock> = result
+        .into_iter()
+        .filter(|block| {
+            let duration = block.end_time - block.start_time;
+            duration >= min_duration
+        })
+        .collect();
 
     Ok(result)
 }

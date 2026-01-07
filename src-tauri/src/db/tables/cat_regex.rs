@@ -28,7 +28,7 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
     
-    // Insert default "*" regex for Miscellaneous category if table is empty
+    // Insert default ".*" regex for Miscellaneous category if table is empty
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM category_regex")
         .fetch_one(pool)
         .await?;
@@ -42,7 +42,7 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         if let Some((cat_id,)) = misc_id {
             sqlx::query("INSERT OR IGNORE INTO category_regex (cat_id, regex) VALUES (?, ?)")
                 .bind(cat_id)
-                .bind("*")
+                .bind(".*")
                 .execute(pool)
                 .await?;
         }

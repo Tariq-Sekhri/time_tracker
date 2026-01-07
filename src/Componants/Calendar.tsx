@@ -234,29 +234,10 @@ export default function Calendar() {
 
         if (!data || data.length === 0) {
             return (
-                <div className="relative">
-                    <FullCalendar
-                        key={date.toISOString()}
-                        plugins={[timeGridPlugin]}
-                        initialView="timeGridWeek"
-                        initialDate={date}
-                        headerToolbar={false}
-                        editable={false}
-                        selectable={false}
-                        dayMaxEvents={true}
-                        events={[]}
-                        height="auto"
-                        allDaySlot={false}
-                        eventDisplay="block"
-                        nowIndicator={true}
-                        timeZone="local"
-                        firstDay={1}
-                    />
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
-                        <div className="text-center">
-                            <div className="text-gray-400 text-xl mb-2">No data for this week</div>
-                            <div className="text-gray-600 text-sm">Start tracking to see your activity here</div>
-                        </div>
+                <div className="flex items-center justify-center h-full w-full">
+                    <div className="text-center">
+                        <div className="text-gray-400 text-4xl mb-4 font-semibold">No data for this week</div>
+                        <div className="text-gray-600 text-xl">Start tracking to see your activity here</div>
                     </div>
                 </div>
             );
