@@ -256,15 +256,22 @@ fn get_time_blocks(
 pub async fn get_week(week_start: i64, week_end: i64) -> Result<Vec<TimeBlock>, AppError> {
     let mut logs = get_logs().await?;
     let skipped_apps = get_skipped_apps().await?;
-    let skipped_app_names: std::collections::HashSet<String> = skipped_apps
+    
+    // Build regex patterns for skipped apps
+    let skipped_regexes: Vec<Regex> = skipped_apps
         .iter()
-        .map(|app| app.app_name.clone())
+        .filter_map(|app| Regex::new(&app.regex).ok())
         .collect();
+    
+    // Check if an app matches any skipped regex
+    let is_skipped = |app_name: &str| -> bool {
+        skipped_regexes.iter().any(|regex| regex.is_match(app_name))
+    };
     
     // Filter out and delete logs for skipped apps
     let logs_to_delete: Vec<i64> = logs
         .iter()
-        .filter(|log| skipped_app_names.contains(&log.app))
+        .filter(|log| is_skipped(&log.app))
         .map(|log| log.id)
         .collect();
     
@@ -274,7 +281,7 @@ pub async fn get_week(week_start: i64, week_end: i64) -> Result<Vec<TimeBlock>, 
     }
     
     // Filter out skipped apps from the logs list
-    logs.retain(|log| !skipped_app_names.contains(&log.app));
+    logs.retain(|log| !is_skipped(&log.app));
     
     let cat_regex = get_cat_regex().await?;
     let categories = get_categories().await?;

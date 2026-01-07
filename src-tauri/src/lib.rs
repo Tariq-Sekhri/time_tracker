@@ -2,7 +2,8 @@ mod core;
 mod db;
 mod tray;
 
-use core::supervisor;
+use core::{get_tracking_status, set_tracking_status, supervisor};
+use tray::refresh_tray_menu_cmd;
 use db::queries::get_week;
 use db::tables::cat_regex::{
     delete_cat_regex_by_id, get_cat_regex, get_cat_regex_by_id, insert_cat_regex,
@@ -12,11 +13,15 @@ use db::tables::category::{
     delete_category_by_id, get_categories, get_category_by_id, insert_category,
     update_category_by_id,
 };
-use db::tables::log::{delete_log_by_id, get_log_by_id, get_logs};
-use db::tables::skipped_app::{
-    delete_skipped_app_by_id, get_skipped_apps, insert_skipped_app,
+use db::tables::log::{
+    count_logs_for_time_block, delete_log_by_id, delete_logs_for_time_block, get_log_by_id,
+    get_logs,
 };
-use db::{get_all_db_data, get_db_path_cmd};
+use db::tables::skipped_app::{
+    count_matching_logs, delete_skipped_app_by_id, get_skipped_apps, insert_skipped_app,
+    insert_skipped_app_and_delete_logs, restore_default_skipped_apps, update_skipped_app_by_id,
+};
+use db::{get_all_db_data, get_db_path_cmd, wipe_all_data};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -45,11 +50,21 @@ pub fn run() {
             get_logs,
             get_log_by_id,
             delete_log_by_id,
+            delete_logs_for_time_block,
+            count_logs_for_time_block,
             get_skipped_apps,
             insert_skipped_app,
+            insert_skipped_app_and_delete_logs,
+            update_skipped_app_by_id,
             delete_skipped_app_by_id,
+            count_matching_logs,
+            restore_default_skipped_apps,
             get_db_path_cmd,
             get_all_db_data,
+            wipe_all_data,
+            get_tracking_status,
+            set_tracking_status,
+            refresh_tray_menu_cmd,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

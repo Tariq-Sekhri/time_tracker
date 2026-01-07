@@ -11,6 +11,8 @@ pub enum AppError {
     Db(String),
     #[error("not found")]
     NotFound,
+    #[error("regex error: {0}")]
+    Regex(String),
     #[error("{0}")]
     Other(String),
 }

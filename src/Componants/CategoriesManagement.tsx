@@ -166,7 +166,7 @@ export default function CategoriesManagement() {
     const handleCreateSkippedApp = () => {
         if (newSkippedAppName.trim()) {
             createSkippedAppMutation.mutate({
-                app_name: newSkippedAppName.trim(),
+                regex: newSkippedAppName.trim(),
             });
         }
     };
@@ -416,16 +416,16 @@ export default function CategoriesManagement() {
             <div className="mt-8">
                 <h2 className="text-2xl font-semibold mb-4">Skipped Apps</h2>
                 <p className="text-sm text-gray-400 mb-4">
-                    Apps in this list will not be tracked. These are typically system windows and dialogs.
+                    Apps matching these regex patterns will not be tracked. Use the Skipped Apps tab for a better experience with confirmation dialogs.
                 </p>
                 
                 {/* Add New Skipped App */}
                 <div className="mb-4 p-4 bg-gray-900 rounded-lg">
-                    <h3 className="text-lg font-medium mb-3">Add Skipped App</h3>
+                    <h3 className="text-lg font-medium mb-3">Add Skipped App Pattern</h3>
                     <div className="flex gap-3">
                         <input
                             type="text"
-                            placeholder="App name (exact match)"
+                            placeholder="Regex pattern (e.g., ^Chrome$ or .*Discord.*)"
                             value={newSkippedAppName}
                             onChange={(e) => setNewSkippedAppName(e.target.value)}
                             className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
@@ -444,7 +444,7 @@ export default function CategoriesManagement() {
                     {skippedApps.map((app) => (
                         <div key={app.id} className="p-4 bg-gray-900 rounded-lg flex items-center justify-between">
                             <div>
-                                <span className="font-medium text-gray-200">{app.app_name || "(empty)"}</span>
+                                <code className="font-medium text-gray-200 bg-gray-800 px-2 py-1 rounded">{app.regex || "(empty)"}</code>
                             </div>
                             <button
                                 onClick={() => deleteSkippedAppMutation.mutate(app.id)}

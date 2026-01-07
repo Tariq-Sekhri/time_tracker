@@ -79,3 +79,53 @@ pub async fn increase_duration(id: i64) -> Result<(), sqlx::Error> {
         .await?;
     Ok(())
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DeleteTimeBlockRequest {
+    pub app_names: Vec<String>,
+    pub start_time: i64,
+    pub end_time: i64,
+}
+
+#[tauri::command]
+pub async fn delete_logs_for_time_block(request: DeleteTimeBlockRequest) -> Result<i64, Error> {
+    let pool = db::get_pool().await?;
+    
+    // Get all logs in the time range that match the app names
+    let logs = sqlx::query_as::<_, Log>("SELECT * FROM logs WHERE timestamp >= ? AND timestamp <= ?")
+        .bind(request.start_time)
+        .bind(request.end_time)
+        .fetch_all(pool)
+        .await?;
+    
+    let mut deleted_count = 0i64;
+    for log in logs {
+        // Check if the log's app is in the list of app names for this time block
+        if request.app_names.contains(&log.app) {
+            sqlx::query("DELETE FROM logs WHERE id = ?")
+                .bind(log.id)
+                .execute(pool)
+                .await?;
+            deleted_count += 1;
+        }
+    }
+    
+    Ok(deleted_count)
+}
+
+#[tauri::command]
+pub async fn count_logs_for_time_block(request: DeleteTimeBlockRequest) -> Result<i64, Error> {
+    let pool = db::get_pool().await?;
+    
+    let logs = sqlx::query_as::<_, Log>("SELECT * FROM logs WHERE timestamp >= ? AND timestamp <= ?")
+        .bind(request.start_time)
+        .bind(request.end_time)
+        .fetch_all(pool)
+        .await?;
+    
+    let count = logs.iter()
+        .filter(|log| request.app_names.contains(&log.app))
+        .count();
+    
+    Ok(count as i64)
+}

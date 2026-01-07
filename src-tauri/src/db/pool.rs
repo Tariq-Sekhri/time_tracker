@@ -17,7 +17,12 @@ pub fn drop_all() -> std::io::Result<()> {
 
 pub fn get_db_path() -> PathBuf {
     let appdata = env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(appdata).join("time-tracker").join("app.db")
+    let db_name = if cfg!(feature = "test-db") {
+        "app-test.db"
+    } else {
+        "app.db"
+    };
+    PathBuf::from(appdata).join("time-tracker").join(db_name)
 }
 
 pub async fn get_pool() -> Result<&'static SqlitePool, sqlx::Error> {

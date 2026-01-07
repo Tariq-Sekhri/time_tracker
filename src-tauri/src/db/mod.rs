@@ -6,6 +6,7 @@ pub mod queries;
 pub(crate) mod tables;
 
 use serde::Serialize;
+use sqlx;
 use tables::cat_regex::{get_cat_regex, CategoryRegex};
 use tables::category::{get_categories, Category};
 use tables::log::{get_logs, Log};
@@ -41,4 +42,25 @@ pub async fn get_all_db_data() -> Result<AllDbData, AppError> {
 #[tauri::command]
 pub fn get_db_path_cmd() -> String {
     pool::get_db_path().to_string_lossy().to_string()
+}
+
+#[tauri::command]
+pub async fn wipe_all_data() -> Result<(), AppError> {
+    let pool = get_pool().await?;
+    
+    // Delete all data from all tables
+    sqlx::query("DELETE FROM logs").execute(pool).await?;
+    sqlx::query("DELETE FROM category_regex").execute(pool).await?;
+    sqlx::query("DELETE FROM category").execute(pool).await?;
+    sqlx::query("DELETE FROM skipped_apps").execute(pool).await?;
+    
+    // Re-run table creation which will insert defaults
+    tables::category::create_table(pool).await
+        .map_err(|e| AppError::Db(e.to_string()))?;
+    tables::cat_regex::create_table(pool).await
+        .map_err(|e| AppError::Db(e.to_string()))?;
+    tables::skipped_app::create_table(pool).await
+        .map_err(|e| AppError::Db(e.to_string()))?;
+    
+    Ok(())
 }
