@@ -6,6 +6,7 @@ use std::sync::OnceLock;
 use crate::db::tables::cat_regex;
 use crate::db::tables::category;
 use crate::db::tables::log;
+use crate::db::tables::skipped_app;
 
 static POOL: OnceLock<SqlitePool> = OnceLock::new();
 
@@ -57,5 +58,6 @@ async fn create_all_tables(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     log::create_table(pool).await?;
     category::create_table(pool).await?;
     cat_regex::create_table(pool).await?;
+    skipped_app::create_table(pool).await?;
     Ok(())
 }

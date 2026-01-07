@@ -1,4 +1,5 @@
 use crate::db::tables::log::{self, increase_duration, NewLog};
+use crate::db::tables::skipped_app;
 use crate::db::AppError;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, SystemTimeError, UNIX_EPOCH};
@@ -43,7 +44,9 @@ async fn background_process() -> Result<(), AppError> {
         }
         let new_log = generate_log()?;
 
-        if log::SKIPPED_APPS.iter().any(|&app| app == new_log.app) {
+        if skipped_app::is_skipped_app(&new_log.app).await? {
+            // Delete the skipped app from the database so it will be tracked again
+            let _ = skipped_app::delete_skipped_app_by_name(&new_log.app).await;
             continue;
         }
 
