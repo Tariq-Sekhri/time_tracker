@@ -1,18 +1,25 @@
 use crate::core::IS_SUSPENDED;
 use std::sync::atomic::Ordering;
+use std::sync::OnceLock;
 use tauri::{
     menu::{Menu, MenuItem},
-    tray::TrayIconBuilder,
-    AppHandle, Manager, WindowEvent,
+    tray::{TrayIcon, TrayIconBuilder},
+    AppHandle, Manager, Runtime, WindowEvent,
 };
 
-pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let show = MenuItem::with_id(app, "show", "Show", true, None::<String>)?;
-    let pause = MenuItem::with_id(app, "pause", "Pause", true, None::<String>)?;
-    let resume = MenuItem::with_id(app, "resume", "Resume", true, None::<String>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<String>)?;
-    let menu = Menu::with_items(app, &[&show, &resume, &pause, &quit])?;
+static TRAY_ICON: OnceLock<TrayIcon<tauri::Wry>> = OnceLock::new();
 
+fn create_menu<R: Runtime>(app: &AppHandle<R>) -> Result<Menu<R>, Box<dyn std::error::Error>> {
+    let show = MenuItem::with_id(app, "show", "Show", true, None::<String>)?;
+    let is_paused = IS_SUSPENDED.load(Ordering::Relaxed);
+    let toggle_text = if is_paused { "Resume" } else { "Pause" };
+    let toggle = MenuItem::with_id(app, "toggle", toggle_text, true, None::<String>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<String>)?;
+    Ok(Menu::with_items(app, &[&show, &toggle, &quit])?)
+}
+
+pub fn setup_tray(app: &AppHandle<tauri::Wry>) -> Result<(), Box<dyn std::error::Error>> {
+    let menu = create_menu(app)?;
     let icon = app.default_window_icon()
         .ok_or_else(|| std::io::Error::new(
             std::io::ErrorKind::NotFound,
@@ -20,40 +27,44 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         ))?
         .clone();
     
-    TrayIconBuilder::new()
+    let tray = TrayIconBuilder::new()
         .icon(icon)
         .menu(&menu)
-        .on_menu_event(|app, event| match event.id.as_ref() {
-            "quit" => {
-                app.exit(0);
-            }
-            "pause" => {
-                IS_SUSPENDED.store(true, Ordering::Relaxed);
-            }
-            "resume" => {
-                IS_SUSPENDED.store(false, Ordering::Relaxed);
-            }
-            "show" => {
-                if let Some(window) = app.get_window("main") {
-                    if let Err(e) = window.show() {
-                        eprintln!("Failed to show window: {}", e);
-                    }
-                    if let Err(e) = window.set_focus() {
-                        eprintln!("Failed to set window focus: {}", e);
+        .on_menu_event(move |app, event| {
+            match event.id.as_ref() {
+                "quit" => {
+                    app.exit(0);
+                }
+                "toggle" => {
+                    let current_state = IS_SUSPENDED.load(Ordering::Relaxed);
+                    IS_SUSPENDED.store(!current_state, Ordering::Relaxed);
+                    
+                    if let Some(tray_icon) = TRAY_ICON.get() {
+                        let _ = tray_icon.set_menu(None::<Menu<tauri::Wry>>);
+                        if let Ok(new_menu) = create_menu(app) {
+                            let _ = tray_icon.set_menu(Some(new_menu));
+                        }
                     }
                 }
+                "show" => {
+                    if let Some(window) = app.get_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
+                _ => {}
             }
-            _ => {}
         })
         .build(app)?;
+    
+    let _ = TRAY_ICON.set(tray);
+    
     Ok(())
 }
 
 pub fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
     if let WindowEvent::CloseRequested { api, .. } = event {
-        if let Err(e) = window.hide() {
-            eprintln!("Failed to hide window: {}", e);
-        }
+        let _ = window.hide();
         api.prevent_close();
     }
 }

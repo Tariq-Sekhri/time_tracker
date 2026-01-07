@@ -27,6 +27,27 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     )
     .execute(pool)
     .await?;
+    
+    // Insert default "*" regex for Miscellaneous category if table is empty
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM category_regex")
+        .fetch_one(pool)
+        .await?;
+    
+    if count.0 == 0 {
+        // Get the Miscellaneous category ID
+        let misc_id: Option<(i32,)> = sqlx::query_as("SELECT id FROM category WHERE name = 'Miscellaneous'")
+            .fetch_optional(pool)
+            .await?;
+        
+        if let Some((cat_id,)) = misc_id {
+            sqlx::query("INSERT OR IGNORE INTO category_regex (cat_id, regex) VALUES (?, ?)")
+                .bind(cat_id)
+                .bind("*")
+                .execute(pool)
+                .await?;
+        }
+    }
+    
     Ok(())
 }
 #[tauri::command]
