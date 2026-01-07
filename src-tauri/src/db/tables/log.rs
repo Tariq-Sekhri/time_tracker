@@ -18,7 +18,6 @@ pub static SKIPPED_APPS: [&str; 7] = [
 pub struct Log {
     pub id: i64,
     pub app: String,
-    #[serde(serialize_with = "serialize_timestamp")]
     pub timestamp: i64,
     pub duration: i64,
 }
@@ -27,19 +26,6 @@ pub struct Log {
 pub struct NewLog {
     pub app: String,
     pub timestamp: i64,
-}
-
-pub fn serialize_timestamp<S>(ts: &i64, ser: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    let formatted = Local
-        .timestamp_opt(*ts, 0)
-        .single()
-        .ok_or_else(|| serde::ser::Error::custom(format!("Invalid timestamp: {}", ts)))?
-        .format("%Y-%m-%d %I:%M:%S %p")
-        .to_string();
-    ser.serialize_str(&formatted)
 }
 
 pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
