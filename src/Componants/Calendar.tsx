@@ -1,8 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import { get_week, TimeBlock } from "../api/week.ts";
 import { get_categories } from "../api/Category.ts";
+import { delete_logs_for_time_block, count_logs_for_time_block } from "../api/Log.ts";
 import { unwrapResult } from "../utils.ts";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { EventClickArg } from "@fullcalendar/core";
@@ -86,6 +87,7 @@ function CalendarSkeleton() {
 }
 
 export default function Calendar() {
+    const queryClient = useQueryClient();
     const [date, setDate] = useState<Date>(() => new Date());
     const [selectedEvent, setSelectedEvent] = useState<{
         title: string;
@@ -95,6 +97,11 @@ export default function Calendar() {
     } | null>(null);
     const [visibleCategories, setVisibleCategories] = useState<Set<string>>(new Set());
     const hasInitialized = useRef(false);
+    
+    // Delete confirmation state
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [deleteLogCount, setDeleteLogCount] = useState(0);
+    const [isCountingLogs, setIsCountingLogs] = useState(false);
 
     const { data, isLoading, error } = useQuery({
         queryKey: ["week", date.toISOString()],
@@ -175,6 +182,56 @@ export default function Calendar() {
         if (!isEventClick) {
             setSelectedEvent(null);
         }
+    };
+
+    const deleteTimeBlockMutation = useMutation({
+        mutationFn: async (params: { appNames: string[]; startTime: number; endTime: number }) => {
+            return unwrapResult(await delete_logs_for_time_block({
+                app_names: params.appNames,
+                start_time: params.startTime,
+                end_time: params.endTime,
+            }));
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["week"] });
+            setSelectedEvent(null);
+            setShowDeleteConfirm(false);
+        },
+    });
+
+    const handleDeleteClick = async () => {
+        if (!selectedEvent) return;
+        
+        setIsCountingLogs(true);
+        const startTime = Math.floor(selectedEvent.start.getTime() / 1000);
+        const endTime = Math.floor(selectedEvent.end.getTime() / 1000);
+        const appNames = selectedEvent.apps.map(a => a.app);
+        
+        const result = await count_logs_for_time_block({
+            app_names: appNames,
+            start_time: startTime,
+            end_time: endTime,
+        });
+        
+        if (result.success) {
+            setDeleteLogCount(result.data);
+            setShowDeleteConfirm(true);
+        }
+        setIsCountingLogs(false);
+    };
+
+    const handleConfirmDelete = () => {
+        if (!selectedEvent) return;
+        
+        const startTime = Math.floor(selectedEvent.start.getTime() / 1000);
+        const endTime = Math.floor(selectedEvent.end.getTime() / 1000);
+        const appNames = selectedEvent.apps.map(a => a.app);
+        
+        deleteTimeBlockMutation.mutate({
+            appNames,
+            startTime,
+            endTime,
+        });
     };
 
     const toggleCategory = (categoryName: string) => {
@@ -364,6 +421,55 @@ export default function Calendar() {
                             ) : (
                                 <p className="text-sm text-gray-500">No apps recorded</p>
                             )}
+                        </div>
+
+                        {/* Delete Button */}
+                        <div className="mt-6 pt-4 border-t border-gray-700">
+                            <button
+                                onClick={handleDeleteClick}
+                                disabled={isCountingLogs || deleteTimeBlockMutation.isPending}
+                                className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-white disabled:opacity-50"
+                            >
+                                {isCountingLogs ? "Checking..." : "Delete Time Block"}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Delete Confirmation Dialog */}
+                {showDeleteConfirm && selectedEvent && (
+                    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+                        <div className="bg-gray-900 p-6 rounded-lg max-w-md w-full mx-4 border border-gray-700">
+                            <h3 className="text-xl font-bold mb-4 text-white">Delete Time Block?</h3>
+                            <p className="text-gray-300 mb-2">
+                                Category: <span className="font-semibold">{selectedEvent.title}</span>
+                            </p>
+                            <p className="text-gray-300 mb-2">
+                                Time: {selectedEvent.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {selectedEvent.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                            <p className="text-gray-300 mb-4">
+                                This will <span className="text-red-400 font-semibold">permanently delete {deleteLogCount} log{deleteLogCount !== 1 ? 's' : ''}</span> associated with this time block.
+                            </p>
+                            {deleteLogCount > 0 && (
+                                <p className="text-yellow-400 text-sm mb-4">
+                                    ⚠️ This action cannot be undone!
+                                </p>
+                            )}
+                            <div className="flex gap-3 justify-end">
+                                <button
+                                    onClick={() => setShowDeleteConfirm(false)}
+                                    className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleConfirmDelete}
+                                    disabled={deleteTimeBlockMutation.isPending}
+                                    className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-white disabled:opacity-50"
+                                >
+                                    {deleteTimeBlockMutation.isPending ? "Deleting..." : "Delete"}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}

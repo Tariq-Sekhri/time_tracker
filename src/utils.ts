@@ -28,9 +28,11 @@ export function unwrapResult<D, E extends AppError>(result: Result<D, E>): D {
     const errorMessage =
         result.error.type === "Db"
             ? result.error.data
-            : result.error.type === "Other"
+            : result.error.type === "Regex"
                 ? result.error.data
-                : "Not found";
+                : result.error.type === "Other"
+                    ? result.error.data
+                    : "Not found";
 
     throw new Error(errorMessage);
 }

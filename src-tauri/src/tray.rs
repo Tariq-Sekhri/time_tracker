@@ -4,10 +4,11 @@ use std::sync::OnceLock;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{TrayIcon, TrayIconBuilder},
-    AppHandle, Manager, Runtime, WindowEvent,
+    AppHandle, Emitter, Manager, Runtime, WindowEvent,
 };
 
 static TRAY_ICON: OnceLock<TrayIcon<tauri::Wry>> = OnceLock::new();
+static APP_HANDLE: OnceLock<AppHandle<tauri::Wry>> = OnceLock::new();
 
 fn create_menu<R: Runtime>(app: &AppHandle<R>) -> Result<Menu<R>, Box<dyn std::error::Error>> {
     let show = MenuItem::with_id(app, "show", "Show", true, None::<String>)?;
@@ -19,6 +20,8 @@ fn create_menu<R: Runtime>(app: &AppHandle<R>) -> Result<Menu<R>, Box<dyn std::e
 }
 
 pub fn setup_tray(app: &AppHandle<tauri::Wry>) -> Result<(), Box<dyn std::error::Error>> {
+    let _ = APP_HANDLE.set(app.clone());
+    
     let menu = create_menu(app)?;
     let icon = app.default_window_icon()
         .ok_or_else(|| std::io::Error::new(
@@ -39,11 +42,14 @@ pub fn setup_tray(app: &AppHandle<tauri::Wry>) -> Result<(), Box<dyn std::error:
                     let current_state = IS_SUSPENDED.load(Ordering::Relaxed);
                     IS_SUSPENDED.store(!current_state, Ordering::Relaxed);
                     
-                    if let Some(tray_icon) = TRAY_ICON.get() {
-                        let _ = tray_icon.set_menu(None::<Menu<tauri::Wry>>);
-                        if let Ok(new_menu) = create_menu(app) {
-                            let _ = tray_icon.set_menu(Some(new_menu));
-                        }
+                    refresh_tray_menu();
+                    
+                    // Emit event to frontend to update toggle state
+                    // new_tracking_status = !IS_SUSPENDED (tracking is active when NOT suspended)
+                    let new_tracking_status = !IS_SUSPENDED.load(Ordering::Relaxed);
+                    // Emit to window (works even if hidden)
+                    if let Some(window) = app.get_window("main") {
+                        let _ = window.emit("tracking-status-changed", new_tracking_status);
                     }
                 }
                 "show" => {
@@ -60,6 +66,20 @@ pub fn setup_tray(app: &AppHandle<tauri::Wry>) -> Result<(), Box<dyn std::error:
     let _ = TRAY_ICON.set(tray);
     
     Ok(())
+}
+
+pub fn refresh_tray_menu() {
+    if let (Some(tray_icon), Some(app)) = (TRAY_ICON.get(), APP_HANDLE.get()) {
+        let _ = tray_icon.set_menu(None::<Menu<tauri::Wry>>);
+        if let Ok(new_menu) = create_menu(app) {
+            let _ = tray_icon.set_menu(Some(new_menu));
+        }
+    }
+}
+
+#[tauri::command]
+pub fn refresh_tray_menu_cmd() {
+    refresh_tray_menu();
 }
 
 pub fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
