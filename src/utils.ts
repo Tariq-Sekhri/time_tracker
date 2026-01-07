@@ -16,6 +16,26 @@ export async function invokeWithResult<T>(
 }
 
 /**
+ * Unwraps a Result type, returning the data on success or throwing an Error on failure.
+ * This makes it easy to use Result types with React Query and other promise-based APIs.
+ */
+export function unwrapResult<D, E extends AppError>(result: Result<D, E>): D {
+    if (result.success) {
+        return result.data;
+    }
+
+    // Convert AppError to a readable error message
+    const errorMessage =
+        result.error.type === "Db"
+            ? result.error.data
+            : result.error.type === "Other"
+                ? result.error.data
+                : "Not found";
+
+    throw new Error(errorMessage);
+}
+
+/**
  * Calculate the start and end timestamps for the week containing the given date
  * Week starts on Monday and ends on Sunday
  */
