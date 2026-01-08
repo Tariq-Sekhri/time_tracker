@@ -64,7 +64,7 @@ pub async fn insert_category(new_category: NewCategory) -> Result<i64, Error> {
             .bind(new_category.name)
             .bind(new_category.priority)
             .bind(new_category.color)
-            .execute(pool)
+            .execute(&pool)
             .await?
             .last_insert_rowid(),
     )
@@ -75,7 +75,7 @@ pub async fn get_category_by_id(id: i32) -> Result<Category, Error> {
     let pool = db::get_pool().await?;
     let cat = sqlx::query_as::<_, Category>("select * from Category where id = ?")
         .bind(id)
-        .fetch_one(pool)
+        .fetch_one(&pool)
         .await?;
     Ok(cat)
 }
@@ -83,8 +83,8 @@ pub async fn get_category_by_id(id: i32) -> Result<Category, Error> {
 #[tauri::command]
 pub async fn get_categories() -> Result<Vec<Category>, Error> {
     let pool = db::get_pool().await?;
-    let cats = sqlx::query_as::<_, Category>("select * from Category")
-        .fetch_all(pool)
+    let cats = sqlx::query_as::<_, Category>("select * from Category ORDER BY priority DESC")
+        .fetch_all(&pool)
         .await?;
     Ok(cats)
 }
@@ -97,7 +97,7 @@ pub async fn update_category_by_id(cat: Category) -> Result<(), Error> {
         .bind(cat.priority)
         .bind(cat.color)
         .bind(cat.id)
-        .execute(pool)
+        .execute(&pool)
         .await?;
     Ok(())
 }
@@ -107,7 +107,7 @@ pub async fn delete_category_by_id(id: i32) -> Result<(), Error> {
     let pool = db::get_pool().await?;
     sqlx::query("delete from category where id= ?")
         .bind(id)
-        .execute(pool)
+        .execute(&pool)
         .await?;
     Ok(())
 }

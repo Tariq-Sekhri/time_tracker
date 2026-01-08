@@ -1,14 +1,14 @@
 use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
 use std::env;
 use std::path::PathBuf;
-use std::sync::OnceLock;
+use std::sync::Mutex;
 
 use crate::db::tables::cat_regex;
 use crate::db::tables::category;
 use crate::db::tables::log;
 use crate::db::tables::skipped_app;
 
-static POOL: OnceLock<SqlitePool> = OnceLock::new();
+static POOL: Mutex<Option<SqlitePool>> = Mutex::new(None);
 
 pub fn drop_all() -> std::io::Result<()> {
     std::fs::remove_file(get_db_path())?;
@@ -17,21 +17,38 @@ pub fn drop_all() -> std::io::Result<()> {
 
 pub fn get_db_path() -> PathBuf {
     let appdata = env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
-    let db_name = if cfg!(feature = "test-db") {
-        "app-test.db"
-    } else {
-        "app.db"
-    };
-    PathBuf::from(appdata).join("time-tracker").join(db_name)
+    PathBuf::from(appdata).join("time-tracker").join("app.db")
 }
 
-pub async fn get_pool() -> Result<&'static SqlitePool, sqlx::Error> {
-    if let Some(pool) = POOL.get() {
-        Ok(pool)
-    } else {
+pub async fn reset_pool() -> Result<(), sqlx::Error> {
+    let pool_to_close = {
+        let mut pool_guard = POOL.lock().unwrap();
+        pool_guard.take()
+    };
+    if let Some(pool) = pool_to_close {
+        pool.close().await;
+    }
+    Ok(())
+}
+
+pub async fn get_pool() -> Result<SqlitePool, sqlx::Error> {
+    // Check if pool exists without holding lock across await
+    let should_create = {
+        let pool_guard = POOL.lock().unwrap();
+        pool_guard.is_none()
+    };
+    
+    if should_create {
+        // Create new pool
         let pool = create_pool().await?;
-        let _ = POOL.set(pool).ok();
-        Ok(POOL.get().unwrap())
+        let pool_clone = pool.clone();
+        let mut pool_guard = POOL.lock().unwrap();
+        *pool_guard = Some(pool);
+        Ok(pool_clone)
+    } else {
+        // Pool exists, return a clone
+        let pool_guard = POOL.lock().unwrap();
+        Ok(pool_guard.as_ref().unwrap().clone())
     }
 }
 

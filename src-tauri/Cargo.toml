@@ -44,4 +44,3 @@ objc = "0.2"
 x11 = { version = "2", features = ["xlib"] }
 [features]
 dev-warnings = []
-test-db = []

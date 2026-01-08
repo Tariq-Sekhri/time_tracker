@@ -5,7 +5,6 @@
   "type": "module",
   "scripts": {
     "start": "tauri dev",
-    "test": "npm run tauri dev -- --features test-db",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
