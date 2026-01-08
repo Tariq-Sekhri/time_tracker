@@ -21,7 +21,7 @@ use db::tables::skipped_app::{
     count_matching_logs, delete_skipped_app_by_id, get_skipped_apps, insert_skipped_app,
     insert_skipped_app_and_delete_logs, restore_default_skipped_apps, update_skipped_app_by_id,
 };
-use db::{get_all_db_data, get_db_path_cmd, wipe_all_data};
+use db::{get_all_db_data, get_db_path_cmd, reset_database, wipe_all_data};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -62,6 +62,7 @@ pub fn run() {
             get_db_path_cmd,
             get_all_db_data,
             wipe_all_data,
+            reset_database,
             get_tracking_status,
             set_tracking_status,
             refresh_tray_menu_cmd,

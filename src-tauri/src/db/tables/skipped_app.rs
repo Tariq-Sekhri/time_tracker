@@ -124,7 +124,7 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 pub async fn get_skipped_apps() -> Result<Vec<SkippedApp>, Error> {
     let pool = db::get_pool().await?;
     let apps = sqlx::query_as::<_, SkippedApp>("SELECT id, regex FROM skipped_apps ORDER BY regex")
-        .fetch_all(pool)
+        .fetch_all(&pool)
         .await?;
     Ok(apps)
 }
@@ -161,7 +161,7 @@ pub async fn insert_skipped_app_and_delete_logs(new_app: NewSkippedApp) -> Resul
         // SQLite doesn't support variable-length IN clauses easily, so we'll use a transaction
         // and delete in chunks, or use a simpler approach: delete one by one but in a transaction
         // Actually, let's use a prepared statement with a loop for safety, but in a single transaction
-        let mut tx = pool.begin().await?;
+        let mut tx = (&pool).begin().await?;
         for log_id in matching_ids {
             sqlx::query("DELETE FROM logs WHERE id = ?")
                 .bind(log_id)
@@ -174,7 +174,7 @@ pub async fn insert_skipped_app_and_delete_logs(new_app: NewSkippedApp) -> Resul
     // Insert the skipped app - try INSERT first, if duplicate then get existing ID
     let id = match sqlx::query("INSERT INTO skipped_apps (regex) VALUES (?)")
         .bind(&new_app.regex)
-        .execute(pool)
+        .execute(&pool)
         .await
     {
         Ok(result) => {
@@ -189,7 +189,7 @@ pub async fn insert_skipped_app_and_delete_logs(new_app: NewSkippedApp) -> Resul
             if e.to_string().contains("UNIQUE") {
                 let existing: Option<(i64,)> = sqlx::query_as("SELECT id FROM skipped_apps WHERE regex = ?")
                     .bind(&new_app.regex)
-                    .fetch_optional(pool)
+                    .fetch_optional(&pool)
                     .await?;
                 existing.map(|(id,)| id).unwrap_or(0)
             } else {
@@ -212,7 +212,7 @@ pub async fn insert_skipped_app(new_app: NewSkippedApp) -> Result<i64, Error> {
     Ok(
         sqlx::query("INSERT INTO skipped_apps (regex) VALUES (?)")
             .bind(new_app.regex)
-            .execute(pool)
+            .execute(&pool)
             .await?
             .last_insert_rowid(),
     )
@@ -228,7 +228,7 @@ pub async fn update_skipped_app_by_id(skipped_app: SkippedApp) -> Result<(), Err
     sqlx::query("UPDATE skipped_apps SET regex = ? WHERE id = ?")
         .bind(&skipped_app.regex)
         .bind(skipped_app.id)
-        .execute(pool)
+        .execute(&pool)
         .await?;
     Ok(())
 }
@@ -238,7 +238,7 @@ pub async fn delete_skipped_app_by_id(id: i32) -> Result<(), Error> {
     let pool = db::get_pool().await?;
     sqlx::query("DELETE FROM skipped_apps WHERE id = ?")
         .bind(id)
-        .execute(pool)
+        .execute(&pool)
         .await?;
     Ok(())
 }
@@ -246,7 +246,7 @@ pub async fn delete_skipped_app_by_id(id: i32) -> Result<(), Error> {
 pub async fn is_skipped_app(app_name: &str) -> Result<bool, Error> {
     let pool = db::get_pool().await?;
     let skipped_apps = sqlx::query_as::<_, SkippedApp>("SELECT id, regex FROM skipped_apps")
-        .fetch_all(pool)
+        .fetch_all(&pool)
         .await?;
     
     for skipped in skipped_apps {
@@ -268,7 +268,7 @@ pub async fn restore_default_skipped_apps() -> Result<(), Error> {
     for regex_pattern in DEFAULT_SKIPPED_APPS.iter() {
         sqlx::query("INSERT OR IGNORE INTO skipped_apps (regex) VALUES (?)")
             .bind(regex_pattern)
-            .execute(pool)
+            .execute(&pool)
             .await?;
     }
     

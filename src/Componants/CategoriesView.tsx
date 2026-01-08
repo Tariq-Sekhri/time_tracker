@@ -8,7 +8,7 @@ import {
     Category,
     NewCategory
 } from "../api/Category.ts";
-import { unwrapResult } from "../utils.ts";
+import { unwrapResult, invokeWithResult } from "../utils.ts";
 
 export default function CategoriesView() {
     const queryClient = useQueryClient();
@@ -32,6 +32,9 @@ export default function CategoriesView() {
             setNewCategoryPriority(0);
             setNewCategoryColor("#000000");
         },
+        onError: (error) => {
+            console.error("Failed to create category:", error);
+        }
     });
 
     const updateCategoryMutation = useMutation({
@@ -55,12 +58,14 @@ export default function CategoriesView() {
     });
 
     const handleCreateCategory = () => {
+        console.log("Creating category:", newCategoryName.trim());
         if (newCategoryName.trim()) {
             createCategoryMutation.mutate({
                 name: newCategoryName.trim(),
                 priority: newCategoryPriority,
                 color: newCategoryColor || null,
             });
+
         }
     };
 
@@ -72,19 +77,47 @@ export default function CategoriesView() {
         queryClient.invalidateQueries({ queryKey: ["categories"] });
     };
 
+    const handleResetDatabase = async () => {
+        if (confirm("⚠️ WARNING: This will delete the entire database file and create a new one with defaults.\n\nThis is useful for users with old database versions.\n\nAre you sure you want to continue?")) {
+            try {
+                const result = await invokeWithResult("reset_database");
+                if (result.success) {
+                    queryClient.invalidateQueries();
+                    alert("Database has been reset successfully. A new database with defaults has been created.");
+                } else {
+                    alert("Failed to reset database: " + JSON.stringify(result.error));
+                }
+            } catch (error) {
+                alert("Error resetting database: " + error);
+            }
+        }
+    };
+
     return (
         <div className="p-6 text-white">
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold">Categories</h1>
-                <button
-                    onClick={handleRefresh}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded flex items-center gap-2"
-                >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Refresh
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        onClick={handleRefresh}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded flex items-center gap-2"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Refresh
+                    </button>
+                    <button
+                        onClick={handleResetDatabase}
+                        className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded flex items-center gap-2"
+                        title="Reset database - deletes old DB file and creates new one with defaults"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Reset DB
+                    </button>
+                </div>
             </div>
 
             {/* Add New Category */}
@@ -122,7 +155,7 @@ export default function CategoriesView() {
 
             {/* Categories List */}
             <div className="space-y-2">
-                {categories.map((cat) => (
+                {[...categories].sort((a, b) => b.priority - a.priority).map((cat) => (
                     <div key={cat.id} className="p-4 bg-gray-900 rounded-lg flex items-center justify-between">
                         {editingCategory?.id === cat.id ? (
                             <div className="flex gap-3 flex-1">

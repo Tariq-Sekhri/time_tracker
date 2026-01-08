@@ -57,7 +57,7 @@ pub async fn insert_cat_regex(new_category_regex: NewCategoryRegex) -> Result<i6
     let new_id = sqlx::query("INSERT INTO category_regex (cat_id, regex) values (?, ?)")
         .bind(new_category_regex.cat_id)
         .bind(new_category_regex.regex)
-        .execute(pool)
+        .execute(&pool)
         .await?
         .last_insert_rowid();
     Ok(new_id)
@@ -70,7 +70,7 @@ pub async fn update_cat_regex_by_id(cat_regex: CategoryRegex) -> Result<(), Erro
         .bind(cat_regex.cat_id)
         .bind(cat_regex.regex)
         .bind(cat_regex.id)
-        .execute(pool)
+        .execute(&pool)
         .await?;
     Ok(())
 }
@@ -80,7 +80,7 @@ pub async fn get_cat_regex_by_id(id: i32) -> Result<CategoryRegex, Error> {
     let pool = db::get_pool().await?;
     let regex = sqlx::query_as::<_, CategoryRegex>("select * from category_regex where id = ?")
         .bind(id)
-        .fetch_one(pool)
+        .fetch_one(&pool)
         .await?;
     Ok(regex)
 }
@@ -89,7 +89,7 @@ pub async fn get_cat_regex_by_id(id: i32) -> Result<CategoryRegex, Error> {
 pub async fn get_cat_regex() -> Result<Vec<CategoryRegex>, Error> {
     let pool = db::get_pool().await?;
     let regex = sqlx::query_as::<_, CategoryRegex>("select * from category_regex")
-        .fetch_all(pool)
+        .fetch_all(&pool)
         .await?;
     Ok(regex)
 }
@@ -98,7 +98,7 @@ pub async fn delete_cat_regex_by_id(id: i32) -> Result<(), Error> {
     let pool = db::get_pool().await?;
     sqlx::query("delete from category_regex where id=?")
         .bind(id)
-        .execute(pool)
+        .execute(&pool)
         .await?;
     Ok(())
 }

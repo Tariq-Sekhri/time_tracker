@@ -27,7 +27,7 @@ export async function get_category_by_id(id: number): Promise<Result<null, AppEr
 }
 
 export async function insert_category(newCat: NewCategory): Promise<Result<number, AppError>> {
-    return invokeWithResult<number>("insert_category", { newCat });
+    return invokeWithResult<number>("insert_category", { newCategory: newCat });
 }
 
 export async function update_category_by_id(cat: Category): Promise<Result<null, AppError>> {

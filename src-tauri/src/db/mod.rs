@@ -13,7 +13,7 @@ use tables::log::{get_logs, Log};
 use tables::skipped_app::{get_skipped_apps, SkippedApp};
 
 pub use error::AppError;
-pub use pool::get_pool;
+pub use pool::{get_pool, reset_pool};
 pub use queries::get_week;
 
 #[derive(Serialize)]
@@ -44,23 +44,39 @@ pub fn get_db_path_cmd() -> String {
     pool::get_db_path().to_string_lossy().to_string()
 }
 
+pub use pool::get_db_path;
+
 #[tauri::command]
 pub async fn wipe_all_data() -> Result<(), AppError> {
     let pool = get_pool().await?;
     
     // Delete all data from all tables
-    sqlx::query("DELETE FROM logs").execute(pool).await?;
-    sqlx::query("DELETE FROM category_regex").execute(pool).await?;
-    sqlx::query("DELETE FROM category").execute(pool).await?;
-    sqlx::query("DELETE FROM skipped_apps").execute(pool).await?;
+    sqlx::query("DELETE FROM logs").execute(&pool).await?;
+    sqlx::query("DELETE FROM category_regex").execute(&pool).await?;
+    sqlx::query("DELETE FROM category").execute(&pool).await?;
+    sqlx::query("DELETE FROM skipped_apps").execute(&pool).await?;
     
     // Re-run table creation which will insert defaults
-    tables::category::create_table(pool).await
+    tables::category::create_table(&pool).await
         .map_err(|e| AppError::Db(e.to_string()))?;
-    tables::cat_regex::create_table(pool).await
+    tables::cat_regex::create_table(&pool).await
         .map_err(|e| AppError::Db(e.to_string()))?;
-    tables::skipped_app::create_table(pool).await
+    tables::skipped_app::create_table(&pool).await
         .map_err(|e| AppError::Db(e.to_string()))?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn reset_database() -> Result<(), AppError> {
+    // Close and clear the existing pool
+    reset_pool().await.map_err(|e| AppError::Db(e.to_string()))?;
+    
+    // Delete the database file
+    pool::drop_all().map_err(|e| AppError::Db(format!("Failed to delete database file: {}", e)))?;
+    
+    // Create a new pool (which will create a new database with defaults)
+    get_pool().await.map_err(|e| AppError::Db(e.to_string()))?;
     
     Ok(())
 }
