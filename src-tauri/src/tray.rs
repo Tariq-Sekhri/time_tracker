@@ -30,6 +30,7 @@ pub fn setup_tray(app: &AppHandle<tauri::Wry>) -> Result<(), Box<dyn std::error:
         ))?
         .clone();
     
+    let app_clone = app.clone();
     let tray = TrayIconBuilder::new()
         .icon(icon)
         .menu(&menu)
@@ -56,9 +57,24 @@ pub fn setup_tray(app: &AppHandle<tauri::Wry>) -> Result<(), Box<dyn std::error:
                     if let Some(window) = app.get_window("main") {
                         let _ = window.show();
                         let _ = window.set_focus();
+                        let _ = window.unminimize();
                     }
                 }
                 _ => {}
+            }
+        })
+        .on_tray_icon_event(move |_tray, event| {
+            // Handle tray icon click (double-click on some platforms, single click on others)
+            if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, .. } = event {
+                if let Some(window) = app_clone.get_window("main") {
+                    if window.is_visible().unwrap_or(false) {
+                        let _ = window.hide();
+                    } else {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                        let _ = window.unminimize();
+                    }
+                }
             }
         })
         .build(app)?;

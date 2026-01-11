@@ -1,6 +1,5 @@
 use crate::db;
 use crate::db::AppError as Error;
-use chrono::{Local, TimeZone};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
 
@@ -41,8 +40,8 @@ pub async fn insert_log(log: NewLog) -> Result<i64, sqlx::Error> {
         .await?;
     Ok(result.last_insert_rowid())
 }
-#[tauri::command]
 
+#[tauri::command]
 pub async fn delete_log_by_id(id: i64) -> Result<(), Error> {
     let pool = db::get_pool().await?;
     sqlx::query("DELETE FROM logs WHERE id = ?")
@@ -51,8 +50,8 @@ pub async fn delete_log_by_id(id: i64) -> Result<(), Error> {
         .await?;
     Ok(())
 }
-#[tauri::command]
 
+#[tauri::command]
 pub async fn get_logs() -> Result<Vec<Log>, Error> {
     let pool = db::get_pool().await?;
     let logs = sqlx::query_as::<_, Log>("SELECT * FROM logs")
@@ -60,8 +59,8 @@ pub async fn get_logs() -> Result<Vec<Log>, Error> {
         .await?;
     Ok(logs)
 }
-#[tauri::command]
 
+#[tauri::command]
 pub async fn get_log_by_id(id: i64) -> Result<Log, Error> {
     let pool = db::get_pool().await?;
     let log = sqlx::query_as::<_, Log>("SELECT * FROM logs WHERE id = ?")
@@ -128,4 +127,21 @@ pub async fn count_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resul
         .count();
     
     Ok(count as i64)
+}
+
+#[tauri::command]
+pub async fn get_logs_for_time_block(request: DeleteTimeBlockRequest) -> Result<Vec<Log>, Error> {
+    let pool = db::get_pool().await?;
+    
+    let logs = sqlx::query_as::<_, Log>("SELECT * FROM logs WHERE timestamp >= ? AND timestamp <= ? ORDER BY duration DESC")
+        .bind(request.start_time)
+        .bind(request.end_time)
+        .fetch_all(&pool)
+        .await?;
+    
+    let filtered_logs: Vec<Log> = logs.into_iter()
+        .filter(|log| request.app_names.contains(&log.app))
+        .collect();
+    
+    Ok(filtered_logs)
 }

@@ -4530,6 +4530,7 @@ name = "time-tracker"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "libc",
  "objc",
  "regex",
  "serde",

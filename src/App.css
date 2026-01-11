@@ -3,3 +3,46 @@
 body {
     background: black;
 }
+
+/* FullCalendar dark theme styling */
+.fc-theme-standard .fc-col-header-cell {
+    background-color: #1f2937 !important; /* gray-800 */
+    color: white !important;
+}
+
+.fc-theme-standard .fc-col-header-cell-cushion {
+    color: white !important;
+}
+
+.fc-theme-standard .fc-daygrid-day-number {
+    color: white !important;
+}
+
+.fc-theme-standard .fc-daygrid-day {
+    background-color: #111827 !important; /* gray-900 */
+}
+
+.fc-theme-standard .fc-timegrid-col {
+    background-color: #111827 !important;
+}
+
+.fc-theme-standard .fc-timegrid-slot {
+    background-color: #111827 !important;
+}
+
+.fc-theme-standard .fc-timegrid-slot-label {
+    color: #9ca3af !important; /* gray-400 */
+}
+
+.fc-theme-standard .fc-timegrid-axis {
+    color: #9ca3af !important;
+}
+
+.fc-theme-standard .fc-scrollgrid {
+    border-color: #374151 !important; /* gray-700 */
+}
+
+.fc-theme-standard td,
+.fc-theme-standard th {
+    border-color: #374151 !important;
+}

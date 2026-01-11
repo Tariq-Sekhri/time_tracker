@@ -2,9 +2,11 @@ mod core;
 mod db;
 mod tray;
 
+use tauri::Manager;
+
 use core::{get_tracking_status, set_tracking_status, supervisor};
 use tray::refresh_tray_menu_cmd;
-use db::queries::get_week;
+use db::queries::{get_week, get_week_statistics, get_day_statistics};
 use db::tables::cat_regex::{
     delete_cat_regex_by_id, get_cat_regex, get_cat_regex_by_id, insert_cat_regex,
     update_cat_regex_by_id,
@@ -15,7 +17,7 @@ use db::tables::category::{
 };
 use db::tables::log::{
     count_logs_for_time_block, delete_log_by_id, delete_logs_for_time_block, get_log_by_id,
-    get_logs,
+    get_logs, get_logs_for_time_block,
 };
 use db::tables::skipped_app::{
     count_matching_logs, delete_skipped_app_by_id, get_skipped_apps, insert_skipped_app,
@@ -27,6 +29,11 @@ use db::{get_all_db_data, get_db_path_cmd, reset_database, wipe_all_data};
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            // Hide window on startup (tray mode)
+            if let Some(window) = app.get_window("main") {
+                let _ = window.hide();
+            }
+            
             tray::setup_tray(app.handle())?;
             tauri::async_runtime::spawn(supervisor(app.handle().clone()));
             Ok(())
@@ -38,6 +45,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_categories,
             get_week,
+            get_week_statistics,
+            get_day_statistics,
             delete_category_by_id,
             get_category_by_id,
             insert_category,
@@ -52,6 +61,7 @@ pub fn run() {
             delete_log_by_id,
             delete_logs_for_time_block,
             count_logs_for_time_block,
+            get_logs_for_time_block,
             get_skipped_apps,
             insert_skipped_app,
             insert_skipped_app_and_delete_logs,

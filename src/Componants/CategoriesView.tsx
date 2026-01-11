@@ -1,5 +1,5 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import {useQuery, useMutation, useQueryClient} from "@tanstack/react-query";
+import {useState} from "react";
 import {
     get_categories,
     insert_category,
@@ -8,7 +8,7 @@ import {
     Category,
     NewCategory
 } from "../api/Category.ts";
-import { unwrapResult, invokeWithResult } from "../utils.ts";
+import {unwrapResult} from "../utils.ts";
 
 export default function CategoriesView() {
     const queryClient = useQueryClient();
@@ -17,7 +17,7 @@ export default function CategoriesView() {
     const [newCategoryPriority, setNewCategoryPriority] = useState(0);
     const [newCategoryColor, setNewCategoryColor] = useState("#000000");
 
-    const { data: categories = [] } = useQuery({
+    const {data: categories = []} = useQuery({
         queryKey: ["categories"],
         queryFn: async () => unwrapResult(await get_categories()),
     });
@@ -27,7 +27,7 @@ export default function CategoriesView() {
             return unwrapResult(await insert_category(newCat));
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["categories"] });
+            queryClient.invalidateQueries({queryKey: ["categories"]});
             setNewCategoryName("");
             setNewCategoryPriority(0);
             setNewCategoryColor("#000000");
@@ -42,7 +42,7 @@ export default function CategoriesView() {
             return unwrapResult(await update_category_by_id(cat));
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["categories"] });
+            queryClient.invalidateQueries({queryKey: ["categories"]});
             setEditingCategory(null);
         },
     });
@@ -52,8 +52,8 @@ export default function CategoriesView() {
             return unwrapResult(await delete_category_by_id(id));
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["categories"] });
-            queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
+            queryClient.invalidateQueries({queryKey: ["categories"]});
+            queryClient.invalidateQueries({queryKey: ["cat_regex"]});
         },
     });
 
@@ -74,24 +74,9 @@ export default function CategoriesView() {
     };
 
     const handleRefresh = () => {
-        queryClient.invalidateQueries({ queryKey: ["categories"] });
+        queryClient.invalidateQueries({queryKey: ["categories"]});
     };
 
-    const handleResetDatabase = async () => {
-        if (confirm("⚠️ WARNING: This will delete the entire database file and create a new one with defaults.\n\nThis is useful for users with old database versions.\n\nAre you sure you want to continue?")) {
-            try {
-                const result = await invokeWithResult("reset_database");
-                if (result.success) {
-                    queryClient.invalidateQueries();
-                    alert("Database has been reset successfully. A new database with defaults has been created.");
-                } else {
-                    alert("Failed to reset database: " + JSON.stringify(result.error));
-                }
-            } catch (error) {
-                alert("Error resetting database: " + error);
-            }
-        }
-    };
 
     return (
         <div className="p-6 text-white">
@@ -103,19 +88,10 @@ export default function CategoriesView() {
                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded flex items-center gap-2"
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                         </svg>
                         Refresh
-                    </button>
-                    <button
-                        onClick={handleResetDatabase}
-                        className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded flex items-center gap-2"
-                        title="Reset database - deletes old DB file and creates new one with defaults"
-                    >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        Reset DB
                     </button>
                 </div>
             </div>
@@ -162,19 +138,22 @@ export default function CategoriesView() {
                                 <input
                                     type="text"
                                     value={editingCategory.name}
-                                    onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
+                                    onChange={(e) => setEditingCategory({...editingCategory, name: e.target.value})}
                                     className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
                                 />
                                 <input
                                     type="number"
                                     value={editingCategory.priority}
-                                    onChange={(e) => setEditingCategory({ ...editingCategory, priority: parseInt(e.target.value) || 0 })}
+                                    onChange={(e) => setEditingCategory({
+                                        ...editingCategory,
+                                        priority: parseInt(e.target.value) || 0
+                                    })}
                                     className="w-24 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
                                 />
                                 <input
                                     type="color"
                                     value={editingCategory.color || "#000000"}
-                                    onChange={(e) => setEditingCategory({ ...editingCategory, color: e.target.value })}
+                                    onChange={(e) => setEditingCategory({...editingCategory, color: e.target.value})}
                                     className="w-16 h-10 bg-gray-800 border border-gray-700 rounded cursor-pointer"
                                 />
                                 <button
@@ -195,7 +174,7 @@ export default function CategoriesView() {
                                 <div className="flex items-center gap-3">
                                     <div
                                         className="w-6 h-6 rounded border border-gray-600"
-                                        style={{ backgroundColor: cat.color || "#000000" }}
+                                        style={{backgroundColor: cat.color || "#000000"}}
                                     />
                                     <div>
                                         <span className="font-medium">{cat.name}</span>
