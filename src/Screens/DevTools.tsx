@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { get_logs } from "../api/Log.ts";
-import { unwrapResult, invokeWithResult } from "../utils.ts";
-import { listen } from "@tauri-apps/api/event";
+import {useState, useEffect} from "react";
+import {useQuery, useQueryClient} from "@tanstack/react-query";
+import {get_logs} from "../api/Log.ts";
+import {unwrapResult, invokeWithResult} from "../utils.ts";
+import {listen} from "@tauri-apps/api/event";
 
 type DevToolsTab = "logs" | "danger";
 
@@ -11,12 +11,14 @@ export default function DevTools() {
 
     useEffect(() => {
         const unlisten = listen("BackgroundProcessError", e => console.error(e.payload));
-        return () => { unlisten.then(fn => fn()); };
+        return () => {
+            unlisten.then(fn => fn());
+        };
     }, []);
 
     const tabs: { id: DevToolsTab; label: string; color: string }[] = [
-        { id: "logs", label: "Logs Overview", color: "bg-orange-600" },
-        { id: "danger", label: "Danger Zone", color: "bg-red-600" },
+        {id: "logs", label: "Logs Overview", color: "bg-orange-600"},
+        {id: "danger", label: "Danger Zone", color: "bg-red-600"},
     ];
 
     return (
@@ -28,9 +30,9 @@ export default function DevTools() {
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
                         className={`px-4 py-2 font-medium transition-colors ${activeTab === tab.id
-                                ? `${tab.color} text-white`
-                                : "text-gray-400 hover:text-white hover:bg-gray-800"
-                            }`}
+                            ? `${tab.color} text-white`
+                            : "text-gray-400 hover:text-white hover:bg-gray-800"
+                        }`}
                     >
                         {tab.label}
                     </button>
@@ -39,8 +41,8 @@ export default function DevTools() {
 
             {/* Content Area */}
             <div className="flex-1 overflow-auto p-6">
-                {activeTab === "logs" && <LogsOverviewTab />}
-                {activeTab === "danger" && <DangerZoneTab />}
+                {activeTab === "logs" && <LogsOverviewTab/>}
+                {activeTab === "danger" && <DangerZoneTab/>}
             </div>
         </div>
     );
@@ -50,7 +52,7 @@ export default function DevTools() {
 function LogsOverviewTab() {
     const [displayText, setDisplayText] = useState<string>("");
 
-    const { data: logs = [], isLoading } = useQuery({
+    const {data: logs = [], isLoading} = useQuery({
         queryKey: ["logs"],
         queryFn: async () => unwrapResult(await get_logs()),
     });
@@ -58,7 +60,6 @@ function LogsOverviewTab() {
     async function getAllData() {
         const result = await invokeWithResult<any>("get_all_db_data");
         if (result.success) {
-            // Reorder data so logs come last
             const reorderedData = {
                 categories: result.data.categories,
                 category_regex: result.data.category_regex,
@@ -109,13 +110,15 @@ function LogsOverviewTab() {
                         disabled={!displayText}
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                         </svg>
                         Copy
                     </button>
                 </div>
                 <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
-                    <pre className="text-sm whitespace-pre-wrap overflow-auto max-h-[70vh] text-gray-300">{displayText || "Click a button above to view data"}</pre>
+                    <pre
+                        className="text-sm whitespace-pre-wrap overflow-auto max-h-[70vh] text-gray-300">{displayText || "Click a button above to view data"}</pre>
                 </div>
             </div>
         </div>

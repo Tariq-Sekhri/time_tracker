@@ -1,5 +1,5 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import {useQuery, useMutation, useQueryClient} from "@tanstack/react-query";
+import {useState} from "react";
 import {
     get_skipped_apps,
     insert_skipped_app_and_delete_logs,
@@ -9,9 +9,9 @@ import {
     SkippedApp,
     NewSkippedApp
 } from "../api/SkippedApp.ts";
-import { unwrapResult } from "../utils.ts";
-import { getErrorMessage } from "../types/common.ts";
-import { ToastContainer, useToast } from "./Toast.tsx";
+import {unwrapResult} from "../utils.ts";
+import {getErrorMessage} from "../types/common.ts";
+import {ToastContainer, useToast} from "../Componants/Toast.tsx";
 
 // Validate regex pattern - returns error message or null if valid
 // Note: Rust regex supports (?i) for case-insensitive, but JS doesn't, so we validate without flags
@@ -23,13 +23,13 @@ function validateRegex(pattern: string): string | null {
         // Remove Rust-specific flags like (?i) for validation, then add them back
         // Rust regex uses (?i) for case-insensitive, (?m) for multiline, etc.
         let testPattern = pattern;
-        
+
         // Remove Rust regex flags at the start: (?i), (?m), (?s), (?x), (?U), etc.
         testPattern = testPattern.replace(/^\(\?[imsxU]+\)/, '');
-        
+
         // Also handle flags in the middle (less common but possible)
         testPattern = testPattern.replace(/\(\?[imsxU]+\)/g, '');
-        
+
         // Now validate the pattern without flags using JS RegExp
         new RegExp(testPattern);
         return null;
@@ -40,18 +40,18 @@ function validateRegex(pattern: string): string | null {
 
 export default function SkippedAppsView() {
     const queryClient = useQueryClient();
-    const { toasts, showToast, removeToast, updateToast } = useToast();
+    const {toasts, showToast, removeToast, updateToast} = useToast();
     const [newRegexPattern, setNewRegexPattern] = useState("");
     const [regexError, setRegexError] = useState<string | null>(null);
     const [editingApp, setEditingApp] = useState<SkippedApp | null>(null);
     const [editRegexError, setEditRegexError] = useState<string | null>(null);
-    
+
     // Confirmation dialog state
     const [pendingRegex, setPendingRegex] = useState<string | null>(null);
     const [matchingLogCount, setMatchingLogCount] = useState<number>(0);
     const [isCountingLogs, setIsCountingLogs] = useState(false);
 
-    const { data: skippedApps = [] } = useQuery({
+    const {data: skippedApps = []} = useQuery({
         queryKey: ["skipped_apps"],
         queryFn: async () => unwrapResult(await get_skipped_apps()),
     });
@@ -66,25 +66,25 @@ export default function SkippedAppsView() {
         },
         onMutate: async (newApp) => {
             // Cancel outgoing refetches
-            await queryClient.cancelQueries({ queryKey: ["skipped_apps"] });
-            
+            await queryClient.cancelQueries({queryKey: ["skipped_apps"]});
+
             // Snapshot previous value
             const previousApps = queryClient.getQueryData<SkippedApp[]>(["skipped_apps"]);
-            
+
             // Optimistically add to the list
             const optimisticApp: SkippedApp = {
                 id: Date.now(), // Temporary ID
                 regex: newApp.regex,
             };
-            
+
             queryClient.setQueryData<SkippedApp[]>(["skipped_apps"], (old = []) => {
                 return [...old, optimisticApp].sort((a, b) => a.regex.localeCompare(b.regex));
             });
-            
+
             // Show loading toast
             const toastId = showToast(`Adding pattern "${newApp.regex}"...`, "loading", 0);
-            
-            return { previousApps, toastId };
+
+            return {previousApps, toastId};
         },
         onSuccess: (_data, variables, context) => {
             // Update toast to success
@@ -92,10 +92,10 @@ export default function SkippedAppsView() {
                 updateToast(context.toastId, `Pattern "${variables.regex}" added successfully`, "success");
                 setTimeout(() => removeToast(context.toastId!), 2000);
             }
-            
+
             // Invalidate to get real data
-            queryClient.invalidateQueries({ queryKey: ["skipped_apps"] });
-            queryClient.invalidateQueries({ queryKey: ["week"] });
+            queryClient.invalidateQueries({queryKey: ["skipped_apps"]});
+            queryClient.invalidateQueries({queryKey: ["week"]});
             setNewRegexPattern("");
             setPendingRegex(null);
             setMatchingLogCount(0);
@@ -105,7 +105,7 @@ export default function SkippedAppsView() {
             if (context?.previousApps) {
                 queryClient.setQueryData(["skipped_apps"], context.previousApps);
             }
-            
+
             // Update toast to error
             const errorMsg = error instanceof Error ? error.message : String(error);
             if (context?.toastId) {
@@ -113,7 +113,7 @@ export default function SkippedAppsView() {
             } else {
                 showToast(`Failed to add pattern: ${errorMsg}`, "error");
             }
-            
+
             setRegexError("Failed to add pattern: " + errorMsg);
             setPendingRegex(null);
         },
@@ -124,7 +124,7 @@ export default function SkippedAppsView() {
             return unwrapResult(await update_skipped_app_by_id(app));
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["skipped_apps"] });
+            queryClient.invalidateQueries({queryKey: ["skipped_apps"]});
             setEditingApp(null);
             setEditRegexError(null);
         },
@@ -135,7 +135,7 @@ export default function SkippedAppsView() {
             return unwrapResult(await delete_skipped_app_by_id(id));
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["skipped_apps"] });
+            queryClient.invalidateQueries({queryKey: ["skipped_apps"]});
         },
     });
 
@@ -146,7 +146,7 @@ export default function SkippedAppsView() {
             return;
         }
         setRegexError(null);
-        
+
         // Count matching logs first
         setIsCountingLogs(true);
         try {
@@ -165,7 +165,7 @@ export default function SkippedAppsView() {
 
     const handleConfirmAdd = () => {
         if (pendingRegex) {
-            createSkippedAppMutation.mutate({ regex: pendingRegex });
+            createSkippedAppMutation.mutate({regex: pendingRegex});
         }
     };
 
@@ -185,12 +185,12 @@ export default function SkippedAppsView() {
     };
 
     const handleRefresh = () => {
-        queryClient.invalidateQueries({ queryKey: ["skipped_apps"] });
+        queryClient.invalidateQueries({queryKey: ["skipped_apps"]});
     };
 
     return (
         <div className="p-6 text-white">
-            <ToastContainer toasts={toasts} onRemove={removeToast} />
+            <ToastContainer toasts={toasts} onRemove={removeToast}/>
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold">Skipped Apps</h1>
                 <button
@@ -198,14 +198,17 @@ export default function SkippedAppsView() {
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded flex items-center gap-2"
                 >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                     </svg>
                     Refresh
                 </button>
             </div>
 
             <p className="text-sm text-gray-400 mb-4">
-                Apps matching these regex patterns will not be tracked. Use regex patterns like <code className="bg-gray-800 px-1 rounded">^Chrome$</code> for exact match or <code className="bg-gray-800 px-1 rounded">.*Discord.*</code> for partial match.
+                Apps matching these regex patterns will not be tracked. Use regex patterns like <code
+                className="bg-gray-800 px-1 rounded">^Chrome$</code> for exact match or <code
+                className="bg-gray-800 px-1 rounded">.*Discord.*</code> for partial match.
             </p>
 
             {/* Add New Skipped App */}
@@ -244,7 +247,9 @@ export default function SkippedAppsView() {
                             Pattern: <code className="bg-gray-800 px-2 py-1 rounded">{pendingRegex}</code>
                         </p>
                         <p className="text-gray-300 mb-4">
-                            This will <span className="text-red-400 font-semibold">permanently delete {matchingLogCount} log{matchingLogCount !== 1 ? 's' : ''}</span> that match this pattern.
+                            This will <span
+                            className="text-red-400 font-semibold">permanently delete {matchingLogCount} log{matchingLogCount !== 1 ? 's' : ''}</span> that
+                            match this pattern.
                         </p>
                         {matchingLogCount > 0 && (
                             <p className="text-yellow-400 text-sm mb-4">
@@ -281,7 +286,7 @@ export default function SkippedAppsView() {
                                         type="text"
                                         value={editingApp.regex}
                                         onChange={(e) => {
-                                            setEditingApp({ ...editingApp, regex: e.target.value });
+                                            setEditingApp({...editingApp, regex: e.target.value});
                                             setEditRegexError(null);
                                         }}
                                         className={`flex-1 px-3 py-2 bg-gray-800 border rounded text-white ${editRegexError ? 'border-red-500' : 'border-gray-700'}`}

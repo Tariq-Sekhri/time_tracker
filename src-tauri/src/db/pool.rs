@@ -37,7 +37,7 @@ pub async fn get_pool() -> Result<SqlitePool, sqlx::Error> {
         let pool_guard = POOL.lock().unwrap();
         pool_guard.is_none()
     };
-    
+
     if should_create {
         // Create new pool
         let pool = create_pool().await?;
@@ -78,8 +78,8 @@ async fn create_pool() -> Result<SqlitePool, sqlx::Error> {
 
 async fn create_all_tables(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     log::create_table(pool).await?;
-    category::create_table(pool).await?; // Creates Miscellaneous category if needed
-    cat_regex::create_table(pool).await?; // Creates "*" regex for Miscellaneous if needed
+    category::create_table(pool).await?;
+    cat_regex::create_table(pool).await?;
     skipped_app::create_table(pool).await?;
     Ok(())
 }

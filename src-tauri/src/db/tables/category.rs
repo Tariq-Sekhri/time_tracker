@@ -1,5 +1,5 @@
 use crate::db;
-use crate::db::AppError as Error;
+use crate::db::Error;
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteQueryResult;
 use sqlx::{FromRow, Sqlite, SqlitePool};
@@ -31,29 +31,18 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     )
     .execute(pool)
     .await?;
-    
-    // Add color column to existing tables if it doesn't exist
-    sqlx::query(
-        "ALTER TABLE category ADD COLUMN color TEXT;"
-    )
-    .execute(pool)
-    .await
-    .ok(); // Ignore error if column already exists
-    
-    // Insert default "Miscellaneous" category if table is empty
+
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM category")
         .fetch_one(pool)
         .await?;
-    
     if count.0 == 0 {
         sqlx::query("INSERT OR IGNORE INTO category (name, priority, color) VALUES (?, ?, ?)")
             .bind("Miscellaneous")
-            .bind(0) // Lowest priority as fallback
+            .bind(0)
             .bind::<Option<String>>(None)
             .execute(pool)
             .await?;
     }
-    
     Ok(())
 }
 #[tauri::command]
@@ -70,7 +59,6 @@ pub async fn insert_category(new_category: NewCategory) -> Result<i64, Error> {
     )
 }
 #[tauri::command]
-
 pub async fn get_category_by_id(id: i32) -> Result<Category, Error> {
     let pool = db::get_pool().await?;
     let cat = sqlx::query_as::<_, Category>("select * from Category where id = ?")
@@ -89,7 +77,6 @@ pub async fn get_categories() -> Result<Vec<Category>, Error> {
     Ok(cats)
 }
 #[tauri::command]
-
 pub async fn update_category_by_id(cat: Category) -> Result<(), Error> {
     let pool = db::get_pool().await?;
     sqlx::query("UPDATE category SET name = ?, priority = ?, color = ? WHERE id = ?")
@@ -102,7 +89,6 @@ pub async fn update_category_by_id(cat: Category) -> Result<(), Error> {
     Ok(())
 }
 #[tauri::command]
-
 pub async fn delete_category_by_id(id: i32) -> Result<(), Error> {
     let pool = db::get_pool().await?;
     sqlx::query("delete from category where id= ?")

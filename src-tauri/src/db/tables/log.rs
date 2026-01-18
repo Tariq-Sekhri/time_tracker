@@ -1,5 +1,5 @@
 use crate::db;
-use crate::db::AppError as Error;
+use crate::db::Error;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
 
@@ -89,14 +89,15 @@ pub struct DeleteTimeBlockRequest {
 #[tauri::command]
 pub async fn delete_logs_for_time_block(request: DeleteTimeBlockRequest) -> Result<i64, Error> {
     let pool = db::get_pool().await?;
-    
+
     // Get all logs in the time range that match the app names
-    let logs = sqlx::query_as::<_, Log>("SELECT * FROM logs WHERE timestamp >= ? AND timestamp <= ?")
-        .bind(request.start_time)
-        .bind(request.end_time)
-        .fetch_all(&pool)
-        .await?;
-    
+    let logs =
+        sqlx::query_as::<_, Log>("SELECT * FROM logs WHERE timestamp >= ? AND timestamp <= ?")
+            .bind(request.start_time)
+            .bind(request.end_time)
+            .fetch_all(&pool)
+            .await?;
+
     let mut deleted_count = 0i64;
     for log in logs {
         // Check if the log's app is in the list of app names for this time block
@@ -108,40 +109,45 @@ pub async fn delete_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resu
             deleted_count += 1;
         }
     }
-    
+
     Ok(deleted_count)
 }
 
 #[tauri::command]
 pub async fn count_logs_for_time_block(request: DeleteTimeBlockRequest) -> Result<i64, Error> {
     let pool = db::get_pool().await?;
-    
-    let logs = sqlx::query_as::<_, Log>("SELECT * FROM logs WHERE timestamp >= ? AND timestamp <= ?")
-        .bind(request.start_time)
-        .bind(request.end_time)
-        .fetch_all(&pool)
-        .await?;
-    
-    let count = logs.iter()
+
+    let logs =
+        sqlx::query_as::<_, Log>("SELECT * FROM logs WHERE timestamp >= ? AND timestamp <= ?")
+            .bind(request.start_time)
+            .bind(request.end_time)
+            .fetch_all(&pool)
+            .await?;
+
+    let count = logs
+        .iter()
         .filter(|log| request.app_names.contains(&log.app))
         .count();
-    
+
     Ok(count as i64)
 }
 
 #[tauri::command]
 pub async fn get_logs_for_time_block(request: DeleteTimeBlockRequest) -> Result<Vec<Log>, Error> {
     let pool = db::get_pool().await?;
-    
-    let logs = sqlx::query_as::<_, Log>("SELECT * FROM logs WHERE timestamp >= ? AND timestamp <= ? ORDER BY duration DESC")
-        .bind(request.start_time)
-        .bind(request.end_time)
-        .fetch_all(&pool)
-        .await?;
-    
-    let filtered_logs: Vec<Log> = logs.into_iter()
+
+    let logs = sqlx::query_as::<_, Log>(
+        "SELECT * FROM logs WHERE timestamp >= ? AND timestamp <= ? ORDER BY duration DESC",
+    )
+    .bind(request.start_time)
+    .bind(request.end_time)
+    .fetch_all(&pool)
+    .await?;
+
+    let filtered_logs: Vec<Log> = logs
+        .into_iter()
         .filter(|log| request.app_names.contains(&log.app))
         .collect();
-    
+
     Ok(filtered_logs)
 }

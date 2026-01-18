@@ -12,7 +12,7 @@ use tables::category::{get_categories, Category};
 use tables::log::{get_logs, Log};
 use tables::skipped_app::{get_skipped_apps, SkippedApp};
 
-pub use error::AppError;
+pub use error::Error;
 pub use pool::{get_pool, reset_pool};
 pub use queries::get_week;
 
@@ -25,12 +25,12 @@ pub struct AllDbData {
 }
 
 #[tauri::command]
-pub async fn get_all_db_data() -> Result<AllDbData, AppError> {
+pub async fn get_all_db_data() -> Result<AllDbData, Error> {
     let logs = get_logs().await?;
     let categories = get_categories().await?;
     let category_regex = get_cat_regex().await?;
     let skipped_apps = get_skipped_apps().await?;
-    
+
     Ok(AllDbData {
         logs,
         categories,
@@ -41,42 +41,43 @@ pub async fn get_all_db_data() -> Result<AllDbData, AppError> {
 
 #[tauri::command]
 pub fn get_db_path_cmd() -> String {
-    pool::get_db_path().to_string_lossy().to_string()
+    get_db_path().to_string_lossy().to_string()
 }
 
 pub use pool::get_db_path;
 
 #[tauri::command]
-pub async fn wipe_all_data() -> Result<(), AppError> {
+pub async fn wipe_all_data() -> Result<(), Error> {
     let pool = get_pool().await?;
-    
+
     // Delete all data from all tables
     sqlx::query("DELETE FROM logs").execute(&pool).await?;
-    sqlx::query("DELETE FROM category_regex").execute(&pool).await?;
+    sqlx::query("DELETE FROM category_regex")
+        .execute(&pool)
+        .await?;
     sqlx::query("DELETE FROM category").execute(&pool).await?;
-    sqlx::query("DELETE FROM skipped_apps").execute(&pool).await?;
-    
+    sqlx::query("DELETE FROM skipped_apps")
+        .execute(&pool)
+        .await?;
+
     // Re-run table creation which will insert defaults
-    tables::category::create_table(&pool).await
-        .map_err(|e| AppError::Db(e.to_string()))?;
-    tables::cat_regex::create_table(&pool).await
-        .map_err(|e| AppError::Db(e.to_string()))?;
-    tables::skipped_app::create_table(&pool).await
-        .map_err(|e| AppError::Db(e.to_string()))?;
-    
+    tables::category::create_table(&pool)
+        .await
+        .map_err(|e| Error::Db(e.to_string()))?;
+    tables::cat_regex::create_table(&pool)
+        .await
+        .map_err(|e| Error::Db(e.to_string()))?;
+    tables::skipped_app::create_table(&pool)
+        .await
+        .map_err(|e| Error::Db(e.to_string()))?;
+
     Ok(())
 }
 
 #[tauri::command]
-pub async fn reset_database() -> Result<(), AppError> {
-    // Close and clear the existing pool
-    reset_pool().await.map_err(|e| AppError::Db(e.to_string()))?;
-    
-    // Delete the database file
-    pool::drop_all().map_err(|e| AppError::Db(format!("Failed to delete database file: {}", e)))?;
-    
-    // Create a new pool (which will create a new database with defaults)
-    get_pool().await.map_err(|e| AppError::Db(e.to_string()))?;
-    
+pub async fn reset_database() -> Result<(), Error> {
+    reset_pool().await.map_err(|e| Error::Db(e.to_string()))?;
+    pool::drop_all().map_err(|e| Error::Db(format!("Failed to delete database file: {}", e)))?;
+    get_pool().await.map_err(|e| Error::Db(e.to_string()))?;
     Ok(())
 }

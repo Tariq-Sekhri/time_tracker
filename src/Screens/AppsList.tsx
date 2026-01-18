@@ -1,7 +1,8 @@
 import {useQuery} from "@tanstack/react-query";
 import {useState} from "react";
-import {get_week_statistics, WeekStatistics} from "../api/statistics.ts";
+import {get_week_statistics} from "../api/statistics.ts";
 import {unwrapResult, getWeekRange} from "../utils.ts";
+import {useDateStore} from "../stores/dateStore.ts";
 
 type Tab = "week" | "dailyAvg" | "allTime";
 
@@ -19,16 +20,11 @@ function formatPercentage(value: number): string {
     return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
 }
 
-interface AppsListProps {
-    weekDate: Date;
-    onBack: () => void;
-}
-
-export default function AppsList({weekDate, onBack}: AppsListProps) {
+export default function AppsList({onBack}: { onBack: () => void }) {
     const [activeTab, setActiveTab] = useState<Tab>("week");
     const [expanded, setExpanded] = useState(false);
-
-    const {week_start, week_end} = getWeekRange(weekDate);
+    const {date, setDate} = useDateStore();
+    const {week_start, week_end} = getWeekRange(date);
 
     const {data: weekStats, isLoading} = useQuery({
         queryKey: ["week_statistics", week_start, week_end],
@@ -42,7 +38,6 @@ export default function AppsList({weekDate, onBack}: AppsListProps) {
             </div>
         );
     }
-
     // Get all apps from week stats
     const allApps = weekStats.all_apps || weekStats.top_apps;
     const displayedApps = expanded ? allApps : allApps.slice(0, 10);

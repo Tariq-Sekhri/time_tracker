@@ -13,13 +13,15 @@
   "dependencies": {
     "@fullcalendar/core": "^6.1.20",
     "@fullcalendar/daygrid": "^6.1.20",
+    "@fullcalendar/interaction": "^6.1.20",
     "@fullcalendar/react": "^6.1.20",
     "@fullcalendar/timegrid": "^6.1.20",
     "@tanstack/react-query": "^5.90.16",
     "@tauri-apps/api": "^2.8.0",
     "@tauri-apps/plugin-opener": "^2",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "zustand": "^5.0.10"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.17",
