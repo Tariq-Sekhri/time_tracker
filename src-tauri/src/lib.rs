@@ -2,11 +2,8 @@ mod core;
 mod db;
 mod tray;
 
-use tauri::Manager;
-
 use core::{get_tracking_status, set_tracking_status, supervisor};
-use tray::refresh_tray_menu_cmd;
-use db::queries::{get_week, get_week_statistics, get_day_statistics};
+use db::queries::{get_day_statistics, get_week, get_week_statistics};
 use db::tables::cat_regex::{
     delete_cat_regex_by_id, get_cat_regex, get_cat_regex_by_id, insert_cat_regex,
     update_cat_regex_by_id,
@@ -20,20 +17,26 @@ use db::tables::log::{
     get_logs, get_logs_for_time_block,
 };
 use db::tables::skipped_app::{
-    count_matching_logs, delete_skipped_app_by_id, get_skipped_apps, insert_skipped_app,
+    count_matching_logs, delete_skipped_app_by_id, get_skipped_apps,
     insert_skipped_app_and_delete_logs, restore_default_skipped_apps, update_skipped_app_by_id,
 };
 use db::{get_all_db_data, get_db_path_cmd, reset_database, wipe_all_data};
+use tauri::Manager;
+use tray::refresh_tray_menu;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            // Hide window on startup (tray mode)
+            // Todo if running in dev disable this using cfg stuff
             if let Some(window) = app.get_window("main") {
+                #[cfg(debug_assertions)]
+                let _ = window.show();
+
+                #[cfg(not(debug_assertions))]
                 let _ = window.hide();
             }
-            
+
             tray::setup_tray(app.handle())?;
             tauri::async_runtime::spawn(supervisor(app.handle().clone()));
             Ok(())
@@ -63,7 +66,6 @@ pub fn run() {
             count_logs_for_time_block,
             get_logs_for_time_block,
             get_skipped_apps,
-            insert_skipped_app,
             insert_skipped_app_and_delete_logs,
             update_skipped_app_by_id,
             delete_skipped_app_by_id,
@@ -75,7 +77,7 @@ pub fn run() {
             reset_database,
             get_tracking_status,
             set_tracking_status,
-            refresh_tray_menu_cmd,
+            refresh_tray_menu,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

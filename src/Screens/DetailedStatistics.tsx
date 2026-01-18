@@ -2,6 +2,7 @@ import {useQuery} from "@tanstack/react-query";
 import {useState} from "react";
 import {get_week_statistics, WeekStatistics} from "../api/statistics.ts";
 import {unwrapResult, getWeekRange} from "../utils.ts";
+import {useDateStore} from "../stores/dateStore.ts";
 
 type Tab = "week" | "dailyAvg" | "total";
 
@@ -23,17 +24,12 @@ function formatPercentage(value: number): string {
     return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
 }
 
-interface DetailedStatisticsProps {
-    weekDate: Date;
-    onBack: () => void;
-}
 
-export default function DetailedStatistics({weekDate, onBack}: DetailedStatisticsProps) {
+export default function DetailedStatistics({onBack}: { onBack: () => void }) {
     const [activeTab, setActiveTab] = useState<Tab>("week");
     const [displayMode, setDisplayMode] = useState<"percentage" | "time" | "count">("percentage");
-
-    const {week_start, week_end} = getWeekRange(weekDate);
-
+    const {date, setDate} = useDateStore();
+    const {week_start, week_end} = getWeekRange(date);
     const {data: weekStats, isLoading} = useQuery({
         queryKey: ["week_statistics", week_start, week_end],
         queryFn: async () => unwrapResult(await get_week_statistics(week_start, week_end)),

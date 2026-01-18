@@ -1,5 +1,5 @@
 use crate::db;
-use crate::db::error::{AppError, WeekProcessError};
+use crate::db::error::Error;
 use crate::db::pool::get_pool;
 use crate::db::tables::cat_regex::{get_cat_regex, CategoryRegex};
 use crate::db::tables::category::{get_categories, Category};
@@ -92,28 +92,26 @@ struct CachedCategoryRegex {
     priority: i32,
 }
 
-fn derive_category(app: &str, regexes: &[CachedCategoryRegex]) -> Result<String, WeekProcessError> {
+fn derive_category(app: &str, regexes: &[CachedCategoryRegex]) -> Result<String, Error> {
     // If no regexes available, default to Miscellaneous
     if regexes.is_empty() {
         return Ok("Miscellaneous".to_string());
     }
-    
+
     regexes
         .iter()
         .find(|regex| regex.regex.is_match(app))
         .map(|regex| regex.category.clone())
-        .ok_or(WeekProcessError::MissingCategory)
+        .ok_or(Error::Regex("Derive Category Error".to_string()))
 }
 
 fn build_regex_table(
     categories: &[Category],
     cat_regex: &[CategoryRegex],
-) -> Result<Vec<CachedCategoryRegex>, WeekProcessError> {
+) -> Result<Vec<CachedCategoryRegex>, Error> {
     // Build a map of category ID to category for quick lookup
-    let category_map: HashMap<i32, &Category> = categories
-        .iter()
-        .map(|cat| (cat.id, cat))
-        .collect();
+    let category_map: HashMap<i32, &Category> =
+        categories.iter().map(|cat| (cat.id, cat)).collect();
 
     // Create a CachedCategoryRegex for each regex pattern (not just one per category)
     let mut regex: Vec<CachedCategoryRegex> = cat_regex
@@ -121,9 +119,10 @@ fn build_regex_table(
         .map(|reg| {
             let cat = category_map
                 .get(&reg.cat_id)
-                .ok_or(WeekProcessError::MissingCategory)?;
+                .ok_or(Error::Regex("Error Creating regex".to_string()))?;
 
-            let compiled_regex = Regex::new(&reg.regex)?;
+            let compiled_regex =
+                Regex::new(&reg.regex).map_err(|e| Error::Regex(format!("{e}")))?;
 
             Ok(CachedCategoryRegex {
                 category: cat.name.clone(),
@@ -131,30 +130,33 @@ fn build_regex_table(
                 regex: compiled_regex,
             })
         })
-        .collect::<Result<Vec<_>, WeekProcessError>>()?;
+        .collect::<Result<Vec<_>, Error>>()?;
 
     // Sort by priority (highest first) so highest priority matches are checked first
     regex.sort_by_key(|r| std::cmp::Reverse(r.priority));
     Ok(regex)
 }
 
-fn get_time_blocks(
-    logs: &[Log],
-    regex: &[CachedCategoryRegex],
-) -> Result<Vec<TimeBlock>, WeekProcessError> {
+fn get_time_blocks(logs: &[Log], regex: &[CachedCategoryRegex]) -> Result<Vec<TimeBlock>, Error> {
     if logs.is_empty() {
         return Ok(Vec::new());
     }
-    
-    let min_log_duration = 60; 
-    
-    let long_logs: Vec<&Log> = logs.iter().filter(|log| log.duration >= min_log_duration).collect();
-    let short_logs: Vec<&Log> = logs.iter().filter(|log| log.duration < min_log_duration).collect();
-    
+
+    let min_log_duration = 60;
+
+    let long_logs: Vec<&Log> = logs
+        .iter()
+        .filter(|log| log.duration >= min_log_duration)
+        .collect();
+    let short_logs: Vec<&Log> = logs
+        .iter()
+        .filter(|log| log.duration < min_log_duration)
+        .collect();
+
     if long_logs.is_empty() {
         return Ok(Vec::new());
     }
-    
+
     let mut time_blocks: Vec<TimeBlock> = Vec::new();
     let first = long_logs[0];
     time_blocks.push(TimeBlock::new(
@@ -194,30 +196,30 @@ fn get_time_blocks(
             }
         }
     }
-    
+
     // Attach short logs to same-category blocks within 10 minutes, else discard
     let max_attach_distance = 10 * 60; // 10 minutes in seconds
-    
+
     for short_log in short_logs {
         if time_blocks.is_empty() {
             break;
         }
-        
+
         let short_log_cat = match derive_category(&short_log.app, regex) {
             Ok(cat) => cat,
             Err(_) => continue, // Skip if can't determine category
         };
-        
+
         // Find a same-category block within 10 minutes
         let mut best_match: Option<usize> = None;
         let mut min_distance = i64::MAX;
-        
+
         for (idx, block) in time_blocks.iter().enumerate() {
             // Only consider blocks of the same category
             if block.category != short_log_cat {
                 continue;
             }
-            
+
             // Distance from short log to block
             let distance = if short_log.timestamp < block.start_time {
                 block.start_time - short_log.timestamp
@@ -226,13 +228,13 @@ fn get_time_blocks(
             } else {
                 0 // Log is within the block's time range
             };
-            
+
             if distance <= max_attach_distance && distance < min_distance {
                 min_distance = distance;
                 best_match = Some(idx);
             }
         }
-        
+
         // Only attach if we found a matching block within 10 min, else discard
         if let Some(idx) = best_match {
             if let Some(block) = time_blocks.get_mut(idx) {
@@ -253,36 +255,35 @@ fn get_time_blocks(
 }
 
 #[tauri::command]
-pub async fn get_week(week_start: i64, week_end: i64) -> Result<Vec<TimeBlock>, AppError> {
+pub async fn get_week(week_start: i64, week_end: i64) -> Result<Vec<TimeBlock>, Error> {
     let mut logs = get_logs().await?;
     let skipped_apps = get_skipped_apps().await?;
-    
+
     // Build regex patterns for skipped apps
     let skipped_regexes: Vec<Regex> = skipped_apps
         .iter()
         .filter_map(|app| Regex::new(&app.regex).ok())
         .collect();
-    
+
     // Check if an app matches any skipped regex
-    let is_skipped = |app_name: &str| -> bool {
-        skipped_regexes.iter().any(|regex| regex.is_match(app_name))
-    };
-    
+    let is_skipped =
+        |app_name: &str| -> bool { skipped_regexes.iter().any(|regex| regex.is_match(app_name)) };
+
     // Filter out and delete logs for skipped apps
     let logs_to_delete: Vec<i64> = logs
         .iter()
         .filter(|log| is_skipped(&log.app))
         .map(|log| log.id)
         .collect();
-    
+
     // Delete the logs
     for log_id in logs_to_delete {
         let _ = delete_log_by_id(log_id).await;
     }
-    
+
     // Filter out skipped apps from the logs list
     logs.retain(|log| !is_skipped(&log.app));
-    
+
     let cat_regex = get_cat_regex().await?;
     let categories = get_categories().await?;
     let regex = build_regex_table(&categories, &cat_regex)?;
@@ -347,7 +348,7 @@ fn ensure_non_overlapping(mut blocks: Vec<TimeBlock>) -> Vec<TimeBlock> {
     result
 }
 
-fn transform_time_blocks(time_blocks: Vec<TimeBlock>) -> Result<Vec<TimeBlock>, AppError> {
+fn transform_time_blocks(time_blocks: Vec<TimeBlock>) -> Result<Vec<TimeBlock>, Error> {
     let lookahead_window = 10 * 60; // 10 minutes in seconds - how far ahead to look for same category
     let min_duration = 60; // 1 minute in seconds - minimum duration for a time block
 
