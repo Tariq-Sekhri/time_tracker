@@ -2,6 +2,7 @@ use crate::db;
 use crate::db::Error;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
+use std::collections::HashMap;
 
 #[derive(Debug, Serialize, FromRow, Clone, Deserialize)]
 pub struct Log {
@@ -149,5 +150,17 @@ pub async fn get_logs_for_time_block(request: DeleteTimeBlockRequest) -> Result<
         .filter(|log| request.app_names.contains(&log.app))
         .collect();
 
-    Ok(filtered_logs)
+    Ok(merge_logs_in_time_block(filtered_logs))
+}
+
+fn merge_logs_in_time_block(logs: Vec<Log>) -> Vec<Log> {
+    let mut app_map: HashMap<String, Log> = HashMap::new();
+    for log in logs {
+        if let Some(existing) = app_map.get_mut(&log.app) {
+            existing.duration += log.duration;
+        } else {
+            app_map.insert(log.app.clone(), log);
+        }
+    }
+    app_map.into_values().collect()
 }
