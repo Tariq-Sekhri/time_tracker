@@ -1,6 +1,5 @@
 - high priority
     - afk detection??
-    - in a time bock merge all blocks with same app name and combine there duration
     - cascase delete ?
 - mid priority
     - double click on the day
