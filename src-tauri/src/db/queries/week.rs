@@ -6,6 +6,7 @@ use crate::db::tables::category::{get_categories, Category};
 use crate::db::tables::log::{delete_log_by_id, get_logs, Log};
 use crate::db::tables::skipped_app::get_skipped_apps;
 
+use log::log;
 use regex::Regex;
 use serde::Serialize;
 use serde_json::to_string_pretty;
@@ -132,7 +133,7 @@ fn build_regex_table(
         })
         .collect::<Result<Vec<_>, Error>>()?;
 
-    // Sort by priority (highest first) so highest priority matches are checked first
+    // Sort by priority (highest first) so the highest priority matches are checked first
     regex.sort_by_key(|r| std::cmp::Reverse(r.priority));
     Ok(regex)
 }

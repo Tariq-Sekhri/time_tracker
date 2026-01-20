@@ -1,5 +1,5 @@
-import { invokeWithResult, getWeekRange } from "../utils.ts";
-import { AppError, Result } from "../types/common.ts";
+import {invokeWithResult, getWeekRange} from "../utils.ts";
+import {AppError, Result} from "../types/common.ts";
 
 // Backend returns snake_case, but we use camelCase in frontend
 type TimeBlockBackend = {
@@ -32,7 +32,7 @@ function transformTimeBlock(block: TimeBlockBackend): TimeBlock {
 }
 
 export async function get_week(date: Date): Promise<Result<TimeBlock[], AppError>> {
-    const { week_start, week_end } = getWeekRange(date);
+    const {week_start, week_end} = getWeekRange(date);
     const result = await invokeWithResult<TimeBlockBackend[]>("get_week", {
         weekStart: week_start,
         weekEnd: week_end,
