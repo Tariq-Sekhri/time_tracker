@@ -1,13 +1,10 @@
 - high priority
-    - afk detection
-    - double click on the day
-    - in a time block merge all apps with same name (maybe user defined rules)
-    - in time block app list u should be able to click on a log and copy it
+    - afk detection??
+    - in a time bock merge all blocks with same app name and combine there duration
     - cascase delete ?
-    -
 - mid priority
+    - double click on the day
     - disable right click
-    -
     - the category break down by day should be a correctly sized bar graph, if one thing is one hour and another is two
       then
     - when swaping from % to time in the side bar it does not work. could be an issue of lack of data but either way it

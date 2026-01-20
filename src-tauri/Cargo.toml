@@ -27,6 +27,7 @@ tokio = { version = "1", features = ["full"] }
 chrono = { version = "0.4", features = ["clock"] }
 regex = "1"
 thiserror = "2.0.16"
+tauri-plugin-clipboard-manager = "2.3.2"
 
 # Platform-specific dependencies
 [target.'cfg(target_os = "windows")'.dependencies]

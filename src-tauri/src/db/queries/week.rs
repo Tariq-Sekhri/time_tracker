@@ -6,7 +6,6 @@ use crate::db::tables::category::{get_categories, Category};
 use crate::db::tables::log::{delete_log_by_id, get_logs, Log};
 use crate::db::tables::skipped_app::get_skipped_apps;
 
-use log::log;
 use regex::Regex;
 use serde::Serialize;
 use serde_json::to_string_pretty;

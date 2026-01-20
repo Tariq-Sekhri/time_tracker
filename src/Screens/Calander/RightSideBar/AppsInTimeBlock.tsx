@@ -9,6 +9,8 @@ import {useState} from "react"
 import {unwrapResult} from "../../../utils.ts";
 import {useMutation, useQueryClient} from "@tanstack/react-query";
 import {SideBarView} from "./RightSideBar.tsx";
+import {writeText, readText} from "@tauri-apps/plugin-clipboard-manager";
+import {ToastContainer, useToast} from "../../../Componants/Toast.tsx";
 
 export type SelectedEvent = {
     title: string
@@ -40,6 +42,7 @@ export default function AppsInTimeBlock({
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [deleteLogCount, setDeleteLogCount] = useState(0);
     const [isCountingLogs, setIsCountingLogs] = useState(false);
+    const {showToast, toasts, removeToast} = useToast();
 
     const handleDeleteClick = async () => {
         if (!selectedEvent) return;
@@ -116,11 +119,22 @@ export default function AppsInTimeBlock({
         handleDeleteLogMutation.mutate(id)
     }
 
+    const appClicked = async (name: string) => {
+        try {
+            await writeText(name)
+            showToast(`Copied ${name} To ClipBoard`, "success");
+        } catch (e) {
+            showToast("Failed to copy", "error");
+            console.error(e);
+        }
+    };
+
     const sortedLogs = [...selectedEventLogs].sort((a, b) => b.duration - a.duration);
     const totalDuration = sortedLogs.reduce((sum, log) => sum + log.duration, 0);
 
     return (
         <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col h-full">
+            <ToastContainer toasts={toasts} onRemove={removeToast}/>
             {/* Header */}
             <div className="flex-shrink-0 mb-6">
                 <div className="flex items-center justify-between mb-3">
@@ -161,10 +175,12 @@ export default function AppsInTimeBlock({
                         {sortedLogs.map((log, idx) => (
                             <div
                                 key={idx}
+                                onClick={() => appClicked(log.app)}
                                 className="h-15 bg-gray-900 rounded-lg p-3 hover:bg-gray-800 transition-colors"
                             >
                                 <div className="flex items-center justify-between mb-1">
-                                    <span className="text-sm font-medium text-white truncate flex-1">
+                                    <span
+                                        className="text-sm font-medium text-white truncate flex-1">
                                         {log.app}
                                     </span>
                                     <svg onClick={() => {
