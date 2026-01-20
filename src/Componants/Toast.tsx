@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import {useEffect, useState} from "react";
 
 export type ToastType = "success" | "error" | "info" | "loading";
 
@@ -13,7 +13,7 @@ interface ToastContainerProps {
     onRemove: (id: string) => void;
 }
 
-export function ToastContainer({ toasts, onRemove }: ToastContainerProps) {
+export function ToastContainer({toasts, onRemove}: ToastContainerProps) {
     return (
         <div className="fixed top-4 right-4 z-50 space-y-2">
             {toasts.map((toast) => (
@@ -23,26 +23,29 @@ export function ToastContainer({ toasts, onRemove }: ToastContainerProps) {
                         toast.type === "success"
                             ? "bg-green-600 text-white"
                             : toast.type === "error"
-                            ? "bg-red-600 text-white"
-                            : toast.type === "loading"
-                            ? "bg-blue-600 text-white"
-                            : "bg-gray-700 text-white"
+                                ? "bg-red-600 text-white"
+                                : toast.type === "loading"
+                                    ? "bg-blue-600 text-white"
+                                    : "bg-gray-700 text-white"
                     }`}
                 >
                     {toast.type === "loading" && (
                         <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                    strokeWidth="4"/>
+                            <path className="opacity-75" fill="currentColor"
+                                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
                         </svg>
                     )}
                     {toast.type === "success" && (
                         <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/>
                         </svg>
                     )}
                     {toast.type === "error" && (
                         <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                  d="M6 18L18 6M6 6l12 12"/>
                         </svg>
                     )}
                     <span className="flex-1">{toast.message}</span>
@@ -51,7 +54,8 @@ export function ToastContainer({ toasts, onRemove }: ToastContainerProps) {
                         className="text-white/80 hover:text-white"
                     >
                         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                  d="M6 18L18 6M6 6l12 12"/>
                         </svg>
                     </button>
                 </div>
@@ -65,9 +69,15 @@ export function useToast() {
 
     const showToast = (message: string, type: ToastType = "info", duration: number = 3000) => {
         const id = Math.random().toString(36).substring(7);
-        const toast: Toast = { id, message, type };
-        
-        setToasts((prev) => [...prev, toast]);
+        const toast: Toast = {id, message, type};
+
+        setToasts((prev) => {
+            const updated = [...prev, toast];
+            if (updated.length > 4) {
+                updated.shift();
+            }
+            return updated;
+        });
 
         if (type !== "loading" && duration > 0) {
             setTimeout(() => {
@@ -84,10 +94,9 @@ export function useToast() {
 
     const updateToast = (id: string, message: string, type: ToastType) => {
         setToasts((prev) =>
-            prev.map((t) => (t.id === id ? { ...t, message, type } : t))
+            prev.map((t) => (t.id === id ? {...t, message, type} : t))
         );
     };
 
-    return { toasts, showToast, removeToast, updateToast };
+    return {toasts, showToast, removeToast, updateToast};
 }
-
