@@ -14,7 +14,7 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose}
     const dayStartDate = new Date(selectedDate);
     dayStartDate.setHours(0, 0, 0, 0);
     const dayStart = Math.floor(dayStartDate.getTime() / 1000);
-    
+
     const dayEndDate = new Date(selectedDate);
     dayEndDate.setHours(23, 59, 59, 999);
     const dayEnd = Math.floor(dayEndDate.getTime() / 1000);
@@ -41,7 +41,7 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose}
     // Show loading or error state
     if (isLoading || (!dayStats && !isError)) {
         return (
-            <div className="w-80 border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
+            <div className=" border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
                 <div className="flex-1">
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-xl font-bold text-white">Day Statistics</h2>
@@ -73,7 +73,7 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose}
 
     if (isError) {
         return (
-            <div className="w-80 border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
+            <div className=" border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
                 <div className="flex-1">
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-xl font-bold text-white">Day Statistics</h2>
@@ -109,7 +109,7 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose}
     // At this point, dayStats should be defined, but TypeScript needs a check
     if (!dayStats) {
         return (
-            <div className="w-80 border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
+            <div className=" border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
                 <div className="flex-1">
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-xl font-bold text-white">Day Statistics</h2>
@@ -156,7 +156,7 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose}
     const maxCategoryDuration = topCategories.length > 0 ? topCategories[0].total_duration : 1;
 
     return (
-        <div className="w-80 border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
+        <div className=" border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold text-white">Day Statistics</h2>

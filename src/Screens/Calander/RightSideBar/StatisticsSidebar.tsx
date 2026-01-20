@@ -1,9 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
-import { get_week_statistics } from "../../../api/statistics.ts";
-import { unwrapResult, getWeekRange } from "../../../utils.ts";
-import { formatDuration, formatPercentage } from "../utils.ts";
-import { DonutChart } from "../DonutChart.tsx";
+import {useQuery} from "@tanstack/react-query";
+import {useState, useEffect} from "react";
+import {get_week_statistics} from "../../../api/statistics.ts";
+import {unwrapResult, getWeekRange} from "../../../utils.ts";
+import {formatDuration, formatPercentage} from "../utils.ts";
+import {DonutChart} from "../DonutChart.tsx";
 
 type DisplayMode = "percentage" | "time" | "count";
 
@@ -14,10 +14,10 @@ interface StatisticsSidebarProps {
     onAppsList?: () => void;
 }
 
-export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList }: StatisticsSidebarProps) {
+export default function StatisticsSidebar({weekDate, onMoreInfo, onAppsList}: StatisticsSidebarProps) {
     const [displayMode, setDisplayMode] = useState<DisplayMode>("percentage");
 
-    const { week_start, week_end } = getWeekRange(weekDate);
+    const {week_start, week_end} = getWeekRange(weekDate);
 
     // Build and log the query event before executing
     useEffect(() => {
@@ -47,7 +47,7 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList }: 
     // Show loading or error state, but always show the "More Info" button
     if (isLoading || (!stats && !isError)) {
         return (
-            <div className="w-80 border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
+            <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
                 <div className="flex-1">
                     <h2 className="text-xl font-bold text-white mb-4">
                         Week Statistics
@@ -69,7 +69,7 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList }: 
 
     if (isError) {
         return (
-            <div className="w-80 border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
+            <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
                 <div className="flex-1">
                     <h2 className="text-xl font-bold text-white mb-4">
                         Week Statistics
@@ -95,7 +95,7 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList }: 
     // At this point, stats should be defined, but TypeScript needs a check
     if (!stats) {
         return (
-            <div className="w-80 border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
+            <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
                 <div className="flex-1">
                     <h2 className="text-xl font-bold text-white mb-4">
                         Week Statistics
@@ -132,7 +132,7 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList }: 
     const maxCategoryDuration = topCategories.length > 0 ? topCategories[0].total_duration : 1;
 
     return (
-        <div className="w-80 border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
+        <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
             {/* Header */}
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold text-white">
@@ -172,7 +172,7 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList }: 
 
             {/* Donut Chart */}
             <div className="mb-6">
-                <DonutChart data={donutData} colors={categoryColors} />
+                <DonutChart data={donutData} colors={categoryColors}/>
             </div>
 
             {/* Categories */}
@@ -185,7 +185,7 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList }: 
                                 <div className="flex items-center gap-2">
                                     <div
                                         className="w-3 h-3 rounded-full"
-                                        style={{ backgroundColor: cat.color || "#6b7280" }}
+                                        style={{backgroundColor: cat.color || "#6b7280"}}
                                     />
                                     <span className="text-sm text-gray-200">{cat.category}</span>
                                 </div>

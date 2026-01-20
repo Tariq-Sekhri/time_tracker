@@ -78,6 +78,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
             const appNames = event.apps.map(a => a.app);
 
             const result = await get_logs_for_time_block({
+
                 app_names: appNames,
                 start_time: startTime,
                 end_time: endTime,
@@ -85,6 +86,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
 
             if (result.success) {
                 const logs = result.data.map(log => ({
+                    id: log.id,
                     app: log.app,
                     timestamp: new Date(Number(log.timestamp) * 1000),
                     duration: log.duration,

@@ -1,5 +1,5 @@
-import { invokeWithResult } from "../utils.ts";
-import { AppError, Result } from "../types/common.ts";
+import {invokeWithResult} from "../utils.ts";
+import {AppError, Result} from "../types/common.ts";
 
 export type Log = {
     id: number;
@@ -15,7 +15,7 @@ export type DeleteTimeBlockRequest = {
 };
 
 export async function delete_log_by_id(id: number): Promise<Result<null, AppError>> {
-    return invokeWithResult<null>("delete_log_by_id", { id });
+    return invokeWithResult<null>("delete_log_by_id", {id});
 }
 
 export async function get_logs(): Promise<Result<Log[], AppError>> {
@@ -23,18 +23,20 @@ export async function get_logs(): Promise<Result<Log[], AppError>> {
 }
 
 export async function get_log_by_id(id: number): Promise<Result<Log, AppError>> {
-    return invokeWithResult<Log>("get_log_by_id", { id });
+    return invokeWithResult<Log>("get_log_by_id", {id});
 }
 
 export async function delete_logs_for_time_block(request: DeleteTimeBlockRequest): Promise<Result<number, AppError>> {
-    return invokeWithResult<number>("delete_logs_for_time_block", { request });
+    return invokeWithResult<number>("delete_logs_for_time_block", {request});
 }
 
 export async function count_logs_for_time_block(request: DeleteTimeBlockRequest): Promise<Result<number, AppError>> {
-    return invokeWithResult<number>("count_logs_for_time_block", { request });
+    return invokeWithResult<number>("count_logs_for_time_block", {request});
 }
 
 export async function get_logs_for_time_block(request: DeleteTimeBlockRequest): Promise<Result<Log[], AppError>> {
-    return invokeWithResult<Log[]>("get_logs_for_time_block", { request });
+    return invokeWithResult<Log[]>("get_logs_for_time_block", {request});
 }
+
+
 

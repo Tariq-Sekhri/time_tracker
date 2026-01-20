@@ -9,6 +9,7 @@ export type CalendarEvent = {
 } | null;
 
 export type EventLogs = {
+    id: number
     app: string;
     timestamp: Date;
     duration: number;
