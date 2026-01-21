@@ -89,9 +89,19 @@ pub async fn update_category_by_id(cat: Category) -> Result<(), Error> {
     Ok(())
 }
 #[tauri::command]
-pub async fn delete_category_by_id(id: i32) -> Result<(), Error> {
+pub async fn delete_category_by_id(id: i32, cascade: bool) -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    sqlx::query("delete from category where id= ?")
+    
+    if cascade {
+        // Delete all category_regex entries associated with this category
+        sqlx::query("DELETE FROM category_regex WHERE cat_id = ?")
+            .bind(id)
+            .execute(&pool)
+            .await?;
+    }
+    
+    // Delete the category
+    sqlx::query("DELETE FROM category WHERE id = ?")
         .bind(id)
         .execute(&pool)
         .await?;

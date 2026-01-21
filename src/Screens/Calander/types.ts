@@ -1,5 +1,5 @@
-import {View} from "../../App.tsx";
-import {useDateStore} from "../../stores/dateStore.ts";
+import { View } from "../../App.tsx";
+import { useDateStore } from "../../stores/dateStore.ts";
 
 export type CalendarEvent = {
     title: string;
@@ -9,7 +9,7 @@ export type CalendarEvent = {
 } | null;
 
 export type EventLogs = {
-    id: number
+    ids: number[];
     app: string;
     timestamp: Date;
     duration: number;
