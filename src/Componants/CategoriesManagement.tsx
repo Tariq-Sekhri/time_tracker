@@ -1,12 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { 
-    get_categories, 
-    insert_category, 
-    update_category_by_id, 
+import {
+    get_categories,
+    insert_category,
+    update_category_by_id,
     delete_category_by_id,
     Category,
-    NewCategory 
+    NewCategory
 } from "../api/Category.ts";
 import {
     get_cat_regex,
@@ -24,9 +24,11 @@ import {
     NewSkippedApp
 } from "../api/SkippedApp.ts";
 import { unwrapResult } from "../utils.ts";
+import { ToastContainer, useToast } from "./Toast.tsx";
 
 export default function CategoriesManagement() {
     const queryClient = useQueryClient();
+    const { showToast, toasts, removeToast } = useToast();
     const [editingCategory, setEditingCategory] = useState<Category | null>(null);
     const [editingRegex, setEditingRegex] = useState<CategoryRegex | null>(null);
     const [newCategoryName, setNewCategoryName] = useState("");
@@ -73,15 +75,45 @@ export default function CategoriesManagement() {
         },
     });
 
+    const [showCascadeDeleteConfirm, setShowCascadeDeleteConfirm] = useState(false);
+    const [categoryToDelete, setCategoryToDelete] = useState<number | null>(null);
+    const [cascadeDelete, setCascadeDelete] = useState(true);
+    const [regexCount, setRegexCount] = useState(0);
+
     const deleteCategoryMutation = useMutation({
-        mutationFn: async (id: number) => {
-            return unwrapResult(await delete_category_by_id(id));
+        mutationFn: async ({ id, cascade }: { id: number; cascade: boolean }) => {
+            return unwrapResult(await delete_category_by_id(id, cascade));
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["categories"] });
             queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
+            setShowCascadeDeleteConfirm(false);
+            setCategoryToDelete(null);
+            setCascadeDelete(true);
+            showToast("Category deleted successfully", "success");
+        },
+        onError: (error) => {
+            console.error("Failed to delete category:", error);
+            showToast("Failed to delete category", "error");
         },
     });
+
+    const handleDeleteCategoryClick = (id: number) => {
+        setCategoryToDelete(id);
+        setCascadeDelete(true); // Default to cascade delete
+
+        // Count how many regex patterns are associated with this category
+        const count = regexes.filter(regex => regex.cat_id === id).length;
+        setRegexCount(count);
+
+        setShowCascadeDeleteConfirm(true);
+    };
+
+    const handleConfirmDeleteCategory = (cascade: boolean) => {
+        if (categoryToDelete !== null) {
+            deleteCategoryMutation.mutate({ id: categoryToDelete, cascade });
+        }
+    };
 
     const createRegexMutation = useMutation({
         mutationFn: async (newRegex: NewCategoryRegex) => {
@@ -179,6 +211,7 @@ export default function CategoriesManagement() {
 
     return (
         <div className="p-6 text-white">
+            <ToastContainer toasts={toasts} onRemove={removeToast} />
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold">Categories & Regex Management</h1>
                 <button
@@ -195,7 +228,7 @@ export default function CategoriesManagement() {
             {/* Categories Section */}
             <div className="mb-8">
                 <h2 className="text-2xl font-semibold mb-4">Categories</h2>
-                
+
                 {/* Add New Category */}
                 <div className="mb-4 p-4 bg-gray-900 rounded-lg">
                     <h3 className="text-lg font-medium mb-3">Add New Category</h3>
@@ -269,7 +302,7 @@ export default function CategoriesManagement() {
                             ) : (
                                 <>
                                     <div className="flex items-center gap-3">
-                                        <div 
+                                        <div
                                             className="w-6 h-6 rounded border border-gray-600"
                                             style={{ backgroundColor: cat.color || "#000000" }}
                                         />
@@ -286,7 +319,7 @@ export default function CategoriesManagement() {
                                             Edit
                                         </button>
                                         <button
-                                            onClick={() => deleteCategoryMutation.mutate(cat.id)}
+                                            onClick={() => handleDeleteCategoryClick(cat.id)}
                                             className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-sm"
                                         >
                                             Delete
@@ -302,7 +335,7 @@ export default function CategoriesManagement() {
             {/* Category Regex Section */}
             <div>
                 <h2 className="text-2xl font-semibold mb-4">Category Regex Patterns</h2>
-                
+
                 {/* Add New Regex */}
                 <div className="mb-4 p-4 bg-gray-900 rounded-lg">
                     <h3 className="text-lg font-medium mb-3">Add New Regex</h3>
@@ -380,7 +413,7 @@ export default function CategoriesManagement() {
                                     <>
                                         <div className="flex items-center gap-3">
                                             {category?.color && (
-                                                <div 
+                                                <div
                                                     className="w-6 h-6 rounded border border-gray-600"
                                                     style={{ backgroundColor: category.color }}
                                                 />
@@ -418,7 +451,7 @@ export default function CategoriesManagement() {
                 <p className="text-sm text-gray-400 mb-4">
                     Apps matching these regex patterns will not be tracked. Use the Skipped Apps tab for a better experience with confirmation dialogs.
                 </p>
-                
+
                 {/* Add New Skipped App */}
                 <div className="mb-4 p-4 bg-gray-900 rounded-lg">
                     <h3 className="text-lg font-medium mb-3">Add Skipped App Pattern</h3>
@@ -456,6 +489,94 @@ export default function CategoriesManagement() {
                     ))}
                 </div>
             </div>
+
+            {/* Cascade Delete Confirmation Modal */}
+            {showCascadeDeleteConfirm && categoryToDelete !== null && (
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+                    <div className="bg-gray-900 p-6 rounded-lg max-w-md w-full mx-4 border border-gray-700">
+                        <h3 className="text-xl font-bold mb-4 text-white">Delete Category</h3>
+                        {(() => {
+                            const category = categories.find(c => c.id === categoryToDelete);
+                            return (
+                                <>
+                                    <p className="text-gray-300 mb-2">
+                                        You are about to delete <span className="font-semibold text-white">{category?.name || "this category"}</span>.
+                                    </p>
+                                    {regexCount > 0 ? (
+                                        <p className="text-yellow-400 mb-4 text-sm">
+                                            This category has <span className="font-semibold">{regexCount} regex pattern{regexCount !== 1 ? 's' : ''}</span> associated with it.
+                                        </p>
+                                    ) : (
+                                        <p className="text-gray-400 mb-4 text-sm">
+                                            This category has no regex patterns associated with it.
+                                        </p>
+                                    )}
+                                    <p className="text-gray-300 mb-4">
+                                        How would you like to proceed?
+                                    </p>
+                                </>
+                            );
+                        })()}
+                        <div className="space-y-3 mb-4">
+                            <div className="p-3 bg-gray-800 rounded border border-gray-700">
+                                <label className="flex items-start gap-3 cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        name="deleteType"
+                                        value="cascade"
+                                        checked={cascadeDelete}
+                                        onChange={() => setCascadeDelete(true)}
+                                        className="mt-1"
+                                    />
+                                    <div>
+                                        <div className="font-medium text-white">Cascade Delete</div>
+                                        <div className="text-sm text-gray-400">
+                                            Delete the category{regexCount > 0 && ` and all ${regexCount} associated regex pattern${regexCount !== 1 ? 's' : ''}`}
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                            <div className="p-3 bg-gray-800 rounded border border-gray-700">
+                                <label className="flex items-start gap-3 cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        name="deleteType"
+                                        value="simple"
+                                        checked={!cascadeDelete}
+                                        onChange={() => setCascadeDelete(false)}
+                                        className="mt-1"
+                                    />
+                                    <div>
+                                        <div className="font-medium text-white">Simple Delete</div>
+                                        <div className="text-sm text-gray-400">
+                                            Delete only the category{regexCount > 0 && ` (${regexCount} regex pattern${regexCount !== 1 ? 's will' : ' will'} remain orphaned)`}
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => {
+                                    setShowCascadeDeleteConfirm(false);
+                                    setCategoryToDelete(null);
+                                }}
+                                disabled={deleteCategoryMutation.isPending}
+                                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => handleConfirmDeleteCategory(cascadeDelete)}
+                                disabled={deleteCategoryMutation.isPending}
+                                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-white disabled:opacity-50"
+                            >
+                                {deleteCategoryMutation.isPending ? "Deleting..." : "Delete"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

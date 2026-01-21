@@ -13,6 +13,14 @@ pub struct Log {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct MergedLog {
+    pub ids: Vec<i64>,
+    pub app: String,
+    pub timestamp: i64,
+    pub duration: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct NewLog {
     pub app: String,
     pub timestamp: i64,
@@ -49,6 +57,18 @@ pub async fn delete_log_by_id(id: i64) -> Result<(), Error> {
         .bind(id)
         .execute(&pool)
         .await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_logs_by_ids(ids: Vec<i64>) -> Result<(), Error> {
+    let pool = db::get_pool().await?;
+    for id in ids {
+        sqlx::query("DELETE FROM logs WHERE id = ?")
+            .bind(id)
+            .execute(&pool)
+            .await?;
+    }
     Ok(())
 }
 
@@ -134,7 +154,7 @@ pub async fn count_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resul
 }
 
 #[tauri::command]
-pub async fn get_logs_for_time_block(request: DeleteTimeBlockRequest) -> Result<Vec<Log>, Error> {
+pub async fn get_logs_for_time_block(request: DeleteTimeBlockRequest) -> Result<Vec<MergedLog>, Error> {
     let pool = db::get_pool().await?;
 
     let logs = sqlx::query_as::<_, Log>(
@@ -153,13 +173,23 @@ pub async fn get_logs_for_time_block(request: DeleteTimeBlockRequest) -> Result<
     Ok(merge_logs_in_time_block(filtered_logs))
 }
 
-fn merge_logs_in_time_block(logs: Vec<Log>) -> Vec<Log> {
-    let mut app_map: HashMap<String, Log> = HashMap::new();
+fn merge_logs_in_time_block(logs: Vec<Log>) -> Vec<MergedLog> {
+    let mut app_map: HashMap<String, MergedLog> = HashMap::new();
     for log in logs {
         if let Some(existing) = app_map.get_mut(&log.app) {
             existing.duration += log.duration;
+            existing.ids.push(log.id);
+            // Keep the earliest timestamp
+            if log.timestamp < existing.timestamp {
+                existing.timestamp = log.timestamp;
+            }
         } else {
-            app_map.insert(log.app.clone(), log);
+            app_map.insert(log.app.clone(), MergedLog {
+                ids: vec![log.id],
+                app: log.app,
+                timestamp: log.timestamp,
+                duration: log.duration,
+            });
         }
     }
     app_map.into_values().collect()

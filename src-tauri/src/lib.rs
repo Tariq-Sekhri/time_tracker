@@ -13,7 +13,7 @@ use db::tables::category::{
     update_category_by_id,
 };
 use db::tables::log::{
-    count_logs_for_time_block, delete_log_by_id, delete_logs_for_time_block, get_log_by_id,
+    count_logs_for_time_block, delete_log_by_id, delete_logs_by_ids, delete_logs_for_time_block, get_log_by_id,
     get_logs, get_logs_for_time_block,
 };
 use db::tables::skipped_app::{
@@ -63,6 +63,7 @@ pub fn run() {
             get_logs,
             get_log_by_id,
             delete_log_by_id,
+            delete_logs_by_ids,
             delete_logs_for_time_block,
             count_logs_for_time_block,
             get_logs_for_time_block,

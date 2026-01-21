@@ -1,6 +1,5 @@
 - high priority
-    - afk detection??
-    - cascase delete ?
+  - cascade delete, when u delete a category, the user should be propmted to delte the regex patterns associated with it.
 - mid priority
     - double click on the day
     - disable right click
@@ -18,3 +17,7 @@
     - the bars should reflect that proportionally, also its horizontal not vertical.
     - users can see all app names, allow them to more easily make regex
     - swap to using sqlx macro for compile time checks
+
+
+- not planned
+    - afk detection

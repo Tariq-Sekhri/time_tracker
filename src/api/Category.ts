@@ -18,8 +18,8 @@ export async function get_categories(): Promise<Result<Category[], AppError>> {
     return invokeWithResult<Category[]>("get_categories");
 }
 
-export async function delete_category_by_id(id: number): Promise<Result<null, AppError>> {
-    return invokeWithResult<null>("delete_category_by_id", { id });
+export async function delete_category_by_id(id: number, cascade: boolean = false): Promise<Result<null, AppError>> {
+    return invokeWithResult<null>("delete_category_by_id", { id, cascade });
 }
 
 export async function get_category_by_id(id: number): Promise<Result<null, AppError>> {

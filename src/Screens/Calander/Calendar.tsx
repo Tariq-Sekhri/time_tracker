@@ -1,21 +1,22 @@
-import {useQuery} from "@tanstack/react-query";
-import {get_categories} from "../../api/Category.ts";
-import {get_logs_for_time_block} from "../../api/Log.ts";
-import {unwrapResult} from "../../utils.ts";
-import {useState, useMemo, useEffect, useRef} from "react";
-import {EventClickArg, DatesSetArg} from "@fullcalendar/core";
+import { useQuery } from "@tanstack/react-query";
+import { get_categories } from "../../api/Category.ts";
+import { get_logs_for_time_block } from "../../api/Log.ts";
+import { get_week } from "../../api/week.ts";
+import { unwrapResult } from "../../utils.ts";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { EventClickArg, DatesSetArg } from "@fullcalendar/core";
 import RenderCalendarContent from "./RenderCalenderContent.tsx";
-import {getWeekStart, isCurrentWeek} from "./utils.ts";
-import {useDateStore} from "../../stores/dateStore.ts";
-import {View} from "../../App.tsx";
+import { getWeekStart, isCurrentWeek } from "./utils.ts";
+import { useDateStore } from "../../stores/dateStore.ts";
+import { View } from "../../App.tsx";
 import CalenderHeader from "./RightSideBar/CalanderHeader.tsx";
-import {CalendarEvent, DateClickInfo, EventLogs} from "./types.ts";
-import {RightSideBar, SideBarView} from "./RightSideBar/RightSideBar.tsx";
+import { CalendarEvent, DateClickInfo, EventLogs } from "./types.ts";
+import { RightSideBar, SideBarView } from "./RightSideBar/RightSideBar.tsx";
 import FullCalendar from '@fullcalendar/react';
 
-export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View) => void }) {
+export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: View) => void }) {
     const [rightSideBarView, setRightSideBarView] = useState<SideBarView>("Week")
-    const {date, setDate} = useDateStore();
+    const { date, setDate } = useDateStore();
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [selectedEvent, setSelectedEvent] = useState<CalendarEvent>(null);
     const [selectedEventLogs, setSelectedEventLogs] = useState<EventLogs>([]);
@@ -26,7 +27,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
 
     const [visibleCategories, setVisibleCategories] = useState<Set<string>>(new Set());
 
-    const {data: categories = []} = useQuery({
+    const { data: categories = [] } = useQuery({
         queryKey: ["categories"],
         queryFn: async () => unwrapResult(await get_categories()),
     });
@@ -48,6 +49,45 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         });
         return map;
     }, [categories]);
+
+    // Get week data to check if selectedEvent still exists
+    const weekStart = getWeekStart(date);
+    const { data: weekData } = useQuery({
+        queryKey: ["week", weekStart.toISOString()],
+        queryFn: async () => unwrapResult(await get_week(weekStart)),
+        enabled: !!weekStart && !isNaN(weekStart.getTime()) && !!selectedEvent,
+    });
+
+    // Check if selectedEvent still exists in the week data after refresh
+    useEffect(() => {
+        if (selectedEvent && weekData) {
+            // Check if the event still exists by matching start/end times and apps
+            const eventExists = weekData.some((block) => {
+                const blockStart = new Date(block.startTime * 1000);
+                const blockEnd = new Date(block.endTime * 1000);
+                const eventStart = selectedEvent.start;
+                const eventEnd = selectedEvent.end;
+
+                // Check if times match (within 1 second tolerance)
+                const startMatch = Math.abs(blockStart.getTime() - eventStart.getTime()) < 1000;
+                const endMatch = Math.abs(blockEnd.getTime() - eventEnd.getTime()) < 1000;
+
+                // Check if apps match
+                const blockApps = new Set(block.apps.map(a => a.app));
+                const eventApps = new Set(selectedEvent.apps.map(a => a.app));
+                const appsMatch = blockApps.size === eventApps.size &&
+                    [...blockApps].every(app => eventApps.has(app));
+
+                return startMatch && endMatch && appsMatch;
+            });
+
+            // If event doesn't exist anymore, reset it
+            if (!eventExists) {
+                setSelectedEvent(null);
+                setSelectedEventLogs([]);
+            }
+        }
+    }, [weekData, selectedEvent]);
 
     // Only auto-update view if we're not already on the correct view
     // This prevents flicker when clicking calendar background (which sets view directly)
@@ -86,9 +126,9 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
 
             if (result.success) {
                 const logs = result.data.map(log => ({
-                    id: log.id,
+                    ids: log.ids,
                     app: log.app,
-                    timestamp: new Date(Number(log.timestamp) * 1000),
+                    timestamp: new Date(log.timestamp * 1000), // Convert seconds to milliseconds
                     duration: log.duration,
                 }));
                 // Sort by duration (longest first) - backend already sorts, but ensure it here too
@@ -258,20 +298,20 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         setSelectedDate(null);
     };
 
-    const weekStart = getWeekStart(date);
-    const weekEnd = new Date(weekStart);
+    const headerWeekStart = getWeekStart(date);
+    const weekEnd = new Date(headerWeekStart);
     weekEnd.setDate(weekEnd.getDate() + 6);
 
-    const headerTitle = `${weekStart.toLocaleDateString('en-US', {
+    const headerTitle = `${headerWeekStart.toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric'
-    })} – ${weekEnd.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'})}`;
+    })} – ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 
 
     return (
         <div className="flex flex-col h-full w-full">
             <CalenderHeader headerTitle={headerTitle} onClick={goToPrevWeek} d={date} onClick1={goToNextWeek}
-                            onClick2={goToToday}/>
+                onClick2={goToToday} />
 
             <div className="flex flex-1 overflow-hidden">
                 <div className="flex-1 overflow-hidden">
@@ -289,9 +329,9 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                     </div>
                 </div>
                 <RightSideBar selectedEvent={selectedEvent} setSelectedEvent={setSelectedEvent}
-                              setSelectedEventLogs={setSelectedEventLogs} selectedEventLogs={selectedEventLogs}
-                              view={rightSideBarView} setView={setRightSideBarView} selectedDate={selectedDate}
-                              setSelectedDate={setSelectedDate} setCurrentView={setCurrentView}/>
+                    setSelectedEventLogs={setSelectedEventLogs} selectedEventLogs={selectedEventLogs}
+                    view={rightSideBarView} setView={setRightSideBarView} selectedDate={selectedDate}
+                    setSelectedDate={setSelectedDate} setCurrentView={setCurrentView} />
             </div>
 
 
