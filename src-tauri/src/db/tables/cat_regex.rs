@@ -1,5 +1,4 @@
 use crate::db;
-use crate::db::tables::category::NewCategory;
 use crate::db::Error;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
@@ -29,21 +28,22 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .await?;
 
     // Insert default ".*" regex for Miscellaneous category if table is empty
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM category_regex")
+    let row = sqlx::query!("SELECT COUNT(*) as count FROM category_regex")
         .fetch_one(pool)
         .await?;
 
-    if count.0 == 0 {
-        let misc_cat_id: Option<(i32,)> =
-            sqlx::query_as("SELECT id FROM category WHERE name = 'Miscellaneous'")
-                .fetch_optional(pool)
-                .await?;
-        if let Some((cat_id,)) = misc_cat_id {
-            sqlx::query("INSERT OR IGNORE INTO category_regex (cat_id, regex) VALUES (?, ?)")
-                .bind(cat_id)
-                .bind(".*")
-                .execute(pool)
-                .await?;
+    if row.count == 0 {
+        let misc = sqlx::query!("SELECT id FROM category WHERE name = 'Miscellaneous'")
+            .fetch_optional(pool)
+            .await?;
+        if let Some(m) = misc {
+            sqlx::query!(
+                "INSERT OR IGNORE INTO category_regex (cat_id, regex) VALUES (?1, ?2)",
+                m.id,
+                ".*"
+            )
+            .execute(pool)
+            .await?;
         }
     }
     Ok(())
@@ -51,48 +51,56 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 #[tauri::command]
 pub async fn insert_cat_regex(new_category_regex: NewCategoryRegex) -> Result<i64, Error> {
     let pool = db::get_pool().await?;
-    let new_id = sqlx::query("INSERT INTO category_regex (cat_id, regex) values (?, ?)")
-        .bind(new_category_regex.cat_id)
-        .bind(new_category_regex.regex)
-        .execute(&pool)
-        .await?
-        .last_insert_rowid();
-    Ok(new_id)
+    let result = sqlx::query!(
+        "INSERT INTO category_regex (cat_id, regex) VALUES (?1, ?2)",
+        new_category_regex.cat_id,
+        new_category_regex.regex
+    )
+    .execute(&pool)
+    .await?;
+    Ok(result.last_insert_rowid())
 }
 
 #[tauri::command]
 pub async fn update_cat_regex_by_id(cat_regex: CategoryRegex) -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    sqlx::query("update category_regex set cat_id= ?, regex=? where id = ?")
-        .bind(cat_regex.cat_id)
-        .bind(cat_regex.regex)
-        .bind(cat_regex.id)
-        .execute(&pool)
-        .await?;
+    sqlx::query!(
+        "UPDATE category_regex SET cat_id = ?1, regex = ?2 WHERE id = ?3",
+        cat_regex.cat_id,
+        cat_regex.regex,
+        cat_regex.id
+    )
+    .execute(&pool)
+    .await?;
     Ok(())
 }
 #[tauri::command]
 pub async fn get_cat_regex_by_id(id: i32) -> Result<CategoryRegex, Error> {
     let pool = db::get_pool().await?;
-    let regex = sqlx::query_as::<_, CategoryRegex>("select * from category_regex where id = ?")
-        .bind(id)
-        .fetch_one(&pool)
-        .await?;
+    let regex = sqlx::query_as!(
+        CategoryRegex,
+        r#"SELECT id as "id!: i32", cat_id as "cat_id!: i32", regex FROM category_regex WHERE id = ?1"#,
+        id
+    )
+    .fetch_one(&pool)
+    .await?;
     Ok(regex)
 }
 #[tauri::command]
 pub async fn get_cat_regex() -> Result<Vec<CategoryRegex>, Error> {
     let pool = db::get_pool().await?;
-    let regex = sqlx::query_as::<_, CategoryRegex>("select * from category_regex")
-        .fetch_all(&pool)
-        .await?;
+    let regex = sqlx::query_as!(
+        CategoryRegex,
+        r#"SELECT id as "id!: i32", cat_id as "cat_id!: i32", regex FROM category_regex"#
+    )
+    .fetch_all(&pool)
+    .await?;
     Ok(regex)
 }
 #[tauri::command]
 pub async fn delete_cat_regex_by_id(id: i32) -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    sqlx::query("delete from category_regex where id=?")
-        .bind(id)
+    sqlx::query!("DELETE FROM category_regex WHERE id = ?1", id)
         .execute(&pool)
         .await?;
     Ok(())

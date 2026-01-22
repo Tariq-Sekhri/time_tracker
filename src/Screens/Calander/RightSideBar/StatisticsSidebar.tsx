@@ -1,9 +1,9 @@
-import {useQuery} from "@tanstack/react-query";
-import {useState, useEffect} from "react";
-import {get_week_statistics} from "../../../api/statistics.ts";
-import {unwrapResult, getWeekRange} from "../../../utils.ts";
-import {formatDuration, formatPercentage} from "../utils.ts";
-import {DonutChart} from "../DonutChart.tsx";
+import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { get_week_statistics } from "../../../api/statistics.ts";
+import { unwrapResult, getWeekRange } from "../../../utils.ts";
+import { formatDuration, formatPercentage } from "../utils.ts";
+import { DonutChart } from "../DonutChart.tsx";
 
 type DisplayMode = "percentage" | "time" | "count";
 
@@ -14,10 +14,10 @@ interface StatisticsSidebarProps {
     onAppsList?: () => void;
 }
 
-export default function StatisticsSidebar({weekDate, onMoreInfo, onAppsList}: StatisticsSidebarProps) {
+export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList }: StatisticsSidebarProps) {
     const [displayMode, setDisplayMode] = useState<DisplayMode>("percentage");
 
-    const {week_start, week_end} = getWeekRange(weekDate);
+    const { week_start, week_end } = getWeekRange(weekDate);
 
     // Build and log the query event before executing
     useEffect(() => {
@@ -131,6 +131,44 @@ export default function StatisticsSidebar({weekDate, onMoreInfo, onAppsList}: St
     const topCategories = stats.categories.slice(0, 5);
     const maxCategoryDuration = topCategories.length > 0 ? topCategories[0].total_duration : 1;
 
+    // Helper function to calculate time change from percentage change
+    // percentage_change = ((current - previous) / previous) * 100
+    // Solving for time_change = current - previous:
+    // previous = current / (1 + percentage_change / 100)
+    // time_change = current - current / (1 + percentage_change / 100)
+    // time_change = current * (percentage_change / 100) / (1 + percentage_change / 100)
+    // time_change = current * percentage_change / (100 + percentage_change)
+    const calculateTimeChange = (currentDuration: number, percentageChange: number): number => {
+        if (percentageChange === 0) return 0;
+        // Handle edge case where percentage_change is -100 (current = 0, previous > 0)
+        // In this case, we can't calculate previous from current (which is 0)
+        // But since current = 0, time_change = 0 - previous = -previous
+        // We can't determine previous, so we'll use a fallback
+        if (percentageChange === -100) {
+            // This means current = 0, so time_change should be negative
+            // We can't determine the exact value, but we know it's a decrease
+            // Return a small negative value as a fallback
+            return -1;
+        }
+        // For all other cases, use the formula
+        // Note: When percentage_change = 100, this could mean:
+        // - prev = 0, current > 0 (backend sets to 100) → formula gives current/2 (approximation)
+        // - current = 2*prev → formula gives current/2 (correct)
+        // The formula works for most cases
+        return (currentDuration * percentageChange) / (100 + percentageChange);
+    };
+
+    // Helper function to format change indicator (percentage change or time change)
+    const formatChange = (currentDuration: number, percentageChange: number | null): string | null => {
+        if (percentageChange === null) return null;
+        if (displayMode === "time") {
+            const timeChange = calculateTimeChange(currentDuration, percentageChange);
+            const sign = timeChange >= 0 ? "+" : "";
+            return `${sign}${formatDuration(Math.abs(timeChange))}`;
+        }
+        return formatPercentage(percentageChange);
+    };
+
     return (
         <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
             {/* Header */}
@@ -163,8 +201,15 @@ export default function StatisticsSidebar({weekDate, onMoreInfo, onAppsList}: St
                     </div>
                     {stats.total_time_change !== null && (
                         <div
-                            className={`text-xs ${stats.total_time_change >= 0 ? "text-green-400" : "text-red-400"}`}>
-                            {formatPercentage(stats.total_time_change)}
+                            className={`text-xs min-w-[50px] text-right ${stats.total_time_change >= 0 ? "text-green-400" : "text-red-400"}`}>
+                            {displayMode === "time"
+                                ? (() => {
+                                    const timeChange = calculateTimeChange(stats.total_time, stats.total_time_change);
+                                    const sign = timeChange >= 0 ? "+" : "";
+                                    return `${sign}${formatDuration(Math.abs(timeChange))}`;
+                                })()
+                                : formatPercentage(stats.total_time_change)
+                            }
                         </div>
                     )}
                 </div>
@@ -172,7 +217,7 @@ export default function StatisticsSidebar({weekDate, onMoreInfo, onAppsList}: St
 
             {/* Donut Chart */}
             <div className="mb-6">
-                <DonutChart data={donutData} colors={categoryColors}/>
+                <DonutChart data={donutData} colors={categoryColors} />
             </div>
 
             {/* Categories */}
@@ -185,16 +230,18 @@ export default function StatisticsSidebar({weekDate, onMoreInfo, onAppsList}: St
                                 <div className="flex items-center gap-2">
                                     <div
                                         className="w-3 h-3 rounded-full"
-                                        style={{backgroundColor: cat.color || "#6b7280"}}
+                                        style={{ backgroundColor: cat.color || "#6b7280" }}
                                     />
                                     <span className="text-sm text-gray-200">{cat.category}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <span className="text-sm text-gray-400">{formatDuration(cat.total_duration)}</span>
-                                    {cat.percentage_change !== null && (
+                                    <span className="text-sm text-gray-400">
+                                        {formatDuration(cat.total_duration)}
+                                    </span>
+                                    {formatChange(cat.total_duration, cat.percentage_change) !== null && (
                                         <span
-                                            className={`text-xs ${cat.percentage_change >= 0 ? "text-green-400" : "text-red-400"}`}>
-                                            {formatPercentage(cat.percentage_change)}
+                                            className={`text-xs min-w-[50px] text-right ${cat.percentage_change! >= 0 ? "text-green-400" : "text-red-400"}`}>
+                                            {formatChange(cat.total_duration, cat.percentage_change)}
                                         </span>
                                     )}
                                 </div>
@@ -231,11 +278,13 @@ export default function StatisticsSidebar({weekDate, onMoreInfo, onAppsList}: St
                         <div key={idx} className="flex items-center justify-between">
                             <span className="text-sm text-gray-200">{app.app}</span>
                             <div className="flex items-center gap-2">
-                                <span className="text-sm text-gray-400">{formatDuration(app.total_duration)}</span>
-                                {app.percentage_change !== null && (
+                                <span className="text-sm text-gray-400">
+                                    {formatDuration(app.total_duration)}
+                                </span>
+                                {formatChange(app.total_duration, app.percentage_change) !== null && (
                                     <span
-                                        className={`text-xs ${app.percentage_change >= 0 ? "text-green-400" : "text-red-400"}`}>
-                                        {formatPercentage(app.percentage_change)}
+                                        className={`text-xs min-w-[50px] text-right ${app.percentage_change! >= 0 ? "text-green-400" : "text-red-400"}`}>
+                                        {formatChange(app.total_duration, app.percentage_change)}
                                     </span>
                                 )}
                             </div>

@@ -32,14 +32,82 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         queryFn: async () => unwrapResult(await get_categories()),
     });
 
-
+    // Initialize visible categories when categories are loaded
     useEffect(() => {
         if (categories.length > 0 && !hasInitialized.current) {
-            const allCategoryNames = categories.map(cat => cat.name);
-            setVisibleCategories(new Set(allCategoryNames));
+            try {
+                const saved = localStorage.getItem("visibleCategories");
+                const allCategoryNames = categories.map(cat => cat.name);
+
+                if (saved) {
+                    const savedArray = JSON.parse(saved) as string[];
+                    const savedSet = new Set<string>(savedArray);
+
+                    // Use saved preferences: categories in saved array are visible
+                    // New categories (not in saved) default to visible
+                    const mergedSet = new Set<string>();
+                    allCategoryNames.forEach(name => {
+                        if (savedSet.has(name)) {
+                            // Was saved as visible
+                            mergedSet.add(name);
+                        } else {
+                            // Not in saved - could be new category or was hidden
+                            // Check if we have any saved data at all - if yes, this was likely hidden
+                            // If it's truly new, we'll add it to visible on next save
+                            // For now: if saved data exists, assume missing = hidden
+                            // But we need to handle new categories differently
+                            // Simple approach: if saved exists, only show saved ones; new ones default visible
+                            // Actually, let's be smarter: track all known categories
+                            const knownCategories = localStorage.getItem("knownCategories");
+                            if (knownCategories) {
+                                const knownSet = new Set<string>(JSON.parse(knownCategories));
+                                if (knownSet.has(name)) {
+                                    // Was known but not visible = hidden, keep hidden
+                                    // Don't add to mergedSet
+                                } else {
+                                    // New category - default to visible
+                                    mergedSet.add(name);
+                                }
+                            } else {
+                                // No known categories - this is first run, all visible
+                                mergedSet.add(name);
+                            }
+                        }
+                    });
+
+                    setVisibleCategories(mergedSet);
+                    // Update known categories
+                    localStorage.setItem("knownCategories", JSON.stringify(allCategoryNames));
+                } else {
+                    // No saved preferences - all categories visible by default
+                    const allVisible = new Set(allCategoryNames);
+                    setVisibleCategories(allVisible);
+                    localStorage.setItem("visibleCategories", JSON.stringify([...allVisible]));
+                    localStorage.setItem("knownCategories", JSON.stringify(allCategoryNames));
+                }
+            } catch (e) {
+                console.error("Failed to initialize visible categories:", e);
+                // Fallback to all visible
+                const allCategoryNames = categories.map(cat => cat.name);
+                setVisibleCategories(new Set(allCategoryNames));
+            }
             hasInitialized.current = true;
         }
     }, [categories]);
+
+    // Save visible categories to localStorage whenever they change
+    useEffect(() => {
+        if (hasInitialized.current && categories.length > 0) {
+            try {
+                localStorage.setItem("visibleCategories", JSON.stringify([...visibleCategories]));
+                // Also update known categories
+                const allCategoryNames = categories.map(cat => cat.name);
+                localStorage.setItem("knownCategories", JSON.stringify(allCategoryNames));
+            } catch (e) {
+                console.error("Failed to save visible categories to localStorage:", e);
+            }
+        }
+    }, [visibleCategories, categories]);
     const categoryColorMap = useMemo(() => {
         const map = new Map<string, string>();
         categories.forEach(cat => {
@@ -164,6 +232,15 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
             }
             return newSet;
         });
+    };
+
+    const checkAllCategories = () => {
+        const allCategoryNames = categories.map(cat => cat.name);
+        setVisibleCategories(new Set(allCategoryNames));
+    };
+
+    const uncheckAllCategories = () => {
+        setVisibleCategories(new Set<string>());
     };
 
 
@@ -323,6 +400,8 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                             visibleCategories={visibleCategories}
                             categories={categories}
                             toggleCategory={toggleCategory}
+                            checkAllCategories={checkAllCategories}
+                            uncheckAllCategories={uncheckAllCategories}
                             handleEventClick={handleEventClick}
                             onDatesSet={handleDatesSet}
                         />

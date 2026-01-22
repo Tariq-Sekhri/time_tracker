@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO category_regex (cat_id, regex) VALUES (?1, ?2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "bad61b2c6e89a8913b69ddbc966ff5740153b72ed4af8f0cb8aa7ef0963f7418"
+}

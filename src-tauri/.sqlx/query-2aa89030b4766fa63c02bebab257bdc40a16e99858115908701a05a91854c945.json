@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM category_regex WHERE cat_id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "2aa89030b4766fa63c02bebab257bdc40a16e99858115908701a05a91854c945"
+}

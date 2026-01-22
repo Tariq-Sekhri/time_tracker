@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: i32\", name, COALESCE(priority, 0) as \"priority!: i32\", color FROM category ORDER BY priority DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i32",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "priority!: i32",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "color",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "50c7aa9343e5b8405b7dc3aaa12d29274bad242878e7a387a338b5460b9f40df"
+}

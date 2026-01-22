@@ -42,7 +42,7 @@ export default function AppsInTimeBlock({
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [deleteLogCount, setDeleteLogCount] = useState(0);
     const [isCountingLogs, setIsCountingLogs] = useState(false);
-    const { showToast, toasts, removeToast } = useToast();
+    const { showToast, toasts, removeToast, updateToast } = useToast();
 
     const handleDeleteClick = async () => {
         if (!selectedEvent) return;
@@ -148,7 +148,7 @@ export default function AppsInTimeBlock({
 
     return (
         <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col h-full">
-            <ToastContainer toasts={toasts} onRemove={removeToast} />
+            <ToastContainer toasts={toasts} onRemove={removeToast} onUpdate={updateToast} />
             {/* Header */}
             <div className="flex-shrink-0 mb-6">
                 <div className="flex items-center justify-between mb-3">

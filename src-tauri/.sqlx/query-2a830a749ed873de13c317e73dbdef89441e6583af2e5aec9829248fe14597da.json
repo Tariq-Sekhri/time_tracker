@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, app, timestamp, duration FROM logs",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "app",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "timestamp",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "duration",
+        "ordinal": 3,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "2a830a749ed873de13c317e73dbdef89441e6583af2e5aec9829248fe14597da"
+}

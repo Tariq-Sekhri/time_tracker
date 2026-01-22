@@ -28,7 +28,7 @@ import { ToastContainer, useToast } from "./Toast.tsx";
 
 export default function CategoriesManagement() {
     const queryClient = useQueryClient();
-    const { showToast, toasts, removeToast } = useToast();
+    const { showToast, toasts, removeToast, updateToast } = useToast();
     const [editingCategory, setEditingCategory] = useState<Category | null>(null);
     const [editingRegex, setEditingRegex] = useState<CategoryRegex | null>(null);
     const [newCategoryName, setNewCategoryName] = useState("");
@@ -62,6 +62,12 @@ export default function CategoriesManagement() {
             setNewCategoryName("");
             setNewCategoryPriority(0);
             setNewCategoryColor("#000000");
+            showToast("Category created successfully", "success");
+        },
+        onError: (error: any) => {
+            console.error("Failed to create category:", error);
+            const fullError = JSON.stringify(error, null, 2);
+            showToast("Failed to create category", "error", 5000, fullError);
         },
     });
 
@@ -72,6 +78,12 @@ export default function CategoriesManagement() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["categories"] });
             setEditingCategory(null);
+            showToast("Category updated successfully", "success");
+        },
+        onError: (error: any) => {
+            console.error("Failed to update category:", error);
+            const fullError = JSON.stringify(error, null, 2);
+            showToast("Failed to update category", "error", 5000, fullError);
         },
     });
 
@@ -123,10 +135,13 @@ export default function CategoriesManagement() {
             queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
             setNewRegexCatId("");
             setNewRegexPattern("");
+            showToast("Regex pattern created successfully", "success");
         },
-        onError: (error) => {
+        onError: (error: any) => {
             console.error("Failed to create regex:", error);
-            alert(`Failed to create regex: ${error}`);
+            const errorMessage = error?.message || error?.toString() || "Unknown error";
+            const fullError = JSON.stringify(error, null, 2);
+            showToast("Failed to create regex pattern", "error", 5000, fullError);
         },
     });
 
@@ -137,6 +152,13 @@ export default function CategoriesManagement() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
             setEditingRegex(null);
+            showToast("Regex pattern updated successfully", "success");
+        },
+        onError: (error: any) => {
+            console.error("Failed to update regex:", error);
+            const errorMessage = error?.message || error?.toString() || "Unknown error";
+            const fullError = JSON.stringify(error, null, 2);
+            showToast("Failed to update regex pattern", "error", 5000, fullError);
         },
     });
 
@@ -156,6 +178,12 @@ export default function CategoriesManagement() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["skipped_apps"] });
             setNewSkippedAppName("");
+            showToast("Skipped app pattern created successfully", "success");
+        },
+        onError: (error: any) => {
+            console.error("Failed to create skipped app:", error);
+            const fullError = JSON.stringify(error, null, 2);
+            showToast("Failed to create skipped app pattern", "error", 5000, fullError);
         },
     });
 
@@ -165,24 +193,60 @@ export default function CategoriesManagement() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["skipped_apps"] });
+            showToast("Skipped app pattern deleted successfully", "success");
+        },
+        onError: (error: any) => {
+            console.error("Failed to delete skipped app:", error);
+            const fullError = JSON.stringify(error, null, 2);
+            showToast("Failed to delete skipped app pattern", "error", 5000, fullError);
         },
     });
 
     const handleCreateCategory = () => {
-        if (newCategoryName.trim()) {
-            createCategoryMutation.mutate({
-                name: newCategoryName.trim(),
-                priority: newCategoryPriority,
-                color: newCategoryColor || null,
-            });
+        if (!newCategoryName.trim()) {
+            showToast("Category name cannot be empty", "error");
+            return;
         }
+
+        createCategoryMutation.mutate({
+            name: newCategoryName.trim(),
+            priority: newCategoryPriority,
+            color: newCategoryColor || null,
+        });
     };
 
     const handleUpdateCategory = (cat: Category) => {
         updateCategoryMutation.mutate(cat);
     };
 
+    // Validate regex pattern
+    const validateRegex = (pattern: string): string | null => {
+        if (!pattern.trim()) {
+            return "Pattern cannot be empty";
+        }
+        try {
+            new RegExp(pattern);
+            return null;
+        } catch (e) {
+            return `Invalid regex: ${e instanceof Error ? e.message : "Unknown error"}`;
+        }
+    };
+
     const handleCreateRegex = () => {
+        // Validate category selection
+        if (newRegexCatId === "" || typeof newRegexCatId !== "number") {
+            showToast("Please select a category", "error");
+            return;
+        }
+
+        // Validate regex pattern
+        const regexError = validateRegex(newRegexPattern);
+        if (regexError) {
+            const fullError = `Validation Error: ${regexError}\nPattern: ${newRegexPattern}`;
+            showToast("Invalid regex pattern", "error", 5000, fullError);
+            return;
+        }
+
         if (typeof newRegexCatId === "number" && newRegexPattern.trim()) {
             createRegexMutation.mutate({
                 cat_id: newRegexCatId,
@@ -192,6 +256,13 @@ export default function CategoriesManagement() {
     };
 
     const handleUpdateRegex = (regex: CategoryRegex) => {
+        // Validate regex pattern
+        const regexError = validateRegex(regex.regex);
+        if (regexError) {
+            const fullError = `Validation Error: ${regexError}\nPattern: ${regex.regex}`;
+            showToast("Invalid regex pattern", "error", 5000, fullError);
+            return;
+        }
         updateRegexMutation.mutate(regex);
     };
 
@@ -211,7 +282,7 @@ export default function CategoriesManagement() {
 
     return (
         <div className="p-6 text-white">
-            <ToastContainer toasts={toasts} onRemove={removeToast} />
+            <ToastContainer toasts={toasts} onRemove={removeToast} onUpdate={updateToast} />
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold">Categories & Regex Management</h1>
                 <button

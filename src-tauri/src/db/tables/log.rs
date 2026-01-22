@@ -42,19 +42,20 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 
 pub async fn insert_log(log: NewLog) -> Result<i64, sqlx::Error> {
     let pool = db::get_pool().await?;
-    let result = sqlx::query("INSERT INTO logs (app, timestamp) VALUES (?, ?)")
-        .bind(log.app)
-        .bind(log.timestamp)
-        .execute(&pool)
-        .await?;
+    let result = sqlx::query!(
+        "INSERT INTO logs (app, timestamp) VALUES (?1, ?2)",
+        log.app,
+        log.timestamp
+    )
+    .execute(&pool)
+    .await?;
     Ok(result.last_insert_rowid())
 }
 
 #[tauri::command]
 pub async fn delete_log_by_id(id: i64) -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    sqlx::query("DELETE FROM logs WHERE id = ?")
-        .bind(id)
+    sqlx::query!("DELETE FROM logs WHERE id = ?1", id)
         .execute(&pool)
         .await?;
     Ok(())
@@ -64,8 +65,7 @@ pub async fn delete_log_by_id(id: i64) -> Result<(), Error> {
 pub async fn delete_logs_by_ids(ids: Vec<i64>) -> Result<(), Error> {
     let pool = db::get_pool().await?;
     for id in ids {
-        sqlx::query("DELETE FROM logs WHERE id = ?")
-            .bind(id)
+        sqlx::query!("DELETE FROM logs WHERE id = ?1", id)
             .execute(&pool)
             .await?;
     }
@@ -75,7 +75,7 @@ pub async fn delete_logs_by_ids(ids: Vec<i64>) -> Result<(), Error> {
 #[tauri::command]
 pub async fn get_logs() -> Result<Vec<Log>, Error> {
     let pool = db::get_pool().await?;
-    let logs = sqlx::query_as::<_, Log>("SELECT * FROM logs")
+    let logs = sqlx::query_as!(Log, "SELECT id, app, timestamp, duration FROM logs")
         .fetch_all(&pool)
         .await?;
     Ok(logs)
@@ -84,8 +84,7 @@ pub async fn get_logs() -> Result<Vec<Log>, Error> {
 #[tauri::command]
 pub async fn get_log_by_id(id: i64) -> Result<Log, Error> {
     let pool = db::get_pool().await?;
-    let log = sqlx::query_as::<_, Log>("SELECT * FROM logs WHERE id = ?")
-        .bind(id)
+    let log = sqlx::query_as!(Log, "SELECT id, app, timestamp, duration FROM logs WHERE id = ?1", id)
         .fetch_one(&pool)
         .await?;
     Ok(log)
@@ -93,8 +92,7 @@ pub async fn get_log_by_id(id: i64) -> Result<Log, Error> {
 
 pub async fn increase_duration(id: i64) -> Result<(), sqlx::Error> {
     let pool = db::get_pool().await?;
-    sqlx::query("UPDATE logs SET duration = duration + 1 WHERE id = ?")
-        .bind(id)
+    sqlx::query!("UPDATE logs SET duration = duration + 1 WHERE id = ?1", id)
         .execute(&pool)
         .await?;
     Ok(())
@@ -112,19 +110,20 @@ pub async fn delete_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resu
     let pool = db::get_pool().await?;
 
     // Get all logs in the time range that match the app names
-    let logs =
-        sqlx::query_as::<_, Log>("SELECT * FROM logs WHERE timestamp >= ? AND timestamp <= ?")
-            .bind(request.start_time)
-            .bind(request.end_time)
-            .fetch_all(&pool)
-            .await?;
+    let logs = sqlx::query_as!(
+        Log,
+        "SELECT id, app, timestamp, duration FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2",
+        request.start_time,
+        request.end_time
+    )
+    .fetch_all(&pool)
+    .await?;
 
     let mut deleted_count = 0i64;
     for log in logs {
         // Check if the log's app is in the list of app names for this time block
         if request.app_names.contains(&log.app) {
-            sqlx::query("DELETE FROM logs WHERE id = ?")
-                .bind(log.id)
+            sqlx::query!("DELETE FROM logs WHERE id = ?1", log.id)
                 .execute(&pool)
                 .await?;
             deleted_count += 1;
@@ -138,12 +137,14 @@ pub async fn delete_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resu
 pub async fn count_logs_for_time_block(request: DeleteTimeBlockRequest) -> Result<i64, Error> {
     let pool = db::get_pool().await?;
 
-    let logs =
-        sqlx::query_as::<_, Log>("SELECT * FROM logs WHERE timestamp >= ? AND timestamp <= ?")
-            .bind(request.start_time)
-            .bind(request.end_time)
-            .fetch_all(&pool)
-            .await?;
+    let logs = sqlx::query_as!(
+        Log,
+        "SELECT id, app, timestamp, duration FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2",
+        request.start_time,
+        request.end_time
+    )
+    .fetch_all(&pool)
+    .await?;
 
     let count = logs
         .iter()
@@ -157,11 +158,12 @@ pub async fn count_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resul
 pub async fn get_logs_for_time_block(request: DeleteTimeBlockRequest) -> Result<Vec<MergedLog>, Error> {
     let pool = db::get_pool().await?;
 
-    let logs = sqlx::query_as::<_, Log>(
-        "SELECT * FROM logs WHERE timestamp >= ? AND timestamp <= ? ORDER BY duration DESC",
+    let logs = sqlx::query_as!(
+        Log,
+        "SELECT id, app, timestamp, duration FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2 ORDER BY duration DESC",
+        request.start_time,
+        request.end_time
     )
-    .bind(request.start_time)
-    .bind(request.end_time)
     .fetch_all(&pool)
     .await?;
 

@@ -51,14 +51,10 @@ pub async fn wipe_all_data() -> Result<(), Error> {
     let pool = get_pool().await?;
 
     // Delete all data from all tables
-    sqlx::query("DELETE FROM logs").execute(&pool).await?;
-    sqlx::query("DELETE FROM category_regex")
-        .execute(&pool)
-        .await?;
-    sqlx::query("DELETE FROM category").execute(&pool).await?;
-    sqlx::query("DELETE FROM skipped_apps")
-        .execute(&pool)
-        .await?;
+    sqlx::query!("DELETE FROM logs").execute(&pool).await?;
+    sqlx::query!("DELETE FROM category_regex").execute(&pool).await?;
+    sqlx::query!("DELETE FROM category").execute(&pool).await?;
+    sqlx::query!("DELETE FROM skipped_apps").execute(&pool).await?;
 
     // Re-run table creation which will insert defaults
     tables::category::create_table(&pool)

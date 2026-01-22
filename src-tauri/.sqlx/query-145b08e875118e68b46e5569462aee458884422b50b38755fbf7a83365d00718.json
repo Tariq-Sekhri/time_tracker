@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO skipped_apps (regex) VALUES (?1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "145b08e875118e68b46e5569462aee458884422b50b38755fbf7a83365d00718"
+}

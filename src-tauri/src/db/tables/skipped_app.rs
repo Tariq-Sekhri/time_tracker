@@ -41,9 +41,12 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 #[tauri::command]
 pub async fn get_skipped_apps() -> Result<Vec<SkippedApp>, Error> {
     let pool = db::get_pool().await?;
-    let apps = sqlx::query_as::<_, SkippedApp>("SELECT id, regex FROM skipped_apps ORDER BY regex")
-        .fetch_all(&pool)
-        .await?;
+    let apps = sqlx::query_as!(
+        SkippedApp,
+        r#"SELECT id as "id!: i32", regex FROM skipped_apps ORDER BY regex"#
+    )
+    .fetch_all(&pool)
+    .await?;
     Ok(apps)
 }
 
@@ -72,19 +75,17 @@ pub async fn insert_skipped_app_and_delete_logs(new_app: NewSkippedApp) -> Resul
     if !matching_ids.is_empty() {
         let mut tx = (&pool).begin().await?;
         for log_id in matching_ids {
-            sqlx::query("DELETE FROM logs WHERE id = ?")
-                .bind(log_id)
+            sqlx::query!("DELETE FROM logs WHERE id = ?1", log_id)
                 .execute(&mut *tx)
                 .await?;
         }
         tx.commit().await?;
     }
 
-    let id = sqlx::query("INSERT INTO skipped_apps (regex) VALUES (?)")
-        .bind(&new_app.regex)
+    let result = sqlx::query!("INSERT INTO skipped_apps (regex) VALUES (?1)", new_app.regex)
         .execute(&pool)
-        .await?
-        .last_insert_rowid();
+        .await?;
+    let id = result.last_insert_rowid();
 
     Ok(id)
 }
@@ -93,19 +94,20 @@ pub async fn insert_skipped_app_and_delete_logs(new_app: NewSkippedApp) -> Resul
 pub async fn update_skipped_app_by_id(skipped_app: SkippedApp) -> Result<(), Error> {
     Regex::new(&skipped_app.regex).map_err(|e| Error::Regex(e.to_string()))?;
     let pool = db::get_pool().await?;
-    sqlx::query("UPDATE skipped_apps SET regex = ? WHERE id = ?")
-        .bind(&skipped_app.regex)
-        .bind(skipped_app.id)
-        .execute(&pool)
-        .await?;
+    sqlx::query!(
+        "UPDATE skipped_apps SET regex = ?1 WHERE id = ?2",
+        skipped_app.regex,
+        skipped_app.id
+    )
+    .execute(&pool)
+    .await?;
     Ok(())
 }
 
 #[tauri::command]
 pub async fn delete_skipped_app_by_id(id: i32) -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    sqlx::query("DELETE FROM skipped_apps WHERE id = ?")
-        .bind(id)
+    sqlx::query!("DELETE FROM skipped_apps WHERE id = ?1", id)
         .execute(&pool)
         .await?;
     Ok(())
@@ -113,7 +115,10 @@ pub async fn delete_skipped_app_by_id(id: i32) -> Result<(), Error> {
 
 pub async fn is_skipped_app(app_name: &str) -> Result<bool, Error> {
     let pool = db::get_pool().await?;
-    let skipped_apps = sqlx::query_as::<_, SkippedApp>("SELECT id, regex FROM skipped_apps")
+    let skipped_apps = sqlx::query_as!(
+        SkippedApp,
+        r#"SELECT id as "id!: i32", regex FROM skipped_apps"#
+    )
         .fetch_all(&pool)
         .await?;
 
@@ -132,8 +137,7 @@ pub async fn is_skipped_app(app_name: &str) -> Result<bool, Error> {
 pub async fn restore_default_skipped_apps() -> Result<(), Error> {
     let pool = db::get_pool().await?;
     for regex_pattern in DEFAULT_SKIPPED_APPS.iter() {
-        sqlx::query("INSERT OR IGNORE INTO skipped_apps (regex) VALUES (?)")
-            .bind(regex_pattern)
+        sqlx::query!("INSERT OR IGNORE INTO skipped_apps (regex) VALUES (?1)", *regex_pattern)
             .execute(&pool)
             .await?;
     }

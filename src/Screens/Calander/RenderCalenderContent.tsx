@@ -19,6 +19,8 @@ interface RenderCalendarContentProps {
     categoryColorMap: Map<string, string>;
     categories: Category[];
     toggleCategory: (categoryName: string) => void;
+    checkAllCategories: () => void;
+    uncheckAllCategories: () => void;
     handleEventClick: (clickInfo: EventClickArg) => void;
     onDatesSet: (dates: DatesSetArg) => void;
 }
@@ -30,6 +32,8 @@ export default function RenderCalendarContent({
                                                   categoryColorMap,
                                                   categories,
                                                   toggleCategory,
+                                                  checkAllCategories,
+                                                  uncheckAllCategories,
                                                   handleEventClick,
                                                   onDatesSet,
                                               }: RenderCalendarContentProps) {
@@ -112,9 +116,25 @@ export default function RenderCalendarContent({
     return (
         <div className="flex flex-1 overflow-hidden">
             <div className="w-64 border-r border-gray-700 bg-black p-4 overflow-y-auto flex-shrink-0">
-                <h3 className="text-lg font-semibold text-white mb-4">
-                    Filter Categories
-                </h3>
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-white">
+                        Filter Categories
+                    </h3>
+                </div>
+                <div className="flex gap-2 mb-4">
+                    <button
+                        onClick={checkAllCategories}
+                        className="flex-1 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 rounded text-white transition-colors"
+                    >
+                        Check All
+                    </button>
+                    <button
+                        onClick={uncheckAllCategories}
+                        className="flex-1 px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 rounded text-white transition-colors"
+                    >
+                        Uncheck All
+                    </button>
+                </div>
                 <div className="space-y-2">
                     {categories.map((category) => {
                         const categoryName = category.name;

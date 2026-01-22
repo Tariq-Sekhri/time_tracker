@@ -14,7 +14,7 @@ import { ToastContainer, useToast } from "./Toast.tsx";
 
 export default function CategoriesView() {
     const queryClient = useQueryClient();
-    const { showToast, toasts, removeToast } = useToast();
+    const { showToast, toasts, removeToast, updateToast } = useToast();
     const [editingCategory, setEditingCategory] = useState<Category | null>(null);
     const [newCategoryName, setNewCategoryName] = useState("");
     const [newCategoryPriority, setNewCategoryPriority] = useState(0);
@@ -43,9 +43,12 @@ export default function CategoriesView() {
             setNewCategoryName("");
             setNewCategoryPriority(0);
             setNewCategoryColor("#000000");
+            showToast("Category created successfully", "success");
         },
-        onError: (error) => {
+        onError: (error: any) => {
             console.error("Failed to create category:", error);
+            const fullError = JSON.stringify(error, null, 2);
+            showToast("Failed to create category", "error", 5000, fullError);
         }
     });
 
@@ -56,6 +59,12 @@ export default function CategoriesView() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["categories"] });
             setEditingCategory(null);
+            showToast("Category updated successfully", "success");
+        },
+        onError: (error: any) => {
+            console.error("Failed to update category:", error);
+            const fullError = JSON.stringify(error, null, 2);
+            showToast("Failed to update category", "error", 5000, fullError);
         },
     });
 
@@ -71,9 +80,10 @@ export default function CategoriesView() {
             setCascadeDelete(true);
             showToast("Category deleted successfully", "success");
         },
-        onError: (error) => {
+        onError: (error: any) => {
             console.error("Failed to delete category:", error);
-            showToast("Failed to delete category", "error");
+            const fullError = JSON.stringify(error, null, 2);
+            showToast("Failed to delete category", "error", 5000, fullError);
         },
     });
 
@@ -95,15 +105,16 @@ export default function CategoriesView() {
     };
 
     const handleCreateCategory = () => {
-        console.log("Creating category:", newCategoryName.trim());
-        if (newCategoryName.trim()) {
-            createCategoryMutation.mutate({
-                name: newCategoryName.trim(),
-                priority: newCategoryPriority,
-                color: newCategoryColor || null,
-            });
-
+        if (!newCategoryName.trim()) {
+            showToast("Category name cannot be empty", "error");
+            return;
         }
+
+        createCategoryMutation.mutate({
+            name: newCategoryName.trim(),
+            priority: newCategoryPriority,
+            color: newCategoryColor || null,
+        });
     };
 
     const handleUpdateCategory = (cat: Category) => {
@@ -117,7 +128,7 @@ export default function CategoriesView() {
 
     return (
         <div className="p-6 text-white">
-            <ToastContainer toasts={toasts} onRemove={removeToast} />
+            <ToastContainer toasts={toasts} onRemove={removeToast} onUpdate={updateToast} />
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold">Categories</h1>
                 <div className="flex gap-2">

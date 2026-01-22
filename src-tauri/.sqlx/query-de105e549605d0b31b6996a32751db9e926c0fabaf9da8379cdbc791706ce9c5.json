@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO logs (app, timestamp) VALUES (?1, ?2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "de105e549605d0b31b6996a32751db9e926c0fabaf9da8379cdbc791706ce9c5"
+}
