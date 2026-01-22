@@ -1,8 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { get_categories } from "../../api/Category.ts";
-import { get_logs_for_time_block } from "../../api/Log.ts";
+import { get_logs_for_time_block, get_logs_by_category } from "../../api/Log.ts";
 import { get_week } from "../../api/week.ts";
-import { unwrapResult } from "../../utils.ts";
+import { unwrapResult, getWeekRange } from "../../utils.ts";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { EventClickArg, DatesSetArg } from "@fullcalendar/core";
 import RenderCalendarContent from "./RenderCalenderContent.tsx";
@@ -20,12 +20,15 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [selectedEvent, setSelectedEvent] = useState<CalendarEvent>(null);
     const [selectedEventLogs, setSelectedEventLogs] = useState<EventLogs>([]);
+    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+    const [isLoadingCategory, setIsLoadingCategory] = useState(false);
     const hasInitialized = useRef(false);
     const calenderRef = useRef<any>(null);
     const isUpdatingFromStore = useRef(false);
 
 
     const [visibleCategories, setVisibleCategories] = useState<Set<string>>(new Set());
+    const queryClient = useQueryClient();
 
     const { data: categories = [] } = useQuery({
         queryKey: ["categories"],
@@ -127,9 +130,17 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
     });
 
     // Check if selectedEvent still exists in the week data after refresh
+    // Skip this check for category-filtered events (they're synthetic and won't be in weekData)
     useEffect(() => {
+        // Don't check if we're in CategoryFilter mode - those events are synthetic
+        if (rightSideBarView === "CategoryFilter") {
+            return;
+        }
+        
         if (selectedEvent && weekData) {
-            // Check if the event still exists by matching start/end times and apps
+            // Check if the event still exists by matching start/end times
+            // Use lenient matching: only check time range, not exact app matching
+            // This prevents the sidebar from closing when apps are deleted
             const eventExists = weekData.some((block) => {
                 const blockStart = new Date(block.startTime * 1000);
                 const blockEnd = new Date(block.endTime * 1000);
@@ -140,30 +151,141 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                 const startMatch = Math.abs(blockStart.getTime() - eventStart.getTime()) < 1000;
                 const endMatch = Math.abs(blockEnd.getTime() - eventEnd.getTime()) < 1000;
 
-                // Check if apps match
-                const blockApps = new Set(block.apps.map(a => a.app));
-                const eventApps = new Set(selectedEvent.apps.map(a => a.app));
-                const appsMatch = blockApps.size === eventApps.size &&
-                    [...blockApps].every(app => eventApps.has(app));
-
-                return startMatch && endMatch && appsMatch;
+                // If time range matches, consider it the same event
+                // Don't require exact app matching to allow for deletions/updates
+                return startMatch && endMatch;
             });
 
-            // If event doesn't exist anymore, reset it
+            // If event doesn't exist anymore (time range doesn't match), reset it
             if (!eventExists) {
                 setSelectedEvent(null);
                 setSelectedEventLogs([]);
             }
         }
-    }, [weekData, selectedEvent]);
+    }, [weekData, selectedEvent, rightSideBarView]);
+
+    // Handle category click - fetch logs filtered by category
+    useEffect(() => {
+        const fetchCategoryLogs = async () => {
+            if (selectedCategory && rightSideBarView === "CategoryFilter") {
+                setIsLoadingCategory(true);
+                let startTime: number;
+                let endTime: number;
+                let title: string;
+
+                if (selectedDate) {
+                    // Day view
+                    const dayStart = new Date(selectedDate);
+                    dayStart.setHours(0, 0, 0, 0);
+                    const dayEnd = new Date(selectedDate);
+                    dayEnd.setHours(23, 59, 59, 999);
+                    startTime = Math.floor(dayStart.getTime() / 1000);
+                    endTime = Math.floor(dayEnd.getTime() / 1000);
+                    title = `${selectedCategory} - ${selectedDate.toLocaleDateString()}`;
+                } else {
+                    // Week view
+                    const weekRange = getWeekRange(date);
+                    startTime = weekRange.week_start;
+                    endTime = weekRange.week_end;
+                    title = `${selectedCategory} - Week`;
+                }
+
+                try {
+                    console.log("Fetching category logs:", { category: selectedCategory, startTime, endTime });
+                    const result = await get_logs_by_category({
+                        category: selectedCategory,
+                        start_time: startTime,
+                        end_time: endTime,
+                    });
+
+                    console.log("Category logs result:", result);
+
+                    if (result.success) {
+                        // The backend already groups logs by app via merge_logs_in_time_block
+                        // But we'll group again on the frontend as a safety measure to ensure no duplicates
+                        const logMap = new Map<string, { ids: number[], app: string, timestamp: Date, duration: number }>();
+                        
+                        result.data.forEach(log => {
+                            const existing = logMap.get(log.app);
+                            if (existing) {
+                                // Merge: combine IDs and sum durations
+                                existing.ids.push(...log.ids);
+                                existing.duration += log.duration;
+                                // Keep earliest timestamp
+                                const logTimestamp = new Date(log.timestamp * 1000);
+                                if (logTimestamp < existing.timestamp) {
+                                    existing.timestamp = logTimestamp;
+                                }
+                            } else {
+                                logMap.set(log.app, {
+                                    ids: [...log.ids],
+                                    app: log.app,
+                                    timestamp: new Date(log.timestamp * 1000),
+                                    duration: log.duration,
+                                });
+                            }
+                        });
+                        
+                        // Convert map to array and sort by duration
+                        const logs = Array.from(logMap.values()).sort((a, b) => b.duration - a.duration);
+                        console.log("Processed logs:", logs.length, "apps for category", selectedCategory);
+                        console.log("Logs grouped by app:", logs.map(l => ({ app: l.app, duration: l.duration, ids: l.ids.length })));
+                        setSelectedEventLogs(logs);
+
+                        // Always create event to show the category name, even if no logs
+                        const categoryEvent: CalendarEvent = {
+                            title: title,
+                            start: new Date(startTime * 1000),
+                            end: new Date(endTime * 1000),
+                            apps: logs.map(log => ({
+                                app: log.app,
+                                totalDuration: log.duration,
+                            })),
+                        };
+                        console.log("Created category event:", categoryEvent);
+                        setSelectedEvent(categoryEvent);
+                    } else {
+                        console.error("Failed to fetch category logs:", result.error);
+                        // Still create an event to show the category name even on error
+                        const categoryEvent: CalendarEvent = {
+                            title: `${selectedCategory} - Error`,
+                            start: new Date(startTime * 1000),
+                            end: new Date(endTime * 1000),
+                            apps: [],
+                        };
+                        setSelectedEvent(categoryEvent);
+                        setSelectedEventLogs([]);
+                    }
+                } catch (error) {
+                    console.error("Error fetching category logs:", error);
+                    setSelectedEventLogs([]);
+                    setSelectedEvent(null);
+                } finally {
+                    setIsLoadingCategory(false);
+                }
+            } else {
+                setIsLoadingCategory(false);
+            }
+        };
+
+        fetchCategoryLogs();
+    }, [selectedCategory, rightSideBarView, selectedDate, date]);
 
     // Only auto-update view if we're not already on the correct view
     // This prevents flicker when clicking calendar background (which sets view directly)
     useEffect(() => {
+        // Don't interfere with CategoryFilter mode
+        if (rightSideBarView === "CategoryFilter") {
+            return;
+        }
+        
         if (selectedEvent && rightSideBarView !== "Event") {
             setRightSideBarView("Event")
         } else if (selectedDate && !selectedEvent && rightSideBarView !== "Day") {
             setRightSideBarView("Day")
+        } else if (!selectedDate && !selectedEvent && rightSideBarView === "Week") {
+            // Reset category when going back to Week view
+            setSelectedCategory(null);
         } else if (!selectedDate && !selectedEvent && rightSideBarView !== "Week") {
             setRightSideBarView("Week")
         }
@@ -218,6 +340,7 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
             setSelectedEvent(null);
             setSelectedEventLogs([]);
             setSelectedDate(null);
+            setSelectedCategory(null);
         }
     };
 
@@ -348,6 +471,21 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         };
     }, [date]);
 
+    // Refresh calendar data when window comes back into focus
+    useEffect(() => {
+        const handleFocus = () => {
+            // Invalidate all calendar-related queries to trigger refetch
+            queryClient.invalidateQueries({ queryKey: ["week"] });
+            queryClient.invalidateQueries({ queryKey: ["categories"] });
+            queryClient.invalidateQueries({ queryKey: ["week_statistics"] });
+            queryClient.invalidateQueries({ queryKey: ["day_statistics"] });
+        };
+
+        window.addEventListener("focus", handleFocus);
+        return () => {
+            window.removeEventListener("focus", handleFocus);
+        };
+    }, [queryClient]);
 
     const goToPrevWeek = () => {
         const newDate = new Date(date);
@@ -356,6 +494,7 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         setSelectedEvent(null);
         setSelectedEventLogs([]);
         setSelectedDate(null);
+        setSelectedCategory(null);
     };
 
     const goToNextWeek = () => {
@@ -366,6 +505,7 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         setSelectedEvent(null);
         setSelectedEventLogs([]);
         setSelectedDate(null);
+        setSelectedCategory(null);
     };
 
     const goToToday = () => {
@@ -373,6 +513,7 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         setSelectedEvent(null);
         setSelectedEventLogs([]);
         setSelectedDate(null);
+        setSelectedCategory(null);
     };
 
     const headerWeekStart = getWeekStart(date);
@@ -410,7 +551,9 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                 <RightSideBar selectedEvent={selectedEvent} setSelectedEvent={setSelectedEvent}
                     setSelectedEventLogs={setSelectedEventLogs} selectedEventLogs={selectedEventLogs}
                     view={rightSideBarView} setView={setRightSideBarView} selectedDate={selectedDate}
-                    setSelectedDate={setSelectedDate} setCurrentView={setCurrentView} />
+                    setSelectedDate={setSelectedDate} setCurrentView={setCurrentView}
+                    selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory}
+                    isLoadingCategory={isLoadingCategory} />
             </div>
 
 

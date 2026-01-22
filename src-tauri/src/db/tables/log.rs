@@ -196,3 +196,87 @@ fn merge_logs_in_time_block(logs: Vec<Log>) -> Vec<MergedLog> {
     }
     app_map.into_values().collect()
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GetLogsByCategoryRequest {
+    pub category: String,
+    pub start_time: i64,
+    pub end_time: i64,
+}
+
+#[tauri::command]
+pub async fn get_logs_by_category(request: GetLogsByCategoryRequest) -> Result<Vec<MergedLog>, Error> {
+    use crate::db::tables::{cat_regex, category, skipped_app};
+    use cat_regex::get_cat_regex;
+    use category::get_categories;
+    use skipped_app::get_skipped_apps;
+    use regex::Regex;
+    use std::collections::HashMap;
+
+    let pool = db::get_pool().await?;
+
+    // Get all logs in the time range
+    let mut logs = sqlx::query_as!(
+        Log,
+        "SELECT id, app, timestamp, duration FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2 ORDER BY duration DESC",
+        request.start_time,
+        request.end_time
+    )
+    .fetch_all(&pool)
+    .await?;
+
+    // Filter skipped apps (similar to statistics.rs)
+    let skipped_apps = get_skipped_apps().await?;
+    let skipped_regexes: Vec<Regex> = skipped_apps
+        .iter()
+        .filter_map(|app| Regex::new(&app.regex).ok())
+        .collect();
+
+    let is_skipped =
+        |app_name: &str| -> bool { skipped_regexes.iter().any(|regex| regex.is_match(app_name)) };
+
+    logs.retain(|log| !is_skipped(&log.app));
+
+    // Get categories and regex patterns to determine which apps belong to the category
+    let categories = get_categories().await?;
+    let cat_regex_list = get_cat_regex().await?;
+
+    // Build regex table (similar to statistics.rs)
+    let category_map: HashMap<i32, &category::Category> =
+        categories.iter().map(|cat| (cat.id, cat)).collect();
+
+    let mut regex_list: Vec<(Regex, String)> = cat_regex_list
+        .iter()
+        .filter_map(|reg| {
+            let cat = category_map.get(&reg.cat_id)?;
+            let compiled_regex = Regex::new(&reg.regex).ok()?;
+            Some((compiled_regex, cat.name.clone()))
+        })
+        .collect();
+
+    // Sort by priority (higher priority first)
+    regex_list.sort_by_key(|(_, cat_name)| {
+        categories
+            .iter()
+            .find(|c| c.name == *cat_name)
+            .map(|c| std::cmp::Reverse(c.priority))
+            .unwrap_or(std::cmp::Reverse(0))
+    });
+
+    // Filter logs by category
+    let filtered_logs: Vec<Log> = logs
+        .into_iter()
+        .filter(|log| {
+            // Find the first matching regex
+            let matched_category = regex_list
+                .iter()
+                .find(|(regex, _)| regex.is_match(&log.app))
+                .map(|(_, cat_name)| cat_name.clone())
+                .unwrap_or_else(|| "Miscellaneous".to_string());
+            
+            matched_category == request.category
+        })
+        .collect();
+
+    Ok(merge_logs_in_time_block(filtered_logs))
+}

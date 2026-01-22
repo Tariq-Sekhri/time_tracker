@@ -8,9 +8,10 @@ interface DayStatisticsSidebarProps {
     selectedDate: Date;
     onMoreInfo: () => void;
     onClose: () => void;
+    onCategoryClick?: (category: string) => void;
 }
 
-export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose}: DayStatisticsSidebarProps) {
+export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose, onCategoryClick}: DayStatisticsSidebarProps) {
     const dayStartDate = new Date(selectedDate);
     dayStartDate.setHours(0, 0, 0, 0);
     const dayStart = Math.floor(dayStartDate.getTime() / 1000);
@@ -191,7 +192,10 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose}
                 <div className="space-y-2">
                     {topCategories.map((cat, idx) => (
                         <div key={idx} className="space-y-1">
-                            <div className="flex items-center justify-between">
+                            <div 
+                                className={`flex items-center justify-between ${onCategoryClick ? "cursor-pointer hover:bg-gray-800 rounded p-1 -m-1 transition-colors" : ""}`}
+                                onClick={() => onCategoryClick?.(cat.category)}
+                            >
                                 <div className="flex items-center gap-2">
                                     <div
                                         className="w-3 h-3 rounded-full"

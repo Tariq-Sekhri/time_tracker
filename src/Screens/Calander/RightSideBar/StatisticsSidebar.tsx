@@ -12,9 +12,10 @@ interface StatisticsSidebarProps {
     weekDate: Date;
     onMoreInfo: () => void;
     onAppsList?: () => void;
+    onCategoryClick?: (category: string) => void;
 }
 
-export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList }: StatisticsSidebarProps) {
+export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList, onCategoryClick }: StatisticsSidebarProps) {
     const [displayMode, setDisplayMode] = useState<DisplayMode>("percentage");
 
     const { week_start, week_end } = getWeekRange(weekDate);
@@ -226,7 +227,10 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList }: 
                 <div className="space-y-2">
                     {topCategories.map((cat, idx) => (
                         <div key={idx} className="space-y-1">
-                            <div className="flex items-center justify-between">
+                            <div 
+                                className={`flex items-center justify-between ${onCategoryClick ? "cursor-pointer hover:bg-gray-800 rounded p-1 -m-1 transition-colors" : ""}`}
+                                onClick={() => onCategoryClick?.(cat.category)}
+                            >
                                 <div className="flex items-center gap-2">
                                     <div
                                         className="w-3 h-3 rounded-full"

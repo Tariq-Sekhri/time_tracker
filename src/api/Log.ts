@@ -21,6 +21,12 @@ export type DeleteTimeBlockRequest = {
     end_time: number;
 };
 
+export type GetLogsByCategoryRequest = {
+    category: string;
+    start_time: number;
+    end_time: number;
+};
+
 export async function delete_log_by_id(id: number): Promise<Result<null, AppError>> {
     return invokeWithResult<null>("delete_log_by_id", { id });
 }
@@ -47,6 +53,10 @@ export async function get_logs_for_time_block(request: DeleteTimeBlockRequest): 
 
 export async function delete_logs_by_ids(ids: number[]): Promise<Result<null, AppError>> {
     return invokeWithResult<null>("delete_logs_by_ids", { ids });
+}
+
+export async function get_logs_by_category(request: GetLogsByCategoryRequest): Promise<Result<MergedLog[], AppError>> {
+    return invokeWithResult<MergedLog[]>("get_logs_by_category", { request });
 }
 
 
