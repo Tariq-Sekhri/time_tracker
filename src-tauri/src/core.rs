@@ -48,6 +48,53 @@ pub fn set_tracking_status(is_tracking: bool) {
 /// - Implement a hybrid approach: X11 for Linux X11, Wayland protocol for Wayland
 ///
 /// **Testing**: Make sure to test on each target platform before releasing!
+
+/// Sanitizes app names by removing invisible Unicode characters that can break regex patterns.
+/// Removes zero-width spaces, formatting characters, and other invisible characters.
+fn sanitize_app_name(name: &str) -> String {
+    name.chars()
+        .filter(|c| {
+            // Remove invisible/zero-width characters that break regex
+            !matches!(
+                *c,
+                // Zero-width and invisible formatting characters
+                '\u{FEFF}' | // Zero Width No-Break Space (BOM)
+                '\u{200B}' | // Zero Width Space
+                '\u{200C}' | // Zero Width Non-Joiner
+                '\u{200D}' | // Zero Width Joiner
+                '\u{200E}' | // Left-to-Right Mark
+                '\u{200F}' | // Right-to-Left Mark
+                '\u{2005}' | // Four-Per-Em Space
+                '\u{2000}' | // En Quad
+                '\u{2001}' | // Em Quad
+                '\u{2002}' | // En Space
+                '\u{2003}' | // Em Space
+                '\u{2004}' | // Three-Per-Em Space
+                '\u{2006}' | // Six-Per-Em Space
+                '\u{2007}' | // Figure Space
+                '\u{2008}' | // Punctuation Space
+                '\u{2009}' | // Thin Space
+                '\u{200A}' | // Hair Space
+                '\u{2028}' | // Line Separator
+                '\u{2029}' | // Paragraph Separator
+                '\u{202A}' | // Left-to-Right Embedding
+                '\u{202B}' | // Right-to-Left Embedding
+                '\u{202C}' | // Pop Directional Formatting
+                '\u{202D}' | // Left-to-Right Override
+                '\u{202E}' | // Right-to-Left Override
+                '\u{2060}' | // Word Joiner
+                '\u{2061}' | // Function Application
+                '\u{2062}' | // Invisible Times
+                '\u{2063}' | // Invisible Separator
+                '\u{2064}' | // Invisible Plus
+                '\u{180E}'   // Mongolian Vowel Separator
+            ) && !matches!(*c, '\u{FE00}'..='\u{FE0F}') // Variation Selectors
+        })
+        .collect::<String>()
+        .trim() // Remove leading/trailing whitespace
+        .to_string()
+}
+
 #[cfg(target_os = "windows")]
 fn get_foreground_app() -> Result<String, Error> {
     use windows::Win32::UI::WindowsAndMessaging as ws;
@@ -168,12 +215,13 @@ fn get_foreground_app() -> Result<String, Error> {
 
 fn generate_log() -> Result<NewLog, Error> {
     let foreground_window = get_foreground_app()?;
+    let sanitized_app = sanitize_app_name(&foreground_window);
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|e| Error::Other(e.to_string()))?
         .as_secs() as i64;
     Ok(NewLog {
-        app: foreground_window,
+        app: sanitized_app,
         timestamp: now,
     })
 }

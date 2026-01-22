@@ -28,13 +28,15 @@ export default function AppsInTimeBlock({
     setSelectedEvent,
     selectedEventLogs,
     setSelectedEventLogs,
-    setRightSideBarView
+    setRightSideBarView,
+    isCategoryFilter = false
 }: {
     selectedEvent: SelectedEvent,
     setSelectedEvent: (newEvent: CalendarEvent) => void,
     selectedEventLogs: EventLogs,
     setSelectedEventLogs: (newLogs: EventLogs) => void,
-    setRightSideBarView: (newView: SideBarView) => void
+    setRightSideBarView: (newView: SideBarView) => void,
+    isCategoryFilter?: boolean
 }) {
     const queryClient = useQueryClient();
 
@@ -113,6 +115,30 @@ export default function AppsInTimeBlock({
             })
             setSelectedEventLogs(updatedLogs);
 
+            // Update selectedEvent.apps to reflect the deletion
+            // Recalculate apps from remaining logs (each log entry already has total duration for that app)
+            if (selectedEvent) {
+                const updatedApps = updatedLogs.map(log => ({
+                    app: log.app,
+                    totalDuration: log.duration
+                }));
+
+                // Only update if the apps actually changed to avoid unnecessary re-renders
+                const appsChanged = updatedApps.length !== selectedEvent.apps.length ||
+                    !updatedApps.every((app, idx) => 
+                        idx < selectedEvent.apps.length && 
+                        app.app === selectedEvent.apps[idx].app &&
+                        app.totalDuration === selectedEvent.apps[idx].totalDuration
+                    );
+
+                if (appsChanged) {
+                    setSelectedEvent({
+                        ...selectedEvent,
+                        apps: updatedApps
+                    });
+                }
+            }
+
             // Invalidate week query to refresh calendar
             queryClient.invalidateQueries({ queryKey: ["week"] });
 
@@ -150,7 +176,7 @@ export default function AppsInTimeBlock({
         <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col h-full">
             <ToastContainer toasts={toasts} onRemove={removeToast} onUpdate={updateToast} />
             {/* Header */}
-            <div className="flex-shrink-0 mb-6">
+            <div className={`flex-shrink-0 ${isCategoryFilter ? 'mb-4' : 'mb-6'}`}>
                 <div className="flex items-center justify-between mb-3">
                     <h2 className="text-xl font-bold text-white">{selectedEvent.title}</h2>
                     <button
@@ -161,6 +187,7 @@ export default function AppsInTimeBlock({
                         }}
                         className="text-gray-400 hover:text-white transition-colors"
                         aria-label="Close"
+                        title="Close"
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -168,16 +195,18 @@ export default function AppsInTimeBlock({
                         </svg>
                     </button>
                 </div>
-                <div className="text-sm text-gray-400 mb-1">
-                    {formatTime(selectedEvent.start)} - {formatTime(selectedEvent.end)}
-                </div>
+                {!isCategoryFilter && (
+                    <div className="text-sm text-gray-400 mb-1">
+                        {formatTime(selectedEvent.start)} - {formatTime(selectedEvent.end)}
+                    </div>
+                )}
                 <div className="text-xs text-gray-500">
                     Total: {formatDuration(totalDuration)}
                 </div>
             </div>
 
             {/* Divider */}
-            <hr className="border-gray-700 mb-6 flex-shrink-0" />
+            {!isCategoryFilter && <hr className="border-gray-700 mb-6 flex-shrink-0" />}
 
             {/* App Logs List */}
             <div className="flex-1 overflow-y-auto mb-6">

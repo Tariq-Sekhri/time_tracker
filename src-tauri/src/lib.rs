@@ -14,7 +14,7 @@ use db::tables::category::{
 };
 use db::tables::log::{
     count_logs_for_time_block, delete_log_by_id, delete_logs_by_ids, delete_logs_for_time_block, get_log_by_id,
-    get_logs, get_logs_for_time_block,
+    get_logs, get_logs_by_category, get_logs_for_time_block,
 };
 use db::tables::skipped_app::{
     count_matching_logs, delete_skipped_app_by_id, get_skipped_apps,
@@ -67,6 +67,7 @@ pub fn run() {
             delete_logs_for_time_block,
             count_logs_for_time_block,
             get_logs_for_time_block,
+            get_logs_by_category,
             get_skipped_apps,
             insert_skipped_app_and_delete_logs,
             update_skipped_app_by_id,
