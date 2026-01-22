@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO category_regex (cat_id, regex) VALUES (?1, ?2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "959c79d5c0509d0becf4419abd1e33936cd12630914ba10d7ee5d99b31875073"
+}

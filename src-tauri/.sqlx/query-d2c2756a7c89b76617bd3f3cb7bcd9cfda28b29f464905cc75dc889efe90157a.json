@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE category_regex SET cat_id = ?1, regex = ?2 WHERE id = ?3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "d2c2756a7c89b76617bd3f3cb7bcd9cfda28b29f464905cc75dc889efe90157a"
+}

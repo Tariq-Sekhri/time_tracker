@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE skipped_apps SET regex = ?1 WHERE id = ?2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "a3dec0487ee332cbb70824f88cdaf80ce813873ab2ea6fa2c72d3040efb059c4"
+}

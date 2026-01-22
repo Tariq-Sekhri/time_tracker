@@ -10,6 +10,7 @@ import {
     NewCategoryRegex
 } from "../api/CategoryRegex.ts";
 import { unwrapResult } from "../utils.ts";
+import { ToastContainer, useToast } from "../Componants/Toast.tsx";
 
 // Validate regex pattern - returns error message or null if valid
 function validateRegex(pattern: string): string | null {
@@ -26,6 +27,7 @@ function validateRegex(pattern: string): string | null {
 
 export default function CategoryRegexView() {
     const queryClient = useQueryClient();
+    const { showToast, toasts, removeToast, updateToast } = useToast();
     const [editingRegex, setEditingRegex] = useState<CategoryRegex | null>(null);
     const [newRegexCatId, setNewRegexCatId] = useState<number | "">("");
     const [newRegexPattern, setNewRegexPattern] = useState("");
@@ -50,10 +52,13 @@ export default function CategoryRegexView() {
             queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
             setNewRegexCatId("");
             setNewRegexPattern("");
+            setRegexError(null);
+            showToast("Regex pattern created successfully", "success");
         },
-        onError: (error) => {
+        onError: (error: any) => {
             console.error("Failed to create regex:", error);
-            alert(`Failed to create regex: ${error}`);
+            const fullError = JSON.stringify(error, null, 2);
+            showToast("Failed to create regex pattern", "error", 5000, fullError);
         },
     });
 
@@ -64,6 +69,13 @@ export default function CategoryRegexView() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
             setEditingRegex(null);
+            setEditRegexError(null);
+            showToast("Regex pattern updated successfully", "success");
+        },
+        onError: (error: any) => {
+            console.error("Failed to update regex:", error);
+            const fullError = JSON.stringify(error, null, 2);
+            showToast("Failed to update regex pattern", "error", 5000, fullError);
         },
     });
 
@@ -73,13 +85,28 @@ export default function CategoryRegexView() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
+            showToast("Regex pattern deleted successfully", "success");
+        },
+        onError: (error: any) => {
+            console.error("Failed to delete regex:", error);
+            const fullError = JSON.stringify(error, null, 2);
+            showToast("Failed to delete regex pattern", "error", 5000, fullError);
         },
     });
 
     const handleCreateRegex = () => {
+        // Validate category selection
+        if (newRegexCatId === "" || typeof newRegexCatId !== "number") {
+            showToast("Please select a category", "error");
+            return;
+        }
+
+        // Validate regex pattern
         const error = validateRegex(newRegexPattern);
         if (error) {
             setRegexError(error);
+            const fullError = `Validation Error: ${error}\nPattern: ${newRegexPattern}`;
+            showToast("Invalid regex pattern", "error", 5000, fullError);
             return;
         }
         setRegexError(null);
@@ -96,6 +123,8 @@ export default function CategoryRegexView() {
         const error = validateRegex(regex.regex);
         if (error) {
             setEditRegexError(error);
+            const fullError = `Validation Error: ${error}\nPattern: ${regex.regex}`;
+            showToast("Invalid regex pattern", "error", 5000, fullError);
             return;
         }
         setEditRegexError(null);
@@ -109,6 +138,7 @@ export default function CategoryRegexView() {
 
     return (
         <div className="p-6 text-white">
+            <ToastContainer toasts={toasts} onRemove={removeToast} onUpdate={updateToast} />
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold">Category Regex Patterns</h1>
                 <button

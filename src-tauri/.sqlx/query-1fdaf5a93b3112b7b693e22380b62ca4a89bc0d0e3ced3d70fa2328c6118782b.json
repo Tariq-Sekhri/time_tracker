@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM skipped_apps",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "1fdaf5a93b3112b7b693e22380b62ca4a89bc0d0e3ced3d70fa2328c6118782b"
+}

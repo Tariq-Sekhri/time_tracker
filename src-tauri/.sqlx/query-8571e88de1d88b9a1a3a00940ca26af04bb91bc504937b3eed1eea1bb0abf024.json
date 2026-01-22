@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: i32\", cat_id as \"cat_id!: i32\", regex FROM category_regex",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i32",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "cat_id!: i32",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "regex",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "8571e88de1d88b9a1a3a00940ca26af04bb91bc504937b3eed1eea1bb0abf024"
+}
