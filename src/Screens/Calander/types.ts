@@ -6,6 +6,10 @@ export type CalendarEvent = {
     start: Date;
     end: Date;
     apps: { app: string; totalDuration: number }[];
+    googleCalendarEventId?: string;
+    googleCalendarId?: number;
+    description?: string;
+    location?: string;
 } | null;
 
 export type EventLogs = {

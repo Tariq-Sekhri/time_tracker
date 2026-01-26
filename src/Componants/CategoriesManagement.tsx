@@ -37,6 +37,7 @@ export default function CategoriesManagement() {
     const [newRegexCatId, setNewRegexCatId] = useState<number | "">("");
     const [newRegexPattern, setNewRegexPattern] = useState("");
     const [newSkippedAppName, setNewSkippedAppName] = useState("");
+    const [editRegexError, setEditRegexError] = useState<string | null>(null);
 
     const { data: categories = [] } = useQuery({
         queryKey: ["categories"],
@@ -104,9 +105,10 @@ export default function CategoriesManagement() {
             setCascadeDelete(true);
             showToast("Category deleted successfully", "success");
         },
-        onError: (error) => {
+        onError: (error: any) => {
             console.error("Failed to delete category:", error);
-            showToast("Failed to delete category", "error");
+            const fullError = JSON.stringify(error, null, 2);
+            showToast("Failed to delete category", "error", 5000, fullError);
         },
     });
 
@@ -152,6 +154,7 @@ export default function CategoriesManagement() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
             setEditingRegex(null);
+            setEditRegexError(null);
             showToast("Regex pattern updated successfully", "success");
         },
         onError: (error: any) => {
@@ -256,14 +259,25 @@ export default function CategoriesManagement() {
     };
 
     const handleUpdateRegex = (regex: CategoryRegex) => {
+        if (!regex || !regex.id) {
+            showToast("Invalid regex data", "error");
+            return;
+        }
+
         // Validate regex pattern
         const regexError = validateRegex(regex.regex);
         if (regexError) {
+            setEditRegexError(regexError);
             const fullError = `Validation Error: ${regexError}\nPattern: ${regex.regex}`;
             showToast("Invalid regex pattern", "error", 5000, fullError);
             return;
         }
-        updateRegexMutation.mutate(regex);
+        setEditRegexError(null);
+        updateRegexMutation.mutate({
+            id: regex.id,
+            cat_id: regex.cat_id,
+            regex: regex.regex.trim(),
+        });
     };
 
     const handleCreateSkippedApp = () => {
@@ -461,21 +475,34 @@ export default function CategoriesManagement() {
                                                 </option>
                                             ))}
                                         </select>
-                                        <input
-                                            type="text"
-                                            value={editingRegex.regex}
-                                            onChange={(e) => setEditingRegex({ ...editingRegex, regex: e.target.value })}
-                                            className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
-                                        />
+                                        <div className="flex-1 flex flex-col">
+                                            <input
+                                                type="text"
+                                                value={editingRegex.regex}
+                                                onChange={(e) => {
+                                                    setEditingRegex({ ...editingRegex, regex: e.target.value });
+                                                    setEditRegexError(null);
+                                                }}
+                                                className={`px-3 py-2 bg-gray-800 border rounded text-white ${editRegexError ? 'border-red-500' : 'border-gray-700'}`}
+                                            />
+                                            {editRegexError && (
+                                                <div className="mt-1 text-red-400 text-sm">{editRegexError}</div>
+                                            )}
+                                        </div>
                                         <button
                                             onClick={() => handleUpdateRegex(editingRegex)}
-                                            className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded"
+                                            disabled={updateRegexMutation.isPending}
+                                            className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
-                                            Save
+                                            {updateRegexMutation.isPending ? "Saving..." : "Save"}
                                         </button>
                                         <button
-                                            onClick={() => setEditingRegex(null)}
-                                            className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded"
+                                            onClick={() => {
+                                                setEditingRegex(null);
+                                                setEditRegexError(null);
+                                            }}
+                                            disabled={updateRegexMutation.isPending}
+                                            className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             Cancel
                                         </button>

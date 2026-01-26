@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM google_calendar_v2 WHERE google_calendar_id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "00eeef64b98a1a990285a6b32a1caf516908549f161a09ccadd18f12a09f5493"
+}

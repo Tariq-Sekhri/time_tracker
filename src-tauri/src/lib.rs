@@ -1,6 +1,7 @@
 mod core;
 mod db;
 mod tray;
+mod google_oauth;
 
 use core::{get_tracking_status, set_tracking_status, supervisor};
 use db::queries::{get_day_statistics, get_week, get_week_statistics};
@@ -20,12 +21,33 @@ use db::tables::skipped_app::{
     count_matching_logs, delete_skipped_app_by_id, get_skipped_apps,
     insert_skipped_app_and_delete_logs, restore_default_skipped_apps, update_skipped_app_by_id,
 };
-use db::{get_all_db_data, get_db_path_cmd, reset_database, wipe_all_data};
+use db::tables::google_calendar::{
+    delete_google_calendar, get_google_calendar_by_id, get_google_calendars,
+    insert_google_calendar, update_google_calendar,
+};
+
+use db::tables::google_calendar_sync::{
+    create_google_calendar_event, delete_google_calendar_event, get_all_google_calendar_events,
+    get_google_calendar_events, list_available_google_calendars, update_google_calendar_event,
+};
+use google_oauth::{get_google_auth_status, google_oauth_login, google_oauth_logout};
+use db::{
+    get_all_db_data, get_db_path_cmd, reset_database, wipe_all_data,
+    // Backup commands
+    list_backups, create_manual_backup, restore_backup, get_backup_dir,
+    create_safety_backup, export_data_to_json,
+};
 use tauri::Manager;
 use tray::refresh_tray_menu;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Load .env file if it exists (for development)
+    #[cfg(debug_assertions)]
+    {
+        let _ = dotenv::dotenv();
+    }
+    
     tauri::Builder::default()
         .setup(|app| {
             // Todo if running in dev disable this using cfg stuff
@@ -81,6 +103,27 @@ pub fn run() {
             get_tracking_status,
             set_tracking_status,
             refresh_tray_menu,
+            get_google_calendars,
+            get_google_calendar_by_id,
+            insert_google_calendar,
+            update_google_calendar,
+            delete_google_calendar,
+            get_google_calendar_events,
+            get_all_google_calendar_events,
+            create_google_calendar_event,
+            update_google_calendar_event,
+            delete_google_calendar_event,
+            list_available_google_calendars,
+            google_oauth_login,
+            google_oauth_logout,
+            get_google_auth_status,
+            // Backup commands
+            list_backups,
+            create_manual_backup,
+            restore_backup,
+            get_backup_dir,
+            create_safety_backup,
+            export_data_to_json,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

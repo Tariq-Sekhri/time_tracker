@@ -13,6 +13,8 @@ import CalenderHeader from "./RightSideBar/CalanderHeader.tsx";
 import { CalendarEvent, DateClickInfo, EventLogs } from "./types.ts";
 import { RightSideBar, SideBarView } from "./RightSideBar/RightSideBar.tsx";
 import FullCalendar from '@fullcalendar/react';
+import { get_google_calendars, GoogleCalendar } from "../../api/GoogleCalendar.ts";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: View) => void }) {
     const [rightSideBarView, setRightSideBarView] = useState<SideBarView>("Week")
@@ -28,12 +30,27 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
 
 
     const [visibleCategories, setVisibleCategories] = useState<Set<string>>(new Set());
+    const [visibleCalendars, setVisibleCalendars] = useState<Set<number>>(new Set());
     const queryClient = useQueryClient();
 
     const { data: categories = [] } = useQuery({
         queryKey: ["categories"],
         queryFn: async () => unwrapResult(await get_categories()),
     });
+
+    const { data: googleCalendars = [] } = useQuery({
+        queryKey: ["googleCalendars"],
+        queryFn: async () => {
+            const result = await get_google_calendars();
+            return unwrapResult(result);
+        },
+    });
+
+    const googleCalendarMap = useMemo(() => {
+        const map = new Map<number, GoogleCalendar>();
+        googleCalendars.forEach(cal => map.set(cal.id, cal));
+        return map;
+    }, [googleCalendars]);
 
     // Initialize visible categories when categories are loaded
     useEffect(() => {
@@ -111,6 +128,68 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
             }
         }
     }, [visibleCategories, categories]);
+
+    // Initialize visible calendars when calendars are loaded
+    const hasInitializedCalendars = useRef(false);
+    useEffect(() => {
+        if (googleCalendars.length > 0 && !hasInitializedCalendars.current) {
+            try {
+                const saved = localStorage.getItem("visibleCalendars");
+                const allCalendarIds = googleCalendars.map(cal => cal.id);
+
+                if (saved) {
+                    const savedArray = JSON.parse(saved) as number[];
+                    const savedSet = new Set<number>(savedArray);
+
+                    const mergedSet = new Set<number>();
+                    allCalendarIds.forEach(id => {
+                        if (savedSet.has(id)) {
+                            mergedSet.add(id);
+                        } else {
+                            const knownCalendars = localStorage.getItem("knownCalendars");
+                            if (knownCalendars) {
+                                const knownSet = new Set<number>(JSON.parse(knownCalendars));
+                                if (!knownSet.has(id)) {
+                                    // New calendar - default to visible
+                                    mergedSet.add(id);
+                                }
+                            } else {
+                                mergedSet.add(id);
+                            }
+                        }
+                    });
+
+                    setVisibleCalendars(mergedSet);
+                    localStorage.setItem("knownCalendars", JSON.stringify(allCalendarIds));
+                } else {
+                    // No saved preferences - all calendars visible by default
+                    const allVisible = new Set(allCalendarIds);
+                    setVisibleCalendars(allVisible);
+                    localStorage.setItem("visibleCalendars", JSON.stringify([...allVisible]));
+                    localStorage.setItem("knownCalendars", JSON.stringify(allCalendarIds));
+                }
+            } catch (e) {
+                console.error("Failed to initialize visible calendars:", e);
+                const allCalendarIds = googleCalendars.map(cal => cal.id);
+                setVisibleCalendars(new Set(allCalendarIds));
+            }
+            hasInitializedCalendars.current = true;
+        }
+    }, [googleCalendars]);
+
+    // Save visible calendars to localStorage whenever they change
+    useEffect(() => {
+        if (hasInitializedCalendars.current && googleCalendars.length > 0) {
+            try {
+                localStorage.setItem("visibleCalendars", JSON.stringify([...visibleCalendars]));
+                const allCalendarIds = googleCalendars.map(cal => cal.id);
+                localStorage.setItem("knownCalendars", JSON.stringify(allCalendarIds));
+            } catch (e) {
+                console.error("Failed to save visible calendars to localStorage:", e);
+            }
+        }
+    }, [visibleCalendars, googleCalendars]);
+
     const categoryColorMap = useMemo(() => {
         const map = new Map<string, string>();
         categories.forEach(cat => {
@@ -120,6 +199,43 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         });
         return map;
     }, [categories]);
+
+    // Listen for window focus events to refresh calendar data
+    useEffect(() => {
+        let unlistenFn: (() => void) | null = null;
+
+        const setupFocusListener = async () => {
+            try {
+                const window = getCurrentWindow();
+                
+                // Listen for window focus events
+                const unlisten = await window.listen("tauri://focus", () => {
+                    // Window gained focus - refresh all calendar data
+                    // Invalidate all week queries (will refetch automatically)
+                    queryClient.invalidateQueries({ 
+                        predicate: (query) => query.queryKey[0] === "week" 
+                    });
+                    
+                    // Invalidate Google Calendar events queries
+                    queryClient.invalidateQueries({ 
+                        predicate: (query) => query.queryKey[0] === "googleCalendarEvents" 
+                    });
+                });
+                
+                unlistenFn = unlisten;
+            } catch (error) {
+                console.error("Failed to setup window focus listener:", error);
+            }
+        };
+
+        setupFocusListener();
+
+        return () => {
+            if (unlistenFn) {
+                unlistenFn();
+            }
+        };
+    }, [queryClient]);
 
     // Get week data to check if selectedEvent still exists
     const weekStart = getWeekStart(date);
@@ -131,12 +247,18 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
 
     // Check if selectedEvent still exists in the week data after refresh
     // Skip this check for category-filtered events (they're synthetic and won't be in weekData)
+    // Skip this check for Google Calendar events (they're not in weekData, only in Google Calendar)
     useEffect(() => {
         // Don't check if we're in CategoryFilter mode - those events are synthetic
         if (rightSideBarView === "CategoryFilter") {
             return;
         }
-        
+
+        // Don't check Google Calendar events - they're not in weekData
+        if (selectedEvent?.googleCalendarEventId) {
+            return;
+        }
+
         if (selectedEvent && weekData) {
             // Check if the event still exists by matching start/end times
             // Use lenient matching: only check time range, not exact app matching
@@ -204,7 +326,7 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                         // The backend already groups logs by app via merge_logs_in_time_block
                         // But we'll group again on the frontend as a safety measure to ensure no duplicates
                         const logMap = new Map<string, { ids: number[], app: string, timestamp: Date, duration: number }>();
-                        
+
                         result.data.forEach(log => {
                             const existing = logMap.get(log.app);
                             if (existing) {
@@ -225,7 +347,7 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                                 });
                             }
                         });
-                        
+
                         // Convert map to array and sort by duration
                         const logs = Array.from(logMap.values()).sort((a, b) => b.duration - a.duration);
                         console.log("Processed logs:", logs.length, "apps for category", selectedCategory);
@@ -278,7 +400,7 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         if (rightSideBarView === "CategoryFilter") {
             return;
         }
-        
+
         if (selectedEvent && rightSideBarView !== "Event") {
             setRightSideBarView("Event")
         } else if (selectedDate && !selectedEvent && rightSideBarView !== "Day") {
@@ -293,39 +415,60 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
 
     const handleEventClick = async (clickInfo: EventClickArg) => {
         if (clickInfo.event.start && clickInfo.event.end) {
-            const event = {
-                title: clickInfo.event.title,
-                start: clickInfo.event.start,
-                end: clickInfo.event.end,
-                apps: (clickInfo.event.extendedProps?.apps || []) as { app: string; totalDuration: number }[],
-            };
-            setSelectedEvent(event);
-            setSelectedDate(null); // Clear date selection when event is selected
+            const eventType = clickInfo.event.extendedProps?.type as string | undefined;
 
-            // Fetch and sort logs by duration
-            const startTime = Math.floor(event.start.getTime() / 1000);
-            const endTime = Math.floor(event.end.getTime() / 1000);
-            const appNames = event.apps.map(a => a.app);
-
-            const result = await get_logs_for_time_block({
-
-                app_names: appNames,
-                start_time: startTime,
-                end_time: endTime,
-            });
-
-            if (result.success) {
-                const logs = result.data.map(log => ({
-                    ids: log.ids,
-                    app: log.app,
-                    timestamp: new Date(log.timestamp * 1000), // Convert seconds to milliseconds
-                    duration: log.duration,
-                }));
-                // Sort by duration (longest first) - backend already sorts, but ensure it here too
-                logs.sort((a, b) => b.duration - a.duration);
-                setSelectedEventLogs(logs);
-            } else {
+            if (eventType === "google_calendar") {
+                // Handle Google Calendar event - just show it, no editing since we don't store events
+                const event = {
+                    title: clickInfo.event.title,
+                    start: clickInfo.event.start,
+                    end: clickInfo.event.end,
+                    apps: [],
+                    googleCalendarEventId: clickInfo.event.extendedProps?.eventId as string | undefined,
+                    googleCalendarId: clickInfo.event.extendedProps?.calendarId as number | undefined,
+                    description: clickInfo.event.extendedProps?.description as string | undefined,
+                    location: clickInfo.event.extendedProps?.location as string | undefined,
+                };
+                setSelectedEvent(event);
+                setSelectedDate(null);
                 setSelectedEventLogs([]);
+                // Set view to Event to show Google Calendar event details
+                setRightSideBarView("Event");
+            } else {
+                // Handle time block event
+                const event = {
+                    title: clickInfo.event.title,
+                    start: clickInfo.event.start,
+                    end: clickInfo.event.end,
+                    apps: (clickInfo.event.extendedProps?.apps || []) as { app: string; totalDuration: number }[],
+                };
+                setSelectedEvent(event);
+                setSelectedDate(null); // Clear date selection when event is selected
+
+                // Fetch and sort logs by duration
+                const startTime = Math.floor(event.start.getTime() / 1000);
+                const endTime = Math.floor(event.end.getTime() / 1000);
+                const appNames = event.apps.map(a => a.app);
+
+                const result = await get_logs_for_time_block({
+                    app_names: appNames,
+                    start_time: startTime,
+                    end_time: endTime,
+                });
+
+                if (result.success) {
+                    const logs = result.data.map(log => ({
+                        ids: log.ids,
+                        app: log.app,
+                        timestamp: new Date(log.timestamp * 1000), // Convert seconds to milliseconds
+                        duration: log.duration,
+                    }));
+                    // Sort by duration (longest first) - backend already sorts, but ensure it here too
+                    logs.sort((a, b) => b.duration - a.duration);
+                    setSelectedEventLogs(logs);
+                } else {
+                    setSelectedEventLogs([]);
+                }
             }
         }
     };
@@ -352,6 +495,18 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                 newSet.delete(categoryName);
             } else {
                 newSet.add(categoryName);
+            }
+            return newSet;
+        });
+    };
+
+    const toggleCalendar = (calendarId: number) => {
+        setVisibleCalendars(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(calendarId)) {
+                newSet.delete(calendarId);
+            } else {
+                newSet.add(calendarId);
             }
             return newSet;
         });
@@ -479,6 +634,7 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
             queryClient.invalidateQueries({ queryKey: ["categories"] });
             queryClient.invalidateQueries({ queryKey: ["week_statistics"] });
             queryClient.invalidateQueries({ queryKey: ["day_statistics"] });
+            queryClient.invalidateQueries({ queryKey: ["googleCalendarEvents"] });
         };
 
         window.addEventListener("focus", handleFocus);
@@ -531,9 +687,9 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
             <CalenderHeader headerTitle={headerTitle} onClick={goToPrevWeek} d={date} onClick1={goToNextWeek}
                 onClick2={goToToday} />
 
-            <div className="flex flex-1 overflow-hidden">
-                <div className="flex-1 overflow-hidden">
-                    <div className="h-full overflow-y-auto p-4" onClick={handleCalendarClick}>
+            <div className="flex flex-1 overflow-hidden min-h-0">
+                <div className="flex-1 overflow-hidden min-h-0">
+                    <div className="h-full p-4 flex flex-col" onClick={handleCalendarClick}>
                         <RenderCalendarContent
                             ref={calenderRef}
                             date={date}
@@ -545,6 +701,10 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                             uncheckAllCategories={uncheckAllCategories}
                             handleEventClick={handleEventClick}
                             onDatesSet={handleDatesSet}
+                            googleCalendarMap={googleCalendarMap}
+                            googleCalendars={googleCalendars}
+                            visibleCalendars={visibleCalendars}
+                            toggleCalendar={toggleCalendar}
                         />
                     </div>
                 </div>

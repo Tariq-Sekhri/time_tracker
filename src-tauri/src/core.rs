@@ -229,12 +229,8 @@ pub async fn supervisor(app: AppHandle) {
     tokio::time::sleep(Duration::from_secs(10)).await;
     loop {
         if let Err(e) = background_process().await {
-            // Emit error to frontend, log if emission fails
-            if let Err(emit_err) = app.emit("BackgroundProcessError", &e) {
-                eprintln!("Failed to emit error event: {}", emit_err);
-            }
-            eprintln!("Background process error: {}", e);
-            // TODO: Add proper logger
+            // Emit error to frontend
+            let _ = app.emit("BackgroundProcessError", &e);
         }
     }
 }

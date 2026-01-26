@@ -125,8 +125,8 @@ export default function AppsInTimeBlock({
 
                 // Only update if the apps actually changed to avoid unnecessary re-renders
                 const appsChanged = updatedApps.length !== selectedEvent.apps.length ||
-                    !updatedApps.every((app, idx) => 
-                        idx < selectedEvent.apps.length && 
+                    !updatedApps.every((app, idx) =>
+                        idx < selectedEvent.apps.length &&
                         app.app === selectedEvent.apps[idx].app &&
                         app.totalDuration === selectedEvent.apps[idx].totalDuration
                     );
@@ -149,9 +149,10 @@ export default function AppsInTimeBlock({
                 setRightSideBarView("Week");
             }
         },
-        onError: (e) => {
-            console.error(e)
-            showToast("Failed to delete log", "error");
+        onError: (e: any) => {
+            console.error("Failed to delete log:", e);
+            const fullError = JSON.stringify(e, null, 2);
+            showToast("Failed to delete log", "error", 5000, fullError);
         }
     })
 
@@ -163,9 +164,10 @@ export default function AppsInTimeBlock({
         try {
             await writeText(name)
             showToast(`Copied ${name} To ClipBoard`, "success");
-        } catch (e) {
-            showToast("Failed to copy", "error");
-            console.error(e);
+        } catch (e: any) {
+            console.error("Failed to copy:", e);
+            const fullError = JSON.stringify(e, null, 2);
+            showToast("Failed to copy", "error", 5000, fullError);
         }
     };
 

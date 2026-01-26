@@ -120,6 +120,11 @@ export default function CategoryRegexView() {
     };
 
     const handleUpdateRegex = (regex: CategoryRegex) => {
+        if (!regex || !regex.id) {
+            showToast("Invalid regex data", "error");
+            return;
+        }
+        
         const error = validateRegex(regex.regex);
         if (error) {
             setEditRegexError(error);
@@ -128,7 +133,11 @@ export default function CategoryRegexView() {
             return;
         }
         setEditRegexError(null);
-        updateRegexMutation.mutate(regex);
+        updateRegexMutation.mutate({
+            id: regex.id,
+            cat_id: regex.cat_id,
+            regex: regex.regex.trim(),
+        });
     };
 
     const handleRefresh = () => {
@@ -228,16 +237,18 @@ export default function CategoryRegexView() {
                                     </div>
                                     <button
                                         onClick={() => handleUpdateRegex(editingRegex)}
-                                        className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded"
+                                        disabled={updateRegexMutation.isPending}
+                                        className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                        Save
+                                        {updateRegexMutation.isPending ? "Saving..." : "Save"}
                                     </button>
                                     <button
                                         onClick={() => {
                                             setEditingRegex(null);
                                             setEditRegexError(null);
                                         }}
-                                        className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded"
+                                        disabled={updateRegexMutation.isPending}
+                                        className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         Cancel
                                     </button>

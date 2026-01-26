@@ -64,6 +64,37 @@ pub async fn insert_cat_regex(new_category_regex: NewCategoryRegex) -> Result<i6
 #[tauri::command]
 pub async fn update_cat_regex_by_id(cat_regex: CategoryRegex) -> Result<(), Error> {
     let pool = db::get_pool().await?;
+    
+    // Validate that the category exists
+    let category_exists: i64 = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM category WHERE id = ?1",
+        cat_regex.cat_id
+    )
+    .fetch_one(&pool)
+    .await?;
+    
+    if category_exists == 0 {
+        return Err(Error::Other(format!(
+            "Category with id {} does not exist",
+            cat_regex.cat_id
+        )));
+    }
+    
+    // Validate that the regex entry exists
+    let regex_exists: i64 = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM category_regex WHERE id = ?1",
+        cat_regex.id
+    )
+    .fetch_one(&pool)
+    .await?;
+    
+    if regex_exists == 0 {
+        return Err(Error::Other(format!(
+            "Regex pattern with id {} does not exist",
+            cat_regex.id
+        )));
+    }
+    
     sqlx::query!(
         "UPDATE category_regex SET cat_id = ?1, regex = ?2 WHERE id = ?3",
         cat_regex.cat_id,

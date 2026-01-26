@@ -30,8 +30,8 @@ export async function insert_cat_regex(cat_regex: NewCategoryRegex): Promise<Res
     return invokeWithResult<number>("insert_cat_regex", { newCategoryRegex: cat_regex });
 }
 
-export async function update_cat_regex_by_id(cat_regex: CategoryRegex): Promise<Result<null, AppError>> {
-    return invokeWithResult<null>("update_cat_regex_by_id", { cat_regex });
+export async function update_cat_regex_by_id(catRegex: CategoryRegex): Promise<Result<null, AppError>> {
+    return invokeWithResult<null>("update_cat_regex_by_id", { catRegex });
 }
 
 

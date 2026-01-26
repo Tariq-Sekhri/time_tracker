@@ -28,6 +28,12 @@ chrono = { version = "0.4", features = ["clock"] }
 regex = "1"
 thiserror = "2.0.16"
 tauri-plugin-clipboard-manager = "2.3.2"
+reqwest = { version = "0.12", features = ["json"] }
+oauth2 = "4.4"
+axum = "0.7"
+url = "2.5"
+urlencoding = "2.1"
+dotenv = "0.15"
 
 # Platform-specific dependencies
 [target.'cfg(target_os = "windows")'.dependencies]
