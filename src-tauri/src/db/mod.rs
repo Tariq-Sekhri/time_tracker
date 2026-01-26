@@ -1,9 +1,11 @@
 #![cfg_attr(not(feature = "dev-warnings"), allow(dead_code, unused_imports))]
 
+pub mod backup;
 pub mod error;
 pub mod pool;
 pub mod queries;
 pub(crate) mod tables;
+pub mod validation;
 
 use serde::Serialize;
 use sqlx;
@@ -48,6 +50,9 @@ pub use pool::get_db_path;
 
 #[tauri::command]
 pub async fn wipe_all_data() -> Result<(), Error> {
+    // Create a safety backup before wiping all data
+    let _ = backup::create_safety_backup("pre_wipe");
+    
     let pool = get_pool().await?;
 
     // Delete all data from all tables
@@ -72,8 +77,99 @@ pub async fn wipe_all_data() -> Result<(), Error> {
 
 #[tauri::command]
 pub async fn reset_database() -> Result<(), Error> {
+    // Create a safety backup before reset
+    let _ = backup::create_safety_backup("pre_reset");
+    
     reset_pool().await.map_err(|e| Error::Db(e.to_string()))?;
     pool::drop_all().map_err(|e| Error::Db(format!("Failed to delete database file: {}", e)))?;
     get_pool().await.map_err(|e| Error::Db(e.to_string()))?;
     Ok(())
+}
+
+// ==================== Backup Commands ====================
+
+#[derive(Serialize)]
+pub struct BackupInfoResponse {
+    pub name: String,
+    pub path: String,
+    pub size: u64,
+    pub modified: String,
+    pub backup_type: String,
+}
+
+#[tauri::command]
+pub fn list_backups() -> Result<Vec<BackupInfoResponse>, Error> {
+    let backups = backup::list_backups()
+        .map_err(|e| Error::Db(format!("Failed to list backups: {}", e)))?;
+    
+    Ok(backups.into_iter().map(|b| {
+        let modified = b.modified
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs().to_string())
+            .unwrap_or_default();
+        
+        BackupInfoResponse {
+            name: b.name,
+            path: b.path.to_string_lossy().to_string(),
+            size: b.size,
+            modified,
+            backup_type: format!("{:?}", b.backup_type),
+        }
+    }).collect())
+}
+
+#[tauri::command]
+pub fn create_manual_backup(name: String) -> Result<String, Error> {
+    let path = backup::create_manual_backup(&name)
+        .map_err(|e| Error::Db(format!("Failed to create backup: {}", e)))?;
+    
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub async fn restore_backup(backup_name: String) -> Result<(), Error> {
+    // Close the current pool before restoring
+    reset_pool().await.map_err(|e| Error::Db(e.to_string()))?;
+    
+    // Restore the backup
+    backup::restore_backup(&backup_name)
+        .map_err(|e| Error::Db(format!("Failed to restore backup: {}", e)))?;
+    
+    // Reinitialize the pool with the restored database
+    get_pool().await.map_err(|e| Error::Db(e.to_string()))?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_backup_dir() -> String {
+    backup::get_backup_dir().to_string_lossy().to_string()
+}
+
+#[tauri::command]
+pub fn create_safety_backup(reason: String) -> Result<String, Error> {
+    let path = backup::create_safety_backup(&reason)
+        .map_err(|e| Error::Db(format!("Failed to create safety backup: {}", e)))?;
+    
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// Exports all database data to JSON for additional safety
+#[tauri::command]
+pub async fn export_data_to_json() -> Result<String, Error> {
+    let data = get_all_db_data().await?;
+    let json = serde_json::to_string_pretty(&data)
+        .map_err(|e| Error::Db(format!("Failed to serialize data: {}", e)))?;
+    
+    let backup_dir = backup::get_backup_dir();
+    std::fs::create_dir_all(&backup_dir)
+        .map_err(|e| Error::Db(format!("Failed to create backup directory: {}", e)))?;
+    
+    let timestamp = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S").to_string();
+    let export_path = backup_dir.join(format!("export_{}.json", timestamp));
+    
+    std::fs::write(&export_path, &json)
+        .map_err(|e| Error::Db(format!("Failed to write export file: {}", e)))?;
+    
+    Ok(export_path.to_string_lossy().to_string())
 }

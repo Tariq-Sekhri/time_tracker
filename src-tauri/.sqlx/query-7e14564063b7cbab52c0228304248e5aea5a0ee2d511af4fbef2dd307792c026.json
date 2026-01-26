@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE google_oauth SET access_token = ?1, expires_at = ?2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "7e14564063b7cbab52c0228304248e5aea5a0ee2d511af4fbef2dd307792c026"
+}

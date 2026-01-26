@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM google_oauth",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "d796067528843907a00039c5ed6d44855697fba0fb5667ad1f4f647ed23199c6"
+}

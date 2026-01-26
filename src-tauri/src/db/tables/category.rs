@@ -105,6 +105,21 @@ pub async fn delete_category_by_id(id: i32, cascade: bool) -> Result<(), Error> 
         sqlx::query!("DELETE FROM category_regex WHERE cat_id = ?1", id)
             .execute(&pool)
             .await?;
+    } else {
+        // When not cascading, reassign orphaned regex patterns to Miscellaneous category
+        let misc = sqlx::query!("SELECT id FROM category WHERE name = 'Miscellaneous'")
+            .fetch_optional(&pool)
+            .await?;
+        
+        if let Some(m) = misc {
+            sqlx::query!(
+                "UPDATE category_regex SET cat_id = ?1 WHERE cat_id = ?2",
+                m.id,
+                id
+            )
+            .execute(&pool)
+            .await?;
+        }
     }
 
     sqlx::query!("DELETE FROM category WHERE id = ?1", id)

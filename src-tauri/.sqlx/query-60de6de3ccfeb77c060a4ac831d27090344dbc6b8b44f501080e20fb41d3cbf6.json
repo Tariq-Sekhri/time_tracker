@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: i32\" FROM category WHERE name = 'Miscellaneous'",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i32",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "60de6de3ccfeb77c060a4ac831d27090344dbc6b8b44f501080e20fb41d3cbf6"
+}

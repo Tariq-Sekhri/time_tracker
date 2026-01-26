@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO google_oauth (email, access_token, refresh_token, expires_at) VALUES (?1, ?2, ?3, ?4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "862c271a09143547634cec9b2748a87b6e24cb52f25580b3e69661903c2e86e7"
+}

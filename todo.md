@@ -1,13 +1,7 @@
-- high priority
-    - import google calnder with api
+- High priority
 - mid priority
     - users can see all app names, allow them to more easily make regex
 - low priority
-    - the category break down by day should be a correctly sized bar graph, if one thing is one hour and another is two
-      then
-    - make the week statistics proprional
-    - double click on the day
-    - on hover of the pie chart we should get the name and percent of the hovered se tion
-    - the bars should reflect that proportionally, also its horizontal not vertical.
 - not planned
+
     - afk detection

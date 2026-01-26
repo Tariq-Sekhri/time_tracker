@@ -1,27 +1,28 @@
 import StatisticsSidebar from "./StatisticsSidebar.tsx";
-import {View} from "../../../App.tsx";
-import {useDateStore} from "../../../stores/dateStore.ts";
+import { View } from "../../../App.tsx";
+import { useDateStore } from "../../../stores/dateStore.ts";
 import AppsInTimeBlock from "./AppsInTimeBlock.tsx";
-import {CalendarEvent, EventLogs} from "../types.ts";
-import {SelectedEvent} from "./AppsInTimeBlock.tsx";
+import { CalendarEvent, EventLogs } from "../types.ts";
+import { SelectedEvent } from "./AppsInTimeBlock.tsx";
 import DayStatisticsSidebar from "./DayStatisticsSidebar.tsx";
+import GoogleCalendarEventView from "./GoogleCalendarEventView.tsx";
 
 export type SideBarView = "Week" | "Day" | "Event" | "CategoryFilter"
 
 export function RightSideBar({
-                                 view,
-                                 setView,
-                                 setCurrentView,
-                                 selectedDate,
-                                 setSelectedDate,
-                                 selectedEvent,
-                                 setSelectedEvent,
-                                 selectedEventLogs,
-                                 setSelectedEventLogs,
-                                 selectedCategory,
-                                 setSelectedCategory,
-                                 isLoadingCategory
-                             }: {
+    view,
+    setView,
+    setCurrentView,
+    selectedDate,
+    setSelectedDate,
+    selectedEvent,
+    setSelectedEvent,
+    selectedEventLogs,
+    setSelectedEventLogs,
+    selectedCategory,
+    setSelectedCategory,
+    isLoadingCategory
+}: {
     view: SideBarView,
     setView: (newView: SideBarView) => void,
     setCurrentView: (newView: View) => void,
@@ -35,7 +36,7 @@ export function RightSideBar({
     setSelectedCategory: (category: string | null) => void,
     isLoadingCategory: boolean,
 }) {
-    const {date} = useDateStore();
+    const { date } = useDateStore();
     return (
         <div className={"w-120"}>
             {view === "Week" && <StatisticsSidebar
@@ -59,12 +60,21 @@ export function RightSideBar({
                     setView("CategoryFilter");
                 }}
             />}
-            {view === "Event" && selectedEvent &&
-                <AppsInTimeBlock selectedEvent={selectedEvent as SelectedEvent}
-                                 setSelectedEventLogs={setSelectedEventLogs}
-                                 setSelectedEvent={setSelectedEvent} selectedEventLogs={selectedEventLogs}
-                                 setRightSideBarView={setView}
-                                 isCategoryFilter={false}/>}
+            {view === "Event" && selectedEvent && (
+                selectedEvent.googleCalendarEventId ? (
+                    <GoogleCalendarEventView
+                        selectedEvent={selectedEvent}
+                        setSelectedEvent={setSelectedEvent}
+                        setRightSideBarView={setView}
+                    />
+                ) : (
+                    <AppsInTimeBlock selectedEvent={selectedEvent as SelectedEvent}
+                        setSelectedEventLogs={setSelectedEventLogs}
+                        setSelectedEvent={setSelectedEvent} selectedEventLogs={selectedEventLogs}
+                        setRightSideBarView={setView}
+                        isCategoryFilter={false} />
+                )
+            )}
             {view === "CategoryFilter" && (
                 isLoadingCategory ? (
                     <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
@@ -74,21 +84,21 @@ export function RightSideBar({
                     </div>
                 ) : selectedEvent ? (
                     <AppsInTimeBlock selectedEvent={selectedEvent as SelectedEvent}
-                                     setSelectedEventLogs={setSelectedEventLogs}
-                                     setSelectedEvent={(event) => {
-                                         setSelectedEvent(event);
-                                         if (!event) {
-                                             setSelectedCategory(null);
-                                         }
-                                     }} 
-                                     selectedEventLogs={selectedEventLogs}
-                                     setRightSideBarView={(newView) => {
-                                         setView(newView);
-                                         if (newView === "Week") {
-                                             setSelectedCategory(null);
-                                         }
-                                     }}
-                                     isCategoryFilter={true}/>
+                        setSelectedEventLogs={setSelectedEventLogs}
+                        setSelectedEvent={(event) => {
+                            setSelectedEvent(event);
+                            if (!event) {
+                                setSelectedCategory(null);
+                            }
+                        }}
+                        selectedEventLogs={selectedEventLogs}
+                        setRightSideBarView={(newView) => {
+                            setView(newView);
+                            if (newView === "Week") {
+                                setSelectedCategory(null);
+                            }
+                        }}
+                        isCategoryFilter={true} />
                 ) : selectedCategory ? (
                     <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
                         <div className="flex-1">

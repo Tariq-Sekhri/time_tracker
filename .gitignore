@@ -23,6 +23,15 @@ dist-ssr
 *.sln
 *.sw?
 
+# Environment variables
+# .env contains real secrets - never commit this!
+.env
+.env.local
+.env.*.local
+
+# .env.example is a template and SHOULD be committed
+!.env.example
+
 exmaple_end
 exmaple_end
 exmaple_start
