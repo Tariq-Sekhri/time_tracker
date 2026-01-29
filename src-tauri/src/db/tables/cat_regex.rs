@@ -65,6 +65,26 @@ pub async fn insert_cat_regex(new_category_regex: NewCategoryRegex) -> Result<i6
 pub async fn update_cat_regex_by_id(cat_regex: CategoryRegex) -> Result<(), Error> {
     let pool = db::get_pool().await?;
     
+    // Prevent editing the catch-all (Miscellaneous .* regex) - could cause app crashes
+    let current = sqlx::query_as!(
+        CategoryRegex,
+        r#"SELECT id as "id!: i32", cat_id as "cat_id!: i32", regex FROM category_regex WHERE id = ?1"#,
+        cat_regex.id
+    )
+    .fetch_optional(&pool)
+    .await?;
+    if let Some(ref row) = current {
+        let cat_name: Option<String> = sqlx::query_scalar("SELECT name FROM category WHERE id = ?1")
+            .bind(row.cat_id)
+            .fetch_optional(&pool)
+            .await?;
+        if cat_name.as_deref() == Some("Miscellaneous") && row.regex == ".*" {
+            return Err(Error::Other(
+                "The catch-all pattern (.*) for Miscellaneous cannot be edited.".into(),
+            ));
+        }
+    }
+    
     // Validate that the category exists
     let category_exists: i64 = sqlx::query_scalar!(
         "SELECT COUNT(*) FROM category WHERE id = ?1",
@@ -131,6 +151,24 @@ pub async fn get_cat_regex() -> Result<Vec<CategoryRegex>, Error> {
 #[tauri::command]
 pub async fn delete_cat_regex_by_id(id: i32) -> Result<(), Error> {
     let pool = db::get_pool().await?;
+    let row = sqlx::query_as!(
+        CategoryRegex,
+        r#"SELECT id as "id!: i32", cat_id as "cat_id!: i32", regex FROM category_regex WHERE id = ?1"#,
+        id
+    )
+    .fetch_optional(&pool)
+    .await?;
+    if let Some(ref r) = row {
+        let cat_name: Option<String> = sqlx::query_scalar("SELECT name FROM category WHERE id = ?1")
+            .bind(r.cat_id)
+            .fetch_optional(&pool)
+            .await?;
+        if cat_name.as_deref() == Some("Miscellaneous") && r.regex == ".*" {
+            return Err(Error::Other(
+                "The catch-all pattern (.*) for Miscellaneous cannot be deleted.".into(),
+            ));
+        }
+    }
     sqlx::query!("DELETE FROM category_regex WHERE id = ?1", id)
         .execute(&pool)
         .await?;

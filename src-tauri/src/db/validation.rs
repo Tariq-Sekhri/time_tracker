@@ -228,27 +228,9 @@ async fn add_column_safe(pool: &SqlitePool, table_name: &str, column: &ExpectedC
     Ok(())
 }
 
-/// Ensures default data exists (Miscellaneous category and .* regex)
+/// Ensures default data: only the .* regex when Miscellaneous exists (never re-insert deleted categories)
 async fn ensure_default_data(pool: &SqlitePool) -> Result<(), Error> {
-    // Ensure Miscellaneous category exists
-    let misc_count: i64 = sqlx::query_scalar!(
-        "SELECT COUNT(*) FROM category WHERE name = 'Miscellaneous'"
-    )
-    .fetch_one(pool)
-    .await?;
-    
-    if misc_count == 0 {
-        sqlx::query!(
-            "INSERT INTO category (name, priority, color) VALUES (?1, ?2, ?3)",
-            "Miscellaneous",
-            0i32,
-            None::<Option<String>>
-        )
-        .execute(pool)
-        .await?;
-    }
-    
-    // Ensure .* regex exists for Miscellaneous category
+    // Ensure .* regex exists for Miscellaneous category (only if it already exists)
     let misc_id: Option<i32> = sqlx::query_scalar!(
         "SELECT id as \"id!: i32\" FROM category WHERE name = 'Miscellaneous'"
     )

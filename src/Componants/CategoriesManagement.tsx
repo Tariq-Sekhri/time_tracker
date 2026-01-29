@@ -349,71 +349,80 @@ export default function CategoriesManagement() {
 
                 {/* Categories List */}
                 <div className="space-y-2">
-                    {categories.map((cat) => (
-                        <div key={cat.id} className="p-4 bg-gray-900 rounded-lg flex items-center justify-between">
-                            {editingCategory?.id === cat.id ? (
-                                <div className="flex gap-3 flex-1">
-                                    <input
-                                        type="text"
-                                        value={editingCategory.name}
-                                        onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
-                                        className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
-                                    />
-                                    <input
-                                        type="number"
-                                        value={editingCategory.priority}
-                                        onChange={(e) => setEditingCategory({ ...editingCategory, priority: parseInt(e.target.value) || 0 })}
-                                        className="w-24 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
-                                    />
-                                    <input
-                                        type="color"
-                                        value={editingCategory.color || "#000000"}
-                                        onChange={(e) => setEditingCategory({ ...editingCategory, color: e.target.value })}
-                                        className="w-16 h-10 bg-gray-800 border border-gray-700 rounded cursor-pointer"
-                                    />
-                                    <button
-                                        onClick={() => handleUpdateCategory(editingCategory)}
-                                        className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded"
-                                    >
-                                        Save
-                                    </button>
-                                    <button
-                                        onClick={() => setEditingCategory(null)}
-                                        className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            ) : (
-                                <>
-                                    <div className="flex items-center gap-3">
-                                        <div
-                                            className="w-6 h-6 rounded border border-gray-600"
-                                            style={{ backgroundColor: cat.color || "#000000" }}
+                    {categories.map((cat) => {
+                        const isMiscellaneous = cat.name === "Miscellaneous";
+                        return (
+                            <div key={cat.id} className="p-4 bg-gray-900 rounded-lg flex items-center justify-between">
+                                {editingCategory?.id === cat.id ? (
+                                    <div className="flex gap-3 flex-1">
+                                        <input
+                                            type="text"
+                                            value={editingCategory.name}
+                                            onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
+                                            className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
                                         />
-                                        <div>
-                                            <span className="font-medium">{cat.name}</span>
-                                            <span className="text-gray-400 ml-3">Priority: {cat.priority}</span>
+                                        {!isMiscellaneous && (
+                                            <input
+                                                type="number"
+                                                value={editingCategory.priority}
+                                                onChange={(e) => setEditingCategory({ ...editingCategory, priority: parseInt(e.target.value) || 0 })}
+                                                className="w-24 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
+                                            />
+                                        )}
+                                        <input
+                                            type="color"
+                                            value={editingCategory.color || "#000000"}
+                                            onChange={(e) => setEditingCategory({ ...editingCategory, color: e.target.value })}
+                                            className="w-16 h-10 bg-gray-800 border border-gray-700 rounded cursor-pointer"
+                                        />
+                                        <button
+                                            onClick={() => handleUpdateCategory(isMiscellaneous ? { ...editingCategory, priority: 0 } : editingCategory)}
+                                            className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded"
+                                        >
+                                            Save
+                                        </button>
+                                        <button
+                                            onClick={() => setEditingCategory(null)}
+                                            className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="flex items-center gap-3">
+                                            <div
+                                                className="w-6 h-6 rounded border border-gray-600"
+                                                style={{ backgroundColor: cat.color || "#000000" }}
+                                            />
+                                            <div>
+                                                <span className="font-medium">{cat.name}</span>
+                                                {!isMiscellaneous && (
+                                                    <span className="text-gray-400 ml-3">Priority: {cat.priority}</span>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => setEditingCategory(cat)}
-                                            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm"
-                                        >
-                                            Edit
-                                        </button>
-                                        <button
-                                            onClick={() => handleDeleteCategoryClick(cat.id)}
-                                            className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-sm"
-                                        >
-                                            Delete
-                                        </button>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                    ))}
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => setEditingCategory(cat)}
+                                                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm"
+                                            >
+                                                Edit
+                                            </button>
+                                            {!isMiscellaneous && (
+                                                <button
+                                                    onClick={() => handleDeleteCategoryClick(cat.id)}
+                                                    className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-sm"
+                                                >
+                                                    Delete
+                                                </button>
+                                            )}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 
@@ -460,9 +469,10 @@ export default function CategoriesManagement() {
                 <div className="space-y-2">
                     {regexes.map((regex) => {
                         const category = categories.find((c) => c.id === regex.cat_id);
+                        const isCatchAll = category?.name === "Miscellaneous" && regex.regex === ".*";
                         return (
                             <div key={regex.id} className="p-4 bg-gray-900 rounded-lg flex items-center justify-between">
-                                {editingRegex?.id === regex.id ? (
+                                {editingRegex?.id === regex.id && !isCatchAll ? (
                                     <div className="flex gap-3 flex-1">
                                         <select
                                             value={editingRegex.cat_id}
@@ -519,22 +529,27 @@ export default function CategoriesManagement() {
                                             <div>
                                                 <span className="font-medium">{category?.name || `Category ${regex.cat_id}`}</span>
                                                 <span className="text-gray-400 ml-3 font-mono text-sm">{regex.regex}</span>
+                                                {isCatchAll && (
+                                                    <span className="ml-2 text-xs text-gray-500">(catch-all, cannot edit or delete)</span>
+                                                )}
                                             </div>
                                         </div>
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={() => setEditingRegex(regex)}
-                                                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm"
-                                            >
-                                                Edit
-                                            </button>
-                                            <button
-                                                onClick={() => deleteRegexMutation.mutate(regex.id)}
-                                                className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-sm"
-                                            >
-                                                Delete
-                                            </button>
-                                        </div>
+                                        {!isCatchAll && (
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => setEditingRegex(regex)}
+                                                    className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm"
+                                                >
+                                                    Edit
+                                                </button>
+                                                <button
+                                                    onClick={() => deleteRegexMutation.mutate(regex.id)}
+                                                    className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-sm"
+                                                >
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        )}
                                     </>
                                 )}
                             </div>
