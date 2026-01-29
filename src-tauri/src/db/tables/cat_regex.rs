@@ -27,12 +27,13 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    // Insert default ".*" regex for Miscellaneous category if table is empty
+    // Insert default regexes when table is empty (new installs only)
     let row = sqlx::query!("SELECT COUNT(*) as count FROM category_regex")
         .fetch_one(pool)
         .await?;
 
     if row.count == 0 {
+        // Miscellaneous catch-all (must exist so derivation never fails)
         let misc = sqlx::query!("SELECT id FROM category WHERE name = 'Miscellaneous'")
             .fetch_optional(pool)
             .await?;
@@ -44,6 +45,71 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             )
             .execute(pool)
             .await?;
+        }
+
+        // Default regex rows: one row per pattern (no big pipe-separated regexes).
+        // Patterns match foreground window title (logs.app). Resolve cat_id by category name.
+        let default_regexes: &[(&str, &[&str])] = &[
+            ("Social", &["Discord", "Slack", "Microsoft Teams", "WhatsApp", "Telegram"][..]),
+            (
+                "Watching",
+                &["YouTube", " - YouTube - ", "Netflix", "Twitch", "VLC"][..],
+            ),
+            (
+                "Gaming",
+                &["Rocket League", "Minecraft", "Steam", "Epic Games", r"\(64-bit, DX11"][..],
+            ),
+            (
+                "Coding",
+                &[
+                    "Visual Studio",
+                    " - Cursor",
+                    "Code",
+                    "Cursor",
+                    "IntelliJ",
+                    "PyCharm",
+                    "WebStorm",
+                    "Rider",
+                    "PhpStorm",
+                    "GoLand",
+                    "CLion",
+                ][..],
+            ),
+            ("Learning", &["Coursera", "Udemy", "Duolingo", "Khan Academy"][..]),
+            ("Reading", &["Kindle", "Adobe Acrobat", " - PDF", r"\.pdf"][..]),
+            (
+                "Music",
+                &[
+                    "Spotify",
+                    "YouTube Music",
+                    "iTunes",
+                    "Apple Music",
+                    "SoundCloud",
+                    "Tidal",
+                    "Deezer",
+                ][..],
+            ),
+            (
+                "Browsing",
+                &["Vivaldi", "Chrome", "Firefox", "Microsoft Edge", "Brave", "Safari"][..],
+            ),
+        ];
+
+        for (category_name, patterns) in default_regexes {
+            let cat_id: Option<i32> =
+                sqlx::query_scalar("SELECT id FROM category WHERE name = ?1")
+                    .bind(category_name)
+                    .fetch_optional(pool)
+                    .await?;
+            if let Some(cat_id) = cat_id {
+                for regex in *patterns {
+                    sqlx::query("INSERT INTO category_regex (cat_id, regex) VALUES (?1, ?2)")
+                        .bind(cat_id)
+                        .bind(regex)
+                        .execute(pool)
+                        .await?;
+                }
+            }
         }
     }
     Ok(())
