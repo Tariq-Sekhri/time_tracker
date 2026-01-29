@@ -24,8 +24,8 @@ pub fn get_db_path() -> PathBuf {
 
     // #[cfg(debug_assertions)]
     // #[cfg(not(debug_assertions))]
-    // let db_filename = "app.db";
-    let db_filename = "app-test.db";
+    let db_filename = "app.db";
+    // let db_filename = "app-test.db";
 
 
     PathBuf::from(appdata).join("time-tracker").join(db_filename)
