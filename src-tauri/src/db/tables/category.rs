@@ -35,14 +35,28 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         .fetch_one(pool)
         .await?;
     if row.count == 0 {
-        sqlx::query!(
-            "INSERT OR IGNORE INTO category (name, priority, color) VALUES (?1, ?2, ?3)",
-            "Miscellaneous",
-            0i32,
-            None::<Option<String>>
-        )
-        .execute(pool)
-        .await?;
+        // Default categories (desktop-trackable only), only on first table creation
+        let defaults: &[(&str, i32, Option<&str>)] = &[
+            ("Miscellaneous", 0, Some("#9c9c9c")),
+            ("Browsing", 200, Some("#ff7300")),
+            ("Music", 250, Some("#ec4899")),
+            ("Reading", 300, Some("#a855f7")),
+            ("Learning", 380, Some("#eab308")),
+            ("Coding", 400, Some("#1100ff")),
+            ("Gaming", 500, Some("#2eff89")),
+            ("Watching", 600, Some("#fff700")),
+            ("Social", 700, Some("#5662f6")),
+        ];
+        for (name, priority, color) in defaults {
+            sqlx::query!(
+                "INSERT OR IGNORE INTO category (name, priority, color) VALUES (?1, ?2, ?3)",
+                name,
+                priority,
+                color
+            )
+            .execute(pool)
+            .await?;
+        }
     }
     Ok(())
 }
@@ -86,6 +100,25 @@ pub async fn get_categories() -> Result<Vec<Category>, Error> {
 #[tauri::command]
 pub async fn update_category_by_id(cat: Category) -> Result<(), Error> {
     let pool = db::get_pool().await?;
+    let current = sqlx::query_as!(
+        Category,
+        r#"SELECT id as "id!: i32", name, COALESCE(priority, 0) as "priority!: i32", color FROM category WHERE id = ?1"#,
+        cat.id
+    )
+    .fetch_optional(&pool)
+    .await?;
+    if let Some(ref c) = current {
+        if c.name == "Miscellaneous" {
+            // Miscellaneous: only name and color are editable; priority stays 0
+            sqlx::query("UPDATE category SET name = ?1, priority = 0, color = ?2 WHERE id = ?3")
+                .bind(&cat.name)
+                .bind(&cat.color)
+                .bind(cat.id)
+                .execute(&pool)
+                .await?;
+            return Ok(());
+        }
+    }
     sqlx::query!(
         "UPDATE category SET name = ?1, priority = ?2, color = ?3 WHERE id = ?4",
         cat.name,
@@ -100,6 +133,20 @@ pub async fn update_category_by_id(cat: Category) -> Result<(), Error> {
 #[tauri::command]
 pub async fn delete_category_by_id(id: i32, cascade: bool) -> Result<(), Error> {
     let pool = db::get_pool().await?;
+    let current = sqlx::query_as!(
+        Category,
+        r#"SELECT id as "id!: i32", name, COALESCE(priority, 0) as "priority!: i32", color FROM category WHERE id = ?1"#,
+        id
+    )
+    .fetch_optional(&pool)
+    .await?;
+    if let Some(ref c) = current {
+        if c.name == "Miscellaneous" {
+            return Err(Error::Other(
+                "The Miscellaneous category cannot be deleted.".into(),
+            ));
+        }
+    }
 
     if cascade {
         sqlx::query!("DELETE FROM category_regex WHERE cat_id = ?1", id)

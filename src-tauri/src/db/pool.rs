@@ -23,9 +23,9 @@ pub fn get_db_path() -> PathBuf {
     // Use app-test.db in dev mode (when running npm start / tauri dev)
 
     // #[cfg(debug_assertions)]
-    // let db_filename = "app-test.db";
     // #[cfg(not(debug_assertions))]
-    let db_filename = "app.db";
+    // let db_filename = "app.db";
+    let db_filename = "app-test.db";
 
 
     PathBuf::from(appdata).join("time-tracker").join(db_filename)

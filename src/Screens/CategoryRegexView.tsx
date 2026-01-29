@@ -33,6 +33,8 @@ export default function CategoryRegexView() {
     const [newRegexPattern, setNewRegexPattern] = useState("");
     const [regexError, setRegexError] = useState<string | null>(null);
     const [editRegexError, setEditRegexError] = useState<string | null>(null);
+    const [filterCategoryId, setFilterCategoryId] = useState<number | "">("");
+    const [sortOrder, setSortOrder] = useState<"oldest" | "newest">("newest");
 
     const { data: categories = [] } = useQuery({
         queryKey: ["categories"],
@@ -43,6 +45,10 @@ export default function CategoryRegexView() {
         queryKey: ["cat_regex"],
         queryFn: async () => unwrapResult(await get_cat_regex()),
     });
+
+    const filteredAndSortedRegexes = [...regexes]
+        .filter((r) => filterCategoryId === "" || r.cat_id === filterCategoryId)
+        .sort((a, b) => (sortOrder === "oldest" ? a.id - b.id : b.id - a.id));
 
     const createRegexMutation = useMutation({
         mutationFn: async (newRegex: NewCategoryRegex) => {
@@ -202,13 +208,40 @@ export default function CategoryRegexView() {
                 )}
             </div>
 
+            {/* Filter & Sort */}
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+                <label className="text-gray-400 text-sm">Filter by category:</label>
+                <select
+                    value={filterCategoryId === "" ? "" : filterCategoryId}
+                    onChange={(e) => setFilterCategoryId(e.target.value ? parseInt(e.target.value, 10) : "")}
+                    className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
+                >
+                    <option value="">All categories</option>
+                    {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                            {cat.name}
+                        </option>
+                    ))}
+                </select>
+                <label className="text-gray-400 text-sm ml-2">Sort:</label>
+                <select
+                    value={sortOrder}
+                    onChange={(e) => setSortOrder(e.target.value as "oldest" | "newest")}
+                    className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
+                >
+                    <option value="newest">Newest first</option>
+                    <option value="oldest">Oldest first</option>
+                </select>
+            </div>
+
             {/* Regex List */}
             <div className="space-y-2">
-                {regexes.map((regex) => {
+                {filteredAndSortedRegexes.map((regex) => {
                     const category = categories.find((c) => c.id === regex.cat_id);
+                    const isCatchAll = category?.name === "Miscellaneous" && regex.regex === ".*";
                     return (
                         <div key={regex.id} className="p-4 bg-gray-900 rounded-lg flex items-center justify-between">
-                            {editingRegex?.id === regex.id ? (
+                            {editingRegex?.id === regex.id && !isCatchAll ? (
                                 <div className="flex gap-3 flex-1">
                                     <select
                                         value={editingRegex.cat_id}
@@ -265,22 +298,27 @@ export default function CategoryRegexView() {
                                         <div>
                                             <span className="font-medium">{category?.name || `Category ${regex.cat_id}`}</span>
                                             <span className="text-gray-400 ml-3 font-mono text-sm">{regex.regex}</span>
+                                            {isCatchAll && (
+                                                <span className="ml-2 text-xs text-gray-500">(catch-all, cannot edit or delete)</span>
+                                            )}
                                         </div>
                                     </div>
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => setEditingRegex(regex)}
-                                            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm"
-                                        >
-                                            Edit
-                                        </button>
-                                        <button
-                                            onClick={() => deleteRegexMutation.mutate(regex.id)}
-                                            className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-sm"
-                                        >
-                                            Delete
-                                        </button>
-                                    </div>
+                                    {!isCatchAll && (
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => setEditingRegex(regex)}
+                                                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm"
+                                            >
+                                                Edit
+                                            </button>
+                                            <button
+                                                onClick={() => deleteRegexMutation.mutate(regex.id)}
+                                                className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-sm"
+                                            >
+                                                Delete
+                                            </button>
+                                        </div>
+                                    )}
                                 </>
                             )}
                         </div>
