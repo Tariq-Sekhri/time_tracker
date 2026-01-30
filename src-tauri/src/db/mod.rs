@@ -50,18 +50,15 @@ pub use pool::get_db_path;
 
 #[tauri::command]
 pub async fn wipe_all_data() -> Result<(), Error> {
-    // Create a safety backup before wiping all data
     let _ = backup::create_safety_backup("pre_wipe");
     
     let pool = get_pool().await?;
 
-    // Delete all data from all tables
     sqlx::query!("DELETE FROM logs").execute(&pool).await?;
     sqlx::query!("DELETE FROM category_regex").execute(&pool).await?;
     sqlx::query!("DELETE FROM category").execute(&pool).await?;
     sqlx::query!("DELETE FROM skipped_apps").execute(&pool).await?;
 
-    // Re-run table creation which will insert defaults
     tables::category::create_table(&pool)
         .await
         .map_err(|e| Error::Db(e.to_string()))?;
@@ -77,7 +74,6 @@ pub async fn wipe_all_data() -> Result<(), Error> {
 
 #[tauri::command]
 pub async fn reset_database() -> Result<(), Error> {
-    // Create a safety backup before reset
     let _ = backup::create_safety_backup("pre_reset");
     
     reset_pool().await.map_err(|e| Error::Db(e.to_string()))?;
@@ -86,7 +82,6 @@ pub async fn reset_database() -> Result<(), Error> {
     Ok(())
 }
 
-// ==================== Backup Commands ====================
 
 #[derive(Serialize)]
 pub struct BackupInfoResponse {
@@ -128,14 +123,11 @@ pub fn create_manual_backup(name: String) -> Result<String, Error> {
 
 #[tauri::command]
 pub async fn restore_backup(backup_name: String) -> Result<(), Error> {
-    // Close the current pool before restoring
     reset_pool().await.map_err(|e| Error::Db(e.to_string()))?;
     
-    // Restore the backup
     backup::restore_backup(&backup_name)
         .map_err(|e| Error::Db(format!("Failed to restore backup: {}", e)))?;
     
-    // Reinitialize the pool with the restored database
     get_pool().await.map_err(|e| Error::Db(e.to_string()))?;
     
     Ok(())
@@ -154,7 +146,6 @@ pub fn create_safety_backup(reason: String) -> Result<String, Error> {
     Ok(path.to_string_lossy().to_string())
 }
 
-/// Exports all database data to JSON for additional safety
 #[tauri::command]
 pub async fn export_data_to_json() -> Result<String, Error> {
     let data = get_all_db_data().await?;

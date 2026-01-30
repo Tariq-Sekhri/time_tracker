@@ -13,10 +13,8 @@ export default function Header({ currentView, setCurrentView }: {
         invoke<boolean>("get_tracking_status").then(setIsTracking);
     }, []);
 
-    // Load initial tracking status
 
 
-    // Listen for tracking status changes from tray menu
     useEffect(() => {
         let unlistenFn: (() => void) | null = null;
 

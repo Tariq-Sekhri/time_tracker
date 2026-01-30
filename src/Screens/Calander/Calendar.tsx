@@ -52,7 +52,6 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         return map;
     }, [googleCalendars]);
 
-    // Initialize visible categories when categories are loaded
     useEffect(() => {
         if (categories.length > 0 && !hasInitialized.current) {
             try {
@@ -63,43 +62,27 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                     const savedArray = JSON.parse(saved) as string[];
                     const savedSet = new Set<string>(savedArray);
 
-                    // Use saved preferences: categories in saved array are visible
-                    // New categories (not in saved) default to visible
                     const mergedSet = new Set<string>();
                     allCategoryNames.forEach(name => {
                         if (savedSet.has(name)) {
-                            // Was saved as visible
                             mergedSet.add(name);
                         } else {
-                            // Not in saved - could be new category or was hidden
-                            // Check if we have any saved data at all - if yes, this was likely hidden
-                            // If it's truly new, we'll add it to visible on next save
-                            // For now: if saved data exists, assume missing = hidden
-                            // But we need to handle new categories differently
-                            // Simple approach: if saved exists, only show saved ones; new ones default visible
-                            // Actually, let's be smarter: track all known categories
                             const knownCategories = localStorage.getItem("knownCategories");
                             if (knownCategories) {
                                 const knownSet = new Set<string>(JSON.parse(knownCategories));
                                 if (knownSet.has(name)) {
-                                    // Was known but not visible = hidden, keep hidden
-                                    // Don't add to mergedSet
                                 } else {
-                                    // New category - default to visible
                                     mergedSet.add(name);
                                 }
                             } else {
-                                // No known categories - this is first run, all visible
                                 mergedSet.add(name);
                             }
                         }
                     });
 
                     setVisibleCategories(mergedSet);
-                    // Update known categories
                     localStorage.setItem("knownCategories", JSON.stringify(allCategoryNames));
                 } else {
-                    // No saved preferences - all categories visible by default
                     const allVisible = new Set(allCategoryNames);
                     setVisibleCategories(allVisible);
                     localStorage.setItem("visibleCategories", JSON.stringify([...allVisible]));
@@ -107,7 +90,6 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                 }
             } catch (e) {
                 console.error("Failed to initialize visible categories:", e);
-                // Fallback to all visible
                 const allCategoryNames = categories.map(cat => cat.name);
                 setVisibleCategories(new Set(allCategoryNames));
             }
@@ -115,12 +97,10 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         }
     }, [categories]);
 
-    // Save visible categories to localStorage whenever they change
     useEffect(() => {
         if (hasInitialized.current && categories.length > 0) {
             try {
                 localStorage.setItem("visibleCategories", JSON.stringify([...visibleCategories]));
-                // Also update known categories
                 const allCategoryNames = categories.map(cat => cat.name);
                 localStorage.setItem("knownCategories", JSON.stringify(allCategoryNames));
             } catch (e) {
@@ -129,7 +109,6 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         }
     }, [visibleCategories, categories]);
 
-    // Initialize visible calendars when calendars are loaded
     const hasInitializedCalendars = useRef(false);
     useEffect(() => {
         if (googleCalendars.length > 0 && !hasInitializedCalendars.current) {
@@ -150,7 +129,6 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                             if (knownCalendars) {
                                 const knownSet = new Set<number>(JSON.parse(knownCalendars));
                                 if (!knownSet.has(id)) {
-                                    // New calendar - default to visible
                                     mergedSet.add(id);
                                 }
                             } else {
@@ -162,7 +140,6 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                     setVisibleCalendars(mergedSet);
                     localStorage.setItem("knownCalendars", JSON.stringify(allCalendarIds));
                 } else {
-                    // No saved preferences - all calendars visible by default
                     const allVisible = new Set(allCalendarIds);
                     setVisibleCalendars(allVisible);
                     localStorage.setItem("visibleCalendars", JSON.stringify([...allVisible]));
@@ -177,7 +154,6 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         }
     }, [googleCalendars]);
 
-    // Save visible calendars to localStorage whenever they change
     useEffect(() => {
         if (hasInitializedCalendars.current && googleCalendars.length > 0) {
             try {
@@ -200,7 +176,6 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         return map;
     }, [categories]);
 
-    // Listen for window focus events to refresh calendar data
     useEffect(() => {
         let unlistenFn: (() => void) | null = null;
 
@@ -208,15 +183,11 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
             try {
                 const window = getCurrentWindow();
                 
-                // Listen for window focus events
                 const unlisten = await window.listen("tauri://focus", () => {
-                    // Window gained focus - refresh all calendar data
-                    // Invalidate all week queries (will refetch automatically)
                     queryClient.invalidateQueries({ 
                         predicate: (query) => query.queryKey[0] === "week" 
                     });
                     
-                    // Invalidate Google Calendar events queries
                     queryClient.invalidateQueries({ 
                         predicate: (query) => query.queryKey[0] === "googleCalendarEvents" 
                     });
@@ -237,7 +208,6 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         };
     }, [queryClient]);
 
-    // Get week data to check if selectedEvent still exists
     const weekStart = getWeekStart(date);
     const { data: weekData } = useQuery({
         queryKey: ["week", weekStart.toISOString()],
@@ -245,40 +215,28 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         enabled: !!weekStart && !isNaN(weekStart.getTime()) && !!selectedEvent,
     });
 
-    // Check if selectedEvent still exists in the week data after refresh
-    // Skip this check for category-filtered events (they're synthetic and won't be in weekData)
-    // Skip this check for Google Calendar events (they're not in weekData, only in Google Calendar)
     useEffect(() => {
-        // Don't check if we're in CategoryFilter mode - those events are synthetic
         if (rightSideBarView === "CategoryFilter") {
             return;
         }
 
-        // Don't check Google Calendar events - they're not in weekData
         if (selectedEvent?.googleCalendarEventId) {
             return;
         }
 
         if (selectedEvent && weekData) {
-            // Check if the event still exists by matching start/end times
-            // Use lenient matching: only check time range, not exact app matching
-            // This prevents the sidebar from closing when apps are deleted
             const eventExists = weekData.some((block) => {
                 const blockStart = new Date(block.startTime * 1000);
                 const blockEnd = new Date(block.endTime * 1000);
                 const eventStart = selectedEvent.start;
                 const eventEnd = selectedEvent.end;
 
-                // Check if times match (within 1 second tolerance)
                 const startMatch = Math.abs(blockStart.getTime() - eventStart.getTime()) < 1000;
                 const endMatch = Math.abs(blockEnd.getTime() - eventEnd.getTime()) < 1000;
 
-                // If time range matches, consider it the same event
-                // Don't require exact app matching to allow for deletions/updates
                 return startMatch && endMatch;
             });
 
-            // If event doesn't exist anymore (time range doesn't match), reset it
             if (!eventExists) {
                 setSelectedEvent(null);
                 setSelectedEventLogs([]);
@@ -286,7 +244,6 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         }
     }, [weekData, selectedEvent, rightSideBarView]);
 
-    // Handle category click - fetch logs filtered by category
     useEffect(() => {
         const fetchCategoryLogs = async () => {
             if (selectedCategory && rightSideBarView === "CategoryFilter") {
@@ -296,7 +253,6 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                 let title: string;
 
                 if (selectedDate) {
-                    // Day view
                     const dayStart = new Date(selectedDate);
                     dayStart.setHours(0, 0, 0, 0);
                     const dayEnd = new Date(selectedDate);
@@ -305,7 +261,6 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                     endTime = Math.floor(dayEnd.getTime() / 1000);
                     title = `${selectedCategory} - ${selectedDate.toLocaleDateString()}`;
                 } else {
-                    // Week view
                     const weekRange = getWeekRange(date);
                     startTime = weekRange.week_start;
                     endTime = weekRange.week_end;
@@ -323,17 +278,13 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                     console.log("Category logs result:", result);
 
                     if (result.success) {
-                        // The backend already groups logs by app via merge_logs_in_time_block
-                        // But we'll group again on the frontend as a safety measure to ensure no duplicates
                         const logMap = new Map<string, { ids: number[], app: string, timestamp: Date, duration: number }>();
 
                         result.data.forEach(log => {
                             const existing = logMap.get(log.app);
                             if (existing) {
-                                // Merge: combine IDs and sum durations
                                 existing.ids.push(...log.ids);
                                 existing.duration += log.duration;
-                                // Keep earliest timestamp
                                 const logTimestamp = new Date(log.timestamp * 1000);
                                 if (logTimestamp < existing.timestamp) {
                                     existing.timestamp = logTimestamp;
@@ -348,13 +299,11 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                             }
                         });
 
-                        // Convert map to array and sort by duration
                         const logs = Array.from(logMap.values()).sort((a, b) => b.duration - a.duration);
                         console.log("Processed logs:", logs.length, "apps for category", selectedCategory);
                         console.log("Logs grouped by app:", logs.map(l => ({ app: l.app, duration: l.duration, ids: l.ids.length })));
                         setSelectedEventLogs(logs);
 
-                        // Always create event to show the category name, even if no logs
                         const categoryEvent: CalendarEvent = {
                             title: title,
                             start: new Date(startTime * 1000),
@@ -368,7 +317,6 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                         setSelectedEvent(categoryEvent);
                     } else {
                         console.error("Failed to fetch category logs:", result.error);
-                        // Still create an event to show the category name even on error
                         const categoryEvent: CalendarEvent = {
                             title: `${selectedCategory} - Error`,
                             start: new Date(startTime * 1000),
@@ -393,10 +341,7 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         fetchCategoryLogs();
     }, [selectedCategory, rightSideBarView, selectedDate, date]);
 
-    // Only auto-update view if we're not already on the correct view
-    // This prevents flicker when clicking calendar background (which sets view directly)
     useEffect(() => {
-        // Don't interfere with CategoryFilter mode
         if (rightSideBarView === "CategoryFilter") {
             return;
         }
@@ -406,7 +351,6 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         } else if (selectedDate && !selectedEvent && rightSideBarView !== "Day") {
             setRightSideBarView("Day")
         } else if (!selectedDate && !selectedEvent && rightSideBarView === "Week") {
-            // Reset category when going back to Week view
             setSelectedCategory(null);
         } else if (!selectedDate && !selectedEvent && rightSideBarView !== "Week") {
             setRightSideBarView("Week")
@@ -418,7 +362,6 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
             const eventType = clickInfo.event.extendedProps?.type as string | undefined;
 
             if (eventType === "google_calendar") {
-                // Handle Google Calendar event - just show it, no editing since we don't store events
                 const event = {
                     title: clickInfo.event.title,
                     start: clickInfo.event.start,
@@ -432,10 +375,8 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                 setSelectedEvent(event);
                 setSelectedDate(null);
                 setSelectedEventLogs([]);
-                // Set view to Event to show Google Calendar event details
                 setRightSideBarView("Event");
             } else {
-                // Handle time block event
                 const event = {
                     title: clickInfo.event.title,
                     start: clickInfo.event.start,
@@ -445,7 +386,6 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                 setSelectedEvent(event);
                 setSelectedDate(null); // Clear date selection when event is selected
 
-                // Fetch and sort logs by duration
                 const startTime = Math.floor(event.start.getTime() / 1000);
                 const endTime = Math.floor(event.end.getTime() / 1000);
                 const appNames = event.apps.map(a => a.app);
@@ -463,7 +403,6 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                         timestamp: new Date(log.timestamp * 1000), // Convert seconds to milliseconds
                         duration: log.duration,
                     }));
-                    // Sort by duration (longest first) - backend already sorts, but ensure it here too
                     logs.sort((a, b) => b.duration - a.duration);
                     setSelectedEventLogs(logs);
                 } else {
@@ -478,7 +417,6 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         const isEventClick = target.closest('.fc-event') !== null;
         const isHeaderClick = target.closest('.fc-col-header-cell') !== null;
         if (!isEventClick && !isHeaderClick) {
-            // Reset everything and set view to Week immediately to avoid flicker
             setRightSideBarView("Week");
             setSelectedEvent(null);
             setSelectedEventLogs([]);
@@ -522,7 +460,6 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
     };
 
 
-    // Sync calendar with date store
     useEffect(() => {
         const calendarApi = calenderRef.current?.getApi();
         if (calendarApi && !isUpdatingFromStore.current) {
@@ -530,14 +467,12 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
             const targetDate = new Date(date);
             targetDate.setHours(0, 0, 0, 0);
 
-            // Only update if dates are different (avoid infinite loops)
             const calendarDateStr = calendarDate.toISOString().split('T')[0];
             const targetDateStr = targetDate.toISOString().split('T')[0];
 
             if (calendarDateStr !== targetDateStr) {
                 isUpdatingFromStore.current = true;
                 calendarApi.gotoDate(targetDateStr);
-                // Reset flag after a short delay to allow calendar to update
                 setTimeout(() => {
                     isUpdatingFromStore.current = false;
                 }, 100);
@@ -545,9 +480,7 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         }
     }, [date]);
 
-    // Handle calendar date changes (from FullCalendar's datesSet callback)
     const handleDatesSet = (dates: DatesSetArg) => {
-        // Don't update if we're in the middle of updating from store
         if (isUpdatingFromStore.current) {
             return;
         }
@@ -556,11 +489,9 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
             const calendarDate = new Date(dates.start);
             const storeDate = new Date(date);
 
-            // Normalize both to start of day for comparison
             calendarDate.setHours(0, 0, 0, 0);
             storeDate.setHours(0, 0, 0, 0);
 
-            // Only update if different to avoid loops
             const calendarWeekStart = getWeekStart(calendarDate);
             const storeWeekStart = getWeekStart(storeDate);
 
@@ -626,10 +557,8 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         };
     }, [date]);
 
-    // Refresh calendar data when window comes back into focus
     useEffect(() => {
         const handleFocus = () => {
-            // Invalidate all calendar-related queries to trigger refetch
             queryClient.invalidateQueries({ queryKey: ["week"] });
             queryClient.invalidateQueries({ queryKey: ["categories"] });
             queryClient.invalidateQueries({ queryKey: ["week_statistics"] });
@@ -654,7 +583,6 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
     };
 
     const goToNextWeek = () => {
-        // Allow going forward from any week - only disable button if on current week
         const newDate = new Date(date);
         newDate.setDate(newDate.getDate() + 7);
         setDate(newDate);

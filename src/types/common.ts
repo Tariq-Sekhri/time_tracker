@@ -1,4 +1,3 @@
-// Common utility types used throughout the application
 
 export type Result<D, E> =
     | { success: true; data: D }

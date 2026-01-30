@@ -1,7 +1,6 @@
 import {invokeWithResult, getWeekRange} from "../utils.ts";
 import {AppError, Result} from "../types/common.ts";
 
-// Backend returns snake_case, but we use camelCase in frontend
 type TimeBlockBackend = {
     id: number;
     category: string;

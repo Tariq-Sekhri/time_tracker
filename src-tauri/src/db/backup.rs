@@ -6,12 +6,10 @@ use crate::db::pool::get_db_path;
 const MAX_DAILY_BACKUPS: usize = 7;  // Keep 7 days of daily backups
 const MAX_SAFETY_BACKUPS: usize = 5; // Keep 5 pre-change safety backups
 
-/// Gets the backup directory path
 pub fn get_backup_dir() -> PathBuf {
     get_db_path().parent().unwrap().join("backups")
 }
 
-/// Ensures the backup directory exists
 fn ensure_backup_dir() -> std::io::Result<PathBuf> {
     let backup_dir = get_backup_dir();
     if !backup_dir.exists() {
@@ -20,8 +18,6 @@ fn ensure_backup_dir() -> std::io::Result<PathBuf> {
     Ok(backup_dir)
 }
 
-/// Creates a daily backup if one doesn't exist for today
-/// Returns Ok(Some(path)) if a new backup was created, Ok(None) if today's backup already exists
 pub fn create_daily_backup() -> std::io::Result<Option<PathBuf>> {
     let db_path = get_db_path();
     if !db_path.exists() {
@@ -33,22 +29,17 @@ pub fn create_daily_backup() -> std::io::Result<Option<PathBuf>> {
     let backup_name = format!("daily_{}.db", today);
     let backup_path = backup_dir.join(&backup_name);
 
-    // Check if today's backup already exists
     if backup_path.exists() {
         return Ok(None);
     }
 
-    // Create the backup
     fs::copy(&db_path, &backup_path)?;
 
-    // Clean up old daily backups
     cleanup_old_backups(&backup_dir, "daily_", MAX_DAILY_BACKUPS)?;
 
     Ok(Some(backup_path))
 }
 
-/// Creates a safety backup before any schema changes
-/// Always creates a new backup with timestamp
 pub fn create_safety_backup(reason: &str) -> std::io::Result<PathBuf> {
     let db_path = get_db_path();
     let backup_dir = ensure_backup_dir()?;
@@ -58,16 +49,13 @@ pub fn create_safety_backup(reason: &str) -> std::io::Result<PathBuf> {
     let backup_name = format!("safety_{}_{}.db", timestamp, safe_reason);
     let backup_path = backup_dir.join(&backup_name);
 
-    // Create the backup
     fs::copy(&db_path, &backup_path)?;
 
-    // Clean up old safety backups (keep more recent ones)
     cleanup_old_backups(&backup_dir, "safety_", MAX_SAFETY_BACKUPS)?;
 
     Ok(backup_path)
 }
 
-/// Cleans up old backups, keeping only the most recent `keep_count`
 fn cleanup_old_backups(backup_dir: &PathBuf, prefix: &str, keep_count: usize) -> std::io::Result<()> {
     let mut backups: Vec<_> = fs::read_dir(backup_dir)?
         .filter_map(|entry| entry.ok())
@@ -82,14 +70,12 @@ fn cleanup_old_backups(backup_dir: &PathBuf, prefix: &str, keep_count: usize) ->
         return Ok(());
     }
 
-    // Sort by modification time (oldest first)
     backups.sort_by(|a, b| {
         let time_a = a.metadata().and_then(|m| m.modified()).ok();
         let time_b = b.metadata().and_then(|m| m.modified()).ok();
         time_a.cmp(&time_b)
     });
 
-    // Remove oldest backups
     let to_remove = backups.len() - keep_count;
     for entry in backups.into_iter().take(to_remove) {
         let path = entry.path();
@@ -99,7 +85,6 @@ fn cleanup_old_backups(backup_dir: &PathBuf, prefix: &str, keep_count: usize) ->
     Ok(())
 }
 
-/// Lists all available backups
 pub fn list_backups() -> std::io::Result<Vec<BackupInfo>> {
     let backup_dir = get_backup_dir();
     if !backup_dir.exists() {
@@ -134,13 +119,11 @@ pub fn list_backups() -> std::io::Result<Vec<BackupInfo>> {
         })
         .collect();
 
-    // Sort by modification time (newest first)
     backups.sort_by(|a, b| b.modified.cmp(&a.modified));
 
     Ok(backups)
 }
 
-/// Restores a backup by replacing the current database
 pub fn restore_backup(backup_name: &str) -> std::io::Result<()> {
     let backup_dir = get_backup_dir();
     let backup_path = backup_dir.join(backup_name);
@@ -154,26 +137,21 @@ pub fn restore_backup(backup_name: &str) -> std::io::Result<()> {
 
     let db_path = get_db_path();
     
-    // Create a safety backup of current state before restoring
     if db_path.exists() {
         create_safety_backup("pre_restore")?;
     }
 
-    // Replace the database with the backup
     fs::copy(&backup_path, &db_path)?;
 
     Ok(())
 }
 
-/// Verifies a backup file is valid SQLite
 pub fn verify_backup(backup_path: &PathBuf) -> std::io::Result<bool> {
-    // Read first 16 bytes and check for SQLite header
     let header = fs::read(backup_path)?;
     if header.len() < 16 {
         return Ok(false);
     }
     
-    // SQLite files start with "SQLite format 3\0"
     let sqlite_header = b"SQLite format 3\0";
     Ok(&header[..16] == sqlite_header)
 }
@@ -194,7 +172,6 @@ pub enum BackupType {
     Manual,
 }
 
-/// Creates a manual backup with a custom name
 pub fn create_manual_backup(name: &str) -> std::io::Result<PathBuf> {
     let db_path = get_db_path();
     let backup_dir = ensure_backup_dir()?;
@@ -209,13 +186,10 @@ pub fn create_manual_backup(name: &str) -> std::io::Result<PathBuf> {
     Ok(backup_path)
 }
 
-/// Exports all data to a JSON file for additional safety
 pub fn export_data_to_json() -> std::io::Result<PathBuf> {
     let backup_dir = ensure_backup_dir()?;
     let timestamp = Local::now().format("%Y-%m-%d_%H-%M-%S").to_string();
     let export_path = backup_dir.join(format!("export_{}.json", timestamp));
     
-    // Note: This creates the path, but actual export needs to be done
-    // from async context with database access
     Ok(export_path)
 }

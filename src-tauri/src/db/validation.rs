@@ -2,7 +2,6 @@ use sqlx::{SqlitePool, Row};
 use crate::db::Error;
 use crate::db::backup;
 
-/// Expected column definition
 #[derive(Debug, Clone)]
 struct ExpectedColumn {
     name: &'static str,
@@ -11,14 +10,12 @@ struct ExpectedColumn {
     default_value: Option<&'static str>,
 }
 
-/// Expected table definition
 #[derive(Debug, Clone)]
 struct ExpectedTable {
     name: &'static str,
     columns: Vec<ExpectedColumn>,
 }
 
-/// Actual column info from database
 #[derive(Debug)]
 struct ActualColumn {
     name: String,
@@ -27,7 +24,6 @@ struct ActualColumn {
     default_value: Option<String>,
 }
 
-/// Defines all expected tables and their schemas
 fn get_expected_tables() -> Vec<ExpectedTable> {
     vec![
         ExpectedTable {
@@ -76,7 +72,6 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
     ]
 }
 
-/// Gets the actual schema for a table
 async fn get_table_schema(pool: &SqlitePool, table_name: &str) -> Result<Vec<ActualColumn>, sqlx::Error> {
     let query = format!("PRAGMA table_info({})", table_name);
     let rows = sqlx::query(&query).fetch_all(pool).await?;
@@ -93,7 +88,6 @@ async fn get_table_schema(pool: &SqlitePool, table_name: &str) -> Result<Vec<Act
     Ok(columns)
 }
 
-/// Checks if a table exists
 async fn table_exists(pool: &SqlitePool, table_name: &str) -> Result<bool, sqlx::Error> {
     let count: i64 = sqlx::query_scalar!(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
@@ -105,7 +99,6 @@ async fn table_exists(pool: &SqlitePool, table_name: &str) -> Result<bool, sqlx:
     Ok(count > 0)
 }
 
-/// Checks if a table has any data
 async fn table_has_data(pool: &SqlitePool, table_name: &str) -> Result<bool, sqlx::Error> {
     let query = format!("SELECT COUNT(*) FROM {}", table_name);
     let count: i32 = sqlx::query_scalar(&query)
@@ -115,15 +108,11 @@ async fn table_has_data(pool: &SqlitePool, table_name: &str) -> Result<bool, sql
     Ok(count > 0)
 }
 
-/// Safely validates and repairs the database schema
-/// NEVER drops tables with data - uses ALTER TABLE instead
-/// Creates a backup before any modifications
 pub async fn validate_and_repair_database(pool: &SqlitePool) -> Result<ValidationResult, Error> {
     let expected_tables = get_expected_tables();
     let mut result = ValidationResult::default();
     let mut needs_changes = false;
     
-    // First pass: check what changes are needed
     for expected in &expected_tables {
         if !table_exists(pool, expected.name).await? {
             result.missing_tables.push(expected.name.to_string());
@@ -140,21 +129,17 @@ pub async fn validate_and_repair_database(pool: &SqlitePool) -> Result<Validatio
         }
     }
     
-    // If changes are needed, create a safety backup first
     if needs_changes {
         if let Ok(path) = backup::create_safety_backup("schema_validation") {
             result.backup_created = Some(path.to_string_lossy().to_string());
         }
     }
     
-    // Second pass: apply safe changes
     for expected in &expected_tables {
         if !table_exists(pool, expected.name).await? {
-            // Table doesn't exist - safe to create
             create_table_safe(pool, expected).await?;
             result.tables_created.push(expected.name.to_string());
         } else {
-            // Table exists - check for missing columns and add them safely
             let actual_columns = get_table_schema(pool, expected.name).await?;
             
             for expected_col in &expected.columns {
@@ -164,7 +149,6 @@ pub async fn validate_and_repair_database(pool: &SqlitePool) -> Result<Validatio
                 }
             }
             
-            // Note any extra columns (but don't remove them - data preservation)
             for actual_col in &actual_columns {
                 if !expected.columns.iter().any(|c| c.name == actual_col.name) {
                     result.extra_columns.push(format!("{}.{}", expected.name, actual_col.name));
@@ -173,13 +157,11 @@ pub async fn validate_and_repair_database(pool: &SqlitePool) -> Result<Validatio
         }
     }
     
-    // Ensure default data exists
     ensure_default_data(pool).await?;
     
     Ok(result)
 }
 
-/// Creates a table safely (only if it doesn't exist)
 async fn create_table_safe(pool: &SqlitePool, table: &ExpectedTable) -> Result<(), Error> {
     use crate::db::tables;
     
@@ -197,7 +179,6 @@ async fn create_table_safe(pool: &SqlitePool, table: &ExpectedTable) -> Result<(
     Ok(())
 }
 
-/// Adds a column safely using ALTER TABLE
 async fn add_column_safe(pool: &SqlitePool, table_name: &str, column: &ExpectedColumn) -> Result<(), Error> {
     let mut sql = format!(
         "ALTER TABLE {} ADD COLUMN {} {}",
@@ -206,7 +187,6 @@ async fn add_column_safe(pool: &SqlitePool, table_name: &str, column: &ExpectedC
         column.sql_type
     );
     
-    // For NOT NULL columns, we must provide a default value
     if column.not_null {
         let default = column.default_value.unwrap_or_else(|| {
             match column.sql_type {
@@ -228,9 +208,7 @@ async fn add_column_safe(pool: &SqlitePool, table_name: &str, column: &ExpectedC
     Ok(())
 }
 
-/// Ensures default data: only the .* regex when Miscellaneous exists (never re-insert deleted categories)
 async fn ensure_default_data(pool: &SqlitePool) -> Result<(), Error> {
-    // Ensure .* regex exists for Miscellaneous category (only if it already exists)
     let misc_id: Option<i32> = sqlx::query_scalar!(
         "SELECT id as \"id!: i32\" FROM category WHERE name = 'Miscellaneous'"
     )
@@ -259,7 +237,6 @@ async fn ensure_default_data(pool: &SqlitePool) -> Result<(), Error> {
     Ok(())
 }
 
-/// Result of validation process
 #[derive(Debug, Default)]
 pub struct ValidationResult {
     pub backup_created: Option<String>,

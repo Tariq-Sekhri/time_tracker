@@ -39,7 +39,6 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
         enabled: !!dayStart && !!dayEnd,
     });
 
-    // Show loading or error state
     if (isLoading || (!dayStats && !isError)) {
         return (
             <div className=" border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
@@ -59,7 +58,6 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
                     </div>
                     <div className="text-gray-500 mb-4">Loading statistics...</div>
                 </div>
-                {/* Footer - Always show More Info button even while loading */}
                 <div className="mt-auto pt-4 border-t border-gray-700">
                     <button
                         onClick={onMoreInfo}
@@ -94,7 +92,6 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
                         {error instanceof Error ? error.message : "Unknown error occurred"}
                     </div>
                 </div>
-                {/* Footer - Always show More Info button even on error */}
                 <div className="mt-auto pt-4 border-t border-gray-700">
                     <button
                         onClick={onMoreInfo}
@@ -107,7 +104,6 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
         );
     }
 
-    // At this point, dayStats should be defined, but TypeScript needs a check
     if (!dayStats) {
         return (
             <div className=" border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
@@ -127,7 +123,6 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
                     </div>
                     <div className="text-gray-500 mb-4">No statistics available</div>
                 </div>
-                {/* Footer - Always show More Info button */}
                 <div className="mt-auto pt-4 border-t border-gray-700">
                     <button
                         onClick={onMoreInfo}
@@ -158,7 +153,6 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
 
     return (
         <div className=" border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
-            {/* Header */}
             <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold text-white">Day Statistics</h2>
                 <button
@@ -173,7 +167,6 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
                 </button>
             </div>
 
-            {/* Total Time */}
             <div className="mb-4">
                 <div className="flex items-center justify-between mb-1">
                     <span className="text-sm text-gray-400">Total time</span>
@@ -181,12 +174,10 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
                 </div>
             </div>
 
-            {/* Donut Chart */}
             <div className="mb-6">
                 <DonutChart data={donutData} colors={categoryColors}/>
             </div>
 
-            {/* Categories */}
             <div className="mb-6">
                 <h3 className="text-sm font-semibold text-gray-300 mb-3">Categories</h3>
                 <div className="space-y-2">
@@ -219,7 +210,6 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
                 </div>
             </div>
 
-            {/* Top Apps */}
             <div className="mb-6">
                 <h3 className="text-sm font-semibold text-gray-300 mb-3">Top Apps</h3>
                 <div className="space-y-2">
@@ -232,7 +222,6 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
                 </div>
             </div>
 
-            {/* Footer */}
             <div className="mt-auto pt-4 border-t border-gray-700">
                 <button
                     onClick={onMoreInfo}

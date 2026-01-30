@@ -53,13 +53,10 @@ export function ToastContainer({ toasts, onRemove, onUpdate }: ToastContainerPro
                         className={`flex-1 ${toast.errorDetails ? "cursor-pointer hover:underline" : ""}`}
                         onClick={toast.errorDetails && onUpdate ? async () => {
                             try {
-                                // Log to console like console.error would
                                 console.error("Error details:", toast.errorDetails);
 
-                                // Copy full error details to clipboard
                                 await navigator.clipboard.writeText(toast.errorDetails || toast.message);
 
-                                // Temporarily update message to show copied confirmation
                                 const originalMessage = toast.message;
                                 onUpdate(toast.id, "✓ Error copied to clipboard! Click to copy again.", "success");
                                 setTimeout(() => {
@@ -96,7 +93,6 @@ export function useToast() {
     const [toasts, setToasts] = useState<Toast[]>([]);
 
     const showToast = (message: string, type: ToastType = "info", duration: number = 3000, errorDetails?: string) => {
-        // For error toasts, default duration is longer
         if (type === "error" && duration === 3000) {
             duration = 5000;
         }

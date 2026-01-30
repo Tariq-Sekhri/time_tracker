@@ -48,10 +48,7 @@ pub fn setup_tray(app: &AppHandle<tauri::Wry>) -> Result<(), Box<dyn std::error:
 
                     refresh_tray_menu();
 
-                    // Emit event to frontend to update toggle state
-                    // new_tracking_status = !IS_SUSPENDED (tracking is active when NOT suspended)
                     let new_tracking_status = !IS_SUSPENDED.load(Ordering::Relaxed);
-                    // Emit to window (works even if hidden)
                     if let Some(window) = app.get_window("main") {
                         let _ = window.emit("tracking-status-changed", new_tracking_status);
                     }
@@ -67,14 +64,12 @@ pub fn setup_tray(app: &AppHandle<tauri::Wry>) -> Result<(), Box<dyn std::error:
             }
         })
         .on_tray_icon_event(move |_tray, event| {
-            // Handle tray icon click - always show the window (same behavior as "Show" menu item)
             if let tauri::tray::TrayIconEvent::Click {
                 button: tauri::tray::MouseButton::Left,
                 ..
             } = event
             {
                 if let Some(window) = app_clone.get_window("main") {
-                    // Always show, focus, and unminimize (same as "Show" menu item)
                     let _ = window.show();
                     let _ = window.set_focus();
                     let _ = window.unminimize();

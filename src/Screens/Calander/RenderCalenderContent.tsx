@@ -63,11 +63,9 @@ export default function RenderCalendarContent({
         },
         onSuccess: async () => {
             await queryClient.invalidateQueries({ queryKey: ["googleCalendars"] });
-            // Invalidate all googleCalendarEvents queries
             queryClient.invalidateQueries({
                 predicate: (query) => query.queryKey[0] === "googleCalendarEvents"
             });
-            // Force refetch of current week's events
             await refetchGoogleEvents();
             queryClient.invalidateQueries({ queryKey: ["week"] });
             setEditingCalendar(null);
@@ -88,11 +86,9 @@ export default function RenderCalendarContent({
         },
         onSuccess: async () => {
             await queryClient.invalidateQueries({ queryKey: ["googleCalendars"] });
-            // Invalidate all googleCalendarEvents queries
             queryClient.invalidateQueries({
                 predicate: (query) => query.queryKey[0] === "googleCalendarEvents"
             });
-            // Force refetch of current week's events
             await refetchGoogleEvents();
             queryClient.invalidateQueries({ queryKey: ["week"] });
             setShowDeleteConfirm(false);
@@ -136,7 +132,6 @@ export default function RenderCalendarContent({
         setShowDeleteConfirm(true);
     };
 
-    // Use week start for consistent querying
     const weekStart = getWeekStart(date);
     const { data, isLoading, error } = useQuery({
         queryKey: ["week", weekStart.toISOString()],
@@ -145,7 +140,6 @@ export default function RenderCalendarContent({
         refetchOnWindowFocus: true, // Refetch when window gains focus
     });
 
-    // Fetch Google Calendar events
     const weekRange = useMemo(() => getWeekRange(date), [date]);
     const calendarIds = useMemo(() => googleCalendars.map(cal => cal.id).sort().join(','), [googleCalendars]);
     const { data: googleCalendarEvents, refetch: refetchGoogleEvents, error: googleEventsError, isLoading: isLoadingGoogleEvents } = useQuery({
@@ -158,7 +152,6 @@ export default function RenderCalendarContent({
         refetchOnWindowFocus: true, // Refetch when window gains focus
     });
 
-    // Log errors for debugging
     useEffect(() => {
         if (googleEventsError) {
             console.error("Error fetching Google Calendar events:", googleEventsError);
@@ -166,7 +159,6 @@ export default function RenderCalendarContent({
     }, [googleEventsError]);
 
 
-    // Move all hooks to the top, before any conditional returns
     const events = useMemo(() => {
         const timeBlockEvents = (data || [])
             .filter((block: TimeBlock) => visibleCategories.has(block.category))
@@ -199,7 +191,6 @@ export default function RenderCalendarContent({
             })
             .filter((e): e is NonNullable<typeof e> => e !== null);
 
-        // Add Google Calendar events (only for visible calendars)
         const googleEvents = (googleCalendarEvents || [])
             .filter((event: GoogleCalendarEvent) => visibleCalendars.has(event.calendar_id))
             .map((event: GoogleCalendarEvent) => {
@@ -210,24 +201,19 @@ export default function RenderCalendarContent({
                     return null;
                 }
 
-                // Filter out all-day events (12:00 a.m. to 12:00 a.m.)
-                // Check if both start and end are at midnight
                 const isMidnightStart = start.getHours() === 0 && start.getMinutes() === 0 && start.getSeconds() === 0;
                 const isMidnightEnd = end.getHours() === 0 && end.getMinutes() === 0 && end.getSeconds() === 0;
 
                 if (isMidnightStart && isMidnightEnd) {
-                    // Check if same day or exactly 24 hours apart (all-day event)
                     const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate());
                     const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
                     const daysDiff = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
 
-                    // Same day (duration 0) or exactly 1 day difference (duration 1) = all-day event
                     if (daysDiff === 0 || daysDiff === 1) {
                         return null;
                     }
                 }
 
-                // Get calendar color
                 const calendar = googleCalendarMap.get(event.calendar_id);
                 const color = calendar?.color || "#4285f4"; // Default to Google blue if calendar not found
 
@@ -255,7 +241,6 @@ export default function RenderCalendarContent({
     }, [data, categoryColorMap, visibleCategories, googleCalendarEvents, visibleCalendars, googleCalendarMap]);
 
 
-    // Now handle conditional returns after all hooks
     if (isLoading || isLoadingGoogleEvents) {
         return <CalendarSkeleton />;
     }
@@ -271,14 +256,11 @@ export default function RenderCalendarContent({
         );
     }
 
-    // Check if we have any events to display (logs or Google Calendar events)
     const hasTimeBlocks = data && data.length > 0;
-    // Check if there are any visible Google Calendar events (filtered by visibleCalendars)
     const hasGoogleEvents = googleCalendarEvents && googleCalendarEvents.length > 0 &&
         googleCalendarEvents.some((event: GoogleCalendarEvent) => visibleCalendars.has(event.calendar_id));
     const hasAnyEvents = hasTimeBlocks || hasGoogleEvents;
 
-    // Only show "No data" message if we have neither logs nor Google Calendar events
     if (!hasAnyEvents) {
         return (
             <div className="flex items-center justify-center h-full w-full">
@@ -346,10 +328,8 @@ export default function RenderCalendarContent({
                     })}
                 </div>
 
-                {/* Divider */}
                 <div className="border-t border-gray-700 my-4"></div>
 
-                {/* Google Calendars Section */}
                 <div className="mb-4">
                     <div className="flex items-center justify-between mb-2">
                         <h3 className="text-lg font-semibold text-white">
@@ -360,7 +340,6 @@ export default function RenderCalendarContent({
                         Manage calendars in Google Calendar settings
                     </p>
 
-                    {/* Edit Form (only when editing) */}
                     {editingCalendar && (
                         <div className="mb-4 p-3 bg-gray-900 rounded-lg space-y-2">
                             <input
@@ -406,7 +385,6 @@ export default function RenderCalendarContent({
                         </div>
                     )}
 
-                    {/* Calendar List */}
                     <div className="space-y-2">
                         {googleCalendars.map((calendar) => {
                             const isVisible = visibleCalendars.has(calendar.id);
@@ -472,7 +450,6 @@ export default function RenderCalendarContent({
                 />
             </div>
 
-            {/* Delete Confirmation Modal */}
             {showDeleteConfirm && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                     <div className="bg-gray-900 p-6 rounded-lg max-w-md">

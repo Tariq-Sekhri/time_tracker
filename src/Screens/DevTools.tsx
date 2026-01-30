@@ -23,7 +23,6 @@ export default function DevTools() {
 
     return (
         <div className="h-full flex flex-col">
-            {/* Sub-navigation */}
             <div className="flex border-b border-gray-700 bg-gray-900">
                 {tabs.map(tab => (
                     <button
@@ -39,7 +38,6 @@ export default function DevTools() {
                 ))}
             </div>
 
-            {/* Content Area */}
             <div className="flex-1 overflow-auto p-6">
                 {activeTab === "logs" && <LogsOverviewTab/>}
                 {activeTab === "danger" && <DangerZoneTab/>}
@@ -48,7 +46,6 @@ export default function DevTools() {
     );
 }
 
-// ==================== LOGS OVERVIEW TAB ====================
 function LogsOverviewTab() {
     const [displayText, setDisplayText] = useState<string>("");
 
@@ -88,7 +85,6 @@ function LogsOverviewTab() {
 
     return (
         <div className="text-white">
-            {/* Database Overview Section */}
             <div className="bg-gray-900 rounded-lg p-6">
                 <h2 className="text-2xl font-bold mb-4">Database Overview</h2>
                 <div className="flex gap-3 mb-4">
@@ -126,7 +122,6 @@ function LogsOverviewTab() {
 }
 
 
-// ==================== DANGER ZONE TAB ====================
 function DangerZoneTab() {
     const queryClient = useQueryClient();
     const [confirmStep, setConfirmStep] = useState(0);

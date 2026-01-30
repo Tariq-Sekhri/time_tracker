@@ -27,13 +27,11 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    // Insert default regexes when table is empty (new installs only)
     let row = sqlx::query!("SELECT COUNT(*) as count FROM category_regex")
         .fetch_one(pool)
         .await?;
 
     if row.count == 0 {
-        // Miscellaneous catch-all (must exist so derivation never fails)
         let misc = sqlx::query!("SELECT id FROM category WHERE name = 'Miscellaneous'")
             .fetch_optional(pool)
             .await?;
@@ -47,8 +45,6 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             .await?;
         }
 
-        // Default regex rows: one row per pattern (no big pipe-separated regexes).
-        // Patterns match foreground window title (logs.app). Resolve cat_id by category name.
         let default_regexes: &[(&str, &[&str])] = &[
             ("Social", &["Discord", "Slack", "Microsoft Teams", "WhatsApp", "Telegram"][..]),
             (
@@ -131,7 +127,6 @@ pub async fn insert_cat_regex(new_category_regex: NewCategoryRegex) -> Result<i6
 pub async fn update_cat_regex_by_id(cat_regex: CategoryRegex) -> Result<(), Error> {
     let pool = db::get_pool().await?;
     
-    // Prevent editing the catch-all (Miscellaneous .* regex) - could cause app crashes
     let current = sqlx::query_as!(
         CategoryRegex,
         r#"SELECT id as "id!: i32", cat_id as "cat_id!: i32", regex FROM category_regex WHERE id = ?1"#,
@@ -151,7 +146,6 @@ pub async fn update_cat_regex_by_id(cat_regex: CategoryRegex) -> Result<(), Erro
         }
     }
     
-    // Validate that the category exists
     let category_exists: i64 = sqlx::query_scalar!(
         "SELECT COUNT(*) FROM category WHERE id = ?1",
         cat_regex.cat_id
@@ -166,7 +160,6 @@ pub async fn update_cat_regex_by_id(cat_regex: CategoryRegex) -> Result<(), Erro
         )));
     }
     
-    // Validate that the regex entry exists
     let regex_exists: i64 = sqlx::query_scalar!(
         "SELECT COUNT(*) FROM category_regex WHERE id = ?1",
         cat_regex.id

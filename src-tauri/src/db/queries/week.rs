@@ -93,7 +93,6 @@ struct CachedCategoryRegex {
 }
 
 fn derive_category(app: &str, regexes: &[CachedCategoryRegex]) -> Result<String, Error> {
-    // If no regexes available, default to Miscellaneous
     if regexes.is_empty() {
         return Ok("Miscellaneous".to_string());
     }
@@ -109,11 +108,9 @@ fn build_regex_table(
     categories: &[Category],
     cat_regex: &[CategoryRegex],
 ) -> Result<Vec<CachedCategoryRegex>, Error> {
-    // Build a map of category ID to category for quick lookup
     let category_map: HashMap<i32, &Category> =
         categories.iter().map(|cat| (cat.id, cat)).collect();
 
-    // Create a CachedCategoryRegex for each regex pattern (not just one per category)
     let mut regex: Vec<CachedCategoryRegex> = cat_regex
         .iter()
         .map(|reg| {
@@ -132,7 +129,6 @@ fn build_regex_table(
         })
         .collect::<Result<Vec<_>, Error>>()?;
 
-    // Sort by priority (highest first) so the highest priority matches are checked first
     regex.sort_by_key(|r| std::cmp::Reverse(r.priority));
     Ok(regex)
 }
@@ -197,7 +193,6 @@ fn get_time_blocks(logs: &[Log], regex: &[CachedCategoryRegex]) -> Result<Vec<Ti
         }
     }
 
-    // Attach short logs to same-category blocks within 10 minutes, else discard
     let max_attach_distance = 10 * 60; // 10 minutes in seconds
 
     for short_log in short_logs {
@@ -210,17 +205,14 @@ fn get_time_blocks(logs: &[Log], regex: &[CachedCategoryRegex]) -> Result<Vec<Ti
             Err(_) => continue, // Skip if can't determine category
         };
 
-        // Find a same-category block within 10 minutes
         let mut best_match: Option<usize> = None;
         let mut min_distance = i64::MAX;
 
         for (idx, block) in time_blocks.iter().enumerate() {
-            // Only consider blocks of the same category
             if block.category != short_log_cat {
                 continue;
             }
 
-            // Distance from short log to block
             let distance = if short_log.timestamp < block.start_time {
                 block.start_time - short_log.timestamp
             } else if short_log.timestamp > block.end_time {
@@ -235,7 +227,6 @@ fn get_time_blocks(logs: &[Log], regex: &[CachedCategoryRegex]) -> Result<Vec<Ti
             }
         }
 
-        // Only attach if we found a matching block within 10 min, else discard
         if let Some(idx) = best_match {
             if let Some(block) = time_blocks.get_mut(idx) {
                 if let Some(matching_app) = block.apps.iter_mut().find(|a| a.app == short_log.app) {
@@ -248,7 +239,6 @@ fn get_time_blocks(logs: &[Log], regex: &[CachedCategoryRegex]) -> Result<Vec<Ti
                 }
             }
         }
-        // If no matching block found, short log is discarded (user said they don't mind)
     }
 
     Ok(time_blocks)
@@ -259,29 +249,24 @@ pub async fn get_week(week_start: i64, week_end: i64) -> Result<Vec<TimeBlock>, 
     let mut logs = get_logs().await?;
     let skipped_apps = get_skipped_apps().await?;
 
-    // Build regex patterns for skipped apps
     let skipped_regexes: Vec<Regex> = skipped_apps
         .iter()
         .filter_map(|app| Regex::new(&app.regex).ok())
         .collect();
 
-    // Check if an app matches any skipped regex
     let is_skipped =
         |app_name: &str| -> bool { skipped_regexes.iter().any(|regex| regex.is_match(app_name)) };
 
-    // Filter out and delete logs for skipped apps
     let logs_to_delete: Vec<i64> = logs
         .iter()
         .filter(|log| is_skipped(&log.app))
         .map(|log| log.id)
         .collect();
 
-    // Delete the logs
     for log_id in logs_to_delete {
         let _ = delete_log_by_id(log_id).await;
     }
 
-    // Filter out skipped apps from the logs list
     logs.retain(|log| !is_skipped(&log.app));
 
     let cat_regex = get_cat_regex().await?;
@@ -293,7 +278,6 @@ pub async fn get_week(week_start: i64, week_end: i64) -> Result<Vec<TimeBlock>, 
         .filter(|log| log.timestamp >= week_start && log.timestamp <= week_end)
         .collect();
 
-    // If no logs in this week, return empty array
     if logs.is_empty() {
         return Ok(Vec::new());
     }
@@ -360,7 +344,6 @@ fn transform_time_blocks(time_blocks: Vec<TimeBlock>) -> Result<Vec<TimeBlock>, 
     result.sort_by_key(|b| b.start_time);
     let mut to_remove = std::collections::HashSet::new();
 
-    // Extend blocks forward if same category appears soon
     for i in 0..result.len() {
         if to_remove.contains(&i) {
             continue;
@@ -368,8 +351,6 @@ fn transform_time_blocks(time_blocks: Vec<TimeBlock>) -> Result<Vec<TimeBlock>, 
 
         let current_category = result[i].category.clone();
 
-        // Look ahead for blocks with the same category to merge
-        // Keep checking all remaining blocks since merging extends the current block
         for j in (i + 1)..result.len() {
             if to_remove.contains(&j) {
                 continue;
@@ -380,23 +361,17 @@ fn transform_time_blocks(time_blocks: Vec<TimeBlock>) -> Result<Vec<TimeBlock>, 
             let future_end = result[j].end_time;
             let future_apps = result[j].apps.clone();
 
-            // If future block has same category, merge if overlapping or within lookahead window
             if future_category == current_category {
-                // Get current end time (it may have been extended by previous merges)
                 let current_end = result[i].end_time;
                 let gap = future_start - current_end;
 
-                // Merge if overlapping (gap < 0) or within lookahead window
                 if gap <= lookahead_window {
-                    // Extend current block to include this future block
                     result[i].end_time = future_end.max(current_end);
 
-                    // Also update start time if future block starts earlier (overlap case)
                     if future_start < result[i].start_time {
                         result[i].start_time = future_start;
                     }
 
-                    // Merge apps from future block into current block
                     for future_app in future_apps {
                         if let Some(existing_app) =
                             result[i].apps.iter_mut().find(|a| a.app == future_app.app)
@@ -407,14 +382,12 @@ fn transform_time_blocks(time_blocks: Vec<TimeBlock>) -> Result<Vec<TimeBlock>, 
                         }
                     }
 
-                    // Mark future block for removal
                     to_remove.insert(j);
                 }
             }
         }
     }
 
-    // Remove merged blocks (iterate backwards to maintain indices)
     let mut indices_to_remove: Vec<usize> = to_remove.into_iter().collect();
     indices_to_remove.sort_unstable();
     indices_to_remove.reverse();
@@ -423,7 +396,6 @@ fn transform_time_blocks(time_blocks: Vec<TimeBlock>) -> Result<Vec<TimeBlock>, 
         result.remove(idx);
     }
 
-    // Post-filter: only keep blocks longer than 1 minute AFTER merging
     let result: Vec<TimeBlock> = result
         .into_iter()
         .filter(|block| {

@@ -33,7 +33,6 @@ use db::tables::google_calendar_sync::{
 use google_oauth::{get_google_auth_status, google_oauth_login, google_oauth_logout};
 use db::{
     get_all_db_data, get_db_path_cmd, reset_database, wipe_all_data,
-    // Backup commands
     list_backups, create_manual_backup, restore_backup, get_backup_dir,
     create_safety_backup, export_data_to_json,
 };
@@ -42,7 +41,6 @@ use tray::refresh_tray_menu;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Load .env file if it exists (for development)
     #[cfg(debug_assertions)]
     {
         let _ = dotenv::dotenv();
@@ -50,7 +48,6 @@ pub fn run() {
     
     tauri::Builder::default()
         .setup(|app| {
-            // Todo if running in dev disable this using cfg stuff
             if let Some(window) = app.get_window("main") {
                 #[cfg(debug_assertions)]
                 let _ = window.show();
@@ -117,7 +114,6 @@ pub fn run() {
             google_oauth_login,
             google_oauth_logout,
             get_google_auth_status,
-            // Backup commands
             list_backups,
             create_manual_backup,
             restore_backup,

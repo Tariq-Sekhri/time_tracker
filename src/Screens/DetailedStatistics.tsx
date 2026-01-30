@@ -43,7 +43,6 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
         );
     }
 
-    // Calculate daily average
     const dailyAvgStats: WeekStatistics = {
         ...weekStats,
         total_time: weekStats.number_of_active_days > 0
@@ -65,7 +64,6 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
 
     const stats = activeTab === "week" ? weekStats : activeTab === "dailyAvg" ? dailyAvgStats : weekStats;
 
-    // Group day category breakdown by day
     const dayCategoryMap = new Map<number, Map<string, number>>();
     weekStats.day_category_breakdown.forEach(item => {
         if (!dayCategoryMap.has(item.day)) {
@@ -81,7 +79,6 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
 
     return (
         <div className="p-6 text-white h-full overflow-y-auto">
-            {/* Header */}
             <div className="flex items-center justify-between mb-6">
                 <button
                     onClick={onBack}
@@ -93,7 +90,6 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                 <div className="w-20"></div>
             </div>
 
-            {/* Tabs */}
             <div className="flex gap-2 mb-6 border-b border-gray-700">
                 <button
                     onClick={() => setActiveTab("week")}
@@ -115,7 +111,6 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                 </button>
             </div>
 
-            {/* Stats Grid */}
             <div className="grid grid-cols-3 gap-4 mb-6">
                 <div className="bg-gray-900 p-4 rounded">
                     <div className="text-sm text-gray-400 mb-1">First Active Day</div>
@@ -160,7 +155,6 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                 </div>
             </div>
 
-            {/* Categories Section */}
             <div className="mb-6">
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-bold">Categories</h2>
@@ -218,7 +212,6 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                 </div>
             </div>
 
-            {/* Top Apps Section */}
             <div className="mb-6">
                 <h2 className="text-xl font-bold mb-4">Top Apps</h2>
                 <div className="space-y-2">
@@ -239,7 +232,6 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                 </div>
             </div>
 
-            {/* Category Breakdown by Day (Stacked Bar Chart) */}
             <div className="mb-6">
                 <h2 className="text-xl font-bold mb-4">Category Breakdown by Day</h2>
                 <div className="space-y-4">
@@ -285,7 +277,6 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                 </div>
             </div>
 
-            {/* Hourly Activity Distribution */}
             <div className="mb-6">
                 <h2 className="text-xl font-bold mb-4">Hourly Activity Distribution</h2>
                 <div className="bg-gray-900 p-4 rounded">
@@ -297,7 +288,6 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                                     <stop offset="100%" stopColor="#f97316" stopOpacity="0.2"/>
                                 </linearGradient>
                             </defs>
-                            {/* Grid lines */}
                             {[6, 8, 10, 12, 14, 16, 18, 20].map(hour => (
                                 <line
                                     key={hour}
@@ -310,7 +300,6 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                                     strokeDasharray="2,2"
                                 />
                             ))}
-                            {/* Y-axis labels */}
                             {[0, 1, 2, 3, 4].map(val => (
                                 <text
                                     key={val}
@@ -323,7 +312,6 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                                     {val}h
                                 </text>
                             ))}
-                            {/* X-axis labels */}
                             {[6, 8, 10, 12, 14, 16, 18, 20].map(hour => (
                                 <text
                                     key={hour}
@@ -336,7 +324,6 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                                     {hour}:00
                                 </text>
                             ))}
-                            {/* Line chart */}
                             <path
                                 d={`M ${stats.hourly_distribution
                                     .filter(h => h.hour >= 6 && h.hour <= 20)
@@ -351,7 +338,6 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                                 stroke="#f97316"
                                 strokeWidth="2"
                             />
-                            {/* Area under curve */}
                             <path
                                 d={`M 50 190 ${stats.hourly_distribution
                                     .filter(h => h.hour >= 6 && h.hour <= 20)

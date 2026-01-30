@@ -116,7 +116,6 @@ export default function CategoriesManagement() {
         setCategoryToDelete(id);
         setCascadeDelete(true); // Default to cascade delete
 
-        // Count how many regex patterns are associated with this category
         const count = regexes.filter(regex => regex.cat_id === id).length;
         setRegexCount(count);
 
@@ -222,7 +221,6 @@ export default function CategoriesManagement() {
         updateCategoryMutation.mutate(cat);
     };
 
-    // Validate regex pattern
     const validateRegex = (pattern: string): string | null => {
         if (!pattern.trim()) {
             return "Pattern cannot be empty";
@@ -236,13 +234,11 @@ export default function CategoriesManagement() {
     };
 
     const handleCreateRegex = () => {
-        // Validate category selection
         if (newRegexCatId === "" || typeof newRegexCatId !== "number") {
             showToast("Please select a category", "error");
             return;
         }
 
-        // Validate regex pattern
         const regexError = validateRegex(newRegexPattern);
         if (regexError) {
             const fullError = `Validation Error: ${regexError}\nPattern: ${newRegexPattern}`;
@@ -264,7 +260,6 @@ export default function CategoriesManagement() {
             return;
         }
 
-        // Validate regex pattern
         const regexError = validateRegex(regex.regex);
         if (regexError) {
             setEditRegexError(regexError);
@@ -310,11 +305,9 @@ export default function CategoriesManagement() {
                 </button>
             </div>
 
-            {/* Categories Section */}
             <div className="mb-8">
                 <h2 className="text-2xl font-semibold mb-4">Categories</h2>
 
-                {/* Add New Category */}
                 <div className="mb-4 p-4 bg-gray-900 rounded-lg">
                     <h3 className="text-lg font-medium mb-3">Add New Category</h3>
                     <div className="flex gap-3">
@@ -347,7 +340,6 @@ export default function CategoriesManagement() {
                     </div>
                 </div>
 
-                {/* Categories List */}
                 <div className="space-y-2">
                     {categories.map((cat) => {
                         const isMiscellaneous = cat.name === "Miscellaneous";
@@ -426,11 +418,9 @@ export default function CategoriesManagement() {
                 </div>
             </div>
 
-            {/* Category Regex Section */}
             <div>
                 <h2 className="text-2xl font-semibold mb-4">Category Regex Patterns</h2>
 
-                {/* Add New Regex */}
                 <div className="mb-4 p-4 bg-gray-900 rounded-lg">
                     <h3 className="text-lg font-medium mb-3">Add New Regex</h3>
                     <div className="flex gap-3">
@@ -465,7 +455,6 @@ export default function CategoriesManagement() {
                     </div>
                 </div>
 
-                {/* Regex List */}
                 <div className="space-y-2">
                     {regexes.map((regex) => {
                         const category = categories.find((c) => c.id === regex.cat_id);
@@ -558,14 +547,12 @@ export default function CategoriesManagement() {
                 </div>
             </div>
 
-            {/* Skipped Apps Section */}
             <div className="mt-8">
                 <h2 className="text-2xl font-semibold mb-4">Skipped Apps</h2>
                 <p className="text-sm text-gray-400 mb-4">
                     Apps matching these regex patterns will not be tracked. Use the Skipped Apps tab for a better experience with confirmation dialogs.
                 </p>
 
-                {/* Add New Skipped App */}
                 <div className="mb-4 p-4 bg-gray-900 rounded-lg">
                     <h3 className="text-lg font-medium mb-3">Add Skipped App Pattern</h3>
                     <div className="flex gap-3">
@@ -585,7 +572,6 @@ export default function CategoriesManagement() {
                     </div>
                 </div>
 
-                {/* Skipped Apps List */}
                 <div className="space-y-2">
                     {skippedApps.map((app) => (
                         <div key={app.id} className="p-4 bg-gray-900 rounded-lg flex items-center justify-between">
@@ -603,7 +589,6 @@ export default function CategoriesManagement() {
                 </div>
             </div>
 
-            {/* Cascade Delete Confirmation Modal */}
             {showCascadeDeleteConfirm && categoryToDelete !== null && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
                     <div className="bg-gray-900 p-6 rounded-lg max-w-md w-full mx-4 border border-gray-700">

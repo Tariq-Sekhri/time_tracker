@@ -3,7 +3,6 @@ use crate::db::Error;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
 
-// OAuth token storage
 #[derive(Debug, Serialize, FromRow, Deserialize, Clone)]
 pub struct GoogleOAuth {
     pub id: i32,
@@ -22,7 +21,6 @@ pub struct NewGoogleOAuth {
     pub expires_at: i64,
 }
 
-// Calendar storage (linked to OAuth account)
 #[derive(Debug, Serialize, FromRow, Deserialize, Clone)]
 pub struct GoogleCalendar {
     pub id: i32,
@@ -47,7 +45,6 @@ pub struct UpdateGoogleCalendar {
     pub color: Option<String>,
 }
 
-// Available calendar from Google API (not stored, just for selection)
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GoogleCalendarInfo {
     pub google_calendar_id: String,
@@ -58,7 +55,6 @@ pub struct GoogleCalendarInfo {
 }
 
 pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    // Create OAuth tokens table
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS google_oauth (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,7 +68,6 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    // Create calendars table (new schema)
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS google_calendar_v2 (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,7 +84,6 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-// ==================== OAuth Functions ====================
 
 pub async fn get_google_oauth() -> Result<Option<GoogleOAuth>, Error> {
     let pool = db::get_pool().await?;
@@ -105,7 +99,6 @@ pub async fn get_google_oauth() -> Result<Option<GoogleOAuth>, Error> {
 pub async fn save_google_oauth(oauth: NewGoogleOAuth) -> Result<i64, Error> {
     let pool = db::get_pool().await?;
     
-    // Delete any existing OAuth (single account for now)
     sqlx::query!("DELETE FROM google_oauth")
         .execute(&pool)
         .await?;
@@ -138,12 +131,10 @@ pub async fn update_google_oauth_tokens(access_token: &str, expires_at: i64) -> 
 pub async fn delete_google_oauth() -> Result<(), Error> {
     let pool = db::get_pool().await?;
     
-    // Delete all calendars first (cascade)
     sqlx::query!("DELETE FROM google_calendar_v2")
         .execute(&pool)
         .await?;
     
-    // Delete OAuth
     sqlx::query!("DELETE FROM google_oauth")
         .execute(&pool)
         .await?;
@@ -151,7 +142,6 @@ pub async fn delete_google_oauth() -> Result<(), Error> {
     Ok(())
 }
 
-// ==================== Calendar Functions ====================
 
 #[tauri::command]
 pub async fn get_google_calendars() -> Result<Vec<GoogleCalendar>, Error> {
@@ -209,7 +199,6 @@ pub async fn insert_google_calendar(new_calendar: NewGoogleCalendar) -> Result<i
 pub async fn update_google_calendar(update: UpdateGoogleCalendar) -> Result<(), Error> {
     let pool = db::get_pool().await?;
     
-    // Build dynamic update query
     let mut updates = Vec::new();
     if let Some(name) = update.name {
         updates.push(format!("name = '{}'", name.replace("'", "''")));

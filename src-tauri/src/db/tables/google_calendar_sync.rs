@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 
 const GOOGLE_API_BASE: &str = "https://www.googleapis.com/calendar/v3";
 
-// Google Calendar API response types
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GoogleCalendarEvent {
     pub calendar_id: i32, // Our internal ID
@@ -66,7 +65,6 @@ pub struct DeleteGoogleCalendarEventParams {
     pub event_id: String,
 }
 
-// Google API response structures
 #[derive(Debug, Serialize, Deserialize)]
 struct GoogleApiEvent {
     id: String,
@@ -104,7 +102,6 @@ struct GoogleApiCalendarListResponse {
     items: Option<Vec<GoogleApiCalendarListItem>>,
 }
 
-/// Fetch available calendars from Google Calendar API
 #[tauri::command]
 pub async fn list_available_google_calendars(
     client_id: String,
@@ -112,7 +109,6 @@ pub async fn list_available_google_calendars(
 ) -> Result<Vec<GoogleCalendarInfo>, Error> {
     let access_token = get_valid_access_token(&client_id, &client_secret).await?;
     
-    // Get currently selected calendars
     let selected_calendars = get_google_calendars().await?;
     let selected_ids: std::collections::HashSet<String> = selected_calendars
         .iter()
@@ -157,7 +153,6 @@ pub async fn list_available_google_calendars(
     Ok(calendars)
 }
 
-/// Internal function that fetches events from Google Calendar API
 async fn fetch_google_calendar_events_internal(
     calendar: &GoogleCalendar,
     start_time: i64,
@@ -167,7 +162,6 @@ async fn fetch_google_calendar_events_internal(
 ) -> Result<Vec<GoogleCalendarEvent>, Error> {
     let access_token = get_valid_access_token(client_id, client_secret).await?;
 
-    // Convert timestamps to RFC3339
     let time_min = DateTime::<Utc>::from_timestamp(start_time, 0)
         .ok_or_else(|| Error::Other("Invalid start time".to_string()))?
         .to_rfc3339();
@@ -203,8 +197,6 @@ async fn fetch_google_calendar_events_internal(
         .unwrap_or_default()
         .into_iter()
         .filter_map(|event| {
-            // Filter out all-day events - they have date instead of date_time
-            // All-day events are identified by having date field set and dateTime field as None
             let is_all_day = event.start.date_time.is_none() && event.start.date.is_some()
                 || event.end.date_time.is_none() && event.end.date.is_some();
             
@@ -212,30 +204,23 @@ async fn fetch_google_calendar_events_internal(
                 return None;
             }
 
-            // Only process events that have dateTime (not all-day events)
             if event.start.date_time.is_none() || event.end.date_time.is_none() {
                 return None;
             }
 
-            // Parse start and end times
             let start = parse_event_time(&event.start)?;
             let end = parse_event_time(&event.end)?;
 
-            // Filter out all-day events that have dateTime set to midnight
-            // All-day events are typically from 12:00 a.m. to 12:00 a.m. (midnight to midnight)
             let start_time = start.time();
             let end_time = end.time();
             let start_date = start.date_naive();
             let end_date = end.date_naive();
             
-            // Check if both start and end are at midnight (00:00:00)
             let is_midnight_start = start_time.hour() == 0 && start_time.minute() == 0 && start_time.second() == 0;
             let is_midnight_end = end_time.hour() == 0 && end_time.minute() == 0 && end_time.second() == 0;
             
-            // If both are at midnight and on the same day (or end is next day at midnight), it's an all-day event
             if is_midnight_start && is_midnight_end {
                 let duration = end_date.signed_duration_since(start_date);
-                // Same day (duration 0) or exactly 1 day difference (duration 1) = all-day event
                 if duration.num_days() == 0 || duration.num_days() == 1 {
                     return None;
                 }
@@ -256,14 +241,12 @@ async fn fetch_google_calendar_events_internal(
     Ok(events)
 }
 
-/// Parse Google API event time to DateTime
 fn parse_event_time(time: &GoogleApiEventTime) -> Option<DateTime<Utc>> {
     if let Some(date_time) = &time.date_time {
         DateTime::parse_from_rfc3339(date_time)
             .ok()
             .map(|dt| dt.with_timezone(&Utc))
     } else if let Some(date) = &time.date {
-        // All-day event - use start of day
         DateTime::parse_from_rfc3339(&format!("{}T00:00:00Z", date))
             .ok()
             .map(|dt| dt.with_timezone(&Utc))
@@ -272,7 +255,6 @@ fn parse_event_time(time: &GoogleApiEventTime) -> Option<DateTime<Utc>> {
     }
 }
 
-/// Fetch events for a specific calendar
 #[tauri::command]
 pub async fn get_google_calendar_events(
     params: GetGoogleCalendarEventsParams,
@@ -290,7 +272,6 @@ pub async fn get_google_calendar_events(
     .await
 }
 
-/// Fetch events for all calendars
 #[tauri::command]
 pub async fn get_all_google_calendar_events(
     params: GetAllGoogleCalendarEventsParams,
@@ -312,7 +293,6 @@ pub async fn get_all_google_calendar_events(
         {
             Ok(mut events) => all_events.append(&mut events),
             Err(_) => {
-                // Continue with other calendars
             }
         }
     }
@@ -320,7 +300,6 @@ pub async fn get_all_google_calendar_events(
     Ok(all_events)
 }
 
-/// Create a new Google Calendar event
 #[tauri::command]
 pub async fn create_google_calendar_event(
     params: CreateGoogleCalendarEventParams,
@@ -330,7 +309,6 @@ pub async fn create_google_calendar_event(
     let calendar = get_google_calendar_by_id(params.calendar_id).await?;
     let access_token = get_valid_access_token(&client_id, &client_secret).await?;
 
-    // Convert timestamps to RFC3339
     let start = DateTime::<Utc>::from_timestamp(params.start, 0)
         .ok_or_else(|| Error::Other("Invalid start time".to_string()))?
         .to_rfc3339();
@@ -372,7 +350,6 @@ pub async fn create_google_calendar_event(
     Ok(created_event.id)
 }
 
-/// Update an existing Google Calendar event
 #[tauri::command]
 pub async fn update_google_calendar_event(
     update: UpdateGoogleCalendarEventParams,
@@ -382,7 +359,6 @@ pub async fn update_google_calendar_event(
     let calendar = get_google_calendar_by_id(update.calendar_id).await?;
     let access_token = get_valid_access_token(&client_id, &client_secret).await?;
 
-    // Convert timestamps to RFC3339
     let start = DateTime::<Utc>::from_timestamp(update.start, 0)
         .ok_or_else(|| Error::Other("Invalid start time".to_string()))?
         .to_rfc3339();
@@ -420,7 +396,6 @@ pub async fn update_google_calendar_event(
     Ok(())
 }
 
-/// Delete a Google Calendar event
 #[tauri::command]
 pub async fn delete_google_calendar_event(
     params: DeleteGoogleCalendarEventParams,

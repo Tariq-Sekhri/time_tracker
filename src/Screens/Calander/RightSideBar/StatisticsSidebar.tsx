@@ -20,7 +20,6 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList, on
 
     const { week_start, week_end } = getWeekRange(weekDate);
 
-    // Build and log the query event before executing
     useEffect(() => {
 
     }, [week_start, week_end]);
@@ -45,7 +44,6 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList, on
     const stats = weekStats;
 
 
-    // Show loading or error state, but always show the "More Info" button
     if (isLoading || (!stats && !isError)) {
         return (
             <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
@@ -55,7 +53,6 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList, on
                     </h2>
                     <div className="text-gray-500 mb-4">Loading statistics...</div>
                 </div>
-                {/* Footer - Always show More Info button even while loading */}
                 <div className="mt-auto pt-4 border-t border-gray-700">
                     <button
                         onClick={onMoreInfo}
@@ -80,7 +77,6 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList, on
                         {error instanceof Error ? error.message : "Unknown error occurred"}
                     </div>
                 </div>
-                {/* Footer - Always show More Info button even on error */}
                 <div className="mt-auto pt-4 border-t border-gray-700">
                     <button
                         onClick={onMoreInfo}
@@ -93,7 +89,6 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList, on
         );
     }
 
-    // At this point, stats should be defined, but TypeScript needs a check
     if (!stats) {
         return (
             <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
@@ -103,7 +98,6 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList, on
                     </h2>
                     <div className="text-gray-500 mb-4">No statistics available</div>
                 </div>
-                {/* Footer - Always show More Info button */}
                 <div className="mt-auto pt-4 border-t border-gray-700">
                     <button
                         onClick={onMoreInfo}
@@ -132,34 +126,14 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList, on
     const topCategories = stats.categories.slice(0, 5);
     const maxCategoryDuration = topCategories.length > 0 ? topCategories[0].total_duration : 1;
 
-    // Helper function to calculate time change from percentage change
-    // percentage_change = ((current - previous) / previous) * 100
-    // Solving for time_change = current - previous:
-    // previous = current / (1 + percentage_change / 100)
-    // time_change = current - current / (1 + percentage_change / 100)
-    // time_change = current * (percentage_change / 100) / (1 + percentage_change / 100)
-    // time_change = current * percentage_change / (100 + percentage_change)
     const calculateTimeChange = (currentDuration: number, percentageChange: number): number => {
         if (percentageChange === 0) return 0;
-        // Handle edge case where percentage_change is -100 (current = 0, previous > 0)
-        // In this case, we can't calculate previous from current (which is 0)
-        // But since current = 0, time_change = 0 - previous = -previous
-        // We can't determine previous, so we'll use a fallback
         if (percentageChange === -100) {
-            // This means current = 0, so time_change should be negative
-            // We can't determine the exact value, but we know it's a decrease
-            // Return a small negative value as a fallback
             return -1;
         }
-        // For all other cases, use the formula
-        // Note: When percentage_change = 100, this could mean:
-        // - prev = 0, current > 0 (backend sets to 100) → formula gives current/2 (approximation)
-        // - current = 2*prev → formula gives current/2 (correct)
-        // The formula works for most cases
         return (currentDuration * percentageChange) / (100 + percentageChange);
     };
 
-    // Helper function to format change indicator (percentage change or time change)
     const formatChange = (currentDuration: number, percentageChange: number | null): string | null => {
         if (percentageChange === null) return null;
         if (displayMode === "time") {
@@ -172,7 +146,6 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList, on
 
     return (
         <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
-            {/* Header */}
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold text-white">
                     Week Statistics
@@ -193,7 +166,6 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList, on
                 </div>
             </div>
 
-            {/* Total Time */}
             {stats && (
                 <div className="mb-4">
                     <div className="flex items-center justify-between mb-1">
@@ -216,12 +188,10 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList, on
                 </div>
             )}
 
-            {/* Donut Chart */}
             <div className="mb-6">
                 <DonutChart data={donutData} colors={categoryColors} />
             </div>
 
-            {/* Categories */}
             <div className="mb-6">
                 <h3 className="text-sm font-semibold text-gray-300 mb-3">Categories</h3>
                 <div className="space-y-2">
@@ -264,7 +234,6 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList, on
                 </div>
             </div>
 
-            {/* Top Apps */}
             <div className="mb-6">
                 <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-semibold text-gray-300">Top Apps</h3>
@@ -297,7 +266,6 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList, on
                 </div>
             </div>
 
-            {/* Footer */}
             <div className="mt-auto pt-4 border-t border-gray-700">
                 <button
                     onClick={onMoreInfo}

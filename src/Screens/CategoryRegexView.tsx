@@ -12,7 +12,6 @@ import {
 import { unwrapResult } from "../utils.ts";
 import { ToastContainer, useToast } from "../Componants/Toast.tsx";
 
-// Validate regex pattern - returns error message or null if valid
 function validateRegex(pattern: string): string | null {
     if (!pattern.trim()) {
         return "Pattern cannot be empty";
@@ -61,7 +60,6 @@ export default function CategoryRegexView() {
         .filter((r) => filterCategoryId === "" || r.cat_id === filterCategoryId)
         .sort((a, b) => (sortOrder === "oldest" ? a.id - b.id : b.id - a.id));
 
-    // Group by category for display (category order by priority desc)
     const categoriesByPriority = [...categories].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
     const regexesByCategory = new Map<number, typeof filteredAndSortedRegexes>();
     for (const r of filteredAndSortedRegexes) {
@@ -121,13 +119,11 @@ export default function CategoryRegexView() {
     });
 
     const handleCreateRegex = () => {
-        // Validate category selection
         if (newRegexCatId === "" || typeof newRegexCatId !== "number") {
             showToast("Please select a category", "error");
             return;
         }
 
-        // Validate regex pattern
         const error = validateRegex(newRegexPattern);
         if (error) {
             setRegexError(error);
@@ -275,7 +271,6 @@ export default function CategoryRegexView() {
                 </button>
             </div>
 
-            {/* Add New Regex */}
             <div className="mb-4 p-4 bg-gray-900 rounded-lg">
                 <h3 className="text-lg font-medium mb-3">Add New Regex</h3>
                 <div className="flex gap-3">
@@ -316,7 +311,6 @@ export default function CategoryRegexView() {
                 )}
             </div>
 
-            {/* Filter & Sort */}
             <div className="mb-4 flex flex-wrap items-center gap-3">
                 <label className="text-gray-400 text-sm">Filter by category:</label>
                 <select
@@ -351,7 +345,6 @@ export default function CategoryRegexView() {
                 </label>
             </div>
 
-            {/* Regex List */}
             <div className="space-y-2">
                 {groupByCategory ? (
                     categoriesByPriority.map((cat) => {
