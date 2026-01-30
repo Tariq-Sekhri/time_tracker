@@ -109,7 +109,6 @@ pub struct DeleteTimeBlockRequest {
 pub async fn delete_logs_for_time_block(request: DeleteTimeBlockRequest) -> Result<i64, Error> {
     let pool = db::get_pool().await?;
 
-    // Get all logs in the time range that match the app names
     let logs = sqlx::query_as!(
         Log,
         "SELECT id, app, timestamp, duration FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2",
@@ -121,7 +120,6 @@ pub async fn delete_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resu
 
     let mut deleted_count = 0i64;
     for log in logs {
-        // Check if the log's app is in the list of app names for this time block
         if request.app_names.contains(&log.app) {
             sqlx::query!("DELETE FROM logs WHERE id = ?1", log.id)
                 .execute(&pool)
@@ -181,7 +179,6 @@ fn merge_logs_in_time_block(logs: Vec<Log>) -> Vec<MergedLog> {
         if let Some(existing) = app_map.get_mut(&log.app) {
             existing.duration += log.duration;
             existing.ids.push(log.id);
-            // Keep the earliest timestamp
             if log.timestamp < existing.timestamp {
                 existing.timestamp = log.timestamp;
             }
@@ -215,7 +212,6 @@ pub async fn get_logs_by_category(request: GetLogsByCategoryRequest) -> Result<V
 
     let pool = db::get_pool().await?;
 
-    // Get all logs in the time range
     let mut logs = sqlx::query_as!(
         Log,
         "SELECT id, app, timestamp, duration FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2 ORDER BY duration DESC",
@@ -225,7 +221,6 @@ pub async fn get_logs_by_category(request: GetLogsByCategoryRequest) -> Result<V
     .fetch_all(&pool)
     .await?;
 
-    // Filter skipped apps (similar to statistics.rs)
     let skipped_apps = get_skipped_apps().await?;
     let skipped_regexes: Vec<Regex> = skipped_apps
         .iter()
@@ -237,11 +232,9 @@ pub async fn get_logs_by_category(request: GetLogsByCategoryRequest) -> Result<V
 
     logs.retain(|log| !is_skipped(&log.app));
 
-    // Get categories and regex patterns to determine which apps belong to the category
     let categories = get_categories().await?;
     let cat_regex_list = get_cat_regex().await?;
 
-    // Build regex table (similar to statistics.rs)
     let category_map: HashMap<i32, &category::Category> =
         categories.iter().map(|cat| (cat.id, cat)).collect();
 
@@ -254,7 +247,6 @@ pub async fn get_logs_by_category(request: GetLogsByCategoryRequest) -> Result<V
         })
         .collect();
 
-    // Sort by priority (higher priority first)
     regex_list.sort_by_key(|(_, cat_name)| {
         categories
             .iter()
@@ -263,11 +255,9 @@ pub async fn get_logs_by_category(request: GetLogsByCategoryRequest) -> Result<V
             .unwrap_or(std::cmp::Reverse(0))
     });
 
-    // Filter logs by category
     let filtered_logs: Vec<Log> = logs
         .into_iter()
         .filter(|log| {
-            // Find the first matching regex
             let matched_category = regex_list
                 .iter()
                 .find(|(regex, _)| regex.is_match(&log.app))

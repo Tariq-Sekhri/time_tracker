@@ -1,12 +1,6 @@
 import { invokeWithResult } from "../utils.ts";
 import { AppError, Result } from "../types/common.ts";
 
-// ============================================================================
-// OAuth credentials are loaded from environment variables (.env file)
-// Create a .env file in the project root with:
-// VITE_GOOGLE_CLIENT_ID=your_client_id_here
-// VITE_GOOGLE_CLIENT_SECRET=your_client_secret_here
-// ============================================================================
 const DEFAULT_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const DEFAULT_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || "";
 
@@ -25,9 +19,6 @@ export function getGoogleOAuthCredentials(): { clientId: string; clientSecret: s
 }
 
 export function hasGoogleOAuthCredentials(): boolean {
-    // Check if real credentials are set (not placeholders)
-    // Real Google OAuth Client IDs end with .apps.googleusercontent.com
-    // Real Google OAuth Client Secrets start with GOCSPX-
     return CLIENT_ID !== "" && 
            CLIENT_SECRET !== "" && 
            CLIENT_ID.includes(".apps.googleusercontent.com") &&
@@ -40,13 +31,11 @@ export function isUsingDefaultCredentials(): boolean {
     return CLIENT_ID === DEFAULT_CLIENT_ID || CLIENT_SECRET === DEFAULT_CLIENT_SECRET;
 }
 
-// OAuth types
 export type AuthStatus = {
     logged_in: boolean;
     email?: string;
 };
 
-// Calendar types
 export type GoogleCalendar = {
     id: number;
     google_calendar_id: string;
@@ -76,7 +65,6 @@ export type GoogleCalendarInfo = {
     selected: boolean;
 };
 
-// Event types
 export type GoogleCalendarEvent = {
     calendar_id: number;
     event_id: string;
@@ -109,7 +97,6 @@ export type DeleteGoogleCalendarEvent = {
     event_id: string;
 };
 
-// ==================== OAuth Functions ====================
 
 export async function google_oauth_login(): Promise<Result<AuthStatus, AppError>> {
     if (!hasGoogleOAuthCredentials()) {
@@ -135,7 +122,6 @@ export async function get_google_auth_status(): Promise<Result<AuthStatus, AppEr
     return invokeWithResult<AuthStatus>("get_google_auth_status");
 }
 
-// ==================== Calendar Functions ====================
 
 export async function list_available_google_calendars(): Promise<Result<GoogleCalendarInfo[], AppError>> {
     if (!hasGoogleOAuthCredentials()) {
@@ -173,7 +159,6 @@ export async function delete_google_calendar(id: number): Promise<Result<null, A
     return invokeWithResult<null>("delete_google_calendar", { id });
 }
 
-// ==================== Event Functions ====================
 
 export async function get_google_calendar_events(
     calendar_id: number,

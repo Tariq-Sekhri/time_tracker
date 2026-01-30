@@ -13,24 +13,17 @@ import { unwrapResult } from "../utils.ts";
 import { getErrorMessage } from "../types/common.ts";
 import { ToastContainer, useToast } from "../Componants/Toast.tsx";
 
-// Validate regex pattern - returns error message or null if valid
-// Note: Rust regex supports (?i) for case-insensitive, but JS doesn't, so we validate without flags
 function validateRegex(pattern: string): string | null {
     if (!pattern.trim()) {
         return "Pattern cannot be empty";
     }
     try {
-        // Remove Rust-specific flags like (?i) for validation, then add them back
-        // Rust regex uses (?i) for case-insensitive, (?m) for multiline, etc.
         let testPattern = pattern;
 
-        // Remove Rust regex flags at the start: (?i), (?m), (?s), (?x), (?U), etc.
         testPattern = testPattern.replace(/^\(\?[imsxU]+\)/, '');
 
-        // Also handle flags in the middle (less common but possible)
         testPattern = testPattern.replace(/\(\?[imsxU]+\)/g, '');
 
-        // Now validate the pattern without flags using JS RegExp
         new RegExp(testPattern);
         return null;
     } catch (e) {
@@ -44,7 +37,6 @@ export default function SkippedAppsView() {
     const [newRegexPattern, setNewRegexPattern] = useState("");
     const [editingApp, setEditingApp] = useState<SkippedApp | null>(null);
 
-    // Confirmation dialog state
     const [pendingRegex, setPendingRegex] = useState<string | null>(null);
     const [matchingLogCount, setMatchingLogCount] = useState<number>(0);
     const [isCountingLogs, setIsCountingLogs] = useState(false);
@@ -63,13 +55,10 @@ export default function SkippedAppsView() {
             return result.data;
         },
         onMutate: async (newApp) => {
-            // Cancel outgoing refetches
             await queryClient.cancelQueries({ queryKey: ["skipped_apps"] });
 
-            // Snapshot previous value
             const previousApps = queryClient.getQueryData<SkippedApp[]>(["skipped_apps"]);
 
-            // Optimistically add to the list
             const optimisticApp: SkippedApp = {
                 id: Date.now(), // Temporary ID
                 regex: newApp.regex,
@@ -79,19 +68,16 @@ export default function SkippedAppsView() {
                 return [...old, optimisticApp].sort((a, b) => a.regex.localeCompare(b.regex));
             });
 
-            // Show loading toast
             const toastId = showToast(`Adding pattern "${newApp.regex}"...`, "loading", 0);
 
             return { previousApps, toastId };
         },
         onSuccess: (_data, variables, context) => {
-            // Update toast to success
             if (context?.toastId) {
                 updateToast(context.toastId, `Pattern "${variables.regex}" added successfully`, "success");
                 setTimeout(() => removeToast(context.toastId!), 2000);
             }
 
-            // Invalidate to get real data
             queryClient.invalidateQueries({ queryKey: ["skipped_apps"] });
             queryClient.invalidateQueries({ queryKey: ["week"] });
             setNewRegexPattern("");
@@ -99,12 +85,10 @@ export default function SkippedAppsView() {
             setMatchingLogCount(0);
         },
         onError: (error, _variables, context) => {
-            // Rollback optimistic update
             if (context?.previousApps) {
                 queryClient.setQueryData(["skipped_apps"], context.previousApps);
             }
 
-            // Update toast to error
             const errorMsg = error instanceof Error ? error.message : String(error);
             const fullError = JSON.stringify(error, null, 2);
             if (context?.toastId) {
@@ -149,7 +133,6 @@ export default function SkippedAppsView() {
     });
 
     const handleCheckAndAdd = async () => {
-        // Validate regex pattern
         const error = validateRegex(newRegexPattern);
         if (error) {
             const fullError = `Validation Error: ${error}\nPattern: ${newRegexPattern}`;
@@ -157,7 +140,6 @@ export default function SkippedAppsView() {
             return;
         }
 
-        // Count matching logs first
         setIsCountingLogs(true);
         try {
             const result = await count_matching_logs(newRegexPattern);
@@ -189,7 +171,6 @@ export default function SkippedAppsView() {
     };
 
     const handleUpdateApp = (app: SkippedApp) => {
-        // Validate regex pattern
         const error = validateRegex(app.regex);
         if (error) {
             const fullError = `Validation Error: ${error}\nPattern: ${app.regex}`;
@@ -226,7 +207,6 @@ export default function SkippedAppsView() {
                         className="bg-gray-800 px-1 rounded">.*Discord.*</code> for partial match.
             </p>
 
-            {/* Add New Skipped App */}
             <div className="mb-4 p-4 bg-gray-900 rounded-lg">
                 <h3 className="text-lg font-medium mb-3">Add Skipped App Pattern</h3>
                 <div className="flex gap-3">
@@ -247,7 +227,6 @@ export default function SkippedAppsView() {
                 </div>
             </div>
 
-            {/* Confirmation Dialog */}
             {pendingRegex && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
                     <div className="bg-gray-900 p-6 rounded-lg max-w-md w-full mx-4 border border-gray-700">
@@ -284,7 +263,6 @@ export default function SkippedAppsView() {
                 </div>
             )}
 
-            {/* Skipped Apps List */}
             <div className="space-y-2">
                 {skippedApps.map((app) => (
                     <div key={app.id} className="p-4 bg-gray-900 rounded-lg">

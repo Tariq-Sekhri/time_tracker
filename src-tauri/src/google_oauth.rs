@@ -29,19 +29,16 @@ struct AuthCallback {
     error: Option<String>,
 }
 
-// Shared state for the OAuth callback
 struct OAuthState {
     code: Option<String>,
     error: Option<String>,
 }
 
-/// Start the OAuth flow - opens browser and returns when complete
 #[tauri::command]
 pub async fn google_oauth_login(
     client_id: String,
     client_secret: String,
 ) -> Result<AuthStatus, Error> {
-    // Create OAuth client
     let client = BasicClient::new(
         ClientId::new(client_id),
         Some(ClientSecret::new(client_secret)),
@@ -57,7 +54,6 @@ pub async fn google_oauth_login(
             .map_err(|e| Error::Other(format!("Invalid redirect URL: {}", e)))?,
     );
 
-    // Generate the authorization URL
     let (auth_url, _csrf_token) = client
         .authorize_url(CsrfToken::new_random)
         .add_scope(Scope::new(
@@ -70,30 +66,24 @@ pub async fn google_oauth_login(
         .add_extra_param("prompt", "consent") // Force consent screen to get refresh token
         .url();
 
-    // Shared state for the callback
     let state = Arc::new(Mutex::new(OAuthState {
         code: None,
         error: None,
     }));
 
-    // Start local HTTP server
     let server_state = state.clone();
     let server_handle = tokio::spawn(start_callback_server(server_state));
 
-    // Give server a moment to start
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
-    // Open browser
     let auth_url_str = auth_url.to_string();
     tauri_plugin_opener::open_url(&auth_url_str, None::<&str>)
         .map_err(|e| Error::Other(format!("Failed to open browser: {}", e)))?;
 
-    // Wait for callback - poll state directly with timeout
     let start = std::time::Instant::now();
     let timeout = std::time::Duration::from_secs(120);
     
     let code = loop {
-        // Check state
         {
             let state_lock = state.lock().await;
             if let Some(error) = &state_lock.error {
@@ -106,17 +96,13 @@ pub async fn google_oauth_login(
             }
         }
         
-        // Check timeout
         if start.elapsed() > timeout {
             return Err(Error::Other("OAuth timeout - no response received. Please make sure the redirect URI http://localhost:8742/oauth/callback is added in Google Cloud Console.".to_string()));
         }
         
-        // Check if server completed (non-blocking check)
         if server_handle.is_finished() {
-            // Give a moment for code to be stored after server shutdown
             tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
             
-            // Final check after server shutdown
             let state_lock = state.lock().await;
             if let Some(code) = &state_lock.code {
                 let code = code.clone();
@@ -125,17 +111,14 @@ pub async fn google_oauth_login(
             }
             if state_lock.code.is_none() && state_lock.error.is_none() {
                 drop(state_lock);
-                // Await the server handle to see if there was an error
                 let _ = server_handle.await;
                 return Err(Error::Other("No authorization code received. Please check that the redirect URI http://localhost:8742/oauth/callback is correctly configured in Google Cloud Console.".to_string()));
             }
         }
         
-        // Poll every 100ms
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     };
 
-    // Exchange code for token
     let token_result = client
         .exchange_code(AuthorizationCode::new(code))
         .request_async(oauth2::reqwest::async_http_client)
@@ -155,10 +138,8 @@ pub async fn google_oauth_login(
             .map(|d| d.as_secs() as i64)
             .unwrap_or(3600);
 
-    // Get user email from Google
     let email = get_user_email(&access_token).await?;
 
-    // Save to database
     save_google_oauth(NewGoogleOAuth {
         email: email.clone(),
         access_token,
@@ -173,7 +154,6 @@ pub async fn google_oauth_login(
     })
 }
 
-/// Get current auth status
 #[tauri::command]
 pub async fn get_google_auth_status() -> Result<AuthStatus, Error> {
     let oauth = get_google_oauth().await?;
@@ -190,14 +170,12 @@ pub async fn get_google_auth_status() -> Result<AuthStatus, Error> {
     })
 }
 
-/// Logout - clear stored tokens
 #[tauri::command]
 pub async fn google_oauth_logout() -> Result<(), Error> {
     delete_google_oauth().await?;
     Ok(())
 }
 
-/// Get a valid access token, refreshing if necessary
 pub async fn get_valid_access_token(
     client_id: &str,
     client_secret: &str,
@@ -208,12 +186,10 @@ pub async fn get_valid_access_token(
 
     let now = chrono::Utc::now().timestamp();
 
-    // If token is still valid (with 5 minute buffer), return it
     if oauth.expires_at > now + 300 {
         return Ok(oauth.access_token);
     }
 
-    // Token expired, refresh it
     let client = BasicClient::new(
         ClientId::new(client_id.to_string()),
         Some(ClientSecret::new(client_secret.to_string())),
@@ -238,13 +214,11 @@ pub async fn get_valid_access_token(
             .map(|d| d.as_secs() as i64)
             .unwrap_or(3600);
 
-    // Update database
     update_google_oauth_tokens(&new_access_token, new_expires_at).await?;
 
     Ok(new_access_token)
 }
 
-/// Start the callback server
 async fn start_callback_server(state: Arc<Mutex<OAuthState>>) {
     let app_state = state.clone();
     let app = Router::new()
@@ -267,13 +241,11 @@ async fn start_callback_server(state: Arc<Mutex<OAuthState>>) {
 
     let server_state = state.clone();
     
-    // Try to bind - if port is in use, try a different approach
     let listener = tokio::net::TcpListener::bind(addr).await
         .expect(&format!("Port {} is already in use. Please close any other applications using this port.", REDIRECT_PORT));
 
     let _ = axum::serve(listener, app.into_make_service())
         .with_graceful_shutdown(async move {
-            // Wait for code to be received
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                 let state = server_state.lock().await;
@@ -285,13 +257,11 @@ async fn start_callback_server(state: Arc<Mutex<OAuthState>>) {
         .await;
 }
 
-/// OAuth callback handler
 async fn oauth_callback(
     Query(params): Query<AuthCallback>,
     state: Arc<Mutex<OAuthState>>,
 ) -> Html<String> {
     if let Some(error) = params.error {
-        // Store error
         let mut state = state.lock().await;
         state.error = Some(error.clone());
         drop(state);
@@ -311,13 +281,11 @@ async fn oauth_callback(
     }
 
     if let Some(code) = params.code {
-        // Store code
         {
             let mut state = state.lock().await;
             state.code = Some(code.clone());
         }
         
-        // Give a moment for the state to be read before shutdown
         tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
         
         return Html(
@@ -327,7 +295,6 @@ async fn oauth_callback(
                     <h1 style="color: #4caf50;">✓ Authentication Successful</h1>
                     <p>You can close this window and return to the app.</p>
                     <script>
-                        // Auto-close after 2 seconds
                         setTimeout(() => window.close(), 2000);
                     </script>
                 </body>
@@ -351,7 +318,6 @@ async fn oauth_callback(
     )
 }
 
-/// Get user email from Google userinfo endpoint
 async fn get_user_email(access_token: &str) -> Result<String, Error> {
     let client = reqwest::Client::new();
     let response = client
@@ -372,12 +338,10 @@ async fn get_user_email(access_token: &str) -> Result<String, Error> {
     let user_info: serde_json::Value = serde_json::from_str(&response_text)
         .map_err(|e| Error::Other(format!("Failed to parse user info JSON: {} - Response: {}", e, &response_text[..response_text.len().min(200)])))?;
 
-    // Try to get email from the response
     let email = user_info.get("email")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
         .or_else(|| {
-            // Fallback: try to get it from other fields
             user_info.get("sub").and_then(|v| v.as_str()).map(|s| format!("{}@gmail.com", s))
         })
         .ok_or_else(|| {

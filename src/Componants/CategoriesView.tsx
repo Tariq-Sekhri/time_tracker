@@ -91,7 +91,6 @@ export default function CategoriesView() {
         setCategoryToDelete(id);
         setCascadeDelete(true); // Default to cascade delete
 
-        // Count how many regex patterns are associated with this category
         const count = regexes.filter(regex => regex.cat_id === id).length;
         setRegexCount(count);
 
@@ -145,7 +144,6 @@ export default function CategoriesView() {
                 </div>
             </div>
 
-            {/* Add New Category */}
             <div className="mb-4 p-4 bg-gray-900 rounded-lg">
                 <h3 className="text-lg font-medium mb-3">Add New Category</h3>
                 <div className="flex gap-3">
@@ -178,7 +176,6 @@ export default function CategoriesView() {
                 </div>
             </div>
 
-            {/* Categories List */}
             <div className="space-y-2">
                 {[...categories].sort((a, b) => b.priority - a.priority).map((cat) => {
                     const isMiscellaneous = cat.name === "Miscellaneous";
@@ -259,7 +256,6 @@ export default function CategoriesView() {
                 })}
             </div>
 
-            {/* Cascade Delete Confirmation Modal */}
             {showCascadeDeleteConfirm && categoryToDelete !== null && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
                     <div className="bg-gray-900 p-6 rounded-lg max-w-md w-full mx-4 border border-gray-700">

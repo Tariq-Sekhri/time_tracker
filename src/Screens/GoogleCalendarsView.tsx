@@ -58,14 +58,11 @@ export default function GoogleCalendarsView() {
             if (result.success) {
                 showToast(`Logged in as ${result.data.email}`, "success");
 
-                // Invalidate and refetch auth status
                 await queryClient.invalidateQueries({ queryKey: ["googleAuthStatus"] });
                 await refetchAuthStatus();
 
-                // Wait a bit for auth to propagate
                 await new Promise(resolve => setTimeout(resolve, 500));
 
-                // Auto-import all available calendars
                 const availableResult = await list_available_google_calendars();
                 if (availableResult.success && availableResult.data) {
                     const calendarsToAdd = availableResult.data.filter(cal => !cal.selected);
@@ -86,7 +83,6 @@ export default function GoogleCalendarsView() {
                                         importedCount++;
                                     }
                                 } catch (e) {
-                                    // Silently continue with other calendars
                                 }
                             }
                             queryClient.invalidateQueries({ queryKey: ["googleCalendars"] });
@@ -182,13 +178,11 @@ export default function GoogleCalendarsView() {
 
     const handleToggleCalendar = (calendarInfo: GoogleCalendarInfo) => {
         if (calendarInfo.selected) {
-            // Find the calendar in our list and remove it
             const calendar = calendars.find(c => c.google_calendar_id === calendarInfo.google_calendar_id);
             if (calendar) {
                 removeCalendarMutation.mutate(calendar.id);
             }
         } else {
-            // Add it
             addCalendarMutation.mutate(calendarInfo);
         }
     };
@@ -197,7 +191,6 @@ export default function GoogleCalendarsView() {
         <div className="p-8 max-w-4xl mx-auto">
             <h1 className="text-3xl font-bold text-white mb-6">Google Calendar Integration</h1>
 
-            {/* Main Connection Section */}
             <div className="bg-gray-900 rounded-lg p-6 mb-6">
                 {authStatus?.logged_in ? (
                     <div className="space-y-4">
@@ -245,7 +238,6 @@ export default function GoogleCalendarsView() {
                 )}
             </div>
 
-            {/* Developer Setup Section - Only show if credentials not configured (for developer setup) */}
             {!authStatus?.logged_in && !hasGoogleOAuthCredentials() && (
                 <div className="bg-red-900/20 border-2 border-red-600 rounded-lg p-6 mb-6">
                     <h3 className="text-lg font-semibold text-red-400 mb-2">⚠️ Developer Setup Required</h3>
@@ -281,7 +273,6 @@ export default function GoogleCalendarsView() {
                 </div>
             )}
 
-            {/* Calendar Selection */}
             {authStatus?.logged_in && (
                 <div className="bg-gray-900 rounded-lg p-6">
                     <h2 className="text-xl font-semibold text-white mb-4">Select Calendars to Display</h2>

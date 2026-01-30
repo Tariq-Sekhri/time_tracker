@@ -24,7 +24,6 @@ export function unwrapResult<D, E extends AppError>(result: Result<D, E>): D {
         return result.data;
     }
 
-    // Convert AppError to a readable error message
     const errorMessage =
         result.error.type === "Db"
             ? result.error.data

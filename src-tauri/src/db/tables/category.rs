@@ -35,7 +35,6 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         .fetch_one(pool)
         .await?;
     if row.count == 0 {
-        // Default categories (desktop-trackable only), only on first table creation
         let defaults: &[(&str, i32, Option<&str>)] = &[
             ("Miscellaneous", 0, Some("#9c9c9c")),
             ("Browsing", 200, Some("#ff7300")),
@@ -109,7 +108,6 @@ pub async fn update_category_by_id(cat: Category) -> Result<(), Error> {
     .await?;
     if let Some(ref c) = current {
         if c.name == "Miscellaneous" {
-            // Miscellaneous: only name and color are editable; priority stays 0
             sqlx::query("UPDATE category SET name = ?1, priority = 0, color = ?2 WHERE id = ?3")
                 .bind(&cat.name)
                 .bind(&cat.color)
@@ -153,7 +151,6 @@ pub async fn delete_category_by_id(id: i32, cascade: bool) -> Result<(), Error> 
             .execute(&pool)
             .await?;
     } else {
-        // When not cascading, reassign orphaned regex patterns to Miscellaneous category
         let misc = sqlx::query!("SELECT id FROM category WHERE name = 'Miscellaneous'")
             .fetch_optional(&pool)
             .await?;

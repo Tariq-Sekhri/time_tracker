@@ -40,7 +40,6 @@ export default function AppsInTimeBlock({
 }) {
     const queryClient = useQueryClient();
 
-    // Delete confirmation state
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [deleteLogCount, setDeleteLogCount] = useState(0);
     const [isCountingLogs, setIsCountingLogs] = useState(false);
@@ -98,7 +97,6 @@ export default function AppsInTimeBlock({
         });
     };
 
-    // Safety check - if selectedEvent is null, don't render
     if (!selectedEvent) {
         return null;
     }
@@ -108,22 +106,17 @@ export default function AppsInTimeBlock({
             return unwrapResult(await delete_logs_by_ids(ids))
         },
         onSuccess: (_, deletedIds) => {
-            // Update the logs list by removing deleted logs
             const updatedLogs = selectedEventLogs.filter((log) => {
-                // Remove the log if any of its IDs match the deleted IDs
                 return !log.ids.some(id => deletedIds.includes(id))
             })
             setSelectedEventLogs(updatedLogs);
 
-            // Update selectedEvent.apps to reflect the deletion
-            // Recalculate apps from remaining logs (each log entry already has total duration for that app)
             if (selectedEvent) {
                 const updatedApps = updatedLogs.map(log => ({
                     app: log.app,
                     totalDuration: log.duration
                 }));
 
-                // Only update if the apps actually changed to avoid unnecessary re-renders
                 const appsChanged = updatedApps.length !== selectedEvent.apps.length ||
                     !updatedApps.every((app, idx) =>
                         idx < selectedEvent.apps.length &&
@@ -139,11 +132,8 @@ export default function AppsInTimeBlock({
                 }
             }
 
-            // Invalidate week query to refresh calendar
             queryClient.invalidateQueries({ queryKey: ["week"] });
 
-            // If no logs remain, reset the event and go back to week view
-            // The calendar will automatically refresh and the time block will disappear
             if (updatedLogs.length === 0) {
                 setSelectedEvent(null);
                 setRightSideBarView("Week");
@@ -177,7 +167,6 @@ export default function AppsInTimeBlock({
     return (
         <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col h-full">
             <ToastContainer toasts={toasts} onRemove={removeToast} onUpdate={updateToast} />
-            {/* Header */}
             <div className={`flex-shrink-0 ${isCategoryFilter ? 'mb-4' : 'mb-6'}`}>
                 <div className="flex items-center justify-between mb-3">
                     <h2 className="text-xl font-bold text-white">{selectedEvent.title}</h2>
@@ -207,10 +196,8 @@ export default function AppsInTimeBlock({
                 </div>
             </div>
 
-            {/* Divider */}
             {!isCategoryFilter && <hr className="border-gray-700 mb-6 flex-shrink-0" />}
 
-            {/* App Logs List */}
             <div className="flex-1 overflow-y-auto mb-6">
                 <h3 className="text-sm font-semibold text-gray-300 mb-3">App Activity</h3>
                 {sortedLogs.length === 0 ? (
@@ -255,7 +242,6 @@ export default function AppsInTimeBlock({
                 )}
             </div>
 
-            {/* Delete Button - Fixed at bottom */}
             <div className="flex-shrink-0 pt-4 border-t border-gray-700">
                 <button
                     onClick={handleDeleteClick}
@@ -294,7 +280,6 @@ export default function AppsInTimeBlock({
                 </button>
             </div>
 
-            {/* Delete Confirmation Modal */}
             {showDeleteConfirm && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
                     <div className="bg-gray-900 p-6 rounded-lg max-w-md w-full mx-4 border border-gray-700">

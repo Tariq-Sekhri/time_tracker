@@ -171,7 +171,6 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
     let mut logs = get_logs().await?;
     let skipped_apps = get_skipped_apps().await?;
 
-    // Filter skipped apps
     let skipped_regexes: Vec<Regex> = skipped_apps
         .iter()
         .filter_map(|app| Regex::new(&app.regex).ok())
@@ -186,13 +185,11 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
     let categories = get_categories().await?;
     let regex = build_regex_table(&categories, &cat_regex)?;
 
-    // Filter logs for the week
     let week_logs: Vec<Log> = logs
         .into_iter()
         .filter(|log| log.timestamp >= week_start && log.timestamp <= week_end)
         .collect();
 
-    // Calculate category statistics
     let mut category_durations: HashMap<String, i64> = HashMap::new();
     let mut category_colors: HashMap<String, Option<String>> = HashMap::new();
 
@@ -207,7 +204,6 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
 
     let total_time: i64 = category_durations.values().sum();
 
-    // Build category stats
     let mut category_stats: Vec<CategoryStat> = category_durations
         .into_iter()
         .map(|(category, total_duration)| {
@@ -228,7 +224,6 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
 
     category_stats.sort_by(|a, b| b.total_duration.cmp(&a.total_duration));
 
-    // Calculate app statistics
     let mut app_durations: HashMap<String, i64> = HashMap::new();
     for log in &week_logs {
         *app_durations.entry(log.app.clone()).or_insert(0) += log.duration;
@@ -247,7 +242,6 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
     let mut all_apps = app_stats.clone();
     let mut top_apps: Vec<AppStat> = app_stats.into_iter().take(5).collect();
 
-    // Calculate hourly distribution
     let mut hourly_durations: HashMap<i32, i64> = HashMap::new();
     for log in &week_logs {
         let hour = get_hour(log.timestamp);
@@ -261,7 +255,6 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
         })
         .collect();
 
-    // Calculate day category breakdown
     let mut day_category_durations: HashMap<(i32, String), i64> = HashMap::new();
     for log in &week_logs {
         let day = get_day_of_week(log.timestamp);
@@ -278,7 +271,6 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
         })
         .collect();
 
-    // Calculate additional statistics
     let mut day_totals: HashMap<i64, i64> = HashMap::new();
     for log in &week_logs {
         let day_start = get_day_start(log.timestamp);
@@ -298,7 +290,6 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
         .min_by_key(|(_, &duration)| duration)
         .map(|(&timestamp, &duration)| (timestamp, duration));
 
-    // Calculate all-time statistics
     let all_logs = get_logs().await?;
     let all_logs_filtered: Vec<Log> = all_logs
         .into_iter()
@@ -307,7 +298,6 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
 
     let total_time_all_time: i64 = all_logs_filtered.iter().map(|log| log.duration).sum();
 
-    // Today's total
     use chrono::{Local, TimeZone};
     let today_start = get_day_start(Local::now().timestamp());
     let today_end = today_start + 86400; // 24 hours
@@ -323,7 +313,6 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
         0.0
     };
 
-    // Calculate previous week for comparison
     let prev_week_start = week_start - 7 * 86400;
     let prev_week_end = week_start;
     let prev_week_logs: Vec<Log> = all_logs_filtered
@@ -340,7 +329,6 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
         None
     };
 
-    // Calculate percentage changes for categories
     let mut prev_category_durations: HashMap<String, i64> = HashMap::new();
     for log in &prev_week_logs {
         let category = derive_category(&log.app, &regex);
@@ -362,7 +350,6 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
         }
     }
 
-    // Calculate percentage changes for top apps
     let mut prev_app_durations: HashMap<String, i64> = HashMap::new();
     for log in &prev_week_logs {
         *prev_app_durations.entry(log.app.clone()).or_insert(0) += log.duration;
@@ -380,7 +367,6 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
         }
     }
 
-    // Calculate percentage changes for all apps
     for app_stat in &mut all_apps {
         let prev_duration: i64 = *prev_app_durations.get(&app_stat.app).unwrap_or(&0i64);
         if prev_duration > 0 {
@@ -417,7 +403,6 @@ pub async fn get_day_statistics(day_start: i64, day_end: i64) -> Result<DayStati
     let mut logs = get_logs().await?;
     let skipped_apps = get_skipped_apps().await?;
 
-    // Filter skipped apps
     let skipped_regexes: Vec<Regex> = skipped_apps
         .iter()
         .filter_map(|app| Regex::new(&app.regex).ok())
@@ -432,13 +417,11 @@ pub async fn get_day_statistics(day_start: i64, day_end: i64) -> Result<DayStati
     let categories = get_categories().await?;
     let regex = build_regex_table(&categories, &cat_regex)?;
 
-    // Filter logs for the day
     let day_logs: Vec<Log> = logs
         .into_iter()
         .filter(|log| log.timestamp >= day_start && log.timestamp <= day_end)
         .collect();
 
-    // Calculate category statistics
     let mut category_durations: HashMap<String, i64> = HashMap::new();
     let mut category_colors: HashMap<String, Option<String>> = HashMap::new();
 
@@ -453,7 +436,6 @@ pub async fn get_day_statistics(day_start: i64, day_end: i64) -> Result<DayStati
 
     let total_time: i64 = category_durations.values().sum();
 
-    // Build category stats
     let mut category_stats: Vec<CategoryStat> = category_durations
         .into_iter()
         .map(|(category, total_duration)| {
@@ -474,7 +456,6 @@ pub async fn get_day_statistics(day_start: i64, day_end: i64) -> Result<DayStati
 
     category_stats.sort_by(|a, b| b.total_duration.cmp(&a.total_duration));
 
-    // Calculate app statistics
     let mut app_durations: HashMap<String, i64> = HashMap::new();
     for log in &day_logs {
         *app_durations.entry(log.app.clone()).or_insert(0) += log.duration;
@@ -492,7 +473,6 @@ pub async fn get_day_statistics(day_start: i64, day_end: i64) -> Result<DayStati
     app_stats.sort_by(|a, b| b.total_duration.cmp(&a.total_duration));
     let top_apps = app_stats.into_iter().take(5).collect();
 
-    // Calculate hourly distribution
     let mut hourly_durations: HashMap<i32, i64> = HashMap::new();
     for log in &day_logs {
         let hour = get_hour(log.timestamp);

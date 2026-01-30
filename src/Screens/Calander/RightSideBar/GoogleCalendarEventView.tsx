@@ -33,16 +33,13 @@ export default function GoogleCalendarEventView({
     const [editedStartDateTime, setEditedStartDateTime] = useState("");
     const [editedEndDateTime, setEditedEndDateTime] = useState("");
 
-    // Initialize form fields when selectedEvent changes
     useEffect(() => {
         if (selectedEvent) {
             setEditedTitle(selectedEvent.title || "");
             setEditedDescription(selectedEvent.description || "");
 
-            // Format for datetime-local input (YYYY-MM-DDTHH:mm)
             const startDateTime = new Date(selectedEvent.start);
             const endDateTime = new Date(selectedEvent.end);
-            // Convert to local time and format
             const startStr = new Date(startDateTime.getTime() - startDateTime.getTimezoneOffset() * 60000)
                 .toISOString().slice(0, 16);
             const endStr = new Date(endDateTime.getTime() - endDateTime.getTimezoneOffset() * 60000)
@@ -74,13 +71,11 @@ export default function GoogleCalendarEventView({
             return unwrapResult(await update_google_calendar_event(updatedEvent));
         },
         onSuccess: () => {
-            // Invalidate queries to refresh the calendar
             queryClient.invalidateQueries({
                 predicate: (query) => query.queryKey[0] === "googleCalendarEvents"
             });
             queryClient.invalidateQueries({ queryKey: ["week"] });
 
-            // Update the selected event with new values
             if (selectedEvent && calendarId && eventId) {
                 const newStart = new Date(editedStartDateTime);
                 const newEnd = new Date(editedEndDateTime);
@@ -114,13 +109,11 @@ export default function GoogleCalendarEventView({
             }));
         },
         onSuccess: () => {
-            // Invalidate queries to refresh the calendar
             queryClient.invalidateQueries({
                 predicate: (query) => query.queryKey[0] === "googleCalendarEvents"
             });
             queryClient.invalidateQueries({ queryKey: ["week"] });
 
-            // Close the sidebar
             setSelectedEvent(null);
             setRightSideBarView("Week");
             showToast("Event deleted successfully", "success");
@@ -159,7 +152,6 @@ export default function GoogleCalendarEventView({
     };
 
     const handleCancel = () => {
-        // Reset to original values
         if (selectedEvent) {
             setEditedTitle(selectedEvent.title || "");
             setEditedDescription(selectedEvent.description || "");
