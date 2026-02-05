@@ -65,7 +65,7 @@ npm run tauri dev
 ### Build
 
 ```bash
-npm run tauri build
+npx tauri build
 ```
 
 Builds use SQLx **offline mode** (the `.sqlx/` cache in `src-tauri/`). No database is required at compile time. If you change Rust SQL queries, regenerate the cache:
