@@ -1,24 +1,25 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { get_categories } from "../../api/Category.ts";
-import { get_logs_for_time_block, get_logs_by_category } from "../../api/Log.ts";
-import { get_week } from "../../api/week.ts";
-import { unwrapResult, getWeekRange } from "../../utils.ts";
-import { useState, useMemo, useEffect, useRef } from "react";
-import { EventClickArg, DatesSetArg } from "@fullcalendar/core";
+import {useQuery, useQueryClient} from "@tanstack/react-query";
+import {get_categories} from "../../api/Category.ts";
+import {get_logs_for_time_block, get_logs_by_category} from "../../api/Log.ts";
+import {get_week} from "../../api/week.ts";
+import {unwrapResult, getWeekRange} from "../../utils.ts";
+import {useState, useMemo, useEffect, useRef} from "react";
+import {EventClickArg, DatesSetArg} from "@fullcalendar/core";
 import RenderCalendarContent from "./RenderCalenderContent.tsx";
-import { getWeekStart, isCurrentWeek } from "./utils.ts";
-import { useDateStore } from "../../stores/dateStore.ts";
-import { View } from "../../App.tsx";
+import {getWeekStart, isCurrentWeek} from "./utils.ts";
+import {useDateStore} from "../../stores/dateStore.ts";
+import {View} from "../../App.tsx";
 import CalenderHeader from "./RightSideBar/CalanderHeader.tsx";
-import { CalendarEvent, DateClickInfo, EventLogs } from "./types.ts";
-import { RightSideBar, SideBarView } from "./RightSideBar/RightSideBar.tsx";
+import {CalendarEvent, DateClickInfo, EventLogs} from "./types.ts";
+import {RightSideBar, SideBarView} from "./RightSideBar/RightSideBar.tsx";
 import FullCalendar from '@fullcalendar/react';
-import { get_google_calendars, GoogleCalendar } from "../../api/GoogleCalendar.ts";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import {get_google_calendars, GoogleCalendar} from "../../api/GoogleCalendar.ts";
+import {getCachedCalendars, setCachedCalendars} from "../../stores/googleCalendarCache.ts";
+import {getCurrentWindow} from "@tauri-apps/api/window";
 
-export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: View) => void }) {
+export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View) => void }) {
     const [rightSideBarView, setRightSideBarView] = useState<SideBarView>("Week")
-    const { date, setDate } = useDateStore();
+    const {date, setDate} = useDateStore();
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [selectedEvent, setSelectedEvent] = useState<CalendarEvent>(null);
     const [selectedEventLogs, setSelectedEventLogs] = useState<EventLogs>([]);
@@ -33,12 +34,12 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
     const [visibleCalendars, setVisibleCalendars] = useState<Set<number>>(new Set());
     const queryClient = useQueryClient();
 
-    const { data: categories = [] } = useQuery({
+    const {data: categories = []} = useQuery({
         queryKey: ["categories"],
         queryFn: async () => unwrapResult(await get_categories()),
     });
 
-    const { data: googleCalendars = [] } = useQuery({
+    const {data: googleCalendars, isError: isGoogleCalendarsError} = useQuery({
         queryKey: ["googleCalendars"],
         queryFn: async () => {
             const result = await get_google_calendars();
@@ -46,11 +47,19 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         },
     });
 
+    const displayCalendars = googleCalendars ?? (isGoogleCalendarsError ? (getCachedCalendars() ?? []) : []);
+
+    useEffect(() => {
+        if (googleCalendars && googleCalendars.length >= 0) {
+            setCachedCalendars(googleCalendars);
+        }
+    }, [displayCalendars]);
+
     const googleCalendarMap = useMemo(() => {
         const map = new Map<number, GoogleCalendar>();
-        googleCalendars.forEach(cal => map.set(cal.id, cal));
+        displayCalendars.forEach(cal => map.set(cal.id, cal));
         return map;
-    }, [googleCalendars]);
+    }, [displayCalendars]);
 
     useEffect(() => {
         if (categories.length > 0 && !hasInitialized.current) {
@@ -111,10 +120,10 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
 
     const hasInitializedCalendars = useRef(false);
     useEffect(() => {
-        if (googleCalendars.length > 0 && !hasInitializedCalendars.current) {
+        if (displayCalendars.length > 0 && !hasInitializedCalendars.current) {
             try {
                 const saved = localStorage.getItem("visibleCalendars");
-                const allCalendarIds = googleCalendars.map(cal => cal.id);
+                const allCalendarIds = displayCalendars.map(cal => cal.id);
 
                 if (saved) {
                     const savedArray = JSON.parse(saved) as number[];
@@ -147,24 +156,24 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                 }
             } catch (e) {
                 console.error("Failed to initialize visible calendars:", e);
-                const allCalendarIds = googleCalendars.map(cal => cal.id);
+                const allCalendarIds = displayCalendars.map(cal => cal.id);
                 setVisibleCalendars(new Set(allCalendarIds));
             }
             hasInitializedCalendars.current = true;
         }
-    }, [googleCalendars]);
+    }, [displayCalendars]);
 
     useEffect(() => {
-        if (hasInitializedCalendars.current && googleCalendars.length > 0) {
+        if (hasInitializedCalendars.current && displayCalendars.length > 0) {
             try {
                 localStorage.setItem("visibleCalendars", JSON.stringify([...visibleCalendars]));
-                const allCalendarIds = googleCalendars.map(cal => cal.id);
+                const allCalendarIds = displayCalendars.map(cal => cal.id);
                 localStorage.setItem("knownCalendars", JSON.stringify(allCalendarIds));
             } catch (e) {
                 console.error("Failed to save visible calendars to localStorage:", e);
             }
         }
-    }, [visibleCalendars, googleCalendars]);
+    }, [visibleCalendars, displayCalendars]);
 
     const categoryColorMap = useMemo(() => {
         const map = new Map<string, string>();
@@ -182,17 +191,17 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
         const setupFocusListener = async () => {
             try {
                 const window = getCurrentWindow();
-                
+
                 const unlisten = await window.listen("tauri://focus", () => {
-                    queryClient.invalidateQueries({ 
-                        predicate: (query) => query.queryKey[0] === "week" 
+                    queryClient.invalidateQueries({
+                        predicate: (query) => query.queryKey[0] === "week"
                     });
-                    
-                    queryClient.invalidateQueries({ 
-                        predicate: (query) => query.queryKey[0] === "googleCalendarEvents" 
+
+                    queryClient.invalidateQueries({
+                        predicate: (query) => query.queryKey[0] === "googleCalendarEvents"
                     });
                 });
-                
+
                 unlistenFn = unlisten;
             } catch (error) {
                 console.error("Failed to setup window focus listener:", error);
@@ -209,7 +218,7 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
     }, [queryClient]);
 
     const weekStart = getWeekStart(date);
-    const { data: weekData } = useQuery({
+    const {data: weekData} = useQuery({
         queryKey: ["week", weekStart.toISOString()],
         queryFn: async () => unwrapResult(await get_week(weekStart)),
         enabled: !!weekStart && !isNaN(weekStart.getTime()) && !!selectedEvent,
@@ -268,7 +277,7 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                 }
 
                 try {
-                    console.log("Fetching category logs:", { category: selectedCategory, startTime, endTime });
+                    console.log("Fetching category logs:", {category: selectedCategory, startTime, endTime});
                     const result = await get_logs_by_category({
                         category: selectedCategory,
                         start_time: startTime,
@@ -278,7 +287,12 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                     console.log("Category logs result:", result);
 
                     if (result.success) {
-                        const logMap = new Map<string, { ids: number[], app: string, timestamp: Date, duration: number }>();
+                        const logMap = new Map<string, {
+                            ids: number[],
+                            app: string,
+                            timestamp: Date,
+                            duration: number
+                        }>();
 
                         result.data.forEach(log => {
                             const existing = logMap.get(log.app);
@@ -301,7 +315,11 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
 
                         const logs = Array.from(logMap.values()).sort((a, b) => b.duration - a.duration);
                         console.log("Processed logs:", logs.length, "apps for category", selectedCategory);
-                        console.log("Logs grouped by app:", logs.map(l => ({ app: l.app, duration: l.duration, ids: l.ids.length })));
+                        console.log("Logs grouped by app:", logs.map(l => ({
+                            app: l.app,
+                            duration: l.duration,
+                            ids: l.ids.length
+                        })));
                         setSelectedEventLogs(logs);
 
                         const categoryEvent: CalendarEvent = {
@@ -559,11 +577,11 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
 
     useEffect(() => {
         const handleFocus = () => {
-            queryClient.invalidateQueries({ queryKey: ["week"] });
-            queryClient.invalidateQueries({ queryKey: ["categories"] });
-            queryClient.invalidateQueries({ queryKey: ["week_statistics"] });
-            queryClient.invalidateQueries({ queryKey: ["day_statistics"] });
-            queryClient.invalidateQueries({ queryKey: ["googleCalendarEvents"] });
+            queryClient.invalidateQueries({queryKey: ["week"]});
+            queryClient.invalidateQueries({queryKey: ["categories"]});
+            queryClient.invalidateQueries({queryKey: ["week_statistics"]});
+            queryClient.invalidateQueries({queryKey: ["day_statistics"]});
+            queryClient.invalidateQueries({queryKey: ["googleCalendarEvents"]});
         };
 
         window.addEventListener("focus", handleFocus);
@@ -607,13 +625,13 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
     const headerTitle = `${headerWeekStart.toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric'
-    })} – ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    })} – ${weekEnd.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'})}`;
 
 
     return (
         <div className="flex flex-col h-full w-full">
             <CalenderHeader headerTitle={headerTitle} onClick={goToPrevWeek} d={date} onClick1={goToNextWeek}
-                onClick2={goToToday} />
+                            onClick2={goToToday}/>
 
             <div className="flex flex-1 overflow-hidden min-h-0">
                 <div className="flex-1 overflow-hidden min-h-0">
@@ -630,18 +648,18 @@ export default function Calendar({ setCurrentView }: { setCurrentView: (arg0: Vi
                             handleEventClick={handleEventClick}
                             onDatesSet={handleDatesSet}
                             googleCalendarMap={googleCalendarMap}
-                            googleCalendars={googleCalendars}
+                            googleCalendars={displayCalendars}
                             visibleCalendars={visibleCalendars}
                             toggleCalendar={toggleCalendar}
                         />
                     </div>
                 </div>
                 <RightSideBar selectedEvent={selectedEvent} setSelectedEvent={setSelectedEvent}
-                    setSelectedEventLogs={setSelectedEventLogs} selectedEventLogs={selectedEventLogs}
-                    view={rightSideBarView} setView={setRightSideBarView} selectedDate={selectedDate}
-                    setSelectedDate={setSelectedDate} setCurrentView={setCurrentView}
-                    selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory}
-                    isLoadingCategory={isLoadingCategory} />
+                              setSelectedEventLogs={setSelectedEventLogs} selectedEventLogs={selectedEventLogs}
+                              view={rightSideBarView} setView={setRightSideBarView} selectedDate={selectedDate}
+                              setSelectedDate={setSelectedDate} setCurrentView={setCurrentView}
+                              selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory}
+                              isLoadingCategory={isLoadingCategory}/>
             </div>
 
 

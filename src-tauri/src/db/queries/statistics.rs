@@ -168,6 +168,8 @@ fn get_hour(timestamp: i64) -> i32 {
 
 #[tauri::command]
 pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekStatistics, Error> {
+    use chrono::{Local, TimeZone};
+
     let mut logs = get_logs().await?;
     let skipped_apps = get_skipped_apps().await?;
 
@@ -185,9 +187,18 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
     let categories = get_categories().await?;
     let regex = build_regex_table(&categories, &cat_regex)?;
 
+    let now = Local::now().timestamp();
+    let compare_end = week_end.min(now);
+
     let week_logs: Vec<Log> = logs
         .into_iter()
         .filter(|log| log.timestamp >= week_start && log.timestamp <= week_end)
+        .collect();
+
+    let period_logs: Vec<Log> = week_logs
+        .iter()
+        .filter(|log| log.timestamp <= compare_end)
+        .cloned()
         .collect();
 
     let mut category_durations: HashMap<String, i64> = HashMap::new();
@@ -197,7 +208,7 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
         category_colors.insert(cat.name.clone(), cat.color.clone());
     }
 
-    for log in &week_logs {
+    for log in &period_logs {
         let category = derive_category(&log.app, &regex);
         *category_durations.entry(category).or_insert(0) += log.duration;
     }
@@ -225,7 +236,7 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
     category_stats.sort_by(|a, b| b.total_duration.cmp(&a.total_duration));
 
     let mut app_durations: HashMap<String, i64> = HashMap::new();
-    for log in &week_logs {
+    for log in &period_logs {
         *app_durations.entry(log.app.clone()).or_insert(0) += log.duration;
     }
 
@@ -243,7 +254,7 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
     let mut top_apps: Vec<AppStat> = app_stats.into_iter().take(5).collect();
 
     let mut hourly_durations: HashMap<i32, i64> = HashMap::new();
-    for log in &week_logs {
+    for log in &period_logs {
         let hour = get_hour(log.timestamp);
         *hourly_durations.entry(hour).or_insert(0) += log.duration;
     }
@@ -256,7 +267,7 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
         .collect();
 
     let mut day_category_durations: HashMap<(i32, String), i64> = HashMap::new();
-    for log in &week_logs {
+    for log in &period_logs {
         let day = get_day_of_week(log.timestamp);
         let category = derive_category(&log.app, &regex);
         *day_category_durations.entry((day, category)).or_insert(0) += log.duration;
@@ -272,7 +283,7 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
         .collect();
 
     let mut day_totals: HashMap<i64, i64> = HashMap::new();
-    for log in &week_logs {
+    for log in &period_logs {
         let day_start = get_day_start(log.timestamp);
         *day_totals.entry(day_start).or_insert(0) += log.duration;
     }
@@ -298,7 +309,6 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
 
     let total_time_all_time: i64 = all_logs_filtered.iter().map(|log| log.duration).sum();
 
-    use chrono::{Local, TimeZone};
     let today_start = get_day_start(Local::now().timestamp());
     let today_end = today_start + 86400; // 24 hours
     let all_time_today: i64 = all_logs_filtered
@@ -314,10 +324,10 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
     };
 
     let prev_week_start = week_start - 7 * 86400;
-    let prev_week_end = week_start;
+    let prev_compare_end = prev_week_start + (compare_end - week_start);
     let prev_week_logs: Vec<Log> = all_logs_filtered
         .into_iter()
-        .filter(|log| log.timestamp >= prev_week_start && log.timestamp < prev_week_end)
+        .filter(|log| log.timestamp >= prev_week_start && log.timestamp <= prev_compare_end)
         .collect();
 
     let prev_week_total: i64 = prev_week_logs.iter().map(|log| log.duration).sum();
