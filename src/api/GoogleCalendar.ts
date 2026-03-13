@@ -124,7 +124,9 @@ export async function get_google_auth_status(): Promise<Result<AuthStatus, AppEr
 
 
 export async function list_available_google_calendars(): Promise<Result<GoogleCalendarInfo[], AppError>> {
+    console.log("[GCal API] list_available_google_calendars: fetching from Google API");
     if (!hasGoogleOAuthCredentials()) {
+        console.warn("[GCal API] list_available_google_calendars: NO CREDENTIALS");
         return {
             success: false,
             error: {
@@ -133,14 +135,27 @@ export async function list_available_google_calendars(): Promise<Result<GoogleCa
             }
         };
     }
-    return invokeWithResult<GoogleCalendarInfo[]>("list_available_google_calendars", {
+    const result = await invokeWithResult<GoogleCalendarInfo[]>("list_available_google_calendars", {
         clientId: CLIENT_ID,
         clientSecret: CLIENT_SECRET,
     });
+    if (result.success) {
+        console.log("[GCal API] list_available_google_calendars: got", result.data.length, "calendars", result.data.map(c => ({ name: c.name, selected: c.selected })));
+    } else {
+        console.error("[GCal API] list_available_google_calendars: FAILED", result.error);
+    }
+    return result;
 }
 
 export async function get_google_calendars(): Promise<Result<GoogleCalendar[], AppError>> {
-    return invokeWithResult<GoogleCalendar[]>("get_google_calendars");
+    console.log("[GCal API] get_google_calendars: fetching saved calendars from DB");
+    const result = await invokeWithResult<GoogleCalendar[]>("get_google_calendars");
+    if (result.success) {
+        console.log("[GCal API] get_google_calendars: got", result.data.length, "calendars", result.data.map(c => ({ id: c.id, name: c.name })));
+    } else {
+        console.error("[GCal API] get_google_calendars: FAILED", result.error);
+    }
+    return result;
 }
 
 export async function get_google_calendar_by_id(id: number): Promise<Result<GoogleCalendar, AppError>> {
@@ -181,10 +196,18 @@ export async function get_all_google_calendar_events(
     start_time: number,
     end_time: number
 ): Promise<Result<GoogleCalendarEvent[], AppError>> {
+    console.log("[GCal API] get_all_google_calendar_events called", { start_time, end_time });
     if (!hasGoogleOAuthCredentials()) {
-        return { success: true, data: [] }; // Return empty if not configured
+        console.warn("[GCal API] get_all_google_calendar_events: NO CREDENTIALS - returning empty", {
+            CLIENT_ID_set: CLIENT_ID !== "",
+            CLIENT_SECRET_set: CLIENT_SECRET !== "",
+            CLIENT_ID_valid: CLIENT_ID.includes(".apps.googleusercontent.com"),
+            CLIENT_SECRET_valid: CLIENT_SECRET.startsWith("GOCSPX-"),
+        });
+        return { success: true, data: [] };
     }
-    return invokeWithResult<GoogleCalendarEvent[]>("get_all_google_calendar_events", {
+    console.log("[GCal API] get_all_google_calendar_events: credentials OK, invoking backend");
+    const result = await invokeWithResult<GoogleCalendarEvent[]>("get_all_google_calendar_events", {
         params: {
             startTime: start_time,
             endTime: end_time,
@@ -192,6 +215,12 @@ export async function get_all_google_calendar_events(
         clientId: CLIENT_ID,
         clientSecret: CLIENT_SECRET,
     });
+    if (result.success) {
+        console.log("[GCal API] get_all_google_calendar_events: SUCCESS, got", result.data.length, "events");
+    } else {
+        console.error("[GCal API] get_all_google_calendar_events: FAILED", result.error);
+    }
+    return result;
 }
 
 export async function create_google_calendar_event(

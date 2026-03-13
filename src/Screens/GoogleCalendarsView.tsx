@@ -38,13 +38,28 @@ export default function GoogleCalendarsView() {
         },
     });
 
-    const { data: availableCalendars = [], refetch: refetchAvailableCalendars } = useQuery({
+    const { data: availableCalendars = [], refetch: refetchAvailableCalendars, error: availableCalendarsError, isError: isAvailableCalendarsError } = useQuery({
         queryKey: ["availableGoogleCalendars"],
         queryFn: async () => {
+            console.log("[GCal Settings] fetching available calendars from Google API");
             const result = await list_available_google_calendars();
-            return unwrapResult(result);
+            const data = unwrapResult(result);
+            console.log("[GCal Settings] available calendars result:", data.length, "calendars", data.map(c => ({ name: c.name, selected: c.selected })));
+            return data;
         },
         enabled: authStatus?.logged_in === true,
+    });
+
+    if (isAvailableCalendarsError) {
+        console.error("[GCal Settings] FAILED to fetch available calendars:", availableCalendarsError);
+    }
+
+    console.log("[GCal Settings] render state:", {
+        authLoggedIn: authStatus?.logged_in,
+        authEmail: authStatus?.email,
+        savedCalendarsCount: calendars.length,
+        availableCalendarsCount: availableCalendars.length,
+        hasCredentials: hasGoogleOAuthCredentials(),
     });
 
     const handleLogin = async () => {

@@ -1,6 +1,7 @@
 use sqlx::{SqlitePool, Row};
 use crate::db::Error;
 use crate::db::backup;
+use anyhow::Context;
 
 #[derive(Debug, Clone)]
 struct ExpectedColumn {
@@ -172,7 +173,7 @@ async fn create_table_safe(pool: &SqlitePool, table: &ExpectedTable) -> Result<(
         "skipped_apps" => tables::skipped_app::create_table(pool).await?,
         "google_calendar" => tables::google_calendar::create_table(pool).await?,
         _ => {
-            return Err(Error::Db(format!("Unknown table: {}", table.name)));
+            return Err(anyhow::anyhow!("Unknown table: {}", table.name).into());
         }
     }
     
@@ -203,7 +204,7 @@ async fn add_column_safe(pool: &SqlitePool, table_name: &str, column: &ExpectedC
     sqlx::query(&sql)
         .execute(pool)
         .await
-        .map_err(|e| Error::Db(format!("Failed to add column {}.{}: {}", table_name, column.name, e)))?;
+        .context(format!("Failed to add column {}.{}", table_name, column.name))?;
     
     Ok(())
 }

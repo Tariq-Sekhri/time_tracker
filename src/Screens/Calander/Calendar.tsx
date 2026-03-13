@@ -39,15 +39,23 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         queryFn: async () => unwrapResult(await get_categories()),
     });
 
-    const {data: googleCalendars, isError: isGoogleCalendarsError} = useQuery({
+    const {data: googleCalendars, isError: isGoogleCalendarsError, error: googleCalendarsError} = useQuery({
         queryKey: ["googleCalendars"],
         queryFn: async () => {
+            console.log("[GCal Calendar] fetching google calendars from DB");
             const result = await get_google_calendars();
-            return unwrapResult(result);
+            const data = unwrapResult(result);
+            console.log("[GCal Calendar] got", data.length, "calendars from DB:", data.map(c => ({ id: c.id, name: c.name, google_calendar_id: c.google_calendar_id })));
+            return data;
         },
     });
 
+    if (googleCalendarsError) {
+        console.error("[GCal Calendar] calendar fetch error:", googleCalendarsError);
+    }
+
     const displayCalendars = googleCalendars ?? (isGoogleCalendarsError ? (getCachedCalendars() ?? []) : []);
+    console.log("[GCal Calendar] displayCalendars:", displayCalendars.length, "calendars, isError:", isGoogleCalendarsError, "raw data:", googleCalendars?.length ?? "null");
 
     useEffect(() => {
         if (googleCalendars && googleCalendars.length >= 0) {
@@ -120,10 +128,12 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
 
     const hasInitializedCalendars = useRef(false);
     useEffect(() => {
+        console.log("[GCal Calendar] visibleCalendars init effect: displayCalendars.length=", displayCalendars.length, "hasInitialized=", hasInitializedCalendars.current);
         if (displayCalendars.length > 0 && !hasInitializedCalendars.current) {
             try {
                 const saved = localStorage.getItem("visibleCalendars");
                 const allCalendarIds = displayCalendars.map(cal => cal.id);
+                console.log("[GCal Calendar] initializing visibleCalendars: saved=", saved, "allIds=", allCalendarIds);
 
                 if (saved) {
                     const savedArray = JSON.parse(saved) as number[];
@@ -146,16 +156,18 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                         }
                     });
 
+                    console.log("[GCal Calendar] visibleCalendars resolved to:", [...mergedSet]);
                     setVisibleCalendars(mergedSet);
                     localStorage.setItem("knownCalendars", JSON.stringify(allCalendarIds));
                 } else {
                     const allVisible = new Set(allCalendarIds);
+                    console.log("[GCal Calendar] no saved visibleCalendars, showing all:", [...allVisible]);
                     setVisibleCalendars(allVisible);
                     localStorage.setItem("visibleCalendars", JSON.stringify([...allVisible]));
                     localStorage.setItem("knownCalendars", JSON.stringify(allCalendarIds));
                 }
             } catch (e) {
-                console.error("Failed to initialize visible calendars:", e);
+                console.error("[GCal Calendar] Failed to initialize visible calendars:", e);
                 const allCalendarIds = displayCalendars.map(cal => cal.id);
                 setVisibleCalendars(new Set(allCalendarIds));
             }
