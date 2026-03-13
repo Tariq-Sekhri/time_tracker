@@ -7,7 +7,8 @@ export type AppError =
     | { type: "Db"; data: string }
     | { type: "NotFound" }
     | { type: "Regex"; data: string }
-    | { type: "Other"; data: string };
+    | { type: "Other"; data: string }
+    | { type: "AuthExpired"; data: string };
 
 export function getErrorMessage(error: AppError): string {
     switch (error.type) {
@@ -18,6 +19,8 @@ export function getErrorMessage(error: AppError): string {
         case "Regex":
             return error.data;
         case "Other":
+            return error.data;
+        case "AuthExpired":
             return error.data;
     }
 }

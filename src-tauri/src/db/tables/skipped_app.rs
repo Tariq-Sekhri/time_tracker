@@ -52,7 +52,7 @@ pub async fn get_skipped_apps() -> Result<Vec<SkippedApp>, Error> {
 
 #[tauri::command]
 pub async fn count_matching_logs(regex_pattern: String) -> Result<i64, Error> {
-    let compiled_regex = Regex::new(&regex_pattern).map_err(|e| Error::Regex(e.to_string()))?;
+    let compiled_regex = Regex::new(&regex_pattern)?;
     let logs = get_logs().await?;
     let count = logs
         .iter()
@@ -63,7 +63,7 @@ pub async fn count_matching_logs(regex_pattern: String) -> Result<i64, Error> {
 
 #[tauri::command]
 pub async fn insert_skipped_app_and_delete_logs(new_app: NewSkippedApp) -> Result<i64, Error> {
-    let compiled_regex = Regex::new(&new_app.regex).map_err(|e| Error::Regex(e.to_string()))?;
+    let compiled_regex = Regex::new(&new_app.regex)?;
     let pool = db::get_pool().await?;
     let logs = get_logs().await?;
     let matching_ids: Vec<i64> = logs
@@ -92,7 +92,7 @@ pub async fn insert_skipped_app_and_delete_logs(new_app: NewSkippedApp) -> Resul
 
 #[tauri::command]
 pub async fn update_skipped_app_by_id(skipped_app: SkippedApp) -> Result<(), Error> {
-    Regex::new(&skipped_app.regex).map_err(|e| Error::Regex(e.to_string()))?;
+    Regex::new(&skipped_app.regex)?;
     let pool = db::get_pool().await?;
     sqlx::query!(
         "UPDATE skipped_apps SET regex = ?1 WHERE id = ?2",

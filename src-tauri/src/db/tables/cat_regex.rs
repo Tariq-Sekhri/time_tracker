@@ -140,9 +140,7 @@ pub async fn update_cat_regex_by_id(cat_regex: CategoryRegex) -> Result<(), Erro
             .fetch_optional(&pool)
             .await?;
         if cat_name.as_deref() == Some("Miscellaneous") && row.regex == ".*" {
-            return Err(Error::Other(
-                "The catch-all pattern (.*) for Miscellaneous cannot be edited.".into(),
-            ));
+            return Err(anyhow::anyhow!("The catch-all pattern (.*) for Miscellaneous cannot be edited.").into());
         }
     }
     
@@ -154,10 +152,7 @@ pub async fn update_cat_regex_by_id(cat_regex: CategoryRegex) -> Result<(), Erro
     .await?;
     
     if category_exists == 0 {
-        return Err(Error::Other(format!(
-            "Category with id {} does not exist",
-            cat_regex.cat_id
-        )));
+        return Err(anyhow::anyhow!("Category with id {} does not exist", cat_regex.cat_id).into());
     }
     
     let regex_exists: i64 = sqlx::query_scalar!(
@@ -168,10 +163,7 @@ pub async fn update_cat_regex_by_id(cat_regex: CategoryRegex) -> Result<(), Erro
     .await?;
     
     if regex_exists == 0 {
-        return Err(Error::Other(format!(
-            "Regex pattern with id {} does not exist",
-            cat_regex.id
-        )));
+        return Err(anyhow::anyhow!("Regex pattern with id {} does not exist", cat_regex.id).into());
     }
     
     sqlx::query!(
@@ -223,9 +215,7 @@ pub async fn delete_cat_regex_by_id(id: i32) -> Result<(), Error> {
             .fetch_optional(&pool)
             .await?;
         if cat_name.as_deref() == Some("Miscellaneous") && r.regex == ".*" {
-            return Err(Error::Other(
-                "The catch-all pattern (.*) for Miscellaneous cannot be deleted.".into(),
-            ));
+            return Err(anyhow::anyhow!("The catch-all pattern (.*) for Miscellaneous cannot be deleted.").into());
         }
     }
     sqlx::query!("DELETE FROM category_regex WHERE id = ?1", id)

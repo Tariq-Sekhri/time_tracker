@@ -1,6 +1,5 @@
 use crate::db;
 use crate::db::error::Error;
-use crate::db::pool::get_pool;
 use crate::db::tables::cat_regex::{get_cat_regex, CategoryRegex};
 use crate::db::tables::category::{get_categories, Category};
 use crate::db::tables::log::{delete_log_by_id, get_logs, Log};
@@ -8,8 +7,6 @@ use crate::db::tables::skipped_app::get_skipped_apps;
 
 use regex::Regex;
 use serde::Serialize;
-use serde_json::to_string_pretty;
-use sqlx;
 use std::collections::HashMap;
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -101,7 +98,7 @@ fn derive_category(app: &str, regexes: &[CachedCategoryRegex]) -> Result<String,
         .iter()
         .find(|regex| regex.regex.is_match(app))
         .map(|regex| regex.category.clone())
-        .ok_or(Error::Regex("Derive Category Error".to_string()))
+        .ok_or_else(|| anyhow::anyhow!("Derive Category Error").into())
 }
 
 fn build_regex_table(
@@ -116,10 +113,9 @@ fn build_regex_table(
         .map(|reg| {
             let cat = category_map
                 .get(&reg.cat_id)
-                .ok_or(Error::Regex("Error Creating regex".to_string()))?;
+                .ok_or_else(|| anyhow::anyhow!("Error creating regex: category not found"))?;
 
-            let compiled_regex =
-                Regex::new(&reg.regex).map_err(|e| Error::Regex(format!("{e}")))?;
+            let compiled_regex = Regex::new(&reg.regex)?;
 
             Ok(CachedCategoryRegex {
                 category: cat.name.clone(),

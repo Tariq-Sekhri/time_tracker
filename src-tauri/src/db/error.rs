@@ -1,33 +1,57 @@
-use serde::{Deserialize, Serialize};
-use sqlx;
-use std::fmt::Formatter;
-use std::time::SystemTimeError;
-use thiserror::Error;
+use serde::Serialize;
 
-#[derive(Debug, Serialize, Deserialize, Error, Clone)]
-#[serde(tag = "type", content = "data")]
-pub enum Error {
-    #[error("db error: {0}")]
-    Db(String),
-    #[error("not found")]
-    NotFound,
-    #[error("regex error: {0}")]
-    Regex(String),
-    #[error("{0}")]
-    Other(String),
-}
+#[derive(Debug)]
+pub struct Error(pub anyhow::Error);
 
-impl From<sqlx::Error> for Error {
-    fn from(e: sqlx::Error) -> Self {
-        match e {
-            sqlx::Error::RowNotFound => Error::NotFound,
-            other => Error::Db(other.to_string()),
-        }
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:#}", self.0)
     }
 }
 
-impl From<SystemTimeError> for Error {
-    fn from(e: SystemTimeError) -> Self {
-        Error::Other(e.to_string())
+impl Serialize for Error {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&format!("{:#}", self.0))
     }
 }
+
+impl From<anyhow::Error> for Error {
+    fn from(e: anyhow::Error) -> Self {
+        Self(e)
+    }
+}
+
+macro_rules! impl_from {
+    ($($t:ty),*) => {
+        $(impl From<$t> for Error {
+            fn from(e: $t) -> Self {
+                Self(e.into())
+            }
+        })*
+    };
+}
+
+impl_from!(
+    sqlx::Error,
+    std::io::Error,
+    regex::Error,
+    std::time::SystemTimeError,
+    AuthExpiredError
+);
+
+impl Error {
+    pub fn is_auth_expired(&self) -> bool {
+        self.0.downcast_ref::<AuthExpiredError>().is_some()
+    }
+}
+
+#[derive(Debug)]
+pub struct AuthExpiredError(pub String);
+
+impl std::fmt::Display for AuthExpiredError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "auth expired: {}", self.0)
+    }
+}
+
+impl std::error::Error for AuthExpiredError {}

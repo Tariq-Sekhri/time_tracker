@@ -13,6 +13,7 @@ import interactionPlugin from '@fullcalendar/interaction';
 import { useDateStore } from "../../stores/dateStore.ts";
 import {
     get_all_google_calendar_events,
+    google_oauth_login,
     GoogleCalendarEvent,
     GoogleCalendar,
     update_google_calendar,
@@ -64,6 +65,31 @@ export default function RenderCalendarContent({
     const [newCalendarColor, setNewCalendarColor] = useState("#4285f4");
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [calendarToDelete, setCalendarToDelete] = useState<number | null>(null);
+    const [isRelogging, setIsRelogging] = useState(false);
+
+    const handleRelogin = async () => {
+        setIsRelogging(true);
+        try {
+            const result = await google_oauth_login();
+            if (result.success) {
+                await queryClient.invalidateQueries({ queryKey: ["googleAuthStatus"] });
+                await queryClient.invalidateQueries({ queryKey: ["googleCalendars"] });
+                queryClient.invalidateQueries({
+                    predicate: (query) => query.queryKey[0] === "googleCalendarEvents"
+                });
+                await refetchGoogleEvents();
+                showToast("Re-connected to Google Calendar", "success");
+            } else {
+                console.error("[GCal] Re-login failed:", result.error);
+                showToast("Re-login failed", "error");
+            }
+        } catch (e) {
+            console.error("[GCal] Re-login error:", e);
+            showToast("Re-login error", "error");
+        } finally {
+            setIsRelogging(false);
+        }
+    };
 
     const updateCalendarMutation = useMutation({
         mutationFn: async (update: UpdateGoogleCalendar) => {
@@ -150,6 +176,18 @@ export default function RenderCalendarContent({
 
     const weekRange = useMemo(() => getWeekRange(date), [date]);
     const calendarIds = useMemo(() => googleCalendars.map(cal => cal.id).sort().join(','), [googleCalendars]);
+    
+    const queryEnabled = !!weekStart && !isNaN(weekStart.getTime()) && googleCalendars.length > 0;
+    console.log("[GCal Render] query setup:", {
+        weekStart: weekRange.week_start,
+        weekEnd: weekRange.week_end,
+        calendarIds,
+        googleCalendarsCount: googleCalendars.length,
+        visibleCalendarsCount: visibleCalendars.size,
+        visibleCalendarIds: [...visibleCalendars],
+        queryEnabled,
+    });
+
     const {
         data: googleCalendarEvents,
         refetch: refetchGoogleEvents,
@@ -159,19 +197,23 @@ export default function RenderCalendarContent({
     } = useQuery({
         queryKey: ["googleCalendarEvents", weekRange.week_start, weekRange.week_end, calendarIds],
         queryFn: async () => {
+            console.log("[GCal Render] queryFn executing: fetching events for range", weekRange.week_start, "-", weekRange.week_end);
             const result = await get_all_google_calendar_events(weekRange.week_start, weekRange.week_end);
-            return unwrapResult(result);
+            const data = unwrapResult(result);
+            console.log("[GCal Render] queryFn result:", data.length, "events");
+            return data;
         },
-        enabled: !!weekStart && !isNaN(weekStart.getTime()) && googleCalendars.length > 0,
-        refetchOnWindowFocus: true, // Refetch when window gains focus
+        enabled: queryEnabled,
+        refetchOnWindowFocus: true,
     });
 
     const cachedEvents = useMemo(
         () => getCachedEvents(weekRange.week_start, weekRange.week_end, calendarIds),
         [weekRange.week_start, weekRange.week_end, calendarIds],
     );
+    const isAuthExpired = isGoogleEventsError && googleEventsError?.message?.includes("auth expired");
     const displayGoogleEvents = googleCalendarEvents ?? cachedEvents ?? [];
-    const isShowingCachedEvents = isGoogleEventsError && (cachedEvents?.length ?? 0) > 0;
+    const isShowingCachedEvents = isGoogleEventsError && !isAuthExpired && (cachedEvents?.length ?? 0) > 0;
 
     useEffect(() => {
         if (googleCalendarEvents && googleCalendarEvents.length >= 0) {
@@ -181,9 +223,21 @@ export default function RenderCalendarContent({
 
     useEffect(() => {
         if (googleEventsError) {
-            console.error("Error fetching Google Calendar events:", googleEventsError);
+            console.error("[GCal Render] ERROR fetching Google Calendar events:", googleEventsError);
+            console.error("[GCal Render] Error details:", JSON.stringify(googleEventsError, null, 2));
         }
     }, [googleEventsError]);
+
+    useEffect(() => {
+        console.log("[GCal Render] state update:", {
+            googleCalendarEvents: googleCalendarEvents?.length ?? "null",
+            isLoadingGoogleEvents,
+            isGoogleEventsError,
+            displayGoogleEventsCount: displayGoogleEvents.length,
+            isShowingCachedEvents,
+            cachedEventsCount: cachedEvents?.length ?? "null",
+        });
+    }, [googleCalendarEvents, isLoadingGoogleEvents, isGoogleEventsError, displayGoogleEvents, isShowingCachedEvents, cachedEvents]);
 
 
     const events = useMemo(() => {
@@ -294,12 +348,32 @@ export default function RenderCalendarContent({
         return (
             <div className="flex items-center justify-center h-full w-full">
                 <div className="text-center">
-                    <div className="text-gray-400 text-4xl mb-4 font-semibold">
-                        No data for this week
-                    </div>
-                    <div className="text-gray-600 text-xl">
-                        Start tracking to see your activity here
-                    </div>
+                    {isAuthExpired ? (
+                        <>
+                            <div className="text-red-400 text-2xl mb-3 font-semibold">
+                                Google Calendar session expired
+                            </div>
+                            <div className="text-gray-400 text-lg mb-6">
+                                Your Google login has expired. Re-connect to see your calendar events.
+                            </div>
+                            <button
+                                onClick={handleRelogin}
+                                disabled={isRelogging}
+                                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded-lg text-white font-semibold transition-colors"
+                            >
+                                {isRelogging ? "Connecting..." : "Re-connect Google Calendar"}
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <div className="text-gray-400 text-4xl mb-4 font-semibold">
+                                No data for this week
+                            </div>
+                            <div className="text-gray-600 text-xl">
+                                Start tracking to see your activity here
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
         );
@@ -307,6 +381,18 @@ export default function RenderCalendarContent({
 
     return (
         <div className="flex flex-1 overflow-hidden h-full min-h-0 flex flex-col">
+            {isAuthExpired && (
+                <div className="flex-shrink-0 px-4 py-2 bg-red-900/50 border-b border-red-700/50 text-red-200 text-sm flex items-center justify-between">
+                    <span>Google Calendar session expired. Re-connect to see your events.</span>
+                    <button
+                        onClick={handleRelogin}
+                        disabled={isRelogging}
+                        className="ml-4 px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded text-white text-sm font-medium transition-colors"
+                    >
+                        {isRelogging ? "Connecting..." : "Re-connect"}
+                    </button>
+                </div>
+            )}
             {isShowingCachedEvents && (
                 <div
                     className="flex-shrink-0 px-4 py-2 bg-amber-900/50 border-b border-amber-700/50 text-amber-200 text-sm">

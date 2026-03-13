@@ -7,6 +7,7 @@ pub mod queries;
 pub(crate) mod tables;
 pub mod validation;
 
+use anyhow::Context;
 use serde::Serialize;
 use sqlx;
 use tables::cat_regex::{get_cat_regex, CategoryRegex};
@@ -59,15 +60,9 @@ pub async fn wipe_all_data() -> Result<(), Error> {
     sqlx::query!("DELETE FROM category").execute(&pool).await?;
     sqlx::query!("DELETE FROM skipped_apps").execute(&pool).await?;
 
-    tables::category::create_table(&pool)
-        .await
-        .map_err(|e| Error::Db(e.to_string()))?;
-    tables::cat_regex::create_table(&pool)
-        .await
-        .map_err(|e| Error::Db(e.to_string()))?;
-    tables::skipped_app::create_table(&pool)
-        .await
-        .map_err(|e| Error::Db(e.to_string()))?;
+    tables::category::create_table(&pool).await?;
+    tables::cat_regex::create_table(&pool).await?;
+    tables::skipped_app::create_table(&pool).await?;
 
     Ok(())
 }
@@ -76,9 +71,9 @@ pub async fn wipe_all_data() -> Result<(), Error> {
 pub async fn reset_database() -> Result<(), Error> {
     let _ = backup::create_safety_backup("pre_reset");
     
-    reset_pool().await.map_err(|e| Error::Db(e.to_string()))?;
-    pool::drop_all().map_err(|e| Error::Db(format!("Failed to delete database file: {}", e)))?;
-    get_pool().await.map_err(|e| Error::Db(e.to_string()))?;
+    reset_pool().await?;
+    pool::drop_all().context("Failed to delete database file")?;
+    get_pool().await?;
     Ok(())
 }
 
@@ -95,7 +90,7 @@ pub struct BackupInfoResponse {
 #[tauri::command]
 pub fn list_backups() -> Result<Vec<BackupInfoResponse>, Error> {
     let backups = backup::list_backups()
-        .map_err(|e| Error::Db(format!("Failed to list backups: {}", e)))?;
+        .context("Failed to list backups")?;
     
     Ok(backups.into_iter().map(|b| {
         let modified = b.modified
@@ -116,19 +111,19 @@ pub fn list_backups() -> Result<Vec<BackupInfoResponse>, Error> {
 #[tauri::command]
 pub fn create_manual_backup(name: String) -> Result<String, Error> {
     let path = backup::create_manual_backup(&name)
-        .map_err(|e| Error::Db(format!("Failed to create backup: {}", e)))?;
+        .context("Failed to create backup")?;
     
     Ok(path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
 pub async fn restore_backup(backup_name: String) -> Result<(), Error> {
-    reset_pool().await.map_err(|e| Error::Db(e.to_string()))?;
+    reset_pool().await?;
     
     backup::restore_backup(&backup_name)
-        .map_err(|e| Error::Db(format!("Failed to restore backup: {}", e)))?;
+        .context("Failed to restore backup")?;
     
-    get_pool().await.map_err(|e| Error::Db(e.to_string()))?;
+    get_pool().await?;
     
     Ok(())
 }
@@ -141,7 +136,7 @@ pub fn get_backup_dir() -> String {
 #[tauri::command]
 pub fn create_safety_backup(reason: String) -> Result<String, Error> {
     let path = backup::create_safety_backup(&reason)
-        .map_err(|e| Error::Db(format!("Failed to create safety backup: {}", e)))?;
+        .context("Failed to create safety backup")?;
     
     Ok(path.to_string_lossy().to_string())
 }
@@ -150,17 +145,17 @@ pub fn create_safety_backup(reason: String) -> Result<String, Error> {
 pub async fn export_data_to_json() -> Result<String, Error> {
     let data = get_all_db_data().await?;
     let json = serde_json::to_string_pretty(&data)
-        .map_err(|e| Error::Db(format!("Failed to serialize data: {}", e)))?;
+        .context("Failed to serialize data")?;
     
     let backup_dir = backup::get_backup_dir();
     std::fs::create_dir_all(&backup_dir)
-        .map_err(|e| Error::Db(format!("Failed to create backup directory: {}", e)))?;
+        .context("Failed to create backup directory")?;
     
     let timestamp = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S").to_string();
     let export_path = backup_dir.join(format!("export_{}.json", timestamp));
     
     std::fs::write(&export_path, &json)
-        .map_err(|e| Error::Db(format!("Failed to write export file: {}", e)))?;
+        .context("Failed to write export file")?;
     
     Ok(export_path.to_string_lossy().to_string())
 }

@@ -2,11 +2,12 @@ use crate::db::tables::google_calendar::{
     delete_google_oauth, get_google_oauth, save_google_oauth, update_google_oauth_tokens,
     NewGoogleOAuth,
 };
-use crate::db::Error;
+use crate::db::error::{AuthExpiredError, Error};
+use anyhow::Context;
 use axum::{extract::Query, response::Html, routing::get, Router};
 use oauth2::{
     basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
-    RedirectUrl, RefreshToken, Scope, TokenResponse, TokenUrl,
+    RedirectUrl, Scope, TokenResponse, TokenUrl,
 };
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
@@ -43,15 +44,15 @@ pub async fn google_oauth_login(
         ClientId::new(client_id),
         Some(ClientSecret::new(client_secret)),
         AuthUrl::new(GOOGLE_AUTH_URL.to_string())
-            .map_err(|e| Error::Other(format!("Invalid auth URL: {}", e)))?,
+            .context("Invalid auth URL")?,
         Some(
             TokenUrl::new(GOOGLE_TOKEN_URL.to_string())
-                .map_err(|e| Error::Other(format!("Invalid token URL: {}", e)))?,
+                .context("Invalid token URL")?,
         ),
     )
     .set_redirect_uri(
         RedirectUrl::new(format!("http://localhost:{}/oauth/callback", REDIRECT_PORT))
-            .map_err(|e| Error::Other(format!("Invalid redirect URL: {}", e)))?,
+            .context("Invalid redirect URL")?,
     );
 
     let (auth_url, _csrf_token) = client
@@ -62,8 +63,8 @@ pub async fn google_oauth_login(
         .add_scope(Scope::new(
             "https://www.googleapis.com/auth/userinfo.email".to_string(),
         ))
-        .add_extra_param("access_type", "offline") // Get refresh token
-        .add_extra_param("prompt", "consent") // Force consent screen to get refresh token
+        .add_extra_param("access_type", "offline")
+        .add_extra_param("prompt", "consent")
         .url();
 
     let state = Arc::new(Mutex::new(OAuthState {
@@ -78,7 +79,7 @@ pub async fn google_oauth_login(
 
     let auth_url_str = auth_url.to_string();
     tauri_plugin_opener::open_url(&auth_url_str, None::<&str>)
-        .map_err(|e| Error::Other(format!("Failed to open browser: {}", e)))?;
+        .context("Failed to open browser")?;
 
     let start = std::time::Instant::now();
     let timeout = std::time::Duration::from_secs(120);
@@ -87,7 +88,7 @@ pub async fn google_oauth_login(
         {
             let state_lock = state.lock().await;
             if let Some(error) = &state_lock.error {
-                return Err(Error::Other(format!("OAuth error: {}", error)));
+                return Err(anyhow::anyhow!("OAuth error: {}", error).into());
             }
             if let Some(code) = &state_lock.code {
                 let code = code.clone();
@@ -97,7 +98,7 @@ pub async fn google_oauth_login(
         }
         
         if start.elapsed() > timeout {
-            return Err(Error::Other("OAuth timeout - no response received. Please make sure the redirect URI http://localhost:8742/oauth/callback is added in Google Cloud Console.".to_string()));
+            return Err(anyhow::anyhow!("OAuth timeout - no response received. Please make sure the redirect URI http://localhost:8742/oauth/callback is added in Google Cloud Console.").into());
         }
         
         if server_handle.is_finished() {
@@ -112,7 +113,7 @@ pub async fn google_oauth_login(
             if state_lock.code.is_none() && state_lock.error.is_none() {
                 drop(state_lock);
                 let _ = server_handle.await;
-                return Err(Error::Other("No authorization code received. Please check that the redirect URI http://localhost:8742/oauth/callback is correctly configured in Google Cloud Console.".to_string()));
+                return Err(anyhow::anyhow!("No authorization code received. Please check that the redirect URI http://localhost:8742/oauth/callback is correctly configured in Google Cloud Console.").into());
             }
         }
         
@@ -123,12 +124,12 @@ pub async fn google_oauth_login(
         .exchange_code(AuthorizationCode::new(code))
         .request_async(oauth2::reqwest::async_http_client)
         .await
-        .map_err(|e| Error::Other(format!("Failed to exchange code for token: {}", e)))?;
+        .context("Failed to exchange code for token")?;
 
     let access_token = token_result.access_token().secret().to_string();
     let refresh_token = token_result
         .refresh_token()
-        .ok_or_else(|| Error::Other("No refresh token received".to_string()))?
+        .ok_or_else(|| anyhow::anyhow!("No refresh token received"))?
         .secret()
         .to_string();
 
@@ -182,7 +183,7 @@ pub async fn get_valid_access_token(
 ) -> Result<String, Error> {
     let oauth = get_google_oauth()
         .await?
-        .ok_or_else(|| Error::Other("Not logged in".to_string()))?;
+        .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
 
     let now = chrono::Utc::now().timestamp();
 
@@ -190,29 +191,45 @@ pub async fn get_valid_access_token(
         return Ok(oauth.access_token);
     }
 
-    let client = BasicClient::new(
-        ClientId::new(client_id.to_string()),
-        Some(ClientSecret::new(client_secret.to_string())),
-        AuthUrl::new(GOOGLE_AUTH_URL.to_string())
-            .map_err(|e| Error::Other(format!("Invalid auth URL: {}", e)))?,
-        Some(
-            TokenUrl::new(GOOGLE_TOKEN_URL.to_string())
-                .map_err(|e| Error::Other(format!("Invalid token URL: {}", e)))?,
-        ),
-    );
-
-    let token_result = client
-        .exchange_refresh_token(&RefreshToken::new(oauth.refresh_token))
-        .request_async(oauth2::reqwest::async_http_client)
+    let http_client = reqwest::Client::new();
+    let refresh_response = http_client
+        .post(GOOGLE_TOKEN_URL)
+        .form(&[
+            ("client_id", client_id),
+            ("client_secret", client_secret),
+            ("refresh_token", oauth.refresh_token.as_str()),
+            ("grant_type", "refresh_token"),
+        ])
+        .send()
         .await
-        .map_err(|e| Error::Other(format!("Failed to refresh token: {}", e)))?;
+        .map_err(|e| {
+            Error::from(AuthExpiredError(format!("Failed to reach Google token endpoint: {}", e)))
+        })?;
 
-    let new_access_token = token_result.access_token().secret().to_string();
-    let new_expires_at = now
-        + token_result
-            .expires_in()
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(3600);
+    let status = refresh_response.status();
+    let response_body = refresh_response.text().await.unwrap_or_default();
+
+    if !status.is_success() {
+        return Err(AuthExpiredError(format!(
+            "Google token refresh failed ({}): {}. Please re-login to Google Calendar.",
+            status, response_body
+        )).into());
+    }
+
+    let token_data: serde_json::Value = serde_json::from_str(&response_body)
+        .map_err(|e| {
+            Error::from(AuthExpiredError(format!("Failed to parse token refresh response: {}", e)))
+        })?;
+
+    let new_access_token = token_data["access_token"]
+        .as_str()
+        .ok_or_else(|| {
+            Error::from(AuthExpiredError("No access_token in refresh response".to_string()))
+        })?
+        .to_string();
+
+    let expires_in = token_data["expires_in"].as_i64().unwrap_or(3600);
+    let new_expires_at = now + expires_in;
 
     update_google_oauth_tokens(&new_access_token, new_expires_at).await?;
 
@@ -325,18 +342,18 @@ async fn get_user_email(access_token: &str) -> Result<String, Error> {
         .bearer_auth(access_token)
         .send()
         .await
-        .map_err(|e| Error::Other(format!("Failed to get user info: {}", e)))?;
+        .context("Failed to get user info")?;
 
     let status = response.status();
     let response_text = response.text().await
-        .map_err(|e| Error::Other(format!("Failed to read user info response: {}", e)))?;
+        .context("Failed to read user info response")?;
     
     if !status.is_success() {
-        return Err(Error::Other(format!("Userinfo API returned error: {} - {}", status, response_text)));
+        return Err(anyhow::anyhow!("Userinfo API returned error: {} - {}", status, response_text).into());
     }
 
     let user_info: serde_json::Value = serde_json::from_str(&response_text)
-        .map_err(|e| Error::Other(format!("Failed to parse user info JSON: {} - Response: {}", e, &response_text[..response_text.len().min(200)])))?;
+        .context("Failed to parse user info JSON")?;
 
     let email = user_info.get("email")
         .and_then(|v| v.as_str())
@@ -345,7 +362,7 @@ async fn get_user_email(access_token: &str) -> Result<String, Error> {
             user_info.get("sub").and_then(|v| v.as_str()).map(|s| format!("{}@gmail.com", s))
         })
         .ok_or_else(|| {
-            Error::Other(format!("No email in user info. Available fields: {:?}", user_info.as_object().map(|o| o.keys().collect::<Vec<_>>())))
+            anyhow::anyhow!("No email in user info. Available fields: {:?}", user_info.as_object().map(|o| o.keys().collect::<Vec<_>>()))
         })?;
 
     Ok(email)

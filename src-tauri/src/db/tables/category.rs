@@ -140,9 +140,7 @@ pub async fn delete_category_by_id(id: i32, cascade: bool) -> Result<(), Error> 
     .await?;
     if let Some(ref c) = current {
         if c.name == "Miscellaneous" {
-            return Err(Error::Other(
-                "The Miscellaneous category cannot be deleted.".into(),
-            ));
+            return Err(anyhow::anyhow!("The Miscellaneous category cannot be deleted.").into());
         }
     }
 

@@ -4,6 +4,8 @@ use crate::db::Error;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+use anyhow::Context;
 
 #[cfg(debug_assertions)]
 pub static IS_SUSPENDED: AtomicBool = AtomicBool::new(true);
@@ -102,8 +104,7 @@ fn get_foreground_app() -> Result<String, Error> {
     let hwnd = unsafe { ws::GetForegroundWindow() };
     let mut buf: [u16; 1024] = [0; 1024];
     let n = unsafe { ws::GetWindowTextW(hwnd, &mut buf) };
-    let foreground_window = String::from_utf16_lossy(&buf[..n as usize]);
-    Ok(foreground_window)
+    Ok(String::from_utf16_lossy(&buf[..n as usize]))
 }
 
 #[cfg(target_os = "macos")]
@@ -113,39 +114,32 @@ fn get_foreground_app() -> Result<String, Error> {
 
     unsafe {
         let workspace_class = Class::get("NSWorkspace")
-            .ok_or_else(|| Error::Other("Failed to get NSWorkspace class".to_string()))?;
+            .ok_or_else(|| anyhow::anyhow!("Failed to get NSWorkspace class"))?;
 
         let workspace: *mut Object = msg_send![workspace_class, sharedWorkspace];
         if workspace.is_null() {
-            return Err(Error::Other(
-                "Failed to get shared workspace. Make sure the app has accessibility permissions."
-                    .to_string(),
-            ));
+            return Err(anyhow::anyhow!("Failed to get shared workspace. Make sure the app has accessibility permissions.").into());
         }
 
         let front_app: *mut Object = msg_send![workspace, frontmostApplication];
         if front_app.is_null() {
-            return Err(Error::Other(
-                "Failed to get frontmost application. Check accessibility permissions.".to_string(),
-            ));
+            return Err(anyhow::anyhow!("Failed to get frontmost application. Check accessibility permissions.").into());
         }
 
         let app_name: *mut Object = msg_send![front_app, localizedName];
         if app_name.is_null() {
-            return Err(Error::Other("Failed to get application name".to_string()));
+            return Err(anyhow::anyhow!("Failed to get application name").into());
         }
 
         // app_name is an NSString, get UTF8String
         let c_string: *const i8 = msg_send![app_name, UTF8String];
         if c_string.is_null() {
-            return Err(Error::Other(
-                "Failed to get UTF8 string from application name".to_string(),
-            ));
+            return Err(anyhow::anyhow!("Failed to get UTF8 string from application name").into());
         }
 
         let app_name_str = std::ffi::CStr::from_ptr(c_string)
             .to_str()
-            .map_err(|e| Error::Other(format!("Failed to convert string: {}", e)))?;
+            .context("Failed to convert string")?;
 
         Ok(app_name_str.to_string())
     }
@@ -159,7 +153,7 @@ fn get_foreground_app() -> Result<String, Error> {
     unsafe {
         let display = xlib::XOpenDisplay(ptr::null());
         if display.is_null() {
-            return Err(Error::Other("Failed to open X display. Make sure you're running in an X11 environment (not Wayland).".to_string()));
+            return Err(anyhow::anyhow!("Failed to open X display. Make sure you're running in an X11 environment (not Wayland).").into());
         }
 
         let mut focus_return: xlib::Window = 0;
@@ -169,7 +163,7 @@ fn get_foreground_app() -> Result<String, Error> {
 
         if focus_return == 0 {
             xlib::XCloseDisplay(display);
-            return Err(Error::Other("Failed to get focused window".to_string()));
+            return Err(anyhow::anyhow!("Failed to get focused window").into());
         }
 
         // Get window name using XFetchName (simpler than XGetWMName)
@@ -187,7 +181,7 @@ fn get_foreground_app() -> Result<String, Error> {
                 if !class_hint.res_class.is_null() {
                     let class_name = std::ffi::CStr::from_ptr(class_hint.res_class as *const i8)
                         .to_str()
-                        .map_err(|e| Error::Other(format!("Failed to convert class name: {}", e)))?
+                        .context("Failed to convert class name")?
                         .to_string();
                     xlib::XFree(class_hint.res_class as *mut std::ffi::c_void);
                     xlib::XCloseDisplay(display);
@@ -196,14 +190,12 @@ fn get_foreground_app() -> Result<String, Error> {
             }
 
             xlib::XCloseDisplay(display);
-            return Err(Error::Other(
-                "Failed to get window name or class".to_string(),
-            ));
+            return Err(anyhow::anyhow!("Failed to get window name or class").into());
         }
 
         let window_name = std::ffi::CStr::from_ptr(name)
             .to_str()
-            .map_err(|e| Error::Other(format!("Failed to convert window name: {}", e)))?
+            .context("Failed to convert window name")?
             .to_string();
 
         xlib::XFree(name as *mut std::ffi::c_void);
@@ -217,8 +209,7 @@ fn generate_log() -> Result<NewLog, Error> {
     let foreground_window = get_foreground_app()?;
     let sanitized_app = sanitize_app_name(&foreground_window);
     let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|e| Error::Other(e.to_string()))?
+        .duration_since(UNIX_EPOCH)?
         .as_secs() as i64;
     Ok(NewLog {
         app: sanitized_app,

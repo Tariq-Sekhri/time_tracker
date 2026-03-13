@@ -5262,6 +5262,7 @@ dependencies = [
 name = "time-tracker"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "axum",
  "chrono",
  "dotenv",
@@ -5277,7 +5278,6 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-clipboard-manager",
  "tauri-plugin-opener",
- "thiserror 2.0.16",
  "tokio",
  "url",
  "urlencoding",

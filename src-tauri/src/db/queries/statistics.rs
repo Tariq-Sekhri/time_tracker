@@ -4,7 +4,8 @@ use category::{get_categories, Category};
 use chrono::{Datelike, Timelike};
 use db::error::Error;
 use db::tables::{cat_regex, category, log, skipped_app};
-use log::{get_logs, Log};
+use log::get_logs;
+use log::Log;
 use regex::Regex;
 use serde::Serialize;
 use skipped_app::get_skipped_apps;
@@ -96,10 +97,9 @@ fn build_regex_table(
         .map(|reg| {
             let cat = category_map
                 .get(&reg.cat_id)
-                .ok_or_else(|| Error::Db("Category not found".to_string()))?;
+                .ok_or_else(|| anyhow::anyhow!("Category not found"))?;
 
-            let compiled_regex = Regex::new(&reg.regex)
-                .map_err(|e| Error::Regex(format!("Invalid regex: {}", e)))?;
+            let compiled_regex = Regex::new(&reg.regex)?;
 
             Ok(CachedCategoryRegex {
                 category: cat.name.clone(),

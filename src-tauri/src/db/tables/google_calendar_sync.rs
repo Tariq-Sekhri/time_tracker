@@ -4,6 +4,7 @@ use crate::db::tables::google_calendar::{
     get_google_calendar_by_id, get_google_calendars, GoogleCalendar, GoogleCalendarInfo,
 };
 use crate::google_oauth::get_valid_access_token;
+use anyhow::Context;
 use chrono::{DateTime, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -11,7 +12,7 @@ const GOOGLE_API_BASE: &str = "https://www.googleapis.com/calendar/v3";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GoogleCalendarEvent {
-    pub calendar_id: i32, // Our internal ID
+    pub calendar_id: i32,
     pub event_id: String,
     pub title: String,
     pub start: i64,
@@ -123,19 +124,18 @@ pub async fn list_available_google_calendars(
         .bearer_auth(&access_token)
         .send()
         .await
-        .map_err(|e| Error::Other(format!("Failed to fetch calendar list: {}", e)))?;
+        .context("Failed to fetch calendar list")?;
 
     let status = response.status();
-    
     if !status.is_success() {
         let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-        return Err(Error::Other(format!("Calendar list API returned error {}: {}", status, error_text)));
+        return Err(anyhow::anyhow!("Calendar list API returned error {}: {}", status, error_text).into());
     }
 
     let calendar_list: GoogleApiCalendarListResponse = response
         .json()
         .await
-        .map_err(|e| Error::Other(format!("Failed to parse calendar list: {}", e)))?;
+        .context("Failed to parse calendar list")?;
 
     let calendars: Vec<GoogleCalendarInfo> = calendar_list
         .items
@@ -163,19 +163,21 @@ async fn fetch_google_calendar_events_internal(
     let access_token = get_valid_access_token(client_id, client_secret).await?;
 
     let time_min = DateTime::<Utc>::from_timestamp(start_time, 0)
-        .ok_or_else(|| Error::Other("Invalid start time".to_string()))?
+        .ok_or_else(|| anyhow::anyhow!("Invalid start time"))?
         .to_rfc3339();
     let time_max = DateTime::<Utc>::from_timestamp(end_time, 0)
-        .ok_or_else(|| Error::Other("Invalid end time".to_string()))?
+        .ok_or_else(|| anyhow::anyhow!("Invalid end time"))?
         .to_rfc3339();
 
     let client = reqwest::Client::new();
+    let url = format!(
+        "{}/calendars/{}/events",
+        GOOGLE_API_BASE,
+        urlencoding::encode(&calendar.google_calendar_id)
+    );
+
     let response = client
-        .get(format!(
-            "{}/calendars/{}/events",
-            GOOGLE_API_BASE,
-            urlencoding::encode(&calendar.google_calendar_id)
-        ))
+        .get(&url)
         .bearer_auth(&access_token)
         .query(&[
             ("timeMin", time_min.as_str()),
@@ -185,14 +187,21 @@ async fn fetch_google_calendar_events_internal(
         ])
         .send()
         .await
-        .map_err(|e| Error::Other(format!("Failed to fetch events: {}", e)))?;
+        .context("Failed to fetch events")?;
 
-    let events_response: GoogleApiEventsResponse = response
-        .json()
-        .await
-        .map_err(|e| Error::Other(format!("Failed to parse events: {}", e)))?;
+    let status = response.status();
+    if !status.is_success() {
+        let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        return Err(anyhow::anyhow!("Events API error {}: {}", status, error_text).into());
+    }
 
-    let events = events_response
+    let response_text = response.text().await
+        .context("Failed to read events response")?;
+
+    let events_response: GoogleApiEventsResponse = serde_json::from_str(&response_text)
+        .context("Failed to parse events")?;
+
+    let events: Vec<GoogleCalendarEvent> = events_response
         .items
         .unwrap_or_default()
         .into_iter()
@@ -279,11 +288,19 @@ pub async fn get_all_google_calendar_events(
     client_secret: String,
 ) -> Result<Vec<GoogleCalendarEvent>, Error> {
     let calendars = get_google_calendars().await?;
-    let mut all_events = Vec::new();
 
-    for calendar in calendars {
+    if calendars.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut all_events = Vec::new();
+    let mut success_count = 0;
+    let mut error_count = 0;
+    let mut last_auth_error: Option<Error> = None;
+
+    for calendar in &calendars {
         match fetch_google_calendar_events_internal(
-            &calendar,
+            calendar,
             params.start_time,
             params.end_time,
             &client_id,
@@ -291,9 +308,23 @@ pub async fn get_all_google_calendar_events(
         )
         .await
         {
-            Ok(mut events) => all_events.append(&mut events),
-            Err(_) => {
+            Ok(mut events) => {
+                success_count += 1;
+                all_events.append(&mut events);
             }
+            Err(e) => {
+                eprintln!("[GCal] failed to fetch calendar '{}': {}", calendar.name, e);
+                if e.is_auth_expired() {
+                    last_auth_error = Some(e);
+                }
+                error_count += 1;
+            }
+        }
+    }
+
+    if error_count > 0 && success_count == 0 {
+        if let Some(auth_err) = last_auth_error {
+            return Err(auth_err);
         }
     }
 
@@ -310,10 +341,10 @@ pub async fn create_google_calendar_event(
     let access_token = get_valid_access_token(&client_id, &client_secret).await?;
 
     let start = DateTime::<Utc>::from_timestamp(params.start, 0)
-        .ok_or_else(|| Error::Other("Invalid start time".to_string()))?
+        .ok_or_else(|| anyhow::anyhow!("Invalid start time"))?
         .to_rfc3339();
     let end = DateTime::<Utc>::from_timestamp(params.end, 0)
-        .ok_or_else(|| Error::Other("Invalid end time".to_string()))?
+        .ok_or_else(|| anyhow::anyhow!("Invalid end time"))?
         .to_rfc3339();
 
     let event_body = serde_json::json!({
@@ -340,12 +371,12 @@ pub async fn create_google_calendar_event(
         .json(&event_body)
         .send()
         .await
-        .map_err(|e| Error::Other(format!("Failed to create event: {}", e)))?;
+        .context("Failed to create event")?;
 
     let created_event: GoogleApiEvent = response
         .json()
         .await
-        .map_err(|e| Error::Other(format!("Failed to parse created event: {}", e)))?;
+        .context("Failed to parse created event")?;
 
     Ok(created_event.id)
 }
@@ -360,10 +391,10 @@ pub async fn update_google_calendar_event(
     let access_token = get_valid_access_token(&client_id, &client_secret).await?;
 
     let start = DateTime::<Utc>::from_timestamp(update.start, 0)
-        .ok_or_else(|| Error::Other("Invalid start time".to_string()))?
+        .ok_or_else(|| anyhow::anyhow!("Invalid start time"))?
         .to_rfc3339();
     let end = DateTime::<Utc>::from_timestamp(update.end, 0)
-        .ok_or_else(|| Error::Other("Invalid end time".to_string()))?
+        .ok_or_else(|| anyhow::anyhow!("Invalid end time"))?
         .to_rfc3339();
 
     let event_body = serde_json::json!({
@@ -391,7 +422,7 @@ pub async fn update_google_calendar_event(
         .json(&event_body)
         .send()
         .await
-        .map_err(|e| Error::Other(format!("Failed to update event: {}", e)))?;
+        .context("Failed to update event")?;
 
     Ok(())
 }
@@ -416,7 +447,7 @@ pub async fn delete_google_calendar_event(
         .bearer_auth(&access_token)
         .send()
         .await
-        .map_err(|e| Error::Other(format!("Failed to delete event: {}", e)))?;
+        .context("Failed to delete event")?;
 
     Ok(())
 }
