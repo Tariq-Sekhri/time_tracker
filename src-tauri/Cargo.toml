@@ -1,6 +1,6 @@
 [package]
 name = "time-tracker"
-version = "0.1.0"
+version = "1.0.0"
 description = "A Cross-Platform Auto Time Tracking App"
 authors = ["Tariq Sekhri"]
 edition = "2021"
@@ -21,6 +21,7 @@ sqlx = { version = "0.8.6", features = [
     "runtime-tokio-rustls",
     "sqlite",
     "macros",
+    "migrate",
     "chrono"
 ] }
 tokio = { version = "1", features = ["full"] }

@@ -36,6 +36,7 @@ use db::{
     list_backups, create_manual_backup, restore_backup, get_backup_dir,
     create_safety_backup, export_data_to_json,
 };
+use db::get_db_schema_version;
 use tauri::Manager;
 use tray::refresh_tray_menu;
 
@@ -120,6 +121,7 @@ pub fn run() {
             get_backup_dir,
             create_safety_backup,
             export_data_to_json,
+            get_db_schema_version,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

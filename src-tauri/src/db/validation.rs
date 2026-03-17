@@ -61,13 +61,24 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
             ],
         },
         ExpectedTable {
-            name: "google_calendar",
+            name: "google_oauth",
             columns: vec![
                 ExpectedColumn { name: "id", sql_type: "INTEGER", not_null: true, default_value: None },
+                ExpectedColumn { name: "email", sql_type: "TEXT", not_null: true, default_value: None },
+                ExpectedColumn { name: "access_token", sql_type: "TEXT", not_null: true, default_value: None },
+                ExpectedColumn { name: "refresh_token", sql_type: "TEXT", not_null: true, default_value: None },
+                ExpectedColumn { name: "expires_at", sql_type: "INTEGER", not_null: true, default_value: None },
+                ExpectedColumn { name: "created_at", sql_type: "INTEGER", not_null: false, default_value: None },
+            ],
+        },
+        ExpectedTable {
+            name: "google_calendar_v2",
+            columns: vec![
+                ExpectedColumn { name: "id", sql_type: "INTEGER", not_null: true, default_value: None },
+                ExpectedColumn { name: "google_calendar_id", sql_type: "TEXT", not_null: true, default_value: None },
                 ExpectedColumn { name: "name", sql_type: "TEXT", not_null: true, default_value: None },
                 ExpectedColumn { name: "color", sql_type: "TEXT", not_null: true, default_value: None },
-                ExpectedColumn { name: "defaultcolor", sql_type: "TEXT", not_null: true, default_value: None },
-                ExpectedColumn { name: "url", sql_type: "TEXT", not_null: true, default_value: None },
+                ExpectedColumn { name: "account_email", sql_type: "TEXT", not_null: true, default_value: None },
             ],
         },
     ]
@@ -171,7 +182,8 @@ async fn create_table_safe(pool: &SqlitePool, table: &ExpectedTable) -> Result<(
         "category" => tables::category::create_table(pool).await?,
         "category_regex" => tables::cat_regex::create_table(pool).await?,
         "skipped_apps" => tables::skipped_app::create_table(pool).await?,
-        "google_calendar" => tables::google_calendar::create_table(pool).await?,
+        "google_oauth" => tables::google_calendar::create_table(pool).await?,
+        "google_calendar_v2" => tables::google_calendar::create_table(pool).await?,
         _ => {
             return Err(anyhow::anyhow!("Unknown table: {}", table.name).into());
         }
