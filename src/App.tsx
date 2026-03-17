@@ -5,13 +5,12 @@ import Calendar from "./Screens/Calander/Calendar.tsx";
 import CategoriesView from "./Componants/CategoriesView.tsx";
 import CategoryRegexView from "./Screens/CategoryRegexView.tsx";
 import SkippedAppsView from "./Screens/SkippedAppsView.tsx";
-import DevTools from "./Screens/DevTools.tsx";
 import DetailedStatistics from "./Screens/DetailedStatistics.tsx";
 import AppsList from "./Screens/AppsList.tsx";
 import Header from "./Componants/Header.tsx";
 import GoogleCalendarsView from "./Screens/GoogleCalendarsView.tsx";
 
-export type View = "calendar" | "categories" | "regex" | "skipped" | "devtools" | "detailed" | "apps" | "googleCalendars";
+export type View = "calendar" | "categories" | "regex" | "skipped" | "detailed" | "apps" | "googleCalendars";
 
 export default function App() {
     const [currentView, setCurrentView] = useState<View>("calendar");
@@ -25,7 +24,6 @@ export default function App() {
                 {currentView === "categories" && <CategoriesView />}
                 {currentView === "regex" && <CategoryRegexView />}
                 {currentView === "skipped" && <SkippedAppsView />}
-                {currentView === "devtools" && <DevTools />}
                 {currentView === "detailed" && (<DetailedStatistics
                     onBack={() => setCurrentView("calendar")}
                 />
