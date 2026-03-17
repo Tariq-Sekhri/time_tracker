@@ -25,6 +25,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": [
       "nsis"
     ],
@@ -42,6 +43,17 @@
       },
       "nsis": {
         "installerHooks": "./nsis-hooks.nsh"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEEyNEJFMjI3QjZFNDFERDEKUldUUkhlUzJKK0pMb3Z1Wk5GRFk4YlZHc0IyMFRzYTJpWG5paWNlNE53WXF3ektlaWF2TzJBL2gK",
+      "endpoints": [
+        "https://github.com/Tariq-Sekhri/time_tracker/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }
