@@ -2,6 +2,9 @@ mod core;
 mod db;
 mod tray;
 mod google_oauth;
+mod commands;
+
+use std::sync::{atomic::AtomicBool, Mutex};
 
 use core::{get_tracking_status, set_tracking_status, supervisor};
 use db::queries::{get_day_statistics, get_week, get_week_statistics};
@@ -37,8 +40,14 @@ use db::{
     create_safety_backup, export_data_to_json,
 };
 use db::get_db_schema_version;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tray::refresh_tray_menu;
+
+pub struct UpdateState {
+    pub update: Mutex<Option<tauri_plugin_updater::Update>>,
+    pub window_visible: AtomicBool,
+    pub notified: AtomicBool,
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -48,8 +57,15 @@ pub fn run() {
     }
     
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            if let Some(window) = app.get_window("main") {
+            app.manage(UpdateState {
+                update: Mutex::new(None),
+                window_visible: AtomicBool::new(false),
+                notified: AtomicBool::new(false),
+            });
+
+            if let Some(window) = app.get_webview_window("main") {
                 #[cfg(debug_assertions)]
                 let _ = window.show();
 
@@ -59,6 +75,61 @@ pub fn run() {
 
             tray::setup_tray(app.handle())?;
             tauri::async_runtime::spawn(supervisor(app.handle().clone()));
+
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                use std::sync::atomic::Ordering;
+                use tauri_plugin_updater::UpdaterExt;
+
+                let update = match handle.updater_builder().build() {
+                    Ok(builder) => match builder.check().await {
+                        Ok(update) => update,
+                        Err(_) => None,
+                    },
+                    Err(_) => None,
+                };
+
+                let state = handle.state::<UpdateState>();
+                if let Ok(mut lock) = state.update.lock() {
+                    if update.is_some() {
+                        *lock = update;
+                    }
+                }
+
+                let has_update = handle
+                    .state::<UpdateState>()
+                    .update
+                    .lock()
+                    .ok()
+                    .and_then(|g| g.as_ref().map(|_| ()))
+                    .is_some();
+
+                if !has_update {
+                    return;
+                }
+
+                if state.notified.load(Ordering::Relaxed) {
+                    return;
+                }
+
+                let window_visible = state.window_visible.load(Ordering::Relaxed)
+                    || handle
+                        .get_webview_window("main")
+                        .and_then(|w| w.is_visible().ok())
+                        .unwrap_or(false);
+
+                if window_visible {
+                    if state
+                        .notified
+                        .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
+                        .is_ok()
+                    {
+                        if let Some(w) = handle.get_webview_window("main") {
+                            let _ = w.emit("update-available", ());
+                        }
+                    }
+                }
+            });
             Ok(())
         })
         .on_window_event(|_window, event| {
@@ -122,6 +193,7 @@ pub fn run() {
             create_safety_backup,
             export_data_to_json,
             get_db_schema_version,
+            commands::apply_update_cmd,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
