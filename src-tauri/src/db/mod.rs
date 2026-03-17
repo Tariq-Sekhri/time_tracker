@@ -20,6 +20,41 @@ pub use pool::{get_pool, reset_pool};
 pub use queries::get_week;
 
 #[derive(Serialize)]
+pub struct DbMigrationInfo {
+    pub version: i64,
+    pub description: String,
+    pub installed_on: String,
+    pub success: bool,
+}
+
+#[tauri::command]
+pub async fn get_db_schema_version() -> Result<Vec<DbMigrationInfo>, Error> {
+    use sqlx::Row;
+    let pool = get_pool().await?;
+    let rows = sqlx::query(
+        "SELECT version, description, installed_on, success FROM _sqlx_migrations ORDER BY version",
+    )
+    .fetch_all(&pool)
+    .await?;
+
+    let mut out = Vec::with_capacity(rows.len());
+    for row in rows {
+        let version: i64 = row.try_get("version")?;
+        let description: String = row.try_get("description")?;
+        let installed_on: String = row.try_get("installed_on")?;
+        let success: i64 = row.try_get("success")?;
+        out.push(DbMigrationInfo {
+            version,
+            description,
+            installed_on,
+            success: success != 0,
+        });
+    }
+
+    Ok(out)
+}
+
+#[derive(Serialize)]
 pub struct AllDbData {
     pub logs: Vec<Log>,
     pub categories: Vec<Category>,
