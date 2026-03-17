@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { get_categories, Category } from "../api/Category.ts";
 import {
     get_cat_regex,
@@ -32,10 +32,15 @@ export default function CategoryRegexView() {
     const [newRegexPattern, setNewRegexPattern] = useState("");
     const [regexError, setRegexError] = useState<string | null>(null);
     const [editRegexError, setEditRegexError] = useState<string | null>(null);
-    const [filterCategoryId, setFilterCategoryId] = useState<number | "">("");
     const [sortOrder, setSortOrder] = useState<"oldest" | "newest">("newest");
     const [groupByCategory, setGroupByCategory] = useState(false);
     const [collapsedCategoryIds, setCollapsedCategoryIds] = useState<Set<number>>(new Set());
+    const [visibleCategoryIds, setVisibleCategoryIds] = useState<Set<number>>(new Set());
+    const [isCategoryFilterOpen, setIsCategoryFilterOpen] = useState(false);
+    const categoryFilterRef = useRef<HTMLDivElement | null>(null);
+
+    const hasInitializedVisibleCategories = useRef(false);
+    const hasInitializedUiPrefs = useRef(false);
 
     const toggleCategoryCollapsed = (catId: number) => {
         setCollapsedCategoryIds((prev) => {
@@ -56,17 +61,172 @@ export default function CategoryRegexView() {
         queryFn: async () => unwrapResult(await get_cat_regex()),
     });
 
-    const filteredAndSortedRegexes = [...regexes]
-        .filter((r) => filterCategoryId === "" || r.cat_id === filterCategoryId)
-        .sort((a, b) => (sortOrder === "oldest" ? a.id - b.id : b.id - a.id));
+    const categoriesByPriority = useMemo(
+        () => [...categories].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0)),
+        [categories]
+    );
 
-    const categoriesByPriority = [...categories].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
-    const regexesByCategory = new Map<number, typeof filteredAndSortedRegexes>();
-    for (const r of filteredAndSortedRegexes) {
-        const arr = regexesByCategory.get(r.cat_id) ?? [];
-        arr.push(r);
-        regexesByCategory.set(r.cat_id, arr);
-    }
+    useEffect(() => {
+        if (categories.length === 0 || hasInitializedVisibleCategories.current) {
+            return;
+        }
+
+        try {
+            const savedVisibleRaw = localStorage.getItem("regex_visibleCategoryIds");
+            const savedKnownRaw = localStorage.getItem("regex_knownCategoryIds");
+            const allIds = categories.map((c) => c.id);
+
+            if (savedVisibleRaw) {
+                const savedVisible = new Set<number>(JSON.parse(savedVisibleRaw) as number[]);
+                const savedKnown = savedKnownRaw ? new Set<number>(JSON.parse(savedKnownRaw) as number[]) : null;
+
+                const merged = new Set<number>();
+                for (const id of allIds) {
+                    if (savedVisible.has(id)) {
+                        merged.add(id);
+                        continue;
+                    }
+
+                    if (savedKnown && savedKnown.has(id)) {
+                        continue;
+                    }
+
+                    merged.add(id);
+                }
+
+                setVisibleCategoryIds(merged);
+                localStorage.setItem("regex_knownCategoryIds", JSON.stringify(allIds));
+            } else {
+                const allVisible = new Set<number>(allIds);
+                setVisibleCategoryIds(allVisible);
+                localStorage.setItem("regex_visibleCategoryIds", JSON.stringify([...allVisible]));
+                localStorage.setItem("regex_knownCategoryIds", JSON.stringify(allIds));
+            }
+        } catch {
+            const allIds = categories.map((c) => c.id);
+            setVisibleCategoryIds(new Set<number>(allIds));
+        }
+
+        hasInitializedVisibleCategories.current = true;
+    }, [categories]);
+
+    useEffect(() => {
+        if (hasInitializedUiPrefs.current) {
+            return;
+        }
+
+        try {
+            const rawSortOrder = localStorage.getItem("regex_sortOrder");
+            if (rawSortOrder === "oldest" || rawSortOrder === "newest") {
+                setSortOrder(rawSortOrder);
+            }
+
+            const rawGroup = localStorage.getItem("regex_groupByCategory");
+            if (rawGroup != null) {
+                setGroupByCategory(rawGroup === "true");
+            }
+
+            const rawCollapsed = localStorage.getItem("regex_collapsedCategoryIds");
+            if (rawCollapsed) {
+                const ids = JSON.parse(rawCollapsed) as number[];
+                setCollapsedCategoryIds(new Set<number>(ids));
+            }
+        } catch {
+        }
+
+        hasInitializedUiPrefs.current = true;
+    }, []);
+
+    useEffect(() => {
+        if (!isCategoryFilterOpen) return;
+
+        const onPointerDown = (e: PointerEvent) => {
+            const target = e.target as Node | null;
+            if (!target) return;
+            const container = categoryFilterRef.current;
+            if (container && !container.contains(target)) {
+                setIsCategoryFilterOpen(false);
+            }
+        };
+
+        window.addEventListener("pointerdown", onPointerDown);
+        return () => window.removeEventListener("pointerdown", onPointerDown);
+    }, [isCategoryFilterOpen]);
+
+    useEffect(() => {
+        if (!hasInitializedVisibleCategories.current || categories.length === 0) {
+            return;
+        }
+        try {
+            localStorage.setItem("regex_visibleCategoryIds", JSON.stringify([...visibleCategoryIds]));
+            localStorage.setItem("regex_knownCategoryIds", JSON.stringify(categories.map((c) => c.id)));
+        } catch {
+        }
+    }, [visibleCategoryIds, categories]);
+
+    useEffect(() => {
+        if (!hasInitializedUiPrefs.current) {
+            return;
+        }
+        try {
+            localStorage.setItem("regex_sortOrder", sortOrder);
+        } catch {
+        }
+    }, [sortOrder]);
+
+    useEffect(() => {
+        if (!hasInitializedUiPrefs.current) {
+            return;
+        }
+        try {
+            localStorage.setItem("regex_groupByCategory", groupByCategory ? "true" : "false");
+        } catch {
+        }
+    }, [groupByCategory]);
+
+    useEffect(() => {
+        if (!hasInitializedUiPrefs.current) {
+            return;
+        }
+        try {
+            localStorage.setItem("regex_collapsedCategoryIds", JSON.stringify([...collapsedCategoryIds]));
+        } catch {
+        }
+    }, [collapsedCategoryIds]);
+
+    const filteredAndSortedRegexes = useMemo(() => {
+        const visible = visibleCategoryIds;
+        return [...regexes]
+            .filter((r) => visible.has(r.cat_id))
+            .sort((a, b) => (sortOrder === "oldest" ? a.id - b.id : b.id - a.id));
+    }, [regexes, visibleCategoryIds, sortOrder]);
+
+    const regexesByCategory = useMemo(() => {
+        const map = new Map<number, typeof filteredAndSortedRegexes>();
+        for (const r of filteredAndSortedRegexes) {
+            const arr = map.get(r.cat_id) ?? [];
+            arr.push(r);
+            map.set(r.cat_id, arr);
+        }
+        return map;
+    }, [filteredAndSortedRegexes]);
+
+    const toggleVisibleCategory = (catId: number) => {
+        setVisibleCategoryIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(catId)) next.delete(catId);
+            else next.add(catId);
+            return next;
+        });
+    };
+
+    const checkAllCategories = () => {
+        setVisibleCategoryIds(new Set(categories.map((c) => c.id)));
+    };
+
+    const uncheckAllCategories = () => {
+        setVisibleCategoryIds(new Set<number>());
+    };
 
     const createRegexMutation = useMutation({
         mutationFn: async (newRegex: NewCategoryRegex) => {
@@ -312,19 +472,76 @@ export default function CategoryRegexView() {
             </div>
 
             <div className="mb-4 flex flex-wrap items-center gap-3">
-                <label className="text-gray-400 text-sm">Filter by category:</label>
-                <select
-                    value={filterCategoryId === "" ? "" : filterCategoryId}
-                    onChange={(e) => setFilterCategoryId(e.target.value ? parseInt(e.target.value, 10) : "")}
-                    className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
-                >
-                    <option value="">All categories</option>
-                    {categories.map((cat) => (
-                        <option key={cat.id} value={cat.id}>
-                            {cat.name}
-                        </option>
-                    ))}
-                </select>
+                <div className="relative" ref={categoryFilterRef}>
+                    <button
+                        type="button"
+                        onClick={() => setIsCategoryFilterOpen((v) => !v)}
+                        className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white hover:bg-gray-700 flex items-center gap-2"
+                    >
+                        <span>
+                            Filter categories ({visibleCategoryIds.size}/{categories.length || 0})
+                        </span>
+                        <svg
+                            className={`w-4 h-4 text-gray-400 transition-transform ${isCategoryFilterOpen ? "rotate-180" : ""}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+
+                    {isCategoryFilterOpen && (
+                        <div className="absolute z-50 mt-2 w-[min(700px,calc(100vw-3rem))] max-w-[700px] bg-gray-900 border border-gray-700 rounded-lg shadow-lg p-3">
+                            <div className="flex items-center justify-between gap-3 mb-3">
+                                <div className="text-sm font-medium text-gray-200">Categories</div>
+                                <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={checkAllCategories}
+                                        className="px-3 py-1 bg-gray-800 hover:bg-gray-700 rounded text-sm"
+                                    >
+                                        All
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={uncheckAllCategories}
+                                        className="px-3 py-1 bg-gray-800 hover:bg-gray-700 rounded text-sm"
+                                    >
+                                        None
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[50vh] overflow-auto pr-1">
+                                {categoriesByPriority.map((cat) => {
+                                    const checked = visibleCategoryIds.has(cat.id);
+                                    return (
+                                        <label
+                                            key={cat.id}
+                                            className="flex items-center gap-3 p-2 rounded hover:bg-gray-800 cursor-pointer"
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={checked}
+                                                onChange={() => toggleVisibleCategory(cat.id)}
+                                                className="w-4 h-4 rounded cursor-pointer"
+                                            />
+                                            {cat.color && (
+                                                <div
+                                                    className="w-4 h-4 rounded border border-gray-600 shrink-0"
+                                                    style={{ backgroundColor: cat.color }}
+                                                />
+                                            )}
+                                            <span className="text-sm text-gray-200 flex-1">{cat.name}</span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
                 <label className="text-gray-400 text-sm ml-2">Sort:</label>
                 <select
                     value={sortOrder}
