@@ -31,7 +31,9 @@ export function unwrapResult<D, E extends AppError>(result: Result<D, E>): D {
                 ? result.error.data
                 : result.error.type === "Other"
                     ? result.error.data
-                    : "Not found";
+                    : result.error.type === "AuthExpired"
+                        ? `auth expired: ${result.error.data}`
+                        : "Not found";
 
     throw new Error(errorMessage);
 }

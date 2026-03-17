@@ -1,4 +1,5 @@
 use crate::core::IS_SUSPENDED;
+use crate::UpdateState;
 use std::sync::atomic::Ordering;
 use std::sync::OnceLock;
 use tauri::{
@@ -49,15 +50,39 @@ pub fn setup_tray(app: &AppHandle<tauri::Wry>) -> Result<(), Box<dyn std::error:
                     refresh_tray_menu();
 
                     let new_tracking_status = !IS_SUSPENDED.load(Ordering::Relaxed);
-                    if let Some(window) = app.get_window("main") {
+                    if let Some(window) = app.get_webview_window("main") {
                         let _ = window.emit("tracking-status-changed", new_tracking_status);
                     }
                 }
                 "show" => {
-                    if let Some(window) = app.get_window("main") {
+                    if let Some(window) = app.get_webview_window("main") {
                         let _ = window.show();
                         let _ = window.set_focus();
                         let _ = window.unminimize();
+                    }
+
+                    let state = app.state::<UpdateState>();
+                    state.window_visible.store(true, Ordering::Relaxed);
+                    if state.notified.load(Ordering::Relaxed) {
+                        return;
+                    }
+
+                    let has_update = state
+                        .update
+                        .lock()
+                        .ok()
+                        .and_then(|g| g.as_ref().map(|_| ()))
+                        .is_some();
+
+                    if has_update
+                        && state
+                            .notified
+                            .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
+                            .is_ok()
+                    {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.emit("update-available", ());
+                        }
                     }
                 }
                 _ => {}
@@ -69,10 +94,34 @@ pub fn setup_tray(app: &AppHandle<tauri::Wry>) -> Result<(), Box<dyn std::error:
                 ..
             } = event
             {
-                if let Some(window) = app_clone.get_window("main") {
+                if let Some(window) = app_clone.get_webview_window("main") {
                     let _ = window.show();
                     let _ = window.set_focus();
                     let _ = window.unminimize();
+                }
+
+                let state = app_clone.state::<UpdateState>();
+                state.window_visible.store(true, Ordering::Relaxed);
+                if state.notified.load(Ordering::Relaxed) {
+                    return;
+                }
+
+                let has_update = state
+                    .update
+                    .lock()
+                    .ok()
+                    .and_then(|g| g.as_ref().map(|_| ()))
+                    .is_some();
+
+                if has_update
+                    && state
+                        .notified
+                        .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
+                        .is_ok()
+                {
+                    if let Some(window) = app_clone.get_webview_window("main") {
+                        let _ = window.emit("update-available", ());
+                    }
                 }
             }
         })
