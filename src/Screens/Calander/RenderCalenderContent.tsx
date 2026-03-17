@@ -5,14 +5,23 @@ import { useQuery } from "@tanstack/react-query";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import { useEffect, useMemo, useState } from "react";
-import { getCategoryColor, getWeekStart } from "./utils.ts";
+import { getCategoryColor, getWeekStart, formatDuration } from "./utils.ts";
 import { CalendarEvent, DateClickInfo, EventLogs } from "./types.ts";
 import { Category } from "../../api/Category.ts";
 import { EventClickArg, DatesSetArg } from "@fullcalendar/core";
 import interactionPlugin from '@fullcalendar/interaction';
 import { useDateStore } from "../../stores/dateStore.ts";
-import { get_all_google_calendar_events, GoogleCalendarEvent, GoogleCalendar, update_google_calendar, delete_google_calendar, UpdateGoogleCalendar } from "../../api/GoogleCalendar.ts";
+import {
+    get_all_google_calendar_events,
+    google_oauth_login,
+    GoogleCalendarEvent,
+    GoogleCalendar,
+    update_google_calendar,
+    delete_google_calendar,
+    UpdateGoogleCalendar
+} from "../../api/GoogleCalendar.ts";
 import { getWeekRange } from "../../utils.ts";
+import { getCachedEvents, setCachedEvents } from "../../stores/googleCalendarCache.ts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "../../Componants/Toast.tsx";
 
@@ -56,6 +65,31 @@ export default function RenderCalendarContent({
     const [newCalendarColor, setNewCalendarColor] = useState("#4285f4");
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [calendarToDelete, setCalendarToDelete] = useState<number | null>(null);
+    const [isRelogging, setIsRelogging] = useState(false);
+
+    const handleRelogin = async () => {
+        setIsRelogging(true);
+        try {
+            const result = await google_oauth_login();
+            if (result.success) {
+                await queryClient.invalidateQueries({ queryKey: ["googleAuthStatus"] });
+                await queryClient.invalidateQueries({ queryKey: ["googleCalendars"] });
+                queryClient.invalidateQueries({
+                    predicate: (query) => query.queryKey[0] === "googleCalendarEvents"
+                });
+                await refetchGoogleEvents();
+                showToast("Re-connected to Google Calendar", "success");
+            } else {
+                console.error("[GCal] Re-login failed:", result.error);
+                showToast("Re-login failed", "error");
+            }
+        } catch (e) {
+            console.error("[GCal] Re-login error:", e);
+            showToast("Re-login error", "error");
+        } finally {
+            setIsRelogging(false);
+        }
+    };
 
     const updateCalendarMutation = useMutation({
         mutationFn: async (update: UpdateGoogleCalendar) => {
@@ -142,21 +176,68 @@ export default function RenderCalendarContent({
 
     const weekRange = useMemo(() => getWeekRange(date), [date]);
     const calendarIds = useMemo(() => googleCalendars.map(cal => cal.id).sort().join(','), [googleCalendars]);
-    const { data: googleCalendarEvents, refetch: refetchGoogleEvents, error: googleEventsError, isLoading: isLoadingGoogleEvents } = useQuery({
+    
+    const queryEnabled = !!weekStart && !isNaN(weekStart.getTime()) && googleCalendars.length > 0;
+    console.log("[GCal Render] query setup:", {
+        weekStart: weekRange.week_start,
+        weekEnd: weekRange.week_end,
+        calendarIds,
+        googleCalendarsCount: googleCalendars.length,
+        visibleCalendarsCount: visibleCalendars.size,
+        visibleCalendarIds: [...visibleCalendars],
+        queryEnabled,
+    });
+
+    const {
+        data: googleCalendarEvents,
+        refetch: refetchGoogleEvents,
+        error: googleEventsError,
+        isLoading: isLoadingGoogleEvents,
+        isError: isGoogleEventsError
+    } = useQuery({
         queryKey: ["googleCalendarEvents", weekRange.week_start, weekRange.week_end, calendarIds],
         queryFn: async () => {
+            console.log("[GCal Render] queryFn executing: fetching events for range", weekRange.week_start, "-", weekRange.week_end);
             const result = await get_all_google_calendar_events(weekRange.week_start, weekRange.week_end);
-            return unwrapResult(result);
+            const data = unwrapResult(result);
+            console.log("[GCal Render] queryFn result:", data.length, "events");
+            return data;
         },
-        enabled: !!weekStart && !isNaN(weekStart.getTime()) && googleCalendars.length > 0,
-        refetchOnWindowFocus: true, // Refetch when window gains focus
+        enabled: queryEnabled,
+        refetchOnWindowFocus: true,
     });
+
+    const cachedEvents = useMemo(
+        () => getCachedEvents(weekRange.week_start, weekRange.week_end, calendarIds),
+        [weekRange.week_start, weekRange.week_end, calendarIds],
+    );
+    const isAuthExpired = isGoogleEventsError && googleEventsError?.message?.includes("auth expired");
+    const displayGoogleEvents = googleCalendarEvents ?? cachedEvents ?? [];
+    const isShowingCachedEvents = isGoogleEventsError && !isAuthExpired && (cachedEvents?.length ?? 0) > 0;
+
+    useEffect(() => {
+        if (googleCalendarEvents && googleCalendarEvents.length >= 0) {
+            setCachedEvents(weekRange.week_start, weekRange.week_end, calendarIds, googleCalendarEvents);
+        }
+    }, [googleCalendarEvents, weekRange.week_start, weekRange.week_end, calendarIds]);
 
     useEffect(() => {
         if (googleEventsError) {
-            console.error("Error fetching Google Calendar events:", googleEventsError);
+            console.error("[GCal Render] ERROR fetching Google Calendar events:", googleEventsError);
+            console.error("[GCal Render] Error details:", JSON.stringify(googleEventsError, null, 2));
         }
     }, [googleEventsError]);
+
+    useEffect(() => {
+        console.log("[GCal Render] state update:", {
+            googleCalendarEvents: googleCalendarEvents?.length ?? "null",
+            isLoadingGoogleEvents,
+            isGoogleEventsError,
+            displayGoogleEventsCount: displayGoogleEvents.length,
+            isShowingCachedEvents,
+            cachedEventsCount: cachedEvents?.length ?? "null",
+        });
+    }, [googleCalendarEvents, isLoadingGoogleEvents, isGoogleEventsError, displayGoogleEvents, isShowingCachedEvents, cachedEvents]);
 
 
     const events = useMemo(() => {
@@ -175,9 +256,10 @@ export default function RenderCalendarContent({
                 const dbColor = categoryColorMap.get(block.category);
                 const color = getCategoryColor(block.category, dbColor);
 
+                const blockDurationSec = block.endTime - block.startTime;
                 return {
                     id: `timeblock-${block.id}`,
-                    title: block.category,
+                    title: `${block.category} (${formatDuration(blockDurationSec)})`,
                     start: start.toISOString(),
                     end: end.toISOString(),
                     backgroundColor: color,
@@ -191,7 +273,7 @@ export default function RenderCalendarContent({
             })
             .filter((e): e is NonNullable<typeof e> => e !== null);
 
-        const googleEvents = (googleCalendarEvents || [])
+        const googleEvents = displayGoogleEvents
             .filter((event: GoogleCalendarEvent) => visibleCalendars.has(event.calendar_id))
             .map((event: GoogleCalendarEvent) => {
                 const start = new Date(event.start * 1000);
@@ -216,10 +298,11 @@ export default function RenderCalendarContent({
 
                 const calendar = googleCalendarMap.get(event.calendar_id);
                 const color = calendar?.color || "#4285f4"; // Default to Google blue if calendar not found
+                const eventDurationSec = event.end - event.start;
 
                 return {
                     id: `google-${event.event_id}-${event.calendar_id}`,
-                    title: event.title,
+                    title: `${event.title} (${formatDuration(eventDurationSec)})`,
                     start: start.toISOString(),
                     end: end.toISOString(),
                     backgroundColor: color,
@@ -238,10 +321,10 @@ export default function RenderCalendarContent({
         const allEvents = [...timeBlockEvents, ...googleEvents];
 
         return allEvents;
-    }, [data, categoryColorMap, visibleCategories, googleCalendarEvents, visibleCalendars, googleCalendarMap]);
+    }, [data, categoryColorMap, visibleCategories, displayGoogleEvents, visibleCalendars, googleCalendarMap]);
 
 
-    if (isLoading || isLoadingGoogleEvents) {
+    if (isLoading || (isLoadingGoogleEvents && !(cachedEvents?.length ?? 0))) {
         return <CalendarSkeleton />;
     }
 
@@ -257,197 +340,241 @@ export default function RenderCalendarContent({
     }
 
     const hasTimeBlocks = data && data.length > 0;
-    const hasGoogleEvents = googleCalendarEvents && googleCalendarEvents.length > 0 &&
-        googleCalendarEvents.some((event: GoogleCalendarEvent) => visibleCalendars.has(event.calendar_id));
+    const hasGoogleEvents = displayGoogleEvents.length > 0 &&
+        displayGoogleEvents.some((event: GoogleCalendarEvent) => visibleCalendars.has(event.calendar_id));
     const hasAnyEvents = hasTimeBlocks || hasGoogleEvents;
 
     if (!hasAnyEvents) {
         return (
             <div className="flex items-center justify-center h-full w-full">
                 <div className="text-center">
-                    <div className="text-gray-400 text-4xl mb-4 font-semibold">
-                        No data for this week
-                    </div>
-                    <div className="text-gray-600 text-xl">
-                        Start tracking to see your activity here
-                    </div>
+                    {isAuthExpired ? (
+                        <>
+                            <div className="text-red-400 text-2xl mb-3 font-semibold">
+                                Google Calendar session expired
+                            </div>
+                            <div className="text-gray-400 text-lg mb-6">
+                                Your Google login has expired. Re-connect to see your calendar events.
+                            </div>
+                            <button
+                                onClick={handleRelogin}
+                                disabled={isRelogging}
+                                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded-lg text-white font-semibold transition-colors"
+                            >
+                                {isRelogging ? "Connecting..." : "Re-connect Google Calendar"}
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <div className="text-gray-400 text-4xl mb-4 font-semibold">
+                                No data for this week
+                            </div>
+                            <div className="text-gray-600 text-xl">
+                                Start tracking to see your activity here
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="flex flex-1 overflow-hidden h-full min-h-0">
-            <div className="w-64 border-r border-gray-700 bg-black p-4 overflow-y-auto flex-shrink-0">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-white">
-                        Filter Categories
-                    </h3>
-                </div>
-                <div className="flex gap-2 mb-4">
+        <div className="flex flex-1 overflow-hidden h-full min-h-0 flex flex-col">
+            {isAuthExpired && (
+                <div className="flex-shrink-0 px-4 py-2 bg-red-900/50 border-b border-red-700/50 text-red-200 text-sm flex items-center justify-between">
+                    <span>Google Calendar session expired. Re-connect to see your events.</span>
                     <button
-                        onClick={checkAllCategories}
-                        className="flex-1 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 rounded text-white transition-colors"
+                        onClick={handleRelogin}
+                        disabled={isRelogging}
+                        className="ml-4 px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded text-white text-sm font-medium transition-colors"
                     >
-                        Check All
-                    </button>
-                    <button
-                        onClick={uncheckAllCategories}
-                        className="flex-1 px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 rounded text-white transition-colors"
-                    >
-                        Uncheck All
+                        {isRelogging ? "Connecting..." : "Re-connect"}
                     </button>
                 </div>
-                <div className="space-y-2">
-                    {categories.map((category) => {
-                        const categoryName = category.name;
-                        const isVisible = visibleCategories.has(categoryName);
-                        const dbColor = categoryColorMap.get(categoryName);
-                        const color = getCategoryColor(categoryName, dbColor);
-
-                        return (
-                            <label
-                                key={category.id}
-                                className="flex items-center gap-3 p-2 rounded hover:bg-gray-900 cursor-pointer"
-                            >
-                                <input
-                                    type="checkbox"
-                                    checked={isVisible}
-                                    onChange={() => toggleCategory(categoryName)}
-                                    className="w-4 h-4 rounded cursor-pointer"
-                                />
-                                <div
-                                    className="w-4 h-4 rounded border border-gray-600"
-                                    style={{ backgroundColor: color }}
-                                />
-                                <span className="text-sm text-gray-200 flex-1">
-                                    {categoryName}
-                                </span>
-                            </label>
-                        );
-                    })}
+            )}
+            {isShowingCachedEvents && (
+                <div
+                    className="flex-shrink-0 px-4 py-2 bg-amber-900/50 border-b border-amber-700/50 text-amber-200 text-sm">
+                    Showing cached calendar events (offline or sync failed). New changes may not appear until connection
+                    is restored.
                 </div>
-
-                <div className="border-t border-gray-700 my-4"></div>
-
-                <div className="mb-4">
-                    <div className="flex items-center justify-between mb-2">
+            )}
+            <div className="flex flex-1 overflow-hidden min-h-0">
+                <div className="w-64 border-r border-gray-700 bg-black p-4 overflow-y-auto flex-shrink-0">
+                    <div className="flex items-center justify-between mb-4">
                         <h3 className="text-lg font-semibold text-white">
-                            Google Calendars
+                            Filter Categories
                         </h3>
                     </div>
-                    <p className="text-xs text-gray-500 mb-2">
-                        Manage calendars in Google Calendar settings
-                    </p>
-
-                    {editingCalendar && (
-                        <div className="mb-4 p-3 bg-gray-900 rounded-lg space-y-2">
-                            <input
-                                type="text"
-                                value={newCalendarName}
-                                onChange={(e) => setNewCalendarName(e.target.value)}
-                                className="w-full px-2 py-1 bg-gray-800 text-white rounded text-sm"
-                                placeholder="Calendar Name"
-                            />
-                            <div className="flex gap-2 items-center">
-                                <input
-                                    type="color"
-                                    value={newCalendarColor}
-                                    onChange={(e) => setNewCalendarColor(e.target.value)}
-                                    className="w-10 h-8 rounded cursor-pointer"
-                                />
-                                <input
-                                    type="text"
-                                    value={newCalendarColor}
-                                    onChange={(e) => setNewCalendarColor(e.target.value)}
-                                    className="flex-1 px-2 py-1 bg-gray-800 text-white rounded text-sm"
-                                />
-                            </div>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={handleUpdate}
-                                    disabled={updateCalendarMutation.isPending}
-                                    className="flex-1 px-2 py-1 text-sm bg-blue-600 hover:bg-blue-700 rounded text-white disabled:opacity-50"
-                                >
-                                    Save
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        setEditingCalendar(null);
-                                        setNewCalendarName("");
-                                        setNewCalendarColor("#4285f4");
-                                    }}
-                                    className="px-2 py-1 text-sm bg-gray-700 hover:bg-gray-600 rounded text-white"
-                                >
-                                    Cancel
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
+                    <div className="flex gap-2 mb-4">
+                        <button
+                            onClick={checkAllCategories}
+                            className="flex-1 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 rounded text-white transition-colors"
+                        >
+                            Check All
+                        </button>
+                        <button
+                            onClick={uncheckAllCategories}
+                            className="flex-1 px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 rounded text-white transition-colors"
+                        >
+                            Uncheck All
+                        </button>
+                    </div>
                     <div className="space-y-2">
-                        {googleCalendars.map((calendar) => {
-                            const isVisible = visibleCalendars.has(calendar.id);
-                            const isEditing = editingCalendar?.id === calendar.id;
+                        {categories.map((category) => {
+                            const categoryName = category.name;
+                            const isVisible = visibleCategories.has(categoryName);
+                            const dbColor = categoryColorMap.get(categoryName);
+                            const color = getCategoryColor(categoryName, dbColor);
 
                             return (
-                                <div
-                                    key={calendar.id}
-                                    className={`flex items-center gap-2 p-2 rounded hover:bg-gray-900 ${isEditing ? "bg-gray-800" : ""}`}
+                                <label
+                                    key={category.id}
+                                    className="flex items-center gap-3 p-2 rounded hover:bg-gray-900 cursor-pointer"
                                 >
                                     <input
                                         type="checkbox"
                                         checked={isVisible}
-                                        onChange={() => toggleCalendar(calendar.id)}
+                                        onChange={() => toggleCategory(categoryName)}
                                         className="w-4 h-4 rounded cursor-pointer"
                                     />
                                     <div
                                         className="w-4 h-4 rounded border border-gray-600"
-                                        style={{ backgroundColor: calendar.color }}
+                                        style={{ backgroundColor: color }}
                                     />
-                                    <span className="text-sm text-gray-200 flex-1 truncate">
-                                        {calendar.name}
+                                    <span className="text-sm text-gray-200 flex-1">
+                                        {categoryName}
                                     </span>
-                                    <div className="flex gap-1">
-                                        <button
-                                            onClick={() => handleEdit(calendar)}
-                                            className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded text-white"
-                                            title="Edit"
-                                        >
-                                            ✎
-                                        </button>
-                                        <button
-                                            onClick={() => handleDelete(calendar.id)}
-                                            className="px-2 py-1 text-xs bg-red-600 hover:bg-red-700 rounded text-white"
-                                            title="Delete"
-                                        >
-                                            ×
-                                        </button>
-                                    </div>
-                                </div>
+                                </label>
                             );
                         })}
-                        {googleCalendars.length === 0 && (
-                            <p className="text-sm text-gray-500">No calendars added</p>
+                    </div>
+
+                    <div className="border-t border-gray-700 my-4"></div>
+
+                    <div className="mb-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-lg font-semibold text-white">
+                                Google Calendars
+                            </h3>
+                        </div>
+                        <p className="text-xs text-gray-500 mb-2">
+                            Manage calendars in Google Calendar settings
+                        </p>
+
+                        {editingCalendar && (
+                            <div className="mb-4 p-3 bg-gray-900 rounded-lg space-y-2">
+                                <input
+                                    type="text"
+                                    value={newCalendarName}
+                                    onChange={(e) => setNewCalendarName(e.target.value)}
+                                    className="w-full px-2 py-1 bg-gray-800 text-white rounded text-sm"
+                                    placeholder="Calendar Name"
+                                />
+                                <div className="flex gap-2 items-center">
+                                    <input
+                                        type="color"
+                                        value={newCalendarColor}
+                                        onChange={(e) => setNewCalendarColor(e.target.value)}
+                                        className="w-10 h-8 rounded cursor-pointer"
+                                    />
+                                    <input
+                                        type="text"
+                                        value={newCalendarColor}
+                                        onChange={(e) => setNewCalendarColor(e.target.value)}
+                                        className="flex-1 px-2 py-1 bg-gray-800 text-white rounded text-sm"
+                                    />
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={handleUpdate}
+                                        disabled={updateCalendarMutation.isPending}
+                                        className="flex-1 px-2 py-1 text-sm bg-blue-600 hover:bg-blue-700 rounded text-white disabled:opacity-50"
+                                    >
+                                        Save
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setEditingCalendar(null);
+                                            setNewCalendarName("");
+                                            setNewCalendarColor("#4285f4");
+                                        }}
+                                        className="px-2 py-1 text-sm bg-gray-700 hover:bg-gray-600 rounded text-white"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
                         )}
+
+                        <div className="space-y-2">
+                            {googleCalendars.map((calendar) => {
+                                const isVisible = visibleCalendars.has(calendar.id);
+                                const isEditing = editingCalendar?.id === calendar.id;
+
+                                return (
+                                    <div
+                                        key={calendar.id}
+                                        className={`flex items-center gap-2 p-2 rounded hover:bg-gray-900 ${isEditing ? "bg-gray-800" : ""}`}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={isVisible}
+                                            onChange={() => toggleCalendar(calendar.id)}
+                                            className="w-4 h-4 rounded cursor-pointer"
+                                        />
+                                        <div
+                                            className="w-4 h-4 rounded border border-gray-600"
+                                            style={{ backgroundColor: calendar.color }}
+                                        />
+                                        <span className="text-sm text-gray-200 flex-1 truncate">
+                                            {calendar.name}
+                                        </span>
+                                        <div className="flex gap-1">
+                                            <button
+                                                onClick={() => handleEdit(calendar)}
+                                                className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded text-white"
+                                                title="Edit"
+                                            >
+                                                ✎
+                                            </button>
+                                            <button
+                                                onClick={() => handleDelete(calendar.id)}
+                                                className="px-2 py-1 text-xs bg-red-600 hover:bg-red-700 rounded text-white"
+                                                title="Delete"
+                                            >
+                                                ×
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {googleCalendars.length === 0 && (
+                                <p className="text-sm text-gray-500">No calendars added</p>
+                            )}
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div className="flex-1 h-full overflow-hidden min-h-0">
-                <FullCalendar
-                    height="100%"
-                    ref={ref}
-                    plugins={[timeGridPlugin, interactionPlugin]}
-                    initialView="timeGridWeek"
-                    initialDate={weekStart.toISOString().split('T')[0]}
-                    events={events}
-                    eventClick={handleEventClick}
-                    allDaySlot={false}
-                    nowIndicator={true}
-                    headerToolbar={false}
-                    firstDay={1}
-                    datesSet={onDatesSet}
-                />
+                <div className="flex-1 h-full overflow-hidden min-h-0">
+                    <FullCalendar
+                        height="100%"
+                        slotMinTime="06:00:00"
+                        slotMaxTime="30:00:00"
+                        scrollTime="06:00:00"
+                        ref={ref}
+                        plugins={[timeGridPlugin, interactionPlugin]}
+                        initialView="timeGridWeek"
+                        initialDate={weekStart.toISOString().split('T')[0]}
+                        events={events}
+                        eventClick={handleEventClick}
+                        allDaySlot={false}
+                        nowIndicator={true}
+                        headerToolbar={false}
+                        firstDay={1}
+                        datesSet={onDatesSet}
+                    />
+                </div>
             </div>
 
             {showDeleteConfirm && (

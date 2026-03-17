@@ -5,11 +5,6 @@ use std::sync::Mutex;
 
 use crate::db::backup;
 use crate::db::validation;
-use crate::db::tables::cat_regex;
-use crate::db::tables::category;
-use crate::db::tables::log;
-use crate::db::tables::skipped_app;
-use crate::db::tables::google_calendar;
 
 static POOL: Mutex<Option<SqlitePool>> = Mutex::new(None);
 
@@ -81,18 +76,9 @@ async fn create_pool() -> Result<SqlitePool, sqlx::Error> {
         .connect(&connection_string)
         .await?;
     
-    create_all_tables(&pool).await?;
+    sqlx::migrate!("./migrations").run(&pool).await?;
     
     let _ = validation::validate_and_repair_database(&pool).await;
     
     Ok(pool)
-}
-
-async fn create_all_tables(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    log::create_table(pool).await?;
-    category::create_table(pool).await?;
-    cat_regex::create_table(pool).await?;
-    skipped_app::create_table(pool).await?;
-    google_calendar::create_table(pool).await?;
-    Ok(())
 }
