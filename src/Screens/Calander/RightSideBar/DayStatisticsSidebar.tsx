@@ -1,6 +1,5 @@
 import {useQuery} from "@tanstack/react-query";
 import {get_day_statistics} from "../../../api/statistics.ts";
-import {unwrapResult} from "../../../utils.ts";
 import {formatDuration} from "../utils.ts";
 import {DonutChart} from "../DonutChart.tsx";
 
@@ -29,12 +28,7 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
         queryKey: ["day_statistics", dayStart, dayEnd],
         queryFn: async () => {
             if (!dayStart || !dayEnd) return null;
-            try {
-                const result = await get_day_statistics(dayStart, dayEnd);
-                return unwrapResult(result);
-            } catch (error) {
-                throw error;
-            }
+            return await get_day_statistics(dayStart, dayEnd);
         },
         enabled: !!dayStart && !!dayEnd,
     });

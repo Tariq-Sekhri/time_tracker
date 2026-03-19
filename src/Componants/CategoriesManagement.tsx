@@ -23,7 +23,6 @@ import {
     SkippedApp,
     NewSkippedApp
 } from "../api/SkippedApp.ts";
-import { unwrapResult } from "../utils.ts";
 import { ToastContainer, useToast } from "./Toast.tsx";
 
 export default function CategoriesManagement() {
@@ -41,22 +40,22 @@ export default function CategoriesManagement() {
 
     const { data: categories = [] } = useQuery({
         queryKey: ["categories"],
-        queryFn: async () => unwrapResult(await get_categories()),
+        queryFn: get_categories,
     });
 
     const { data: regexes = [] } = useQuery({
         queryKey: ["cat_regex"],
-        queryFn: async () => unwrapResult(await get_cat_regex()),
+        queryFn: get_cat_regex,
     });
 
     const { data: skippedApps = [] } = useQuery({
         queryKey: ["skipped_apps"],
-        queryFn: async () => unwrapResult(await get_skipped_apps()),
+        queryFn: get_skipped_apps,
     });
 
     const createCategoryMutation = useMutation({
         mutationFn: async (newCat: NewCategory) => {
-            return unwrapResult(await insert_category(newCat));
+            return await insert_category(newCat);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["categories"] });
@@ -74,7 +73,7 @@ export default function CategoriesManagement() {
 
     const updateCategoryMutation = useMutation({
         mutationFn: async (cat: Category) => {
-            return unwrapResult(await update_category_by_id(cat));
+            return await update_category_by_id(cat);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["categories"] });
@@ -95,7 +94,7 @@ export default function CategoriesManagement() {
 
     const deleteCategoryMutation = useMutation({
         mutationFn: async ({ id, cascade }: { id: number; cascade: boolean }) => {
-            return unwrapResult(await delete_category_by_id(id, cascade));
+            return await delete_category_by_id(id, cascade);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["categories"] });
@@ -130,7 +129,7 @@ export default function CategoriesManagement() {
 
     const createRegexMutation = useMutation({
         mutationFn: async (newRegex: NewCategoryRegex) => {
-            return unwrapResult(await insert_cat_regex(newRegex));
+            return await insert_cat_regex(newRegex);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
@@ -148,7 +147,7 @@ export default function CategoriesManagement() {
 
     const updateRegexMutation = useMutation({
         mutationFn: async (regex: CategoryRegex) => {
-            return unwrapResult(await update_cat_regex_by_id(regex));
+            return await update_cat_regex_by_id(regex);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
@@ -166,7 +165,7 @@ export default function CategoriesManagement() {
 
     const deleteRegexMutation = useMutation({
         mutationFn: async (id: number) => {
-            return unwrapResult(await delete_cat_regex_by_id(id));
+            return await delete_cat_regex_by_id(id);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
@@ -175,7 +174,7 @@ export default function CategoriesManagement() {
 
     const createSkippedAppMutation = useMutation({
         mutationFn: async (newApp: NewSkippedApp) => {
-            return unwrapResult(await insert_skipped_app(newApp));
+            return await insert_skipped_app(newApp);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["skipped_apps"] });
@@ -191,7 +190,7 @@ export default function CategoriesManagement() {
 
     const deleteSkippedAppMutation = useMutation({
         mutationFn: async (id: number) => {
-            return unwrapResult(await delete_skipped_app_by_id(id));
+            return await delete_skipped_app_by_id(id);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["skipped_apps"] });

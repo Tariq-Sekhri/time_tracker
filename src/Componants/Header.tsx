@@ -9,8 +9,13 @@ export default function Header({ currentView, setCurrentView }: {
     setCurrentView: (newView: View) => void
 }) {
     const [isTracking, setIsTracking] = useState(true);
+    const [appVersion, setAppVersion] = useState<string | null>(null);
     useEffect(() => {
         invoke<boolean>("get_tracking_status").then(setIsTracking);
+    }, []);
+
+    useEffect(() => {
+        invoke<string>("get_app_version").then(setAppVersion).catch(() => setAppVersion(null));
     }, []);
 
 
@@ -89,6 +94,7 @@ export default function Header({ currentView, setCurrentView }: {
             </button>
             <div className="flex-1" />
             <div className="px-4 flex items-center gap-3">
+                {appVersion && <span className="text-xs text-gray-500">v{appVersion}</span>}
                 <span className={`text-sm ${isTracking ? 'text-green-400' : 'text-gray-500'}`}>
                     {isTracking ? 'Tracking' : 'Paused'}
                 </span>

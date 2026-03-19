@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { get_week_statistics } from "../../../api/statistics.ts";
-import { unwrapResult, getWeekRange } from "../../../utils.ts";
+import { getWeekRange } from "../../../utils.ts";
 import { formatDuration, formatPercentage } from "../utils.ts";
 import { DonutChart } from "../DonutChart.tsx";
 
@@ -32,12 +32,7 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList, on
     } = useQuery({
         queryKey: ["week_statistics", week_start, week_end],
         queryFn: async () => {
-            try {
-                const result = await get_week_statistics(week_start, week_end);
-                return unwrapResult(result);
-            } catch (error) {
-                throw error;
-            }
+            return await get_week_statistics(week_start, week_end);
         },
     });
 

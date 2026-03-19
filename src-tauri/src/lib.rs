@@ -49,6 +49,11 @@ pub struct UpdateState {
     pub notified: AtomicBool,
 }
 
+#[tauri::command]
+fn get_app_version(app: tauri::AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(debug_assertions)]
@@ -194,6 +199,7 @@ pub fn run() {
             export_data_to_json,
             get_db_schema_version,
             commands::apply_update_cmd,
+            get_app_version,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

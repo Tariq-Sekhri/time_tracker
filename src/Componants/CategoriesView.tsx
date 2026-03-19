@@ -9,7 +9,6 @@ import {
     NewCategory
 } from "../api/Category.ts";
 import { get_cat_regex } from "../api/CategoryRegex.ts";
-import { unwrapResult } from "../utils.ts";
 import { ToastContainer, useToast } from "./Toast.tsx";
 
 export default function CategoriesView() {
@@ -26,17 +25,17 @@ export default function CategoriesView() {
 
     const { data: categories = [] } = useQuery({
         queryKey: ["categories"],
-        queryFn: async () => unwrapResult(await get_categories()),
+        queryFn: get_categories,
     });
 
     const { data: regexes = [] } = useQuery({
         queryKey: ["cat_regex"],
-        queryFn: async () => unwrapResult(await get_cat_regex()),
+        queryFn: get_cat_regex,
     });
 
     const createCategoryMutation = useMutation({
         mutationFn: async (newCat: NewCategory) => {
-            return unwrapResult(await insert_category(newCat));
+            return await insert_category(newCat);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["categories"] });
@@ -54,7 +53,7 @@ export default function CategoriesView() {
 
     const updateCategoryMutation = useMutation({
         mutationFn: async (cat: Category) => {
-            return unwrapResult(await update_category_by_id(cat));
+            return await update_category_by_id(cat);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["categories"] });
@@ -70,7 +69,7 @@ export default function CategoriesView() {
 
     const deleteCategoryMutation = useMutation({
         mutationFn: async ({ id, cascade }: { id: number; cascade: boolean }) => {
-            return unwrapResult(await delete_category_by_id(id, cascade));
+            return await delete_category_by_id(id, cascade);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["categories"] });

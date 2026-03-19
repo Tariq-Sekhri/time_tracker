@@ -6,7 +6,6 @@ import {
     update_google_calendar_event,
     delete_google_calendar_event,
 } from "../../../api/GoogleCalendar.ts";
-import { unwrapResult } from "../../../utils.ts";
 import { CalendarEvent } from "../types.ts";
 import { useToast } from "../../../Componants/Toast.tsx";
 
@@ -53,8 +52,7 @@ export default function GoogleCalendarEventView({
         queryKey: ["googleCalendar", calendarId],
         queryFn: async () => {
             if (!calendarId) return null;
-            const result = await get_google_calendar_by_id(calendarId);
-            return unwrapResult(result);
+            return await get_google_calendar_by_id(calendarId);
         },
         enabled: !!calendarId,
     });
@@ -68,7 +66,7 @@ export default function GoogleCalendarEventView({
             start: number;
             end: number;
         }) => {
-            return unwrapResult(await update_google_calendar_event(updatedEvent));
+            return await update_google_calendar_event(updatedEvent);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({
@@ -103,10 +101,10 @@ export default function GoogleCalendarEventView({
     const deleteEventMutation = useMutation({
         mutationFn: async () => {
             if (!calendarId || !eventId) throw new Error("Missing calendar or event ID");
-            return unwrapResult(await delete_google_calendar_event({
+            return await delete_google_calendar_event({
                 calendar_id: calendarId,
                 event_id: eventId,
-            }));
+            });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({

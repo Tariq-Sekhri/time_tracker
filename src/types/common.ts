@@ -1,31 +1,9 @@
-
-export type Result<D, E> =
-    | { success: true; data: D }
-    | { success: false; error: E };
-
-export type AppError =
-    | { type: "Db"; data: string }
-    | { type: "NotFound" }
-    | { type: "Regex"; data: string }
-    | { type: "Other"; data: string }
-    | { type: "AuthExpired"; data: string };
-
-export function getErrorMessage(error: AppError): string {
-    switch (error.type) {
-        case "Db":
-            return error.data;
-        case "NotFound":
-            return "Not found";
-        case "Regex":
-            return error.data;
-        case "Other":
-            return error.data;
-        case "AuthExpired":
-            return error.data;
+export function toErrorString(error: unknown): string {
+    if (error instanceof Error) return error.message;
+    if (typeof error === "string") return error;
+    try {
+        return JSON.stringify(error, null, 2);
+    } catch {
+        return String(error);
     }
 }
-
-
-
-
-

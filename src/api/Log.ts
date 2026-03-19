@@ -1,5 +1,4 @@
-import { invokeWithResult } from "../utils.ts";
-import { AppError, Result } from "../types/common.ts";
+import { invokeOrThrow } from "../utils.ts";
 
 export type Log = {
     id: number;
@@ -27,36 +26,36 @@ export type GetLogsByCategoryRequest = {
     end_time: number;
 };
 
-export async function delete_log_by_id(id: number): Promise<Result<null, AppError>> {
-    return invokeWithResult<null>("delete_log_by_id", { id });
+export async function delete_log_by_id(id: number): Promise<null> {
+    return invokeOrThrow<null>("delete_log_by_id", { id });
 }
 
-export async function get_logs(): Promise<Result<Log[], AppError>> {
-    return invokeWithResult<Log[]>("get_logs");
+export async function get_logs(): Promise<Log[]> {
+    return invokeOrThrow<Log[]>("get_logs");
 }
 
-export async function get_log_by_id(id: number): Promise<Result<Log, AppError>> {
-    return invokeWithResult<Log>("get_log_by_id", { id });
+export async function get_log_by_id(id: number): Promise<Log> {
+    return invokeOrThrow<Log>("get_log_by_id", { id });
 }
 
-export async function delete_logs_for_time_block(request: DeleteTimeBlockRequest): Promise<Result<number, AppError>> {
-    return invokeWithResult<number>("delete_logs_for_time_block", { request });
+export async function delete_logs_for_time_block(request: DeleteTimeBlockRequest): Promise<number> {
+    return invokeOrThrow<number>("delete_logs_for_time_block", { request });
 }
 
-export async function count_logs_for_time_block(request: DeleteTimeBlockRequest): Promise<Result<number, AppError>> {
-    return invokeWithResult<number>("count_logs_for_time_block", { request });
+export async function count_logs_for_time_block(request: DeleteTimeBlockRequest): Promise<number> {
+    return invokeOrThrow<number>("count_logs_for_time_block", { request });
 }
 
-export async function get_logs_for_time_block(request: DeleteTimeBlockRequest): Promise<Result<MergedLog[], AppError>> {
-    return invokeWithResult<MergedLog[]>("get_logs_for_time_block", { request });
+export async function get_logs_for_time_block(request: DeleteTimeBlockRequest): Promise<MergedLog[]> {
+    return invokeOrThrow<MergedLog[]>("get_logs_for_time_block", { request });
 }
 
-export async function delete_logs_by_ids(ids: number[]): Promise<Result<null, AppError>> {
-    return invokeWithResult<null>("delete_logs_by_ids", { ids });
+export async function delete_logs_by_ids(ids: number[]): Promise<null> {
+    return invokeOrThrow<null>("delete_logs_by_ids", { ids });
 }
 
-export async function get_logs_by_category(request: GetLogsByCategoryRequest): Promise<Result<MergedLog[], AppError>> {
-    return invokeWithResult<MergedLog[]>("get_logs_by_category", { request });
+export async function get_logs_by_category(request: GetLogsByCategoryRequest): Promise<MergedLog[]> {
+    return invokeOrThrow<MergedLog[]>("get_logs_by_category", { request });
 }
 
 

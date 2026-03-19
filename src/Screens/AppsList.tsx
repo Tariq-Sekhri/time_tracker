@@ -1,7 +1,7 @@
 import {useQuery} from "@tanstack/react-query";
 import {useState} from "react";
 import {get_week_statistics} from "../api/statistics.ts";
-import {unwrapResult, getWeekRange} from "../utils.ts";
+import { getWeekRange } from "../utils.ts";
 import {useDateStore} from "../stores/dateStore.ts";
 
 type Tab = "week" | "dailyAvg" | "allTime";
@@ -28,7 +28,7 @@ export default function AppsList({onBack}: { onBack: () => void }) {
 
     const {data: weekStats, isLoading} = useQuery({
         queryKey: ["week_statistics", week_start, week_end],
-        queryFn: async () => unwrapResult(await get_week_statistics(week_start, week_end)),
+        queryFn: async () => await get_week_statistics(week_start, week_end),
     });
 
     if (isLoading || !weekStats) {

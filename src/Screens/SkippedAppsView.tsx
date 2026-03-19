@@ -9,8 +9,7 @@ import {
     SkippedApp,
     NewSkippedApp
 } from "../api/SkippedApp.ts";
-import { unwrapResult } from "../utils.ts";
-import { getErrorMessage } from "../types/common.ts";
+import { toErrorString } from "../types/common.ts";
 import { ToastContainer, useToast } from "../Componants/Toast.tsx";
 
 function validateRegex(pattern: string): string | null {
@@ -43,16 +42,12 @@ export default function SkippedAppsView() {
 
     const { data: skippedApps = [] } = useQuery({
         queryKey: ["skipped_apps"],
-        queryFn: async () => unwrapResult(await get_skipped_apps()),
+        queryFn: get_skipped_apps,
     });
 
     const createSkippedAppMutation = useMutation({
         mutationFn: async (newApp: NewSkippedApp) => {
-            const result = await insert_skipped_app_and_delete_logs(newApp);
-            if (!result.success) {
-                throw new Error(getErrorMessage(result.error));
-            }
-            return result.data;
+            return await insert_skipped_app_and_delete_logs(newApp);
         },
         onMutate: async (newApp) => {
             await queryClient.cancelQueries({ queryKey: ["skipped_apps"] });
@@ -103,7 +98,7 @@ export default function SkippedAppsView() {
 
     const updateSkippedAppMutation = useMutation({
         mutationFn: async (app: SkippedApp) => {
-            return unwrapResult(await update_skipped_app_by_id(app));
+            return await update_skipped_app_by_id(app);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["skipped_apps"] });
@@ -119,7 +114,7 @@ export default function SkippedAppsView() {
 
     const deleteSkippedAppMutation = useMutation({
         mutationFn: async (id: number) => {
-            return unwrapResult(await delete_skipped_app_by_id(id));
+            return await delete_skipped_app_by_id(id);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["skipped_apps"] });
@@ -142,19 +137,12 @@ export default function SkippedAppsView() {
 
         setIsCountingLogs(true);
         try {
-            const result = await count_matching_logs(newRegexPattern);
-            if (result.success) {
-                setMatchingLogCount(result.data);
-                setPendingRegex(newRegexPattern);
-            } else {
-                const errorMsg = getErrorMessage(result.error);
-                const fullError = JSON.stringify(result.error, null, 2);
-                showToast("Failed to count matching logs", "error", 5000, fullError);
-            }
+            const count = await count_matching_logs(newRegexPattern);
+            setMatchingLogCount(count);
+            setPendingRegex(newRegexPattern);
         } catch (e) {
-            const errorMsg = "Failed to count matching logs";
-            const fullError = e instanceof Error ? e.stack || e.message : String(e);
-            showToast(errorMsg, "error", 5000, fullError);
+            const fullError = toErrorString(e);
+            showToast("Failed to count matching logs", "error", 5000, fullError);
         }
         setIsCountingLogs(false);
     };

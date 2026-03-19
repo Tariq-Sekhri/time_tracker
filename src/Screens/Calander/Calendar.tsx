@@ -2,7 +2,7 @@ import {useQuery, useQueryClient} from "@tanstack/react-query";
 import {get_categories} from "../../api/Category.ts";
 import {get_logs_for_time_block, get_logs_by_category} from "../../api/Log.ts";
 import {get_week} from "../../api/week.ts";
-import {unwrapResult, getWeekRange} from "../../utils.ts";
+import { getWeekRange } from "../../utils.ts";
 import {useState, useMemo, useEffect, useRef} from "react";
 import {EventClickArg, DatesSetArg} from "@fullcalendar/core";
 import RenderCalendarContent from "./RenderCalenderContent.tsx";
@@ -36,15 +36,14 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
 
     const {data: categories = []} = useQuery({
         queryKey: ["categories"],
-        queryFn: async () => unwrapResult(await get_categories()),
+        queryFn: get_categories,
     });
 
     const {data: googleCalendars, isError: isGoogleCalendarsError, error: googleCalendarsError} = useQuery({
         queryKey: ["googleCalendars"],
         queryFn: async () => {
             console.log("[GCal Calendar] fetching google calendars from DB");
-            const result = await get_google_calendars();
-            const data = unwrapResult(result);
+            const data = await get_google_calendars();
             console.log("[GCal Calendar] got", data.length, "calendars from DB:", data.map(c => ({ id: c.id, name: c.name, google_calendar_id: c.google_calendar_id })));
             return data;
         },
@@ -232,7 +231,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const weekStart = getWeekStart(date);
     const {data: weekData} = useQuery({
         queryKey: ["week", weekStart.toISOString()],
-        queryFn: async () => unwrapResult(await get_week(weekStart)),
+        queryFn: async () => await get_week(weekStart),
         enabled: !!weekStart && !isNaN(weekStart.getTime()) && !!selectedEvent,
     });
 
@@ -298,64 +297,52 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
 
                     console.log("Category logs result:", result);
 
-                    if (result.success) {
-                        const logMap = new Map<string, {
-                            ids: number[],
-                            app: string,
-                            timestamp: Date,
-                            duration: number
-                        }>();
+                    const logMap = new Map<string, {
+                        ids: number[],
+                        app: string,
+                        timestamp: Date,
+                        duration: number
+                    }>();
 
-                        result.data.forEach(log => {
-                            const existing = logMap.get(log.app);
-                            if (existing) {
-                                existing.ids.push(...log.ids);
-                                existing.duration += log.duration;
-                                const logTimestamp = new Date(log.timestamp * 1000);
-                                if (logTimestamp < existing.timestamp) {
-                                    existing.timestamp = logTimestamp;
-                                }
-                            } else {
-                                logMap.set(log.app, {
-                                    ids: [...log.ids],
-                                    app: log.app,
-                                    timestamp: new Date(log.timestamp * 1000),
-                                    duration: log.duration,
-                                });
+                    result.forEach(log => {
+                        const existing = logMap.get(log.app);
+                        if (existing) {
+                            existing.ids.push(...log.ids);
+                            existing.duration += log.duration;
+                            const logTimestamp = new Date(log.timestamp * 1000);
+                            if (logTimestamp < existing.timestamp) {
+                                existing.timestamp = logTimestamp;
                             }
-                        });
-
-                        const logs = Array.from(logMap.values()).sort((a, b) => b.duration - a.duration);
-                        console.log("Processed logs:", logs.length, "apps for category", selectedCategory);
-                        console.log("Logs grouped by app:", logs.map(l => ({
-                            app: l.app,
-                            duration: l.duration,
-                            ids: l.ids.length
-                        })));
-                        setSelectedEventLogs(logs);
-
-                        const categoryEvent: CalendarEvent = {
-                            title: title,
-                            start: new Date(startTime * 1000),
-                            end: new Date(endTime * 1000),
-                            apps: logs.map(log => ({
+                        } else {
+                            logMap.set(log.app, {
+                                ids: [...log.ids],
                                 app: log.app,
-                                totalDuration: log.duration,
-                            })),
-                        };
-                        console.log("Created category event:", categoryEvent);
-                        setSelectedEvent(categoryEvent);
-                    } else {
-                        console.error("Failed to fetch category logs:", result.error);
-                        const categoryEvent: CalendarEvent = {
-                            title: `${selectedCategory} - Error`,
-                            start: new Date(startTime * 1000),
-                            end: new Date(endTime * 1000),
-                            apps: [],
-                        };
-                        setSelectedEvent(categoryEvent);
-                        setSelectedEventLogs([]);
-                    }
+                                timestamp: new Date(log.timestamp * 1000),
+                                duration: log.duration,
+                            });
+                        }
+                    });
+
+                    const logs = Array.from(logMap.values()).sort((a, b) => b.duration - a.duration);
+                    console.log("Processed logs:", logs.length, "apps for category", selectedCategory);
+                    console.log("Logs grouped by app:", logs.map(l => ({
+                        app: l.app,
+                        duration: l.duration,
+                        ids: l.ids.length
+                    })));
+                    setSelectedEventLogs(logs);
+
+                    const categoryEvent: CalendarEvent = {
+                        title: title,
+                        start: new Date(startTime * 1000),
+                        end: new Date(endTime * 1000),
+                        apps: logs.map(log => ({
+                            app: log.app,
+                            totalDuration: log.duration,
+                        })),
+                    };
+                    console.log("Created category event:", categoryEvent);
+                    setSelectedEvent(categoryEvent);
                 } catch (error) {
                     console.error("Error fetching category logs:", error);
                     setSelectedEventLogs([]);
@@ -426,18 +413,14 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                     end_time: endTime,
                 });
 
-                if (result.success) {
-                    const logs = result.data.map(log => ({
-                        ids: log.ids,
-                        app: log.app,
-                        timestamp: new Date(log.timestamp * 1000), // Convert seconds to milliseconds
-                        duration: log.duration,
-                    }));
-                    logs.sort((a, b) => b.duration - a.duration);
-                    setSelectedEventLogs(logs);
-                } else {
-                    setSelectedEventLogs([]);
-                }
+                const logs = result.map(log => ({
+                    ids: log.ids,
+                    app: log.app,
+                    timestamp: new Date(log.timestamp * 1000),
+                    duration: log.duration,
+                }));
+                logs.sort((a, b) => b.duration - a.duration);
+                setSelectedEventLogs(logs);
             }
         }
     };
