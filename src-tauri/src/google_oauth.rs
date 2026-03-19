@@ -129,7 +129,30 @@ pub async fn google_oauth_login(
         .exchange_code(AuthorizationCode::new(code))
         .request_async(oauth2::reqwest::async_http_client)
         .await
-        .context("Failed to exchange code for token")?;
+        .map_err(|e| match e {
+            oauth2::RequestTokenError::ServerResponse(err) => {
+                let desc = err
+                    .error_description()
+                    .map(|s| format!(" - {}", s))
+                    .unwrap_or_default();
+                let uri = err
+                    .error_uri()
+                    .map(|u| format!(" ({})", u))
+                    .unwrap_or_default();
+                anyhow::anyhow!("Failed to exchange code for token: {}{}{}", err.error(), desc, uri)
+            }
+            oauth2::RequestTokenError::Request(err) => {
+                anyhow::anyhow!("Failed to exchange code for token: request failed: {}", err)
+            }
+            oauth2::RequestTokenError::Parse(err, body) => anyhow::anyhow!(
+                "Failed to exchange code for token: could not parse response: {} - {}",
+                err,
+                String::from_utf8_lossy(&body)
+            ),
+            oauth2::RequestTokenError::Other(msg) => {
+                anyhow::anyhow!("Failed to exchange code for token: {}", msg)
+            }
+        })?;
 
     let access_token = token_result.access_token().secret().to_string();
     let refresh_token = token_result

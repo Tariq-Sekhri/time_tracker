@@ -4,9 +4,10 @@ import { listen } from "@tauri-apps/api/event";
 import { View } from "../App.tsx"
 
 
-export default function Header({ currentView, setCurrentView }: {
+export default function Header({ currentView, setCurrentView, devEnabled }: {
     currentView: View,
-    setCurrentView: (newView: View) => void
+    setCurrentView: (newView: View) => void,
+    devEnabled: boolean
 }) {
     const [isTracking, setIsTracking] = useState(true);
     const [appVersion, setAppVersion] = useState<string | null>(null);
@@ -92,6 +93,17 @@ export default function Header({ currentView, setCurrentView }: {
             >
                 Google Calendars
             </button>
+            {devEnabled && (
+                <button
+                    onClick={() => setCurrentView("dev")}
+                    className={`px-6 py-3 font-medium transition-colors ${currentView === "dev"
+                        ? "bg-gray-800 text-white border-b-2 border-blue-500"
+                        : "text-gray-400 hover:text-white hover:bg-gray-900"
+                        }`}
+                >
+                    Dev
+                </button>
+            )}
             <div className="flex-1" />
             <div className="px-4 flex items-center gap-3">
                 {appVersion && <span className="text-xs text-gray-500">v{appVersion}</span>}

@@ -49,12 +49,6 @@ pub struct UpdateState {
     pub notified: AtomicBool,
 }
 
-#[derive(Clone, serde::Serialize)]
-struct UpdateProgress {
-    downloaded: u64,
-    total: u64,
-}
-
 #[tauri::command]
 fn get_app_version(app: tauri::AppHandle) -> String {
     app.package_info().version.to_string()
@@ -148,51 +142,6 @@ pub fn run() {
                         let _ = w.emit("update-available", ());
                     }
                 }
-
-                let update_to_apply = state
-                    .update
-                    .lock()
-                    .ok()
-                    .and_then(|mut g| g.take());
-
-                if let Some(update) = update_to_apply {
-                    if let Some(w) = handle.get_webview_window("main") {
-                        let _ = w.emit("update-downloading", ());
-                    }
-
-                    let progress_handle = handle.clone();
-                    let install_handle = handle.clone();
-                    let res = update
-                        .download_and_install(
-                            move |downloaded, total| {
-                                if let Some(w) = progress_handle.get_webview_window("main") {
-                                    let _ = w.emit(
-                                        "update-download-progress",
-                                        UpdateProgress {
-                                            downloaded: downloaded as u64,
-                                            total: total.unwrap_or(0),
-                                        },
-                                    );
-                                }
-                            },
-                            move || {
-                                if let Some(w) = install_handle.get_webview_window("main") {
-                                    let _ = w.emit("update-installing", ());
-                                }
-                            },
-                        )
-                        .await;
-
-                    if let Err(e) = res {
-                        if let Some(w) = handle.get_webview_window("main") {
-                            let _ = w.emit("update-error", e.to_string());
-                        }
-                    } else {
-                        if let Some(w) = handle.get_webview_window("main") {
-                            let _ = w.emit("update-installed", ());
-                        }
-                    }
-                }
             });
             Ok(())
         })
@@ -258,6 +207,7 @@ pub fn run() {
             export_data_to_json,
             get_db_schema_version,
             commands::apply_update_cmd,
+            commands::check_update_cmd,
             get_app_version,
         ])
         .run(tauri::generate_context!())
