@@ -13,9 +13,8 @@ import {
     GoogleCalendarInfo,
     NewGoogleCalendar,
 } from "../api/GoogleCalendar.ts";
-import { unwrapResult } from "../utils.ts";
 import { useToast } from "../Componants/Toast.tsx";
-import { getErrorMessage } from "../types/common.ts";
+import { toErrorString } from "../types/common.ts";
 
 export default function GoogleCalendarsView() {
     const queryClient = useQueryClient();
@@ -24,28 +23,18 @@ export default function GoogleCalendarsView() {
 
     const { data: authStatus, refetch: refetchAuthStatus } = useQuery({
         queryKey: ["googleAuthStatus"],
-        queryFn: async () => {
-            const result = await get_google_auth_status();
-            return unwrapResult(result);
-        },
+        queryFn: get_google_auth_status,
     });
 
     const { data: calendars = [] } = useQuery({
         queryKey: ["googleCalendars"],
-        queryFn: async () => {
-            const result = await get_google_calendars();
-            return unwrapResult(result);
-        },
+        queryFn: get_google_calendars,
     });
 
     const { data: availableCalendars = [], refetch: refetchAvailableCalendars, error: availableCalendarsError, isError: isAvailableCalendarsError } = useQuery({
         queryKey: ["availableGoogleCalendars"],
         queryFn: async () => {
-            console.log("[GCal Settings] fetching available calendars from Google API");
-            const result = await list_available_google_calendars();
-            const data = unwrapResult(result);
-            console.log("[GCal Settings] available calendars result:", data.length, "calendars", data.map(c => ({ name: c.name, selected: c.selected })));
-            return data;
+            return await list_available_google_calendars();
         },
         enabled: authStatus?.logged_in === true,
     });
@@ -69,57 +58,52 @@ export default function GoogleCalendarsView() {
         }
         setIsLoggingIn(true);
         try {
-            const result = await google_oauth_login();
-            if (result.success) {
-                showToast(`Logged in as ${result.data.email}`, "success");
+            const auth = await google_oauth_login();
+            showToast(`Logged in as ${auth.email}`, "success");
 
-                await queryClient.invalidateQueries({ queryKey: ["googleAuthStatus"] });
-                await refetchAuthStatus();
+            await queryClient.invalidateQueries({ queryKey: ["googleAuthStatus"] });
+            await refetchAuthStatus();
 
-                await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 500));
 
-                const availableResult = await list_available_google_calendars();
-                if (availableResult.success && availableResult.data) {
-                    const calendarsToAdd = availableResult.data.filter(cal => !cal.selected);
-                    if (calendarsToAdd.length > 0) {
-                        const authStatusResult = await get_google_auth_status();
-                        if (authStatusResult.success && authStatusResult.data?.email) {
-                            let importedCount = 0;
-                            for (const cal of calendarsToAdd) {
-                                try {
-                                    const newCal: NewGoogleCalendar = {
-                                        google_calendar_id: cal.google_calendar_id,
-                                        name: cal.name,
-                                        color: cal.color,
-                                        account_email: authStatusResult.data.email,
-                                    };
-                                    const insertResult = await insert_google_calendar(newCal);
-                                    if (insertResult.success) {
-                                        importedCount++;
-                                    }
-                                } catch (e) {
-                                }
-                            }
-                            queryClient.invalidateQueries({ queryKey: ["googleCalendars"] });
-                            queryClient.invalidateQueries({ queryKey: ["availableGoogleCalendars"] });
-                            queryClient.invalidateQueries({
-                                predicate: (query) => query.queryKey[0] === "googleCalendarEvents"
-                            });
-                            if (importedCount > 0) {
-                                showToast(`Imported ${importedCount} calendar(s)`, "success");
-                            }
+            const available = await list_available_google_calendars();
+            const calendarsToAdd = available.filter(cal => !cal.selected);
+            if (calendarsToAdd.length > 0) {
+                const refreshedAuth = await get_google_auth_status();
+                if (refreshedAuth?.email) {
+                    let importedCount = 0;
+                    let firstImportError: string | null = null;
+                    for (const cal of calendarsToAdd) {
+                        try {
+                            const newCal: NewGoogleCalendar = {
+                                google_calendar_id: cal.google_calendar_id,
+                                name: cal.name,
+                                color: cal.color,
+                                account_email: refreshedAuth.email,
+                            };
+                            await insert_google_calendar(newCal);
+                            importedCount++;
+                        } catch (e) {
+                            if (!firstImportError) firstImportError = toErrorString(e);
                         }
                     }
+                    queryClient.invalidateQueries({ queryKey: ["googleCalendars"] });
+                    queryClient.invalidateQueries({ queryKey: ["availableGoogleCalendars"] });
+                    queryClient.invalidateQueries({
+                        predicate: (query) => query.queryKey[0] === "googleCalendarEvents"
+                    });
+                    if (importedCount > 0) {
+                        showToast(`Imported ${importedCount} calendar(s)`, "success");
+                    }
+                    if (firstImportError) {
+                        showToast("Some calendars failed to import", "error", 5000, firstImportError);
+                    }
                 }
-                await refetchAvailableCalendars();
-            } else {
-                console.error("Login failed:", result.error);
-                const fullError = JSON.stringify(result.error, null, 2);
-                showToast("Login failed", "error", 5000, fullError);
             }
+            await refetchAvailableCalendars();
         } catch (error: any) {
             console.error("Login error:", error);
-            const fullError = JSON.stringify(error, null, 2);
+            const fullError = toErrorString(error);
             showToast("Login error", "error", 5000, fullError);
         } finally {
             setIsLoggingIn(false);
@@ -128,7 +112,7 @@ export default function GoogleCalendarsView() {
 
     const logoutMutation = useMutation({
         mutationFn: async () => {
-            return unwrapResult(await google_oauth_logout());
+            return await google_oauth_logout();
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["googleAuthStatus"] });
@@ -155,7 +139,7 @@ export default function GoogleCalendarsView() {
                 color: calendarInfo.color,
                 account_email: authStatus.email,
             };
-            return unwrapResult(await insert_google_calendar(newCal));
+            return await insert_google_calendar(newCal);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["googleCalendars"] });
@@ -174,7 +158,7 @@ export default function GoogleCalendarsView() {
 
     const removeCalendarMutation = useMutation({
         mutationFn: async (id: number) => {
-            return unwrapResult(await delete_google_calendar(id));
+            return await delete_google_calendar(id);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["googleCalendars"] });

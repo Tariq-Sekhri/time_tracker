@@ -1,5 +1,4 @@
-import { invokeWithResult } from "../utils.ts";
-import { AppError, Result } from "../types/common.ts";
+import { invokeOrThrow } from "../utils.ts";
 
 export type CategoryStat = {
     category: string;
@@ -51,15 +50,15 @@ export type DayStatistics = {
     hourly_distribution: HourlyStat[];
 };
 
-export async function get_week_statistics(weekStart: number, weekEnd: number): Promise<Result<WeekStatistics, AppError>> {
-    return invokeWithResult<WeekStatistics>("get_week_statistics", {
+export async function get_week_statistics(weekStart: number, weekEnd: number): Promise<WeekStatistics> {
+    return invokeOrThrow<WeekStatistics>("get_week_statistics", {
         weekStart,
         weekEnd,
     });
 }
 
-export async function get_day_statistics(dayStart: number, dayEnd: number): Promise<Result<DayStatistics, AppError>> {
-    return invokeWithResult<DayStatistics>("get_day_statistics", {
+export async function get_day_statistics(dayStart: number, dayEnd: number): Promise<DayStatistics> {
+    return invokeOrThrow<DayStatistics>("get_day_statistics", {
         dayStart,
         dayEnd,
     });

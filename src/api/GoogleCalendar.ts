@@ -1,5 +1,4 @@
-import { invokeWithResult } from "../utils.ts";
-import { AppError, Result } from "../types/common.ts";
+import { invokeOrThrow } from "../utils.ts";
 
 const DEFAULT_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const DEFAULT_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || "";
@@ -98,80 +97,53 @@ export type DeleteGoogleCalendarEvent = {
 };
 
 
-export async function google_oauth_login(): Promise<Result<AuthStatus, AppError>> {
+export async function google_oauth_login(): Promise<AuthStatus> {
     if (!hasGoogleOAuthCredentials()) {
-        return {
-            success: false,
-            error: {
-                type: "Other",
-                data: "OAuth credentials not configured. Please set up your Google OAuth Client ID and Secret in the Advanced settings below."
-            }
-        };
+        throw new Error("OAuth credentials not configured. Please contact the app developer.");
     }
-    return invokeWithResult<AuthStatus>("google_oauth_login", {
+    return invokeOrThrow<AuthStatus>("google_oauth_login", {
         clientId: CLIENT_ID,
         clientSecret: CLIENT_SECRET,
     });
 }
 
-export async function google_oauth_logout(): Promise<Result<null, AppError>> {
-    return invokeWithResult<null>("google_oauth_logout");
+export async function google_oauth_logout(): Promise<null> {
+    return invokeOrThrow<null>("google_oauth_logout");
 }
 
-export async function get_google_auth_status(): Promise<Result<AuthStatus, AppError>> {
-    return invokeWithResult<AuthStatus>("get_google_auth_status");
+export async function get_google_auth_status(): Promise<AuthStatus> {
+    return invokeOrThrow<AuthStatus>("get_google_auth_status");
 }
 
 
-export async function list_available_google_calendars(): Promise<Result<GoogleCalendarInfo[], AppError>> {
-    console.log("[GCal API] list_available_google_calendars: fetching from Google API");
+export async function list_available_google_calendars(): Promise<GoogleCalendarInfo[]> {
     if (!hasGoogleOAuthCredentials()) {
-        console.warn("[GCal API] list_available_google_calendars: NO CREDENTIALS");
-        return {
-            success: false,
-            error: {
-                type: "Other",
-                data: "Google OAuth credentials not set"
-            }
-        };
+        throw new Error("Google OAuth credentials not set");
     }
-    const result = await invokeWithResult<GoogleCalendarInfo[]>("list_available_google_calendars", {
+    return invokeOrThrow<GoogleCalendarInfo[]>("list_available_google_calendars", {
         clientId: CLIENT_ID,
         clientSecret: CLIENT_SECRET,
     });
-    if (result.success) {
-        console.log("[GCal API] list_available_google_calendars: got", result.data.length, "calendars", result.data.map(c => ({ name: c.name, selected: c.selected })));
-    } else {
-        console.error("[GCal API] list_available_google_calendars: FAILED", result.error);
-    }
-    return result;
 }
 
-export async function get_google_calendars(): Promise<Result<GoogleCalendar[], AppError>> {
-    console.log("[GCal API] get_google_calendars: fetching saved calendars from DB");
-    const result = await invokeWithResult<GoogleCalendar[]>("get_google_calendars");
-    if (result.success) {
-        console.log("[GCal API] get_google_calendars: got", result.data.length, "calendars", result.data.map(c => ({ id: c.id, name: c.name })));
-    } else {
-        console.error("[GCal API] get_google_calendars: FAILED", result.error);
-    }
-    return result;
+export async function get_google_calendars(): Promise<GoogleCalendar[]> {
+    return invokeOrThrow<GoogleCalendar[]>("get_google_calendars");
 }
 
-export async function get_google_calendar_by_id(id: number): Promise<Result<GoogleCalendar, AppError>> {
-    return invokeWithResult<GoogleCalendar>("get_google_calendar_by_id", { id });
+export async function get_google_calendar_by_id(id: number): Promise<GoogleCalendar> {
+    return invokeOrThrow<GoogleCalendar>("get_google_calendar_by_id", { id });
 }
 
-export async function insert_google_calendar(calendar: NewGoogleCalendar): Promise<Result<number, AppError>> {
-    return invokeWithResult<number>("insert_google_calendar", { newCalendar: calendar });
+export async function insert_google_calendar(calendar: NewGoogleCalendar): Promise<number> {
+    return invokeOrThrow<number>("insert_google_calendar", { newCalendar: calendar });
 }
 
-export async function update_google_calendar(update: UpdateGoogleCalendar): Promise<Result<null, AppError>> {
-    return invokeWithResult<null>("update_google_calendar", { update });
+export async function update_google_calendar(update: UpdateGoogleCalendar): Promise<null> {
+    return invokeOrThrow<null>("update_google_calendar", { update });
 }
 
-export async function delete_google_calendar(id: number): Promise<Result<null, AppError>> {
-    return invokeWithResult<null>("delete_google_calendar", { id });
+export async function delete_google_calendar(id: number): Promise<null> {
+    return invokeOrThrow<null>("delete_google_calendar", { id });
 }
 
 
@@ -179,11 +151,11 @@ export async function get_google_calendar_events(
     calendar_id: number,
     start_time: number,
     end_time: number
-): Promise<Result<GoogleCalendarEvent[], AppError>> {
+): Promise<GoogleCalendarEvent[]> {
     if (!hasGoogleOAuthCredentials()) {
-        return { success: true, data: [] }; // Return empty if not configured
+        return [];
     }
-    return invokeWithResult<GoogleCalendarEvent[]>("get_google_calendar_events", {
+    return invokeOrThrow<GoogleCalendarEvent[]>("get_google_calendar_events", {
         calendarId: calendar_id,
         startTime: start_time,
         endTime: end_time,
@@ -195,19 +167,11 @@ export async function get_google_calendar_events(
 export async function get_all_google_calendar_events(
     start_time: number,
     end_time: number
-): Promise<Result<GoogleCalendarEvent[], AppError>> {
-    console.log("[GCal API] get_all_google_calendar_events called", { start_time, end_time });
+): Promise<GoogleCalendarEvent[]> {
     if (!hasGoogleOAuthCredentials()) {
-        console.warn("[GCal API] get_all_google_calendar_events: NO CREDENTIALS - returning empty", {
-            CLIENT_ID_set: CLIENT_ID !== "",
-            CLIENT_SECRET_set: CLIENT_SECRET !== "",
-            CLIENT_ID_valid: CLIENT_ID.includes(".apps.googleusercontent.com"),
-            CLIENT_SECRET_valid: CLIENT_SECRET.startsWith("GOCSPX-"),
-        });
-        return { success: true, data: [] };
+        return [];
     }
-    console.log("[GCal API] get_all_google_calendar_events: credentials OK, invoking backend");
-    const result = await invokeWithResult<GoogleCalendarEvent[]>("get_all_google_calendar_events", {
+    return invokeOrThrow<GoogleCalendarEvent[]>("get_all_google_calendar_events", {
         params: {
             startTime: start_time,
             endTime: end_time,
@@ -215,27 +179,15 @@ export async function get_all_google_calendar_events(
         clientId: CLIENT_ID,
         clientSecret: CLIENT_SECRET,
     });
-    if (result.success) {
-        console.log("[GCal API] get_all_google_calendar_events: SUCCESS, got", result.data.length, "events");
-    } else {
-        console.error("[GCal API] get_all_google_calendar_events: FAILED", result.error);
-    }
-    return result;
 }
 
 export async function create_google_calendar_event(
     event: CreateGoogleCalendarEvent
-): Promise<Result<string, AppError>> {
+): Promise<string> {
     if (!hasGoogleOAuthCredentials()) {
-        return {
-            success: false,
-            error: {
-                type: "Other",
-                data: "Google OAuth credentials not set"
-            }
-        };
+        throw new Error("Google OAuth credentials not set");
     }
-    return invokeWithResult<string>("create_google_calendar_event", {
+    return invokeOrThrow<string>("create_google_calendar_event", {
         params: event,
         clientId: CLIENT_ID,
         clientSecret: CLIENT_SECRET,
@@ -244,17 +196,11 @@ export async function create_google_calendar_event(
 
 export async function update_google_calendar_event(
     update: UpdateGoogleCalendarEvent
-): Promise<Result<null, AppError>> {
+): Promise<null> {
     if (!hasGoogleOAuthCredentials()) {
-        return {
-            success: false,
-            error: {
-                type: "Other",
-                data: "Google OAuth credentials not set"
-            }
-        };
+        throw new Error("Google OAuth credentials not set");
     }
-    return invokeWithResult<null>("update_google_calendar_event", {
+    return invokeOrThrow<null>("update_google_calendar_event", {
         update,
         clientId: CLIENT_ID,
         clientSecret: CLIENT_SECRET,
@@ -263,17 +209,11 @@ export async function update_google_calendar_event(
 
 export async function delete_google_calendar_event(
     params: DeleteGoogleCalendarEvent
-): Promise<Result<null, AppError>> {
+): Promise<null> {
     if (!hasGoogleOAuthCredentials()) {
-        return {
-            success: false,
-            error: {
-                type: "Other",
-                data: "Google OAuth credentials not set"
-            }
-        };
+        throw new Error("Google OAuth credentials not set");
     }
-    return invokeWithResult<null>("delete_google_calendar_event", {
+    return invokeOrThrow<null>("delete_google_calendar_event", {
         params,
         clientId: CLIENT_ID,
         clientSecret: CLIENT_SECRET,

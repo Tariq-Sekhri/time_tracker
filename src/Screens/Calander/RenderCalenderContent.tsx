@@ -1,4 +1,4 @@
-import { unwrapResult } from "../../utils.ts";
+import { toErrorString } from "../../types/common.ts";
 import { get_week, TimeBlock } from "../../api/week.ts";
 import CalendarSkeleton from "./CalanderSkeletion.tsx";
 import { useQuery } from "@tanstack/react-query";
@@ -70,22 +70,17 @@ export default function RenderCalendarContent({
     const handleRelogin = async () => {
         setIsRelogging(true);
         try {
-            const result = await google_oauth_login();
-            if (result.success) {
-                await queryClient.invalidateQueries({ queryKey: ["googleAuthStatus"] });
-                await queryClient.invalidateQueries({ queryKey: ["googleCalendars"] });
-                queryClient.invalidateQueries({
-                    predicate: (query) => query.queryKey[0] === "googleCalendarEvents"
-                });
-                await refetchGoogleEvents();
-                showToast("Re-connected to Google Calendar", "success");
-            } else {
-                console.error("[GCal] Re-login failed:", result.error);
-                showToast("Re-login failed", "error");
-            }
+            await google_oauth_login();
+            await queryClient.invalidateQueries({ queryKey: ["googleAuthStatus"] });
+            await queryClient.invalidateQueries({ queryKey: ["googleCalendars"] });
+            queryClient.invalidateQueries({
+                predicate: (query) => query.queryKey[0] === "googleCalendarEvents"
+            });
+            await refetchGoogleEvents();
+            showToast("Re-connected to Google Calendar", "success");
         } catch (e) {
             console.error("[GCal] Re-login error:", e);
-            showToast("Re-login error", "error");
+            showToast("Re-login error", "error", 5000, toErrorString(e));
         } finally {
             setIsRelogging(false);
         }
@@ -93,7 +88,7 @@ export default function RenderCalendarContent({
 
     const updateCalendarMutation = useMutation({
         mutationFn: async (update: UpdateGoogleCalendar) => {
-            return unwrapResult(await update_google_calendar(update));
+            return await update_google_calendar(update);
         },
         onSuccess: async () => {
             await queryClient.invalidateQueries({ queryKey: ["googleCalendars"] });
@@ -116,7 +111,7 @@ export default function RenderCalendarContent({
 
     const deleteCalendarMutation = useMutation({
         mutationFn: async (id: number) => {
-            return unwrapResult(await delete_google_calendar(id));
+            return await delete_google_calendar(id);
         },
         onSuccess: async () => {
             await queryClient.invalidateQueries({ queryKey: ["googleCalendars"] });
@@ -169,7 +164,7 @@ export default function RenderCalendarContent({
     const weekStart = getWeekStart(date);
     const { data, isLoading, error } = useQuery({
         queryKey: ["week", weekStart.toISOString()],
-        queryFn: async () => unwrapResult(await get_week(weekStart)),
+        queryFn: async () => await get_week(weekStart),
         enabled: !!weekStart && !isNaN(weekStart.getTime()),
         refetchOnWindowFocus: true, // Refetch when window gains focus
     });
@@ -198,8 +193,7 @@ export default function RenderCalendarContent({
         queryKey: ["googleCalendarEvents", weekRange.week_start, weekRange.week_end, calendarIds],
         queryFn: async () => {
             console.log("[GCal Render] queryFn executing: fetching events for range", weekRange.week_start, "-", weekRange.week_end);
-            const result = await get_all_google_calendar_events(weekRange.week_start, weekRange.week_end);
-            const data = unwrapResult(result);
+            const data = await get_all_google_calendar_events(weekRange.week_start, weekRange.week_end);
             console.log("[GCal Render] queryFn result:", data.length, "events");
             return data;
         },

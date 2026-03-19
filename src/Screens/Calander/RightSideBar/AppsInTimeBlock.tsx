@@ -6,7 +6,6 @@ import {
     delete_logs_for_time_block
 } from "../../../api/Log.ts";
 import { useState } from "react"
-import { unwrapResult } from "../../../utils.ts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { SideBarView } from "./RightSideBar.tsx";
 import { writeText, readText } from "@tauri-apps/plugin-clipboard-manager";
@@ -59,20 +58,18 @@ export default function AppsInTimeBlock({
             end_time: endTime,
         });
 
-        if (result.success) {
-            setDeleteLogCount(result.data);
-            setShowDeleteConfirm(true);
-        }
+        setDeleteLogCount(result);
+        setShowDeleteConfirm(true);
         setIsCountingLogs(false);
     };
 
     const deleteTimeBlockMutation = useMutation({
         mutationFn: async (params: { appNames: string[]; startTime: number; endTime: number }) => {
-            return unwrapResult(await delete_logs_for_time_block({
+            return await delete_logs_for_time_block({
                 app_names: params.appNames,
                 start_time: params.startTime,
                 end_time: params.endTime,
-            }));
+            });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["week"] });
@@ -103,7 +100,7 @@ export default function AppsInTimeBlock({
 
     const handleDeleteLogMutation = useMutation({
         mutationFn: async (ids: number[]) => {
-            return unwrapResult(await delete_logs_by_ids(ids))
+            return await delete_logs_by_ids(ids)
         },
         onSuccess: (_, deletedIds) => {
             const updatedLogs = selectedEventLogs.filter((log) => {

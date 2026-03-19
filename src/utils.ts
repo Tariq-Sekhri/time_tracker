@@ -1,41 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
-import { AppError, Result } from "./types/common.ts";
 
-/**
- * Wrapper for Tauri invoke that returns a Result type
- */
-export async function invokeWithResult<T>(
+export async function invokeOrThrow<T>(
     command: string,
     args?: Record<string, any>
-): Promise<Result<T, AppError>> {
-    const res: T | AppError = await invoke(command, args);
-    if (res != null && typeof res == "object" && "type" in res) {
-        return { success: false, error: res };
-    }
-    return { success: true, data: res };
-}
-
-/**
- * Unwraps a Result type, returning the data on success or throwing an Error on failure.
- * This makes it easy to use Result types with React Query and other promise-based APIs.
- */
-export function unwrapResult<D, E extends AppError>(result: Result<D, E>): D {
-    if (result.success) {
-        return result.data;
-    }
-
-    const errorMessage =
-        result.error.type === "Db"
-            ? result.error.data
-            : result.error.type === "Regex"
-                ? result.error.data
-                : result.error.type === "Other"
-                    ? result.error.data
-                    : result.error.type === "AuthExpired"
-                        ? `auth expired: ${result.error.data}`
-                        : "Not found";
-
-    throw new Error(errorMessage);
+): Promise<T> {
+    return await invoke<T>(command, args);
 }
 
 /**
