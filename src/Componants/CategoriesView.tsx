@@ -9,11 +9,11 @@ import {
     NewCategory
 } from "../api/Category.ts";
 import { get_cat_regex } from "../api/CategoryRegex.ts";
-import { ToastContainer, useToast } from "./Toast.tsx";
+import { useToast } from "./Toast.tsx";
 
 export default function CategoriesView() {
     const queryClient = useQueryClient();
-    const { showToast, toasts, removeToast, updateToast } = useToast();
+    const { showToast } = useToast();
     const [editingCategory, setEditingCategory] = useState<Category | null>(null);
     const [newCategoryName, setNewCategoryName] = useState("");
     const [newCategoryPriority, setNewCategoryPriority] = useState(0);
@@ -126,7 +126,6 @@ export default function CategoriesView() {
 
     return (
         <div className="p-6 text-white">
-            <ToastContainer toasts={toasts} onRemove={removeToast} onUpdate={updateToast} />
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold">Categories</h1>
                 <div className="flex gap-2">

@@ -9,7 +9,7 @@ import {
     CategoryRegex,
     NewCategoryRegex
 } from "../api/CategoryRegex.ts";
-import { ToastContainer, useToast } from "../Componants/Toast.tsx";
+import { useToast } from "../Componants/Toast.tsx";
 
 function validateRegex(pattern: string): string | null {
     if (!pattern.trim()) {
@@ -25,7 +25,7 @@ function validateRegex(pattern: string): string | null {
 
 export default function CategoryRegexView() {
     const queryClient = useQueryClient();
-    const { showToast, toasts, removeToast, updateToast } = useToast();
+    const { showToast } = useToast();
     const [editingRegex, setEditingRegex] = useState<CategoryRegex | null>(null);
     const [newRegexCatId, setNewRegexCatId] = useState<number | "">("");
     const [newRegexPattern, setNewRegexPattern] = useState("");
@@ -416,7 +416,6 @@ export default function CategoryRegexView() {
 
     return (
         <div className="p-6 text-white">
-            <ToastContainer toasts={toasts} onRemove={removeToast} onUpdate={updateToast} />
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold">Category Regex Patterns</h1>
                 <button

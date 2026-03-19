@@ -23,11 +23,11 @@ import {
     SkippedApp,
     NewSkippedApp
 } from "../api/SkippedApp.ts";
-import { ToastContainer, useToast } from "./Toast.tsx";
+import { useToast } from "./Toast.tsx";
 
 export default function CategoriesManagement() {
     const queryClient = useQueryClient();
-    const { showToast, toasts, removeToast, updateToast } = useToast();
+    const { showToast } = useToast();
     const [editingCategory, setEditingCategory] = useState<Category | null>(null);
     const [editingRegex, setEditingRegex] = useState<CategoryRegex | null>(null);
     const [newCategoryName, setNewCategoryName] = useState("");
@@ -290,7 +290,6 @@ export default function CategoriesManagement() {
 
     return (
         <div className="p-6 text-white">
-            <ToastContainer toasts={toasts} onRemove={removeToast} onUpdate={updateToast} />
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold">Categories & Regex Management</h1>
                 <button

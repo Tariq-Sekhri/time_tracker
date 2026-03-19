@@ -11,6 +11,7 @@ import DetailedStatistics from "./Screens/DetailedStatistics.tsx";
 import AppsList from "./Screens/AppsList.tsx";
 import Header from "./Componants/Header.tsx";
 import GoogleCalendarsView from "./Screens/GoogleCalendarsView.tsx";
+import { ToastProvider } from "./Componants/Toast.tsx";
 
 export type View = "calendar" | "categories" | "regex" | "skipped" | "detailed" | "apps" | "googleCalendars";
 
@@ -48,50 +49,52 @@ export default function App() {
     };
 
     return (
-        <main className="bg-black text-white h-screen flex flex-col">
-            <Header currentView={currentView} setCurrentView={setCurrentView} />
+        <ToastProvider>
+            <main className="bg-black text-white h-screen flex flex-col">
+                <Header currentView={currentView} setCurrentView={setCurrentView} />
 
-            {updateAvailable && (
-                <div className="border-b border-gray-700 bg-gray-900 px-4 py-3 flex items-center gap-3">
-                    <div className="flex-1">
-                        <div className="font-medium">Update available</div>
-                        <div className="text-sm text-gray-300">
-                            {updateError ? updateError : "Install the latest version now."}
+                {updateAvailable && (
+                    <div className="border-b border-gray-700 bg-gray-900 px-4 py-3 flex items-center gap-3">
+                        <div className="flex-1">
+                            <div className="font-medium">Update available</div>
+                            <div className="text-sm text-gray-300">
+                                {updateError ? updateError : "Install the latest version now."}
+                            </div>
                         </div>
+                        <button
+                            onClick={() => setUpdateAvailable(false)}
+                            disabled={isUpdating}
+                            className="px-3 py-2 rounded-md bg-gray-800 hover:bg-gray-700 disabled:opacity-60"
+                        >
+                            Later
+                        </button>
+                        <button
+                            onClick={applyUpdate}
+                            disabled={isUpdating}
+                            className="px-3 py-2 rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-60"
+                        >
+                            {isUpdating ? "Updating..." : "Update now"}
+                        </button>
                     </div>
-                    <button
-                        onClick={() => setUpdateAvailable(false)}
-                        disabled={isUpdating}
-                        className="px-3 py-2 rounded-md bg-gray-800 hover:bg-gray-700 disabled:opacity-60"
-                    >
-                        Later
-                    </button>
-                    <button
-                        onClick={applyUpdate}
-                        disabled={isUpdating}
-                        className="px-3 py-2 rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-60"
-                    >
-                        {isUpdating ? "Updating..." : "Update now"}
-                    </button>
-                </div>
-            )}
-
-            <div className="flex-1 overflow-auto">
-                {currentView === "calendar" && <Calendar setCurrentView={setCurrentView} />}
-                {currentView === "categories" && <CategoriesView />}
-                {currentView === "regex" && <CategoryRegexView />}
-                {currentView === "skipped" && <SkippedAppsView />}
-                {currentView === "detailed" && (<DetailedStatistics
-                    onBack={() => setCurrentView("calendar")}
-                />
                 )}
-                {currentView === "apps" && (
-                    <AppsList
+
+                <div className="flex-1 overflow-auto">
+                    {currentView === "calendar" && <Calendar setCurrentView={setCurrentView} />}
+                    {currentView === "categories" && <CategoriesView />}
+                    {currentView === "regex" && <CategoryRegexView />}
+                    {currentView === "skipped" && <SkippedAppsView />}
+                    {currentView === "detailed" && (<DetailedStatistics
                         onBack={() => setCurrentView("calendar")}
                     />
-                )}
-                {currentView === "googleCalendars" && <GoogleCalendarsView />}
-            </div>
-        </main>
+                    )}
+                    {currentView === "apps" && (
+                        <AppsList
+                            onBack={() => setCurrentView("calendar")}
+                        />
+                    )}
+                    {currentView === "googleCalendars" && <GoogleCalendarsView />}
+                </div>
+            </main>
+        </ToastProvider>
     );
 }
