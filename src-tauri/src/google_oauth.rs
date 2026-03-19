@@ -73,7 +73,12 @@ pub async fn google_oauth_login(
     }));
 
     let server_state = state.clone();
-    let server_handle = tokio::spawn(start_callback_server(server_state));
+    let server_handle = tokio::spawn(async move {
+        if let Err(e) = start_callback_server(server_state.clone()).await {
+            let mut lock = server_state.lock().await;
+            lock.error = Some(e.to_string());
+        }
+    });
 
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
@@ -236,7 +241,7 @@ pub async fn get_valid_access_token(
     Ok(new_access_token)
 }
 
-async fn start_callback_server(state: Arc<Mutex<OAuthState>>) {
+async fn start_callback_server(state: Arc<Mutex<OAuthState>>) -> Result<(), anyhow::Error> {
     let app_state = state.clone();
     let app = Router::new()
         .route("/oauth/callback", get({
@@ -258,10 +263,11 @@ async fn start_callback_server(state: Arc<Mutex<OAuthState>>) {
 
     let server_state = state.clone();
     
-    let listener = tokio::net::TcpListener::bind(addr).await
-        .expect(&format!("Port {} is already in use. Please close any other applications using this port.", REDIRECT_PORT));
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .with_context(|| format!("Port {} is already in use. Please close any other applications using this port.", REDIRECT_PORT))?;
 
-    let _ = axum::serve(listener, app.into_make_service())
+    axum::serve(listener, app.into_make_service())
         .with_graceful_shutdown(async move {
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -271,7 +277,8 @@ async fn start_callback_server(state: Arc<Mutex<OAuthState>>) {
                 }
             }
         })
-        .await;
+        .await?;
+    Ok(())
 }
 
 async fn oauth_callback(

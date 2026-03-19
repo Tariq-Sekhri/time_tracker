@@ -67,7 +67,7 @@ async fn create_pool() -> Result<SqlitePool, sqlx::Error> {
     ensure_db_path(&db_path)?;
 
     if db_path.exists() && std::fs::metadata(&db_path).map(|m| m.len() > 0).unwrap_or(false) {
-        let _ = backup::create_daily_backup();
+        backup::create_daily_backup().map_err(sqlx::Error::Io)?;
     }
 
     let connection_string = format!("sqlite://{}", db_path.display());
@@ -78,7 +78,9 @@ async fn create_pool() -> Result<SqlitePool, sqlx::Error> {
     
     sqlx::migrate!("./migrations").run(&pool).await?;
     
-    let _ = validation::validate_and_repair_database(&pool).await;
+    validation::validate_and_repair_database(&pool)
+        .await
+        .map_err(|e| sqlx::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
     
     Ok(pool)
 }
