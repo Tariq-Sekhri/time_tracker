@@ -222,10 +222,10 @@ pub async fn get_logs_by_category(request: GetLogsByCategoryRequest) -> Result<V
     .await?;
 
     let skipped_apps = get_skipped_apps().await?;
-    let skipped_regexes: Vec<Regex> = skipped_apps
-        .iter()
-        .filter_map(|app| Regex::new(&app.regex).ok())
-        .collect();
+    let mut skipped_regexes: Vec<Regex> = Vec::new();
+    for app in skipped_apps {
+        skipped_regexes.push(Regex::new(&app.regex)?);
+    }
 
     let is_skipped =
         |app_name: &str| -> bool { skipped_regexes.iter().any(|regex| regex.is_match(app_name)) };
@@ -238,14 +238,12 @@ pub async fn get_logs_by_category(request: GetLogsByCategoryRequest) -> Result<V
     let category_map: HashMap<i32, &category::Category> =
         categories.iter().map(|cat| (cat.id, cat)).collect();
 
-    let mut regex_list: Vec<(Regex, String)> = cat_regex_list
-        .iter()
-        .filter_map(|reg| {
-            let cat = category_map.get(&reg.cat_id)?;
-            let compiled_regex = Regex::new(&reg.regex).ok()?;
-            Some((compiled_regex, cat.name.clone()))
-        })
-        .collect();
+    let mut regex_list: Vec<(Regex, String)> = Vec::new();
+    for reg in cat_regex_list {
+        if let Some(cat) = category_map.get(&reg.cat_id) {
+            regex_list.push((Regex::new(&reg.regex)?, cat.name.clone()));
+        }
+    }
 
     regex_list.sort_by_key(|(_, cat_name)| {
         categories

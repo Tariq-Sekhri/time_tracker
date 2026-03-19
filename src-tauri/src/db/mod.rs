@@ -86,7 +86,7 @@ pub use pool::get_db_path;
 
 #[tauri::command]
 pub async fn wipe_all_data() -> Result<(), Error> {
-    let _ = backup::create_safety_backup("pre_wipe");
+    backup::create_safety_backup("pre_wipe")?;
     
     let pool = get_pool().await?;
 
@@ -104,7 +104,7 @@ pub async fn wipe_all_data() -> Result<(), Error> {
 
 #[tauri::command]
 pub async fn reset_database() -> Result<(), Error> {
-    let _ = backup::create_safety_backup("pre_reset");
+    backup::create_safety_backup("pre_reset")?;
     
     reset_pool().await?;
     pool::drop_all().context("Failed to delete database file")?;

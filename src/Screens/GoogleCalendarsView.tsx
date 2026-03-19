@@ -18,7 +18,7 @@ import { toErrorString } from "../types/common.ts";
 
 export default function GoogleCalendarsView() {
     const queryClient = useQueryClient();
-    const { showToast } = useToast();
+    const { showToast, updateToast, removeToast } = useToast();
     const [isLoggingIn, setIsLoggingIn] = useState(false);
 
     const { data: authStatus, refetch: refetchAuthStatus } = useQuery({
@@ -57,9 +57,20 @@ export default function GoogleCalendarsView() {
             return;
         }
         setIsLoggingIn(true);
+        const toastId = showToast("Opening browser for Google sign-in…", "loading", 0);
+        const timeoutId = setTimeout(() => {
+            updateToast(
+                toastId,
+                "Google login timed out",
+                "error",
+                "No response received from Google OAuth within 2 minutes. If a browser window opened, complete the login and try again. If nothing opened, your default browser may be blocked from launching."
+            );
+        }, 125_000);
         try {
             const auth = await google_oauth_login();
-            showToast(`Logged in as ${auth.email}`, "success");
+            clearTimeout(timeoutId);
+            updateToast(toastId, `Logged in as ${auth.email}`, "success");
+            setTimeout(() => removeToast(toastId), 2000);
 
             await queryClient.invalidateQueries({ queryKey: ["googleAuthStatus"] });
             await refetchAuthStatus();
@@ -102,9 +113,10 @@ export default function GoogleCalendarsView() {
             }
             await refetchAvailableCalendars();
         } catch (error: any) {
+            clearTimeout(timeoutId);
             console.error("Login error:", error);
             const fullError = toErrorString(error);
-            showToast("Login error", "error", 5000, fullError);
+            updateToast(toastId, "Login error", "error", fullError);
         } finally {
             setIsLoggingIn(false);
         }

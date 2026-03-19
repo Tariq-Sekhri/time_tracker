@@ -59,7 +59,7 @@ export default function RenderCalendarContent({
     toggleCalendar,
 }: RenderCalendarContentProps) {
     const queryClient = useQueryClient();
-    const { showToast } = useToast();
+    const { showToast, updateToast, removeToast } = useToast();
     const [editingCalendar, setEditingCalendar] = useState<GoogleCalendar | null>(null);
     const [newCalendarName, setNewCalendarName] = useState("");
     const [newCalendarColor, setNewCalendarColor] = useState("#4285f4");
@@ -69,18 +69,30 @@ export default function RenderCalendarContent({
 
     const handleRelogin = async () => {
         setIsRelogging(true);
+        const toastId = showToast("Opening browser for Google sign-in…", "loading", 0);
+        const timeoutId = setTimeout(() => {
+            updateToast(
+                toastId,
+                "Google login timed out",
+                "error",
+                "No response received from Google OAuth within 2 minutes. If a browser window opened, complete the login and try again. If nothing opened, your default browser may be blocked from launching."
+            );
+        }, 125_000);
         try {
             await google_oauth_login();
+            clearTimeout(timeoutId);
+            updateToast(toastId, "Re-connected to Google Calendar", "success");
+            setTimeout(() => removeToast(toastId), 2000);
             await queryClient.invalidateQueries({ queryKey: ["googleAuthStatus"] });
             await queryClient.invalidateQueries({ queryKey: ["googleCalendars"] });
             queryClient.invalidateQueries({
                 predicate: (query) => query.queryKey[0] === "googleCalendarEvents"
             });
             await refetchGoogleEvents();
-            showToast("Re-connected to Google Calendar", "success");
         } catch (e) {
+            clearTimeout(timeoutId);
             console.error("[GCal] Re-login error:", e);
-            showToast("Re-login error", "error", 5000, toErrorString(e));
+            updateToast(toastId, "Re-login error", "error", toErrorString(e));
         } finally {
             setIsRelogging(false);
         }

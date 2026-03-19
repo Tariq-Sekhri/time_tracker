@@ -49,6 +49,12 @@ pub struct UpdateState {
     pub notified: AtomicBool,
 }
 
+#[derive(Clone, serde::Serialize)]
+struct UpdateProgress {
+    downloaded: u64,
+    total: u64,
+}
+
 #[tauri::command]
 fn get_app_version(app: tauri::AppHandle) -> String {
     app.package_info().version.to_string()
@@ -89,9 +95,19 @@ pub fn run() {
                 let update = match handle.updater_builder().build() {
                     Ok(builder) => match builder.check().await {
                         Ok(update) => update,
-                        Err(_) => None,
+                        Err(e) => {
+                            if let Some(w) = handle.get_webview_window("main") {
+                                let _ = w.emit("update-error", e.to_string());
+                            }
+                            None
+                        }
                     },
-                    Err(_) => None,
+                    Err(e) => {
+                        if let Some(w) = handle.get_webview_window("main") {
+                            let _ = w.emit("update-error", e.to_string());
+                        }
+                        None
+                    }
                 };
 
                 let state = handle.state::<UpdateState>();
@@ -117,20 +133,63 @@ pub fn run() {
                     return;
                 }
 
-                let window_visible = state.window_visible.load(Ordering::Relaxed)
+                let _window_visible = state.window_visible.load(Ordering::Relaxed)
                     || handle
                         .get_webview_window("main")
                         .and_then(|w| w.is_visible().ok())
                         .unwrap_or(false);
 
-                if window_visible {
-                    if state
-                        .notified
-                        .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
-                        .is_ok()
-                    {
+                if state
+                    .notified
+                    .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
+                    .is_ok()
+                {
+                    if let Some(w) = handle.get_webview_window("main") {
+                        let _ = w.emit("update-available", ());
+                    }
+                }
+
+                let update_to_apply = state
+                    .update
+                    .lock()
+                    .ok()
+                    .and_then(|mut g| g.take());
+
+                if let Some(update) = update_to_apply {
+                    if let Some(w) = handle.get_webview_window("main") {
+                        let _ = w.emit("update-downloading", ());
+                    }
+
+                    let progress_handle = handle.clone();
+                    let install_handle = handle.clone();
+                    let res = update
+                        .download_and_install(
+                            move |downloaded, total| {
+                                if let Some(w) = progress_handle.get_webview_window("main") {
+                                    let _ = w.emit(
+                                        "update-download-progress",
+                                        UpdateProgress {
+                                            downloaded: downloaded as u64,
+                                            total: total.unwrap_or(0),
+                                        },
+                                    );
+                                }
+                            },
+                            move || {
+                                if let Some(w) = install_handle.get_webview_window("main") {
+                                    let _ = w.emit("update-installing", ());
+                                }
+                            },
+                        )
+                        .await;
+
+                    if let Err(e) = res {
                         if let Some(w) = handle.get_webview_window("main") {
-                            let _ = w.emit("update-available", ());
+                            let _ = w.emit("update-error", e.to_string());
+                        }
+                    } else {
+                        if let Some(w) = handle.get_webview_window("main") {
+                            let _ = w.emit("update-installed", ());
                         }
                     }
                 }

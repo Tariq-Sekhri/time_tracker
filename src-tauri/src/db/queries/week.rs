@@ -196,10 +196,7 @@ fn get_time_blocks(logs: &[Log], regex: &[CachedCategoryRegex]) -> Result<Vec<Ti
             break;
         }
 
-        let short_log_cat = match derive_category(&short_log.app, regex) {
-            Ok(cat) => cat,
-            Err(_) => continue, // Skip if can't determine category
-        };
+        let short_log_cat = derive_category(&short_log.app, regex)?;
 
         let mut best_match: Option<usize> = None;
         let mut min_distance = i64::MAX;
