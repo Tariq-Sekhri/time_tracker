@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 
 export type ToastType = "success" | "error" | "info" | "loading";
 
@@ -89,8 +89,27 @@ export function ToastContainer({ toasts, onRemove, onUpdate }: ToastContainerPro
     );
 }
 
-export function useToast() {
+type ToastContextValue = {
+    toasts: Toast[];
+    showToast: (message: string, type?: ToastType, duration?: number, errorDetails?: string) => string;
+    removeToast: (id: string) => void;
+    updateToast: (id: string, message: string, type: ToastType, errorDetails?: string) => void;
+};
+
+const ToastContext = createContext<ToastContextValue | null>(null);
+
+export function ToastProvider({ children }: { children: React.ReactNode }) {
     const [toasts, setToasts] = useState<Toast[]>([]);
+
+    const removeToast = (id: string) => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+    };
+
+    const updateToast = (id: string, message: string, type: ToastType, errorDetails?: string) => {
+        setToasts((prev) =>
+            prev.map((t) => (t.id === id ? { ...t, message, type, errorDetails: errorDetails ?? t.errorDetails } : t))
+        );
+    };
 
     const showToast = (message: string, type: ToastType = "info", duration: number = 3000, errorDetails?: string) => {
         if (type === "error" && duration === 3000) {
@@ -116,15 +135,20 @@ export function useToast() {
         return id;
     };
 
-    const removeToast = (id: string) => {
-        setToasts((prev) => prev.filter((t) => t.id !== id));
-    };
+    const value = useMemo(() => ({ toasts, showToast, removeToast, updateToast }), [toasts]);
 
-    const updateToast = (id: string, message: string, type: ToastType, errorDetails?: string) => {
-        setToasts((prev) =>
-            prev.map((t) => (t.id === id ? { ...t, message, type, errorDetails: errorDetails ?? t.errorDetails } : t))
-        );
-    };
+    return (
+        <ToastContext.Provider value={value}>
+            {children}
+            <ToastContainer toasts={toasts} onRemove={removeToast} onUpdate={updateToast} />
+        </ToastContext.Provider>
+    );
+}
 
-    return { toasts, showToast, removeToast, updateToast };
+export function useToast() {
+    const ctx = useContext(ToastContext);
+    if (!ctx) {
+        throw new Error("useToast must be used within <ToastProvider>");
+    }
+    return ctx;
 }

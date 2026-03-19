@@ -10,7 +10,7 @@ import {
     NewSkippedApp
 } from "../api/SkippedApp.ts";
 import { toErrorString } from "../types/common.ts";
-import { ToastContainer, useToast } from "../Componants/Toast.tsx";
+import { useToast } from "../Componants/Toast.tsx";
 
 function validateRegex(pattern: string): string | null {
     if (!pattern.trim()) {
@@ -32,7 +32,7 @@ function validateRegex(pattern: string): string | null {
 
 export default function SkippedAppsView() {
     const queryClient = useQueryClient();
-    const { toasts, showToast, removeToast, updateToast } = useToast();
+    const { showToast, removeToast, updateToast } = useToast();
     const [newRegexPattern, setNewRegexPattern] = useState("");
     const [editingApp, setEditingApp] = useState<SkippedApp | null>(null);
 
@@ -174,7 +174,6 @@ export default function SkippedAppsView() {
 
     return (
         <div className="p-6 text-white">
-            <ToastContainer toasts={toasts} onRemove={removeToast} onUpdate={updateToast} />
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold">Skipped Apps</h1>
                 <button
