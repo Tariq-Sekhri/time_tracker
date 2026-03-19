@@ -11,10 +11,11 @@ import DetailedStatistics from "./Screens/DetailedStatistics.tsx";
 import AppsList from "./Screens/AppsList.tsx";
 import Header from "./Componants/Header.tsx";
 import GoogleCalendarsView from "./Screens/GoogleCalendarsView.tsx";
+import DevView from "./Screens/DevView.tsx";
 import { ToastProvider, useToast } from "./Componants/Toast.tsx";
 import { toErrorString } from "./types/common.ts";
 
-export type View = "calendar" | "categories" | "regex" | "skipped" | "detailed" | "apps" | "googleCalendars";
+export type View = "calendar" | "categories" | "regex" | "skipped" | "detailed" | "apps" | "googleCalendars" | "dev";
 
 function AppInner() {
     const { showToast, updateToast, removeToast } = useToast();
@@ -22,6 +23,18 @@ function AppInner() {
     const [updateAvailable, setUpdateAvailable] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
     const [updateError, setUpdateError] = useState<string | null>(null);
+    const [devEnabled, setDevEnabled] = useState(false);
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const dev = params.get("dev");
+        if (dev === "1" || dev === "true") {
+            localStorage.setItem("devView", "1");
+        } else if (dev === "0" || dev === "false") {
+            localStorage.removeItem("devView");
+        }
+        setDevEnabled(import.meta.env.DEV || localStorage.getItem("devView") === "1");
+    }, []);
 
     useEffect(() => {
         let unlistenFn: (() => void) | null = null;
@@ -135,7 +148,7 @@ function AppInner() {
 
     return (
         <main className="bg-black text-white h-screen flex flex-col">
-            <Header currentView={currentView} setCurrentView={setCurrentView} />
+            <Header currentView={currentView} setCurrentView={setCurrentView} devEnabled={devEnabled} />
 
             {updateAvailable && (
                 <div className="border-b border-gray-700 bg-gray-900 px-4 py-3 flex items-center gap-3">
@@ -177,6 +190,7 @@ function AppInner() {
                     />
                 )}
                 {currentView === "googleCalendars" && <GoogleCalendarsView />}
+                {currentView === "dev" && <DevView />}
             </div>
         </main>
     );
