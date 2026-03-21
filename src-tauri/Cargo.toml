@@ -1,7 +1,7 @@
 [package]
 name = "time-tracker"
 version = "1.0.7"
-description = "A Cross-Platform Auto Time Tracking App"
+description = "A Windows Auto Time Tracking App"
 authors = ["Tariq Sekhri"]
 edition = "2021"
 
