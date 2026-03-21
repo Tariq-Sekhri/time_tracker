@@ -44,6 +44,6 @@ jobs:
         with:
           tagName: app-v__VERSION__
           releaseName: "Time Tracker v__VERSION__"
-          releaseBody: "See the assets to download this version and install."
+          releaseBody: "Download and run the .exe installer from Assets. Ignore .sig and latest.json files; they are used internally for automatic updates."
           releaseDraft: false
           prerelease: false
