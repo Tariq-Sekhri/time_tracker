@@ -169,8 +169,21 @@ pub async fn ensure_default_regexes(pool: &SqlitePool) -> Result<(), sqlx::Error
                 apply_default_regex_seed(pool, seed_key, category_name, regex).await?;
             }
         } else {
-            for (seed_key, _, _) in DEFAULT_REGEXES {
-                mark_seed_as_applied(pool, seed_key).await?;
+            for (seed_key, category_name, regex) in DEFAULT_REGEXES {
+                let exists: Option<i64> = sqlx::query_scalar(
+                    "SELECT 1
+                     FROM category_regex cr
+                     JOIN category c ON c.id = cr.cat_id
+                     WHERE c.name = ?1 AND cr.regex = ?2
+                     LIMIT 1",
+                )
+                .bind(category_name)
+                .bind(regex)
+                .fetch_optional(pool)
+                .await?;
+                if exists.is_some() {
+                    mark_seed_as_applied(pool, seed_key).await?;
+                }
             }
         }
 
@@ -211,6 +224,11 @@ async fn apply_default_regex_seed(
     category_name: &str,
     regex: &str,
 ) -> Result<(), sqlx::Error> {
+    let deleted = is_seed_deleted(pool, seed_key).await?;
+    if deleted {
+        return Ok(());
+    }
+
     let applied = is_seed_applied(pool, seed_key).await?;
     if applied {
         return Ok(());
@@ -251,6 +269,34 @@ async fn mark_seed_as_applied(pool: &SqlitePool, seed_key: &str) -> Result<(), s
         .await?;
     Ok(())
 }
+
+async fn is_seed_deleted(pool: &SqlitePool, seed_key: &str) -> Result<bool, sqlx::Error> {
+    let key = format!("default_regex_deleted_{}", seed_key);
+    let value: Option<String> = sqlx::query_scalar("SELECT value FROM app_metadata WHERE key = ?1")
+        .bind(key)
+        .fetch_optional(pool)
+        .await?;
+    Ok(value.is_some())
+}
+
+async fn mark_seed_as_deleted(pool: &SqlitePool, seed_key: &str) -> Result<(), sqlx::Error> {
+    let key = format!("default_regex_deleted_{}", seed_key);
+    sqlx::query("INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?1, ?2)")
+        .bind(key)
+        .bind("1")
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+fn find_seed_key(category_name: &str, regex: &str) -> Option<&'static str> {
+    for (seed_key, cat, pattern) in DEFAULT_REGEXES {
+        if *cat == category_name && *pattern == regex {
+            return Some(*seed_key);
+        }
+    }
+    None
+}
 #[tauri::command]
 pub async fn insert_cat_regex(new_category_regex: NewCategoryRegex) -> Result<i64, Error> {
     let pool = db::get_pool().await?;
@@ -282,6 +328,13 @@ pub async fn update_cat_regex_by_id(cat_regex: CategoryRegex) -> Result<(), Erro
             .await?;
         if cat_name.as_deref() == Some("Miscellaneous") && row.regex == ".*" {
             return Err(anyhow::anyhow!("The catch-all pattern (.*) for Miscellaneous cannot be edited.").into());
+        }
+        if let Some(name) = cat_name {
+            if let Some(seed_key) = find_seed_key(&name, &row.regex) {
+                if row.cat_id != cat_regex.cat_id || row.regex != cat_regex.regex {
+                    mark_seed_as_deleted(&pool, seed_key).await?;
+                }
+            }
         }
     }
     
@@ -357,6 +410,11 @@ pub async fn delete_cat_regex_by_id(id: i32) -> Result<(), Error> {
             .await?;
         if cat_name.as_deref() == Some("Miscellaneous") && r.regex == ".*" {
             return Err(anyhow::anyhow!("The catch-all pattern (.*) for Miscellaneous cannot be deleted.").into());
+        }
+        if let Some(name) = cat_name {
+            if let Some(seed_key) = find_seed_key(&name, &r.regex) {
+                mark_seed_as_deleted(&pool, seed_key).await?;
+            }
         }
     }
     sqlx::query!("DELETE FROM category_regex WHERE id = ?1", id)
