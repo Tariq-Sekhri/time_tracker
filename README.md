@@ -76,10 +76,6 @@ Commit updated `.sqlx/` after running `sqlx prepare`. For CI or builds without a
 - Fully supported with native Windows API
 - No additional configuration required
 
-## Current Status
-
-The app is functional with automatic tracking, database storage, and UI for managing categories, regex rules, and skipped apps on Windows.
-
 ## Contributing
 
 All help is welcome—issues, PRs, questions. No strict rules yet; guidelines will be added as needed. If you're unsure, open an issue first.
