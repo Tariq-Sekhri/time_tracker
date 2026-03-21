@@ -27,87 +27,228 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    let row = sqlx::query!("SELECT COUNT(*) as count FROM category_regex")
+    Ok(())
+}
+
+const DEFAULT_REGEX_SEED_VERSION: &str = "default_regex_seed_initialized_v2";
+const DEFAULT_REGEXES: &[(&str, &str, &str)] = &[
+    ("social_anydesk", "Social", "AnyDesk"),
+    ("social_discord", "Social", "Discord"),
+    ("social_whatsapp", "Social", "WhatsApp"),
+    ("social_telegram", "Social", "Telegram"),
+    ("social_slack", "Social", "Slack"),
+    ("social_teams", "Social", "Microsoft Teams"),
+    ("social_zoom", "Social", "Zoom"),
+    ("social_skype", "Social", "Skype"),
+    ("social_messenger", "Social", "Messenger"),
+    ("watching_s1", "Watching", "S1"),
+    ("watching_steelseries_gg", "Watching", "SteelSeries GG"),
+    ("watching_twitch", "Watching", "Twitch"),
+    ("watching_voidflix", "Watching", "VoidFlix"),
+    ("watching_watch", "Watching", "Watch"),
+    ("watching_youtube", "Watching", "YouTube"),
+    ("watching_netflix", "Watching", "Netflix"),
+    ("watching_prime_video", "Watching", "Prime Video"),
+    ("watching_disney_plus", "Watching", "Disney+"),
+    ("watching_hulu", "Watching", "Hulu"),
+    ("watching_hbo_max", "Watching", "HBO Max"),
+    ("watching_vlc", "Watching", "VLC"),
+    ("gaming_among_us", "Gaming", "Among Us"),
+    ("gaming_deadlock", "Gaming", "Deadlock"),
+    ("gaming_fortnite", "Gaming", "Fortnite"),
+    ("gaming_fragpunk", "Gaming", "FragPunk"),
+    ("gaming_freeways", "Gaming", "Freeways"),
+    ("gaming_highguard", "Gaming", "Highguard"),
+    ("gaming_spiderman2", "Gaming", "Marvel's Spider-Man 2 v1.526.0.0"),
+    ("gaming_midnight_murder_club", "Gaming", "Midnight Murder Club"),
+    ("gaming_minecraft", "Gaming", "Minecraft"),
+    ("gaming_overwatch", "Gaming", "Overwatch"),
+    ("gaming_prison_life", "Gaming", "Prison Life"),
+    ("gaming_pummel_party", "Gaming", "Pummel Party"),
+    ("gaming_roblox", "Gaming", "Roblox"),
+    ("gaming_split_fiction", "Gaming", "Split Fiction"),
+    ("gaming_the_finals", "Gaming", "THE FINALS"),
+    ("gaming_tf2", "Gaming", "Team Fortress 2 - Direct3D 9 - 64 Bit"),
+    ("gaming_trackmania", "Gaming", "Trackmania"),
+    ("gaming_valorant", "Gaming", "VALORANT"),
+    ("gaming_rocket_league", "Gaming", r"^Rocket League \(64-bit, DX11, Cooked\)$"),
+    ("gaming_steam", "Gaming", "Steam"),
+    ("gaming_epic_games", "Gaming", "Epic Games"),
+    ("gaming_battlenet", "Gaming", "Battle.net"),
+    ("gaming_riot_client", "Gaming", "Riot Client"),
+    ("gaming_gog_galaxy", "Gaming", "GOG Galaxy"),
+    ("gaming_ea_app", "Gaming", "EA app"),
+    ("gaming_ubisoft_connect", "Gaming", "Ubisoft Connect"),
+    ("coding_admin_powershell", "Coding", "Administrator: Windows PowerShell"),
+    ("coding_cursor", "Coding", "Cursor"),
+    ("coding_github_desktop", "Coding", "GitHub Desktop"),
+    ("coding_vscode", "Coding", "Visual Studio Code"),
+    ("coding_cmd", "Coding", "cmd.exe"),
+    ("coding_terminal", "Coding", "Terminal"),
+    ("coding_windows_powershell", "Coding", "Windows PowerShell"),
+    ("coding_intellij", "Coding", "IntelliJ"),
+    ("coding_pycharm", "Coding", "PyCharm"),
+    ("coding_webstorm", "Coding", "WebStorm"),
+    ("coding_rider", "Coding", "Rider"),
+    ("coding_phpstorm", "Coding", "PhpStorm"),
+    ("coding_goland", "Coding", "GoLand"),
+    ("coding_clion", "Coding", "CLion"),
+    ("coding_neovim", "Coding", "Neovim"),
+    ("coding_sublime_text", "Coding", "Sublime Text"),
+    ("coding_postman", "Coding", "Postman"),
+    ("coding_dbeaver", "Coding", "DBeaver"),
+    ("coding_android_studio", "Coding", "Android Studio"),
+    ("coding_xcode", "Coding", "Xcode"),
+    ("learning_coursera", "Learning", "Coursera"),
+    ("learning_udemy", "Learning", "Udemy"),
+    ("learning_duolingo", "Learning", "Duolingo"),
+    ("learning_khan_academy", "Learning", "Khan Academy"),
+    ("learning_edx", "Learning", "edX"),
+    ("learning_skillshare", "Learning", "Skillshare"),
+    ("learning_pluralsight", "Learning", "Pluralsight"),
+    ("learning_udacity", "Learning", "Udacity"),
+    ("learning_freecodecamp", "Learning", "freeCodeCamp"),
+    ("learning_leetcode", "Learning", "LeetCode"),
+    ("learning_geeksforgeeks", "Learning", "GeeksforGeeks"),
+    ("reading_kindle", "Reading", "Kindle"),
+    ("reading_adobe_acrobat", "Reading", "Adobe Acrobat"),
+    ("reading_pdf_title", "Reading", " - PDF"),
+    ("reading_pdf_ext", "Reading", r"\.pdf"),
+    ("reading_google_docs", "Reading", "Google Docs"),
+    ("reading_notion", "Reading", "Notion"),
+    ("reading_medium", "Reading", "Medium"),
+    ("reading_substack", "Reading", "Substack"),
+    ("reading_wikipedia", "Reading", "Wikipedia"),
+    ("reading_microsoft_word", "Reading", "Microsoft Word"),
+    ("music_spotify", "Music", "Spotify"),
+    ("music_youtube_music", "Music", "YouTube Music"),
+    ("music_itunes", "Music", "iTunes"),
+    ("music_apple_music", "Music", "Apple Music"),
+    ("music_soundcloud", "Music", "SoundCloud"),
+    ("music_tidal", "Music", "Tidal"),
+    ("music_deezer", "Music", "Deezer"),
+    ("music_amazon_music", "Music", "Amazon Music"),
+    ("music_pandora", "Music", "Pandora"),
+    ("music_bandcamp", "Music", "Bandcamp"),
+    ("music_vlc", "Music", "VLC"),
+    ("music_winamp", "Music", "Winamp"),
+    ("browsing_vivaldi", "Browsing", "Vivaldi"),
+    ("browsing_chrome", "Browsing", "Chrome"),
+    ("browsing_firefox", "Browsing", "Firefox"),
+    ("browsing_edge", "Browsing", "Microsoft Edge"),
+    ("browsing_brave", "Browsing", "Brave"),
+    ("browsing_safari", "Browsing", "Safari"),
+    ("browsing_opera", "Browsing", "Opera"),
+    ("browsing_arc", "Browsing", "Arc"),
+    ("browsing_duckduckgo", "Browsing", "DuckDuckGo"),
+    ("browsing_floorp", "Browsing", "Floorp"),
+    ("browsing_waterfox", "Browsing", "Waterfox"),
+];
+
+pub async fn ensure_default_regexes(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    let initialized: Option<String> =
+        sqlx::query_scalar("SELECT value FROM app_metadata WHERE key = ?1")
+            .bind(DEFAULT_REGEX_SEED_VERSION)
+            .fetch_optional(pool)
+            .await?;
+
+    if initialized.is_none() {
+        let non_misc_regex_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM category_regex cr
+             JOIN category c ON c.id = cr.cat_id
+             WHERE NOT (c.name = ?1 AND cr.regex = ?2)",
+        )
+        .bind("Miscellaneous")
+        .bind(".*")
         .fetch_one(pool)
         .await?;
 
-    if row.count == 0 {
-        let misc = sqlx::query!("SELECT id FROM category WHERE name = 'Miscellaneous'")
-            .fetch_optional(pool)
-            .await?;
-        if let Some(m) = misc {
-            sqlx::query!(
-                "INSERT OR IGNORE INTO category_regex (cat_id, regex) VALUES (?1, ?2)",
-                m.id,
-                ".*"
-            )
-            .execute(pool)
-            .await?;
-        }
-
-        let default_regexes: &[(&str, &[&str])] = &[
-            ("Social", &["Discord", "Slack", "Microsoft Teams", "WhatsApp", "Telegram"][..]),
-            (
-                "Watching",
-                &["YouTube", " - YouTube - ", "Netflix", "Twitch", "VLC"][..],
-            ),
-            (
-                "Gaming",
-                &["Rocket League", "Minecraft", "Steam", "Epic Games", r"\(64-bit, DX11"][..],
-            ),
-            (
-                "Coding",
-                &[
-                    "Visual Studio",
-                    " - Cursor",
-                    "Code",
-                    "Cursor",
-                    "IntelliJ",
-                    "PyCharm",
-                    "WebStorm",
-                    "Rider",
-                    "PhpStorm",
-                    "GoLand",
-                    "CLion",
-                ][..],
-            ),
-            ("Learning", &["Coursera", "Udemy", "Duolingo", "Khan Academy"][..]),
-            ("Reading", &["Kindle", "Adobe Acrobat", " - PDF", r"\.pdf"][..]),
-            (
-                "Music",
-                &[
-                    "Spotify",
-                    "YouTube Music",
-                    "iTunes",
-                    "Apple Music",
-                    "SoundCloud",
-                    "Tidal",
-                    "Deezer",
-                ][..],
-            ),
-            (
-                "Browsing",
-                &["Vivaldi", "Chrome", "Firefox", "Microsoft Edge", "Brave", "Safari"][..],
-            ),
-        ];
-
-        for (category_name, patterns) in default_regexes {
-            let cat_id: Option<i32> =
-                sqlx::query_scalar("SELECT id FROM category WHERE name = ?1")
-                    .bind(category_name)
-                    .fetch_optional(pool)
-                    .await?;
-            if let Some(cat_id) = cat_id {
-                for regex in *patterns {
-                    sqlx::query("INSERT INTO category_regex (cat_id, regex) VALUES (?1, ?2)")
-                        .bind(cat_id)
-                        .bind(regex)
-                        .execute(pool)
-                        .await?;
-                }
+        let is_fresh = non_misc_regex_count == 0;
+        if is_fresh {
+            for (seed_key, category_name, regex) in DEFAULT_REGEXES {
+                apply_default_regex_seed(pool, seed_key, category_name, regex).await?;
+            }
+        } else {
+            for (seed_key, _, _) in DEFAULT_REGEXES {
+                mark_seed_as_applied(pool, seed_key).await?;
             }
         }
+
+        sqlx::query("INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?1, ?2)")
+            .bind(DEFAULT_REGEX_SEED_VERSION)
+            .bind("1")
+            .execute(pool)
+            .await?;
     }
+
+    let misc = sqlx::query!("SELECT id FROM category WHERE name = 'Miscellaneous'")
+        .fetch_optional(pool)
+        .await?;
+    if let Some(m) = misc {
+        sqlx::query(
+            "INSERT INTO category_regex (cat_id, regex)
+             SELECT ?1, ?2
+             WHERE NOT EXISTS (
+                 SELECT 1 FROM category_regex WHERE cat_id = ?1 AND regex = ?2
+             )",
+        )
+        .bind(m.id)
+        .bind(".*")
+        .execute(pool)
+        .await?;
+    }
+
+    for (seed_key, category_name, regex) in DEFAULT_REGEXES {
+        apply_default_regex_seed(pool, seed_key, category_name, regex).await?;
+    }
+
+    Ok(())
+}
+
+async fn apply_default_regex_seed(
+    pool: &SqlitePool,
+    seed_key: &str,
+    category_name: &str,
+    regex: &str,
+) -> Result<(), sqlx::Error> {
+    let applied = is_seed_applied(pool, seed_key).await?;
+    if applied {
+        return Ok(());
+    }
+
+    let cat_id: Option<i32> = sqlx::query_scalar("SELECT id FROM category WHERE name = ?1")
+        .bind(category_name)
+        .fetch_optional(pool)
+        .await?;
+
+    if let Some(cat_id) = cat_id {
+        sqlx::query("INSERT OR IGNORE INTO category_regex (cat_id, regex) VALUES (?1, ?2)")
+            .bind(cat_id)
+            .bind(regex)
+            .execute(pool)
+            .await?;
+    }
+
+    mark_seed_as_applied(pool, seed_key).await?;
+    Ok(())
+}
+
+async fn is_seed_applied(pool: &SqlitePool, seed_key: &str) -> Result<bool, sqlx::Error> {
+    let key = format!("default_regex_applied_{}", seed_key);
+    let value: Option<String> = sqlx::query_scalar("SELECT value FROM app_metadata WHERE key = ?1")
+        .bind(key)
+        .fetch_optional(pool)
+        .await?;
+    Ok(value.is_some())
+}
+
+async fn mark_seed_as_applied(pool: &SqlitePool, seed_key: &str) -> Result<(), sqlx::Error> {
+    let key = format!("default_regex_applied_{}", seed_key);
+    sqlx::query("INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?1, ?2)")
+        .bind(key)
+        .bind("1")
+        .execute(pool)
+        .await?;
     Ok(())
 }
 #[tauri::command]

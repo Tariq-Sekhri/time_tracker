@@ -81,6 +81,13 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
                 ExpectedColumn { name: "account_email", sql_type: "TEXT", not_null: true, default_value: None },
             ],
         },
+        ExpectedTable {
+            name: "app_metadata",
+            columns: vec![
+                ExpectedColumn { name: "key", sql_type: "TEXT", not_null: false, default_value: None },
+                ExpectedColumn { name: "value", sql_type: "TEXT", not_null: true, default_value: None },
+            ],
+        },
     ]
 }
 
@@ -184,6 +191,16 @@ async fn create_table_safe(pool: &SqlitePool, table: &ExpectedTable) -> Result<(
         "skipped_apps" => tables::skipped_app::create_table(pool).await?,
         "google_oauth" => tables::google_calendar::create_table(pool).await?,
         "google_calendar_v2" => tables::google_calendar::create_table(pool).await?,
+        "app_metadata" => {
+            sqlx::query(
+                "CREATE TABLE IF NOT EXISTS app_metadata (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                )",
+            )
+            .execute(pool)
+            .await?;
+        }
         _ => {
             return Err(anyhow::anyhow!("Unknown table: {}", table.name).into());
         }
@@ -222,31 +239,7 @@ async fn add_column_safe(pool: &SqlitePool, table_name: &str, column: &ExpectedC
 }
 
 async fn ensure_default_data(pool: &SqlitePool) -> Result<(), Error> {
-    let misc_id: Option<i32> = sqlx::query_scalar!(
-        "SELECT id as \"id!: i32\" FROM category WHERE name = 'Miscellaneous'"
-    )
-    .fetch_optional(pool)
-    .await?;
-    
-    if let Some(id) = misc_id {
-        let regex_count: i64 = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM category_regex WHERE cat_id = ?1 AND regex = '.*'",
-            id
-        )
-        .fetch_one(pool)
-        .await?;
-        
-        if regex_count == 0 {
-            sqlx::query!(
-                "INSERT INTO category_regex (cat_id, regex) VALUES (?1, ?2)",
-                id,
-                ".*"
-            )
-            .execute(pool)
-            .await?;
-        }
-    }
-    
+    crate::db::tables::cat_regex::ensure_default_regexes(pool).await?;
     Ok(())
 }
 
