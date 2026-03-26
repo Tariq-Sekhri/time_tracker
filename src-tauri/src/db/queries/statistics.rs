@@ -259,7 +259,7 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
         *hourly_durations.entry(hour).or_insert(0) += log.duration;
     }
 
-    let hourly_distribution: Vec<HourlyStat> = (0..24)
+    let hourly_distribution: Vec<HourlyStat> = (0..=24)
         .map(|hour| HourlyStat {
             hour,
             total_duration: hourly_durations.get(&hour).copied().unwrap_or(0),
@@ -409,6 +409,155 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
 }
 
 #[tauri::command]
+pub async fn get_total_statistics() -> Result<WeekStatistics, Error> {
+    use chrono::{Local, TimeZone};
+
+    let mut logs = get_logs().await?;
+    let skipped_apps = get_skipped_apps().await?;
+
+    let skipped_regexes: Vec<Regex> = skipped_apps
+        .iter()
+        .filter_map(|app| Regex::new(&app.regex).ok())
+        .collect();
+
+    let is_skipped = |app_name: &str| -> bool { skipped_regexes.iter().any(|regex| regex.is_match(app_name)) };
+
+    logs.retain(|log| !is_skipped(&log.app));
+
+    let cat_regex = get_cat_regex().await?;
+    let categories = get_categories().await?;
+    let regex = build_regex_table(&categories, &cat_regex)?;
+
+    let mut category_durations: HashMap<String, i64> = HashMap::new();
+    let mut category_colors: HashMap<String, Option<String>> = HashMap::new();
+
+    for cat in &categories {
+        category_colors.insert(cat.name.clone(), cat.color.clone());
+    }
+
+    let mut app_durations: HashMap<String, i64> = HashMap::new();
+    let mut hourly_durations: HashMap<i32, i64> = HashMap::new();
+    let mut day_category_durations: HashMap<(i32, String), i64> = HashMap::new();
+    let mut day_totals: HashMap<i64, i64> = HashMap::new();
+
+    for log in &logs {
+        let category = derive_category(&log.app, &regex);
+        *category_durations.entry(category.clone()).or_insert(0) += log.duration;
+        *app_durations.entry(log.app.clone()).or_insert(0) += log.duration;
+
+        let hour = get_hour(log.timestamp);
+        *hourly_durations.entry(hour).or_insert(0) += log.duration;
+
+        let day = get_day_of_week(log.timestamp);
+        *day_category_durations
+            .entry((day, category.clone()))
+            .or_insert(0) += log.duration;
+
+        let day_start = get_day_start(log.timestamp);
+        *day_totals.entry(day_start).or_insert(0) += log.duration;
+    }
+
+    let total_time: i64 = category_durations.values().sum();
+
+    let mut category_stats: Vec<CategoryStat> = category_durations
+        .into_iter()
+        .map(|(category, total_duration)| {
+            let percentage = if total_time > 0 {
+                (total_duration as f64 / total_time as f64) * 100.0
+            } else {
+                0.0
+            };
+            CategoryStat {
+                category: category.clone(),
+                total_duration,
+                percentage,
+                percentage_change: None,
+                color: category_colors.get(&category).cloned().flatten(),
+            }
+        })
+        .collect();
+
+    category_stats.sort_by(|a, b| b.total_duration.cmp(&a.total_duration));
+
+    let mut app_stats: Vec<AppStat> = app_durations
+        .into_iter()
+        .map(|(app, total_duration)| AppStat {
+            app,
+            total_duration,
+            percentage_change: None,
+        })
+        .collect();
+
+    app_stats.sort_by(|a, b| b.total_duration.cmp(&a.total_duration));
+    let all_apps = app_stats.clone();
+    let top_apps: Vec<AppStat> = app_stats.into_iter().take(5).collect();
+
+    let hourly_distribution: Vec<HourlyStat> = (0..=24)
+        .map(|hour| HourlyStat {
+            hour,
+            total_duration: hourly_durations.get(&hour).copied().unwrap_or(0),
+        })
+        .collect();
+
+    let day_category_breakdown: Vec<DayCategoryStat> = day_category_durations
+        .into_iter()
+        .map(|((day, category), total_duration)| DayCategoryStat {
+            day,
+            category,
+            total_duration,
+        })
+        .collect();
+
+    let first_active_day = day_totals.keys().min().copied();
+    let most_active_day = day_totals
+        .iter()
+        .max_by_key(|(_, &duration)| duration)
+        .map(|(&timestamp, &duration)| (timestamp, duration));
+    let most_inactive_day = day_totals
+        .iter()
+        .min_by_key(|(_, &duration)| duration)
+        .map(|(&timestamp, &duration)| (timestamp, duration));
+
+    let number_of_active_days = day_totals.len() as i32;
+    let total_number_of_days = match (day_totals.keys().min().copied(), day_totals.keys().max().copied()) {
+        (Some(min_ts), Some(max_ts)) => ((max_ts - min_ts) / 86400 + 1) as i32,
+        _ => 0,
+    };
+
+    let today_start = get_day_start(Local::now().timestamp());
+    let today_end = today_start + 86400;
+    let all_time_today: i64 = logs
+        .iter()
+        .filter(|log| log.timestamp >= today_start && log.timestamp < today_end)
+        .map(|log| log.duration)
+        .sum();
+
+    let average_time_active_days = if number_of_active_days > 0 {
+        total_time as f64 / number_of_active_days as f64
+    } else {
+        0.0
+    };
+
+    Ok(WeekStatistics {
+        total_time,
+        total_time_change: None,
+        categories: category_stats,
+        top_apps,
+        all_apps,
+        hourly_distribution,
+        day_category_breakdown,
+        first_active_day,
+        number_of_active_days,
+        total_number_of_days,
+        all_time_today,
+        total_time_all_time: total_time,
+        average_time_active_days,
+        most_active_day,
+        most_inactive_day,
+    })
+}
+
+#[tauri::command]
 pub async fn get_day_statistics(day_start: i64, day_end: i64) -> Result<DayStatistics, Error> {
     let mut logs = get_logs().await?;
     let skipped_apps = get_skipped_apps().await?;
@@ -489,7 +638,7 @@ pub async fn get_day_statistics(day_start: i64, day_end: i64) -> Result<DayStati
         *hourly_durations.entry(hour).or_insert(0) += log.duration;
     }
 
-    let hourly_distribution: Vec<HourlyStat> = (0..24)
+    let hourly_distribution: Vec<HourlyStat> = (0..=24)
         .map(|hour| HourlyStat {
             hour,
             total_duration: hourly_durations.get(&hour).copied().unwrap_or(0),

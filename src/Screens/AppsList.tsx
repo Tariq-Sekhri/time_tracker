@@ -22,7 +22,7 @@ function formatPercentage(value: number): string {
 
 export default function AppsList({onBack}: { onBack: () => void }) {
     const [activeTab, setActiveTab] = useState<Tab>("week");
-    const [expanded, setExpanded] = useState(false);
+    const [visibleCount, setVisibleCount] = useState(20);
     const {date, setDate} = useDateStore();
     const {week_start, week_end} = getWeekRange(date);
 
@@ -38,9 +38,6 @@ export default function AppsList({onBack}: { onBack: () => void }) {
             </div>
         );
     }
-    const allApps = weekStats.all_apps || weekStats.top_apps;
-    const displayedApps = expanded ? allApps : allApps.slice(0, 10);
-
     const allAppsForCalc = weekStats.all_apps || weekStats.top_apps;
     const dailyAvgApps = allAppsForCalc.map(app => ({
         ...app,
@@ -50,7 +47,10 @@ export default function AppsList({onBack}: { onBack: () => void }) {
     }));
 
     const apps = activeTab === "week" ? allAppsForCalc : activeTab === "dailyAvg" ? dailyAvgApps : allAppsForCalc;
-    const maxDuration = apps.length > 0 ? apps[0].total_duration : 1;
+    const minSeconds = 60;
+    const filteredApps = apps.filter((app) => app.total_duration >= minSeconds);
+    const displayedApps = filteredApps.slice(0, visibleCount);
+    const maxDuration = filteredApps.length > 0 ? filteredApps[0].total_duration : 1;
 
 
     return (
@@ -68,19 +68,28 @@ export default function AppsList({onBack}: { onBack: () => void }) {
 
             <div className="flex gap-2 mb-6 border-b border-gray-700">
                 <button
-                    onClick={() => setActiveTab("week")}
+                    onClick={() => {
+                        setActiveTab("week");
+                        setVisibleCount(20);
+                    }}
                     className={`px-4 py-2 font-medium ${activeTab === "week" ? "border-b-2 border-blue-500 text-white" : "text-gray-400"}`}
                 >
                     Week
                 </button>
                 <button
-                    onClick={() => setActiveTab("dailyAvg")}
+                    onClick={() => {
+                        setActiveTab("dailyAvg");
+                        setVisibleCount(20);
+                    }}
                     className={`px-4 py-2 font-medium ${activeTab === "dailyAvg" ? "border-b-2 border-blue-500 text-white" : "text-gray-400"}`}
                 >
                     Daily Avg
                 </button>
                 <button
-                    onClick={() => setActiveTab("allTime")}
+                    onClick={() => {
+                        setActiveTab("allTime");
+                        setVisibleCount(20);
+                    }}
                     className={`px-4 py-2 font-medium ${activeTab === "allTime" ? "border-b-2 border-blue-500 text-white" : "text-gray-400"}`}
                 >
                     All Time
@@ -132,13 +141,13 @@ export default function AppsList({onBack}: { onBack: () => void }) {
                 })}
             </div>
 
-            {!expanded && allApps.length > 10 && (
+            {displayedApps.length < filteredApps.length && (
                 <div className="mt-6 text-center">
                     <button
-                        onClick={() => setExpanded(true)}
+                        onClick={() => setVisibleCount((c) => Math.min(c + 20, filteredApps.length))}
                         className="px-6 py-2 bg-gray-800 hover:bg-gray-700 rounded text-white"
                     >
-                        See more apps
+                        Load 20 more
                     </button>
                 </div>
             )}

@@ -63,9 +63,15 @@ export default function RenderCalendarContent({
     const [editingCalendar, setEditingCalendar] = useState<GoogleCalendar | null>(null);
     const [newCalendarName, setNewCalendarName] = useState("");
     const [newCalendarColor, setNewCalendarColor] = useState("#4285f4");
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-    const [calendarToDelete, setCalendarToDelete] = useState<number | null>(null);
     const [isRelogging, setIsRelogging] = useState(false);
+    const LEFT_SIDEBAR_COLLAPSED_KEY = "time-tracker:left-sidebar-collapsed";
+    const [isLeftCollapsed, setIsLeftCollapsed] = useState(() => {
+        try {
+            return localStorage.getItem(LEFT_SIDEBAR_COLLAPSED_KEY) === "1";
+        } catch {
+            return false;
+        }
+    });
 
     const handleRelogin = async () => {
         setIsRelogging(true);
@@ -121,28 +127,6 @@ export default function RenderCalendarContent({
         },
     });
 
-    const deleteCalendarMutation = useMutation({
-        mutationFn: async (id: number) => {
-            return await delete_google_calendar(id);
-        },
-        onSuccess: async () => {
-            await queryClient.invalidateQueries({ queryKey: ["googleCalendars"] });
-            queryClient.invalidateQueries({
-                predicate: (query) => query.queryKey[0] === "googleCalendarEvents"
-            });
-            await refetchGoogleEvents();
-            queryClient.invalidateQueries({ queryKey: ["week"] });
-            setShowDeleteConfirm(false);
-            setCalendarToDelete(null);
-            showToast("Calendar deleted successfully", "success");
-        },
-        onError: (error: any) => {
-            console.error("Failed to delete calendar:", error);
-            const fullError = JSON.stringify(error, null, 2);
-            showToast("Failed to delete calendar", "error", 5000, fullError);
-        },
-    });
-
 
     const handleUpdate = () => {
         if (!editingCalendar) return;
@@ -166,11 +150,6 @@ export default function RenderCalendarContent({
         setEditingCalendar(calendar);
         setNewCalendarName(calendar.name);
         setNewCalendarColor(calendar.color);
-    };
-
-    const handleDelete = (id: number) => {
-        setCalendarToDelete(id);
-        setShowDeleteConfirm(true);
     };
 
     const weekStart = getWeekStart(date);
@@ -244,6 +223,31 @@ export default function RenderCalendarContent({
             cachedEventsCount: cachedEvents?.length ?? "null",
         });
     }, [googleCalendarEvents, isLoadingGoogleEvents, isGoogleEventsError, displayGoogleEvents, isShowingCachedEvents, cachedEvents]);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(LEFT_SIDEBAR_COLLAPSED_KEY, isLeftCollapsed ? "1" : "0");
+        } catch {
+        }
+    }, [isLeftCollapsed]);
+
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            try {
+                const api = ref?.current?.getApi?.();
+                api?.updateSize?.();
+            } catch {
+            }
+        }, 250);
+
+        return () => clearTimeout(timeoutId);
+    }, [isLeftCollapsed, ref]);
+
+    useEffect(() => {
+        if (editingCalendar && isLeftCollapsed) {
+            setIsLeftCollapsed(false);
+        }
+    }, [editingCalendar, isLeftCollapsed]);
 
 
     const events = useMemo(() => {
@@ -407,13 +411,23 @@ export default function RenderCalendarContent({
                 </div>
             )}
             <div className="flex flex-1 overflow-hidden min-h-0">
-                <div className="w-64 border-r border-gray-700 bg-black p-4 overflow-y-auto flex-shrink-0">
+                <div
+                    className={`border-r border-gray-700 bg-black overflow-y-auto flex-shrink-0 transition-all duration-200 ease-in-out ${isLeftCollapsed ? "w-16 p-2" : "w-64 p-4"}`}
+                >
                     <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold text-white">
+                        <h3 className={`text-lg font-semibold text-white ${isLeftCollapsed ? "hidden" : ""}`}>
                             Filter Categories
                         </h3>
+                        <button
+                            type="button"
+                            onClick={() => setIsLeftCollapsed((v) => !v)}
+                            className="shrink-0 px-2 py-1 text-sm bg-gray-800 hover:bg-gray-700 text-white rounded transition-colors"
+                            aria-label={isLeftCollapsed ? "Expand filter sidebar" : "Collapse filter sidebar"}
+                        >
+                            {isLeftCollapsed ? "»" : "«"}
+                        </button>
                     </div>
-                    <div className="flex gap-2 mb-4">
+                    <div className={`flex gap-2 mb-4 ${isLeftCollapsed ? "hidden" : ""}`}>
                         <button
                             onClick={checkAllCategories}
                             className="flex-1 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 rounded text-white transition-colors"
@@ -449,7 +463,7 @@ export default function RenderCalendarContent({
                                         className="w-4 h-4 rounded border border-gray-600"
                                         style={{ backgroundColor: color }}
                                     />
-                                    <span className="text-sm text-gray-200 flex-1">
+                                    <span className={`text-sm text-gray-200 flex-1 ${isLeftCollapsed ? "hidden" : ""}`}>
                                         {categoryName}
                                     </span>
                                 </label>
@@ -461,11 +475,11 @@ export default function RenderCalendarContent({
 
                     <div className="mb-4">
                         <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-lg font-semibold text-white">
+                            <h3 className={`text-lg font-semibold text-white ${isLeftCollapsed ? "hidden" : ""}`}>
                                 Google Calendars
                             </h3>
                         </div>
-                        <p className="text-xs text-gray-500 mb-2">
+                        <p className={`text-xs text-gray-500 mb-2 ${isLeftCollapsed ? "hidden" : ""}`}>
                             Manage calendars in Google Calendar settings
                         </p>
 
@@ -534,23 +548,16 @@ export default function RenderCalendarContent({
                                             className="w-4 h-4 rounded border border-gray-600"
                                             style={{ backgroundColor: calendar.color }}
                                         />
-                                        <span className="text-sm text-gray-200 flex-1 truncate">
+                                        <span className={`text-sm text-gray-200 flex-1 truncate ${isLeftCollapsed ? "hidden" : ""}`}>
                                             {calendar.name}
                                         </span>
-                                        <div className="flex gap-1">
+                                        <div className={`flex gap-1 ${isLeftCollapsed ? "hidden" : ""}`}>
                                             <button
                                                 onClick={() => handleEdit(calendar)}
                                                 className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded text-white"
                                                 title="Edit"
                                             >
                                                 ✎
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(calendar.id)}
-                                                className="px-2 py-1 text-xs bg-red-600 hover:bg-red-700 rounded text-white"
-                                                title="Delete"
-                                            >
-                                                ×
                                             </button>
                                         </div>
                                     </div>
@@ -583,38 +590,6 @@ export default function RenderCalendarContent({
                 </div>
             </div>
 
-            {showDeleteConfirm && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-gray-900 p-6 rounded-lg max-w-md">
-                        <h3 className="text-xl font-semibold mb-4 text-white">Delete Calendar?</h3>
-                        <p className="text-gray-400 mb-4">
-                            This will delete the calendar and all its events. This action cannot be undone.
-                        </p>
-                        <div className="flex gap-2 justify-end">
-                            <button
-                                onClick={() => {
-                                    setShowDeleteConfirm(false);
-                                    setCalendarToDelete(null);
-                                }}
-                                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={() => {
-                                    if (calendarToDelete !== null) {
-                                        deleteCalendarMutation.mutate(calendarToDelete);
-                                    }
-                                }}
-                                disabled={deleteCalendarMutation.isPending}
-                                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-white disabled:opacity-50"
-                            >
-                                {deleteCalendarMutation.isPending ? "Deleting..." : "Delete"}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
