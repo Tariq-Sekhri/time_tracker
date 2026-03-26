@@ -57,6 +57,10 @@ export async function get_week_statistics(weekStart: number, weekEnd: number): P
     });
 }
 
+export async function get_total_statistics(): Promise<WeekStatistics> {
+    return invokeOrThrow<WeekStatistics>("get_total_statistics");
+}
+
 export async function get_day_statistics(dayStart: number, dayEnd: number): Promise<DayStatistics> {
     return invokeOrThrow<DayStatistics>("get_day_statistics", {
         dayStart,

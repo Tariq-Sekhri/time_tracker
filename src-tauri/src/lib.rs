@@ -10,7 +10,7 @@ mod commands;
 use std::sync::{atomic::AtomicBool, Mutex};
 
 use core::{get_tracking_status, set_tracking_status, supervisor};
-use db::queries::{get_day_statistics, get_week, get_week_statistics};
+use db::queries::{get_day_statistics, get_total_statistics, get_week, get_week_statistics};
 use db::tables::cat_regex::{
     delete_cat_regex_by_id, get_cat_regex, get_cat_regex_by_id, insert_cat_regex,
     update_cat_regex_by_id,
@@ -157,6 +157,7 @@ pub fn run() {
             get_categories,
             get_week,
             get_week_statistics,
+            get_total_statistics,
             get_day_statistics,
             delete_category_by_id,
             get_category_by_id,

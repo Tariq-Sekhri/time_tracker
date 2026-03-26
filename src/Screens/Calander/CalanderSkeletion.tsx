@@ -1,5 +1,5 @@
 export default function CalendarSkeleton() {
-    const hours = Array.from({length: 24}, (_, i) => i);
+    const hours = Array.from({ length: 25 }, (_, i) => i);
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
     return (
@@ -14,7 +14,7 @@ export default function CalendarSkeleton() {
                 ))}
             </div>
             <div className="relative">
-                {hours.slice(0, 12).map((hour) => (
+                {hours.map((hour) => (
                     <div key={hour} className="flex border-b border-gray-800 h-12">
                         <div className="w-16 text-right pr-2 text-xs text-gray-600">
                             {hour}:00
