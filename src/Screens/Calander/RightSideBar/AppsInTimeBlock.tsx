@@ -5,11 +5,18 @@ import {
     delete_logs_by_ids,
     delete_logs_for_time_block
 } from "../../../api/Log.ts";
-import { useState } from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect, useRef } from "react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SideBarView } from "./RightSideBar.tsx";
-import { writeText, readText } from "@tauri-apps/plugin-clipboard-manager";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { useToast } from "../../../Componants/Toast.tsx";
+import { get_categories } from "../../../api/Category.ts";
+import { get_cat_regex, insert_cat_regex, update_cat_regex_by_id } from "../../../api/CategoryRegex.ts";
+
+function exactAppRegexPattern(appName: string): string {
+    const escaped = appName.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+    return `^${escaped}$`;
+}
 
 export type SelectedEvent = {
     title: string
@@ -43,6 +50,72 @@ export default function AppsInTimeBlock({
     const [deleteLogCount, setDeleteLogCount] = useState(0);
     const [isCountingLogs, setIsCountingLogs] = useState(false);
     const { showToast, removeToast, updateToast } = useToast();
+
+    const categorizeMenuRef = useRef<HTMLDivElement>(null);
+    const [categorizeMenu, setCategorizeMenu] = useState<{
+        x: number;
+        y: number;
+        appName: string;
+    } | null>(null);
+
+    const { data: categories = [] } = useQuery({
+        queryKey: ["categories"],
+        queryFn: get_categories,
+    });
+
+    const { data: catRegex = [] } = useQuery({
+        queryKey: ["cat_regex"],
+        queryFn: get_cat_regex,
+    });
+
+    useEffect(() => {
+        if (!categorizeMenu) return;
+        const close = (e: PointerEvent) => {
+            if (categorizeMenuRef.current?.contains(e.target as Node)) return;
+            setCategorizeMenu(null);
+        };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") setCategorizeMenu(null);
+        };
+        document.addEventListener("pointerdown", close);
+        window.addEventListener("keydown", onKey);
+        return () => {
+            document.removeEventListener("pointerdown", close);
+            window.removeEventListener("keydown", onKey);
+        };
+    }, [categorizeMenu]);
+
+    const assignAppCategoryMutation = useMutation({
+        mutationFn: async ({
+            catId,
+            appName,
+        }: {
+            catId: number;
+            appName: string;
+        }) => {
+            const pattern = exactAppRegexPattern(appName);
+            const existing = catRegex.find((r) => r.regex === pattern);
+            if (existing?.cat_id === catId) return false;
+            if (existing) {
+                await update_cat_regex_by_id({ ...existing, cat_id: catId });
+            } else {
+                await insert_cat_regex({ cat_id: catId, regex: pattern });
+            }
+            return true;
+        },
+        onSuccess: (didChange) => {
+            setCategorizeMenu(null);
+            if (!didChange) return;
+            queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
+            queryClient.invalidateQueries({ queryKey: ["week"] });
+            showToast("Category rule saved", "success");
+        },
+        onError: (e: unknown) => {
+            console.error("Failed to save category rule:", e);
+            const fullError = JSON.stringify(e, null, 2);
+            showToast("Failed to save category rule", "error", 5000, fullError);
+        },
+    });
 
     const handleDeleteClick = async () => {
         if (!selectedEvent) return;
@@ -160,6 +233,7 @@ export default function AppsInTimeBlock({
 
     const sortedLogs = [...selectedEventLogs].sort((a, b) => b.duration - a.duration);
     const totalDuration = sortedLogs.reduce((sum, log) => sum + log.duration, 0);
+    const sortedCategories = [...categories].sort((a, b) => b.priority - a.priority);
 
     return (
         <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col h-full">
@@ -204,6 +278,15 @@ export default function AppsInTimeBlock({
                             <div
                                 key={idx}
                                 onClick={() => appClicked(log.app)}
+                                onContextMenu={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setCategorizeMenu({
+                                        x: e.clientX,
+                                        y: e.clientY,
+                                        appName: log.app,
+                                    });
+                                }}
                                 className="h-15 bg-gray-900 rounded-lg p-3 hover:bg-gray-800 transition-colors"
                             >
                                 <div className="flex items-center justify-between mb-1">
@@ -275,6 +358,38 @@ export default function AppsInTimeBlock({
                     )}
                 </button>
             </div>
+
+            {categorizeMenu && (
+                <div
+                    ref={categorizeMenuRef}
+                    className="fixed z-[200] min-w-[12rem] max-h-64 overflow-y-auto rounded-lg border border-gray-600 bg-gray-900 py-1 shadow-xl"
+                    style={{ left: categorizeMenu.x, top: categorizeMenu.y }}
+                    role="menu"
+                >
+                    <div
+                        className="px-3 py-2 text-xs text-gray-400 border-b border-gray-700 truncate"
+                        title={categorizeMenu.appName}
+                    >
+                        {categorizeMenu.appName}
+                    </div>
+                    {sortedCategories.map((cat) => (
+                        <button
+                            key={cat.id}
+                            type="button"
+                            disabled={assignAppCategoryMutation.isPending}
+                            className="w-full px-3 py-2 text-left text-sm text-gray-200 hover:bg-gray-800 disabled:opacity-50"
+                            onClick={() =>
+                                assignAppCategoryMutation.mutate({
+                                    catId: cat.id,
+                                    appName: categorizeMenu.appName,
+                                })
+                            }
+                        >
+                            {cat.name}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {showDeleteConfirm && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
