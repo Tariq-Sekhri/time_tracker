@@ -511,7 +511,7 @@ export default function CategoryRegexView() {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[50vh] overflow-auto pr-1">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[50vh] overflow-auto nice-scrollbar pr-1">
                                 {categoriesByPriority.map((cat) => {
                                     const checked = visibleCategoryIds.has(cat.id);
                                     return (

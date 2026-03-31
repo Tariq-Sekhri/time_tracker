@@ -5,6 +5,8 @@ export default function Settings() {
     const {
         calendarStartHour,
         setCalendarStartHour,
+        rightSidebarWidth,
+        setRightSidebarWidth,
         timeBlockSettings,
         setTimeBlockSettings,
         uiMinAppDuration,
@@ -20,7 +22,7 @@ export default function Settings() {
     }, [calendarStartHour, windowEndHour]);
 
     return (
-        <div className="p-6 text-white h-full overflow-y-auto">
+        <div className="p-6 text-white h-full overflow-y-auto nice-scrollbar">
             <div className="flex items-center justify-between mb-6">
                 <h1 className="text-2xl font-bold">Settings</h1>
                 <button
@@ -51,6 +53,19 @@ export default function Settings() {
 
                         <div className="text-sm text-gray-400">
                             24-hour window: {windowText}
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4">
+                            <label className="text-sm text-gray-300">Right sidebar width (px)</label>
+                            <input
+                                type="number"
+                                min={280}
+                                max={800}
+                                step={1}
+                                value={rightSidebarWidth}
+                                onChange={(e) => setRightSidebarWidth(Number(e.target.value))}
+                                className="w-24 px-2 py-1 bg-gray-800 text-white rounded text-sm"
+                            />
                         </div>
                     </div>
                 </div>

@@ -55,7 +55,7 @@ export default function AppsList({onBack}: { onBack: () => void }) {
 
 
     return (
-        <div className="p-6 text-white h-full overflow-y-auto">
+        <div className="p-6 text-white h-full overflow-y-auto nice-scrollbar">
             <div className="flex items-center justify-between mb-6">
                 <button
                     onClick={onBack}

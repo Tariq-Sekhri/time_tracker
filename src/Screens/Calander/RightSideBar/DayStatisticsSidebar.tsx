@@ -1,7 +1,8 @@
-import {useQuery} from "@tanstack/react-query";
-import {get_day_statistics} from "../../../api/statistics.ts";
-import {formatDuration} from "../utils.ts";
-import {DonutChart} from "../DonutChart.tsx";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { get_day_statistics } from "../../../api/statistics.ts";
+import { formatDuration } from "../utils.ts";
+import { DonutChart } from "../DonutChart.tsx";
 
 interface DayStatisticsSidebarProps {
     selectedDate: Date;
@@ -10,7 +11,19 @@ interface DayStatisticsSidebarProps {
     onCategoryClick?: (category: string) => void;
 }
 
-export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose, onCategoryClick}: DayStatisticsSidebarProps) {
+type CombinedCategory = {
+    category: string;
+    total_duration: number;
+    color: string | null;
+    source: "tracking";
+};
+
+export default function DayStatisticsSidebar({
+    selectedDate,
+    onMoreInfo,
+    onClose,
+    onCategoryClick,
+}: DayStatisticsSidebarProps) {
     const dayStartDate = new Date(selectedDate);
     dayStartDate.setHours(0, 0, 0, 0);
     const dayStart = Math.floor(dayStartDate.getTime() / 1000);
@@ -23,7 +36,7 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
         data: dayStats,
         isLoading,
         error,
-        isError
+        isError,
     } = useQuery({
         queryKey: ["day_statistics", dayStart, dayEnd],
         queryFn: async () => {
@@ -33,9 +46,42 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
         enabled: !!dayStart && !!dayEnd,
     });
 
+    const topCategories = useMemo(() => {
+        if (!dayStats) return [] as CombinedCategory[];
+        return dayStats.categories.slice(0, 5).map((c) => ({
+            category: c.category,
+            total_duration: c.total_duration,
+            color: c.color,
+            source: "tracking",
+        }));
+    }, [dayStats]);
+
+    const maxCategoryDuration = topCategories.length > 0 ? topCategories[0].total_duration : 1;
+
+    const donutData = useMemo(() => {
+        return topCategories.map((cat) => ({
+            label: cat.category,
+            value: cat.total_duration,
+            color: cat.color || "#6b7280",
+        }));
+    }, [topCategories]);
+
+    const categoryColors = useMemo(() => {
+        const map = new Map<string, string>();
+        topCategories.forEach((cat) => {
+            if (cat.color) map.set(cat.category, cat.color);
+        });
+        return map;
+    }, [topCategories]);
+
+    const totalTime = useMemo(() => {
+        if (!dayStats) return 0;
+        return dayStats.total_time;
+    }, [dayStats]);
+
     if (isLoading || (!dayStats && !isError)) {
         return (
-            <div className=" border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
+            <div className=" border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
                 <div className="flex-1">
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-xl font-bold text-white">Day Statistics</h2>
@@ -45,8 +91,12 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
                             aria-label="Close"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                      d="M6 18L18 6M6 6l12 12"/>
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M6 18L18 6M6 6l12 12"
+                                />
                             </svg>
                         </button>
                     </div>
@@ -66,7 +116,7 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
 
     if (isError) {
         return (
-            <div className=" border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
+            <div className=" border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
                 <div className="flex-1">
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-xl font-bold text-white">Day Statistics</h2>
@@ -76,8 +126,12 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
                             aria-label="Close"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                      d="M6 18L18 6M6 6l12 12"/>
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M6 18L18 6M6 6l12 12"
+                                />
                             </svg>
                         </button>
                     </div>
@@ -100,7 +154,7 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
 
     if (!dayStats) {
         return (
-            <div className=" border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
+            <div className=" border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
                 <div className="flex-1">
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-xl font-bold text-white">Day Statistics</h2>
@@ -110,8 +164,12 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
                             aria-label="Close"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                      d="M6 18L18 6M6 6l12 12"/>
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M6 18L18 6M6 6l12 12"
+                                />
                             </svg>
                         </button>
                     </div>
@@ -129,24 +187,8 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
         );
     }
 
-    const categoryColors = new Map<string, string>();
-    dayStats.categories.forEach(cat => {
-        if (cat.color) {
-            categoryColors.set(cat.category, cat.color);
-        }
-    });
-
-    const donutData = dayStats.categories.slice(0, 5).map(cat => ({
-        label: cat.category,
-        value: cat.total_duration,
-        color: cat.color || "#6b7280",
-    }));
-
-    const topCategories = dayStats.categories.slice(0, 5);
-    const maxCategoryDuration = topCategories.length > 0 ? topCategories[0].total_duration : 1;
-
     return (
-        <div className=" border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
+        <div className=" border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
             <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold text-white">Day Statistics</h2>
                 <button
@@ -155,8 +197,12 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
                     aria-label="Close"
                 >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                              d="M6 18L18 6M6 6l12 12"/>
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                        />
                     </svg>
                 </button>
             </div>
@@ -164,43 +210,51 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
             <div className="mb-4">
                 <div className="flex items-center justify-between mb-1">
                     <span className="text-sm text-gray-400">Total time</span>
-                    <span className="text-lg font-semibold text-white">{formatDuration(dayStats.total_time)}</span>
+                    <span className="text-lg font-semibold text-white">{formatDuration(totalTime)}</span>
                 </div>
             </div>
 
             <div className="mb-6">
-                <DonutChart data={donutData} colors={categoryColors}/>
+                <DonutChart data={donutData} colors={categoryColors} />
             </div>
 
             <div className="mb-6">
                 <h3 className="text-sm font-semibold text-gray-300 mb-3">Categories</h3>
                 <div className="space-y-2">
-                    {topCategories.map((cat, idx) => (
-                        <div key={idx} className="space-y-1">
-                            <div 
-                                className={`flex items-center justify-between ${onCategoryClick ? "cursor-pointer hover:bg-gray-800 rounded p-1 -m-1 transition-colors" : ""}`}
-                                onClick={() => onCategoryClick?.(cat.category)}
-                            >
-                                <div className="flex items-center gap-2">
-                                    <div
-                                        className="w-3 h-3 rounded-full"
-                                        style={{backgroundColor: cat.color || "#6b7280"}}
-                                    />
-                                    <span className="text-sm text-gray-200">{cat.category}</span>
-                                </div>
-                                <span className="text-sm text-gray-400">{formatDuration(cat.total_duration)}</span>
-                            </div>
-                            <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
+                    {topCategories.map((cat, idx) => {
+                        const clickable = !!onCategoryClick && cat.source === "tracking";
+                        const onClick = clickable ? () => onCategoryClick?.(cat.category) : undefined;
+                        return (
+                            <div key={`${cat.category}-${idx}`} className="space-y-1">
                                 <div
-                                    className="h-full"
-                                    style={{
-                                        width: `${(cat.total_duration / maxCategoryDuration) * 100}%`,
-                                        backgroundColor: cat.color || "#6b7280",
-                                    }}
-                                />
+                                    className={`flex items-center justify-between ${
+                                        clickable
+                                            ? "cursor-pointer hover:bg-gray-800 rounded p-1 -m-1 transition-colors"
+                                            : ""
+                                    }`}
+                                    onClick={onClick}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <div
+                                            className="w-3 h-3 rounded-full"
+                                            style={{ backgroundColor: cat.color || "#6b7280" }}
+                                        />
+                                        <span className="text-sm text-gray-200">{cat.category}</span>
+                                    </div>
+                                    <span className="text-sm text-gray-400">{formatDuration(cat.total_duration)}</span>
+                                </div>
+                                <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full"
+                                        style={{
+                                            width: `${(cat.total_duration / maxCategoryDuration) * 100}%`,
+                                            backgroundColor: cat.color || "#6b7280",
+                                        }}
+                                    />
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
 
@@ -227,3 +281,4 @@ export default function DayStatisticsSidebar({selectedDate, onMoreInfo, onClose,
         </div>
     );
 }
+

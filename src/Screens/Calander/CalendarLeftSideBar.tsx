@@ -17,7 +17,7 @@ export default function CalendarLeftSideBar({
                                                 toggleCategory
                                             }: CalanderHeaderProps) {
 
-    return <div className="w-64 border-r border-gray-700 bg-black p-4 overflow-y-auto flex-shrink-0">
+    return <div className="w-64 border-r border-gray-700 bg-black p-4 overflow-y-auto nice-scrollbar flex-shrink-0">
         <h3 className="text-lg font-semibold text-white mb-4">Filter Categories</h3>
         <div className="space-y-2">
             {categories.map((category) => {
