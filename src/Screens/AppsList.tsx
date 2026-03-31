@@ -3,6 +3,7 @@ import {useState} from "react";
 import {get_week_statistics} from "../api/statistics.ts";
 import { getWeekRange } from "../utils.ts";
 import {useDateStore} from "../stores/dateStore.ts";
+import { useSettingsStore } from "../stores/settingsStore.ts";
 
 type Tab = "week" | "dailyAvg" | "allTime";
 
@@ -24,6 +25,7 @@ export default function AppsList({onBack}: { onBack: () => void }) {
     const [activeTab, setActiveTab] = useState<Tab>("week");
     const [visibleCount, setVisibleCount] = useState(20);
     const {date, setDate} = useDateStore();
+    const { uiMinAppDuration } = useSettingsStore();
     const {week_start, week_end} = getWeekRange(date);
 
     const {data: weekStats, isLoading} = useQuery({
@@ -47,8 +49,7 @@ export default function AppsList({onBack}: { onBack: () => void }) {
     }));
 
     const apps = activeTab === "week" ? allAppsForCalc : activeTab === "dailyAvg" ? dailyAvgApps : allAppsForCalc;
-    const minSeconds = 60;
-    const filteredApps = apps.filter((app) => app.total_duration >= minSeconds);
+    const filteredApps = apps.filter((app) => app.total_duration >= uiMinAppDuration);
     const displayedApps = filteredApps.slice(0, visibleCount);
     const maxDuration = filteredApps.length > 0 ? filteredApps[0].total_duration : 1;
 

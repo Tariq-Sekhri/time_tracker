@@ -16,10 +16,12 @@ import FullCalendar from '@fullcalendar/react';
 import {get_google_calendars, GoogleCalendar} from "../../api/GoogleCalendar.ts";
 import {getCachedCalendars, setCachedCalendars} from "../../stores/googleCalendarCache.ts";
 import {getCurrentWindow} from "@tauri-apps/api/window";
+import { useSettingsStore } from "../../stores/settingsStore.ts";
 
 export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View) => void }) {
     const [rightSideBarView, setRightSideBarView] = useState<SideBarView>("Week")
     const {date, setDate} = useDateStore();
+    const { timeBlockSettings } = useSettingsStore();
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [selectedEvent, setSelectedEvent] = useState<CalendarEvent>(null);
     const [selectedEventLogs, setSelectedEventLogs] = useState<EventLogs>([]);
@@ -230,8 +232,15 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
 
     const weekStart = getWeekStart(date);
     const {data: weekData} = useQuery({
-        queryKey: ["week", weekStart.toISOString()],
-        queryFn: async () => await get_week(weekStart),
+        queryKey: [
+            "week",
+            weekStart.toISOString(),
+            timeBlockSettings.minLogDuration,
+            timeBlockSettings.maxAttachDistance,
+            timeBlockSettings.lookaheadWindow,
+            timeBlockSettings.minDuration,
+        ],
+        queryFn: async () => await get_week(weekStart, timeBlockSettings),
         enabled: !!weekStart && !isNaN(weekStart.getTime()) && !!selectedEvent,
     });
 

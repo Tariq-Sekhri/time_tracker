@@ -6,7 +6,7 @@ use crate::db::tables::log::{delete_log_by_id, get_logs, Log};
 use crate::db::tables::skipped_app::get_skipped_apps;
 
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -22,6 +22,15 @@ pub struct TimeBlock {
     pub apps: Vec<TimeBlockLogs>,
     pub start_time: i64,
     pub end_time: i64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeBlockSettings {
+    pub min_log_duration: i64,
+    pub max_attach_distance: i64,
+    pub lookahead_window: i64,
+    pub min_duration: i64,
 }
 
 impl TimeBlock {
@@ -129,12 +138,16 @@ fn build_regex_table(
     Ok(regex)
 }
 
-fn get_time_blocks(logs: &[Log], regex: &[CachedCategoryRegex]) -> Result<Vec<TimeBlock>, Error> {
+fn get_time_blocks(
+    logs: &[Log],
+    regex: &[CachedCategoryRegex],
+    time_block_settings: &TimeBlockSettings,
+) -> Result<Vec<TimeBlock>, Error> {
     if logs.is_empty() {
         return Ok(Vec::new());
     }
 
-    let min_log_duration = 60;
+    let min_log_duration = time_block_settings.min_log_duration.max(1);
 
     let long_logs: Vec<&Log> = logs
         .iter()
@@ -189,7 +202,7 @@ fn get_time_blocks(logs: &[Log], regex: &[CachedCategoryRegex]) -> Result<Vec<Ti
         }
     }
 
-    let max_attach_distance = 10 * 60; // 10 minutes in seconds
+    let max_attach_distance = time_block_settings.max_attach_distance.max(0);
 
     for short_log in short_logs {
         if time_blocks.is_empty() {
@@ -238,7 +251,11 @@ fn get_time_blocks(logs: &[Log], regex: &[CachedCategoryRegex]) -> Result<Vec<Ti
 }
 
 #[tauri::command]
-pub async fn get_week(week_start: i64, week_end: i64) -> Result<Vec<TimeBlock>, Error> {
+pub async fn get_week(
+    week_start: i64,
+    week_end: i64,
+    time_block_settings: TimeBlockSettings,
+) -> Result<Vec<TimeBlock>, Error> {
     let mut logs = get_logs().await?;
     let skipped_apps = get_skipped_apps().await?;
 
@@ -275,7 +292,10 @@ pub async fn get_week(week_start: i64, week_end: i64) -> Result<Vec<TimeBlock>, 
         return Ok(Vec::new());
     }
 
-    transform_time_blocks(get_time_blocks(&logs, &regex)?)
+    transform_time_blocks(
+        get_time_blocks(&logs, &regex, &time_block_settings)?,
+        &time_block_settings,
+    )
 }
 
 fn ensure_non_overlapping(mut blocks: Vec<TimeBlock>) -> Vec<TimeBlock> {
@@ -325,9 +345,12 @@ fn ensure_non_overlapping(mut blocks: Vec<TimeBlock>) -> Vec<TimeBlock> {
     result
 }
 
-fn transform_time_blocks(time_blocks: Vec<TimeBlock>) -> Result<Vec<TimeBlock>, Error> {
-    let lookahead_window = 10 * 60; // 10 minutes in seconds - how far ahead to look for same category
-    let min_duration = 60; // 1 minute in seconds - minimum duration for a time block
+fn transform_time_blocks(
+    time_blocks: Vec<TimeBlock>,
+    time_block_settings: &TimeBlockSettings,
+) -> Result<Vec<TimeBlock>, Error> {
+    let lookahead_window = time_block_settings.lookahead_window.max(0);
+    let min_duration = time_block_settings.min_duration.max(1);
 
     if time_blocks.is_empty() {
         return Ok(Vec::new());

@@ -1,0 +1,156 @@
+import { create } from "zustand";
+
+export type TimeBlockSettings = {
+    minLogDuration: number;
+    maxAttachDistance: number;
+    lookaheadWindow: number;
+    minDuration: number;
+};
+
+export type SettingsState = {
+    calendarStartHour: number;
+    timeBlockSettings: TimeBlockSettings;
+    uiMinAppDuration: number;
+    setCalendarStartHour: (hour: number) => void;
+    setTimeBlockSettings: (patch: Partial<TimeBlockSettings>) => void;
+    setUiMinAppDuration: (seconds: number) => void;
+    resetSettings: () => void;
+};
+
+const STORAGE_KEY = "time-tracker:settings";
+
+const DEFAULT_SETTINGS: Omit<SettingsState, "setCalendarStartHour" | "setTimeBlockSettings" | "setUiMinAppDuration" | "resetSettings"> = {
+    calendarStartHour: 6,
+    timeBlockSettings: {
+        minLogDuration: 60,
+        maxAttachDistance: 600,
+        lookaheadWindow: 600,
+        minDuration: 60,
+    },
+    uiMinAppDuration: 60,
+};
+
+function isFiniteNumber(n: unknown): n is number {
+    return typeof n === "number" && Number.isFinite(n);
+}
+
+function clampInt(value: number, min: number, max: number): number {
+    const v = Math.floor(value);
+    return Math.min(max, Math.max(min, v));
+}
+
+function loadStoredSettings(): Omit<
+    SettingsState,
+    "setCalendarStartHour" | "setTimeBlockSettings" | "setUiMinAppDuration" | "resetSettings"
+> {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return DEFAULT_SETTINGS;
+        const parsed = JSON.parse(raw) as any;
+
+        const calendarStartHour = isFiniteNumber(parsed?.calendarStartHour)
+            ? clampInt(parsed.calendarStartHour, 0, 23)
+            : DEFAULT_SETTINGS.calendarStartHour;
+
+        const tb = parsed?.timeBlockSettings ?? {};
+        const timeBlockSettings: TimeBlockSettings = {
+            minLogDuration: isFiniteNumber(tb?.minLogDuration)
+                ? Math.max(1, Math.floor(tb.minLogDuration))
+                : DEFAULT_SETTINGS.timeBlockSettings.minLogDuration,
+            maxAttachDistance: isFiniteNumber(tb?.maxAttachDistance)
+                ? Math.max(0, Math.floor(tb.maxAttachDistance))
+                : DEFAULT_SETTINGS.timeBlockSettings.maxAttachDistance,
+            lookaheadWindow: isFiniteNumber(tb?.lookaheadWindow)
+                ? Math.max(0, Math.floor(tb.lookaheadWindow))
+                : DEFAULT_SETTINGS.timeBlockSettings.lookaheadWindow,
+            minDuration: isFiniteNumber(tb?.minDuration)
+                ? Math.max(1, Math.floor(tb.minDuration))
+                : DEFAULT_SETTINGS.timeBlockSettings.minDuration,
+        };
+
+        const uiMinAppDuration = isFiniteNumber(parsed?.uiMinAppDuration)
+            ? Math.max(1, Math.floor(parsed.uiMinAppDuration))
+            : DEFAULT_SETTINGS.uiMinAppDuration;
+
+        return {
+            calendarStartHour,
+            timeBlockSettings,
+            uiMinAppDuration,
+        };
+    } catch {
+        return DEFAULT_SETTINGS;
+    }
+}
+
+function persistSettings(settings: Omit<
+    SettingsState,
+    "setCalendarStartHour" | "setTimeBlockSettings" | "setUiMinAppDuration" | "resetSettings"
+>): void {
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    } catch {
+    }
+}
+
+const initial = loadStoredSettings();
+
+export const useSettingsStore = create<SettingsState>((set, get) => {
+    const setAndPersist = (
+        next: Omit<
+            SettingsState,
+            "setCalendarStartHour" | "setTimeBlockSettings" | "setUiMinAppDuration" | "resetSettings"
+        >
+    ) => {
+        persistSettings(next);
+        set(next);
+    };
+
+    return {
+        ...initial,
+        setCalendarStartHour: (hour) => {
+            const calendarStartHour = isFiniteNumber(hour) ? clampInt(hour, 0, 23) : DEFAULT_SETTINGS.calendarStartHour;
+            const cur = get();
+            setAndPersist({
+                calendarStartHour,
+                timeBlockSettings: cur.timeBlockSettings,
+                uiMinAppDuration: cur.uiMinAppDuration,
+            });
+        },
+        setTimeBlockSettings: (patch) => {
+            const cur = get();
+            const tbCur = cur.timeBlockSettings;
+            const tbPatch = patch ?? {};
+
+            const timeBlockSettings: TimeBlockSettings = {
+                minLogDuration: isFiniteNumber(tbPatch.minLogDuration)
+                    ? Math.max(1, Math.floor(tbPatch.minLogDuration))
+                    : tbCur.minLogDuration,
+                maxAttachDistance: isFiniteNumber(tbPatch.maxAttachDistance)
+                    ? Math.max(0, Math.floor(tbPatch.maxAttachDistance))
+                    : tbCur.maxAttachDistance,
+                lookaheadWindow: isFiniteNumber(tbPatch.lookaheadWindow)
+                    ? Math.max(0, Math.floor(tbPatch.lookaheadWindow))
+                    : tbCur.lookaheadWindow,
+                minDuration: isFiniteNumber(tbPatch.minDuration)
+                    ? Math.max(1, Math.floor(tbPatch.minDuration))
+                    : tbCur.minDuration,
+            };
+
+            setAndPersist({ ...cur, timeBlockSettings });
+        },
+        setUiMinAppDuration: (seconds) => {
+            const uiMinAppDuration = isFiniteNumber(seconds) ? Math.max(1, Math.floor(seconds)) : DEFAULT_SETTINGS.uiMinAppDuration;
+            const cur = get();
+            setAndPersist({
+                calendarStartHour: cur.calendarStartHour,
+                timeBlockSettings: cur.timeBlockSettings,
+                uiMinAppDuration,
+            });
+        },
+        resetSettings: () => {
+            persistSettings(DEFAULT_SETTINGS);
+            set(DEFAULT_SETTINGS);
+        },
+    };
+});
+
