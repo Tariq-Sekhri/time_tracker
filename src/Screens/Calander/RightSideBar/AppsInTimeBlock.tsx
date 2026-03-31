@@ -12,6 +12,7 @@ import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { useToast } from "../../../Componants/Toast.tsx";
 import { get_categories } from "../../../api/Category.ts";
 import { get_cat_regex, insert_cat_regex, update_cat_regex_by_id } from "../../../api/CategoryRegex.ts";
+import { count_matching_logs, insert_skipped_app_and_delete_logs } from "../../../api/SkippedApp.ts";
 
 function exactAppRegexPattern(appName: string): string {
     const escaped = appName.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
@@ -57,6 +58,10 @@ export default function AppsInTimeBlock({
         y: number;
         appName: string;
     } | null>(null);
+    const [skipConfirmOpen, setSkipConfirmOpen] = useState(false);
+    const [skipPendingRegex, setSkipPendingRegex] = useState<string | null>(null);
+    const [skipMatchingLogCount, setSkipMatchingLogCount] = useState(0);
+    const [isCountingSkipLogs, setIsCountingSkipLogs] = useState(false);
 
     const { data: categories = [] } = useQuery({
         queryKey: ["categories"],
@@ -116,6 +121,43 @@ export default function AppsInTimeBlock({
             showToast("Failed to save category rule", "error", 5000, fullError);
         },
     });
+
+    const addSkipPatternMutation = useMutation({
+        mutationFn: async (regexPattern: string) => {
+            return await insert_skipped_app_and_delete_logs({ regex: regexPattern });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["skipped_apps"] });
+            queryClient.invalidateQueries({ queryKey: ["week"] });
+            setCategorizeMenu(null);
+            setSkipConfirmOpen(false);
+            setSkipPendingRegex(null);
+            showToast("Added to skipped apps", "success");
+        },
+        onError: (e: unknown) => {
+            console.error("Failed to add skipped app:", e);
+            const fullError = JSON.stringify(e, null, 2);
+            showToast("Failed to add skipped app", "error", 5000, fullError);
+        },
+    });
+
+    const handleAddToSkippedApps = async () => {
+        if (!categorizeMenu) return;
+        const regexPattern = exactAppRegexPattern(categorizeMenu.appName);
+        setIsCountingSkipLogs(true);
+        try {
+            const count = await count_matching_logs(regexPattern);
+            setSkipMatchingLogCount(count);
+            setSkipPendingRegex(regexPattern);
+            setSkipConfirmOpen(true);
+        } catch (e: any) {
+            console.error("Failed to count matching logs for skip:", e);
+            const fullError = JSON.stringify(e, null, 2);
+            showToast("Failed to add skipped app", "error", 5000, fullError);
+        } finally {
+            setIsCountingSkipLogs(false);
+        }
+    };
 
     const handleDeleteClick = async () => {
         if (!selectedEvent) return;
@@ -388,6 +430,15 @@ export default function AppsInTimeBlock({
                             {cat.name}
                         </button>
                     ))}
+                    <div className="border-t border-gray-700 my-1" />
+                    <button
+                        type="button"
+                        disabled={isCountingSkipLogs || addSkipPatternMutation.isPending}
+                        className="w-full px-3 py-2 text-left text-sm text-red-300 hover:bg-gray-800 disabled:opacity-50"
+                        onClick={handleAddToSkippedApps}
+                    >
+                        {isCountingSkipLogs ? "Checking..." : "Add to skipped apps"}
+                    </button>
                 </div>
             )}
 
@@ -419,6 +470,45 @@ export default function AppsInTimeBlock({
                                 className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-white disabled:opacity-50"
                             >
                                 {deleteTimeBlockMutation.isPending ? "Deleting..." : "Delete"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {skipConfirmOpen && skipPendingRegex && (
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+                    <div className="bg-gray-900 p-6 rounded-lg max-w-md w-full mx-4 border border-gray-700">
+                        <h3 className="text-xl font-bold mb-4 text-white">Confirm Skip</h3>
+                        <p className="text-gray-300 mb-2">
+                            This will permanently delete{" "}
+                            <span className="text-red-400 font-semibold">
+                                {skipMatchingLogCount} log{skipMatchingLogCount !== 1 ? "s" : ""}
+                            </span>{" "}
+                            that match the selected app.
+                        </p>
+                        {skipMatchingLogCount > 0 && (
+                            <p className="text-yellow-400 text-sm mb-4">
+                                ⚠️ This action cannot be undone!
+                            </p>
+                        )}
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => {
+                                    setSkipConfirmOpen(false);
+                                    setSkipPendingRegex(null);
+                                }}
+                                disabled={addSkipPatternMutation.isPending}
+                                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => addSkipPatternMutation.mutate(skipPendingRegex)}
+                                disabled={addSkipPatternMutation.isPending}
+                                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-white disabled:opacity-50"
+                            >
+                                {addSkipPatternMutation.isPending ? "Adding..." : "Delete Logs & Add Pattern"}
                             </button>
                         </div>
                     </div>

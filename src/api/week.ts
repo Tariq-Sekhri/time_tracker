@@ -1,4 +1,5 @@
 import { invokeOrThrow, getWeekRange } from "../utils.ts";
+import type { TimeBlockSettings } from "../stores/settingsStore.ts";
 
 type TimeBlockBackend = {
     id: number;
@@ -29,11 +30,12 @@ function transformTimeBlock(block: TimeBlockBackend): TimeBlock {
     };
 }
 
-export async function get_week(date: Date): Promise<TimeBlock[]> {
+export async function get_week(date: Date, timeBlockSettings: TimeBlockSettings): Promise<TimeBlock[]> {
     const {week_start, week_end} = getWeekRange(date);
     const result = await invokeOrThrow<TimeBlockBackend[]>("get_week", {
         weekStart: week_start,
         weekEnd: week_end,
+        timeBlockSettings,
     });
     return result.map(transformTimeBlock);
 }

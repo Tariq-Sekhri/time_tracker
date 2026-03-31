@@ -11,10 +11,19 @@ import DetailedStatistics from "./Screens/DetailedStatistics.tsx";
 import AppsList from "./Screens/AppsList.tsx";
 import Header from "./Componants/Header.tsx";
 import GoogleCalendarsView from "./Screens/GoogleCalendarsView.tsx";
+import Settings from "./Screens/Settings.tsx";
 import { ToastProvider, useToast } from "./Componants/Toast.tsx";
 import { toErrorString } from "./types/common.ts";
 
-export type View = "calendar" | "categories" | "regex" | "skipped" | "detailed" | "apps" | "googleCalendars";
+export type View =
+    | "calendar"
+    | "categories"
+    | "regex"
+    | "skipped"
+    | "detailed"
+    | "apps"
+    | "googleCalendars"
+    | "settings";
 
 function AppInner() {
     const { showToast, updateToast, removeToast } = useToast();
@@ -176,6 +185,7 @@ function AppInner() {
                         onBack={() => setCurrentView("calendar")}
                     />
                 )}
+                {currentView === "settings" && <Settings />}
                 {currentView === "googleCalendars" && <GoogleCalendarsView />}
             </div>
         </main>

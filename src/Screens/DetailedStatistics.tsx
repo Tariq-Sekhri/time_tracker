@@ -2,10 +2,9 @@ import {useQuery} from "@tanstack/react-query";
 import {useEffect, useRef, useState} from "react";
 import {get_total_statistics, WeekStatistics} from "../api/statistics.ts";
 import {get_logs_by_category, MergedLog} from "../api/Log.ts";
+import { useSettingsStore } from "../stores/settingsStore.ts";
 
 type Tab = "dailyAvg" | "total";
-
-const MIN_SECONDS = 60;
 
 function formatDuration(seconds: number): string {
     const hours = Math.floor(seconds / 3600);
@@ -28,6 +27,8 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [categoryAppLogs, setCategoryAppLogs] = useState<{ app: string; totalDuration: number }[]>([]);
     const [isLoadingCategory, setIsLoadingCategory] = useState(false);
+
+    const { uiMinAppDuration } = useSettingsStore();
 
     const sidebarRef = useRef<HTMLDivElement | null>(null);
     const categoriesRef = useRef<HTMLDivElement | null>(null);
@@ -167,12 +168,12 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
     const selectedCategoryTotalDuration = selectedCategoryStat?.total_duration ?? 0;
     type DisplayApp = { app: string; totalDuration: number };
 
-    const filteredScaledCategoryAppList = scaledCategoryAppList.filter((a) => a.totalDuration >= MIN_SECONDS);
+    const filteredScaledCategoryAppList = scaledCategoryAppList.filter((a) => a.totalDuration >= uiMinAppDuration);
 
     const sidebarApps: DisplayApp[] = selectedCategory
         ? filteredScaledCategoryAppList
         : stats.all_apps
-            .filter((app) => app.total_duration >= MIN_SECONDS)
+            .filter((app) => app.total_duration >= uiMinAppDuration)
             .map((app) => ({
                 app: app.app,
                 totalDuration: app.total_duration,
@@ -426,7 +427,9 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                         <div className="text-gray-500 text-sm">Loading app contributions...</div>
                     ) : sidebarApps.length === 0 ? (
                         selectedCategory ? (
-                            <div className="text-gray-500 text-sm">No apps recorded for this category (at least 1 min).</div>
+                                <div className="text-gray-500 text-sm">
+                                    No apps recorded for this category (at least {formatDuration(uiMinAppDuration)}).
+                                </div>
                         ) : (
                             <div className="text-gray-500 text-sm">No apps recorded.</div>
                         )

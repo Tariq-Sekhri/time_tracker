@@ -4,13 +4,14 @@ import CalendarSkeleton from "./CalanderSkeletion.tsx";
 import { useQuery } from "@tanstack/react-query";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getCategoryColor, getWeekStart, formatDuration } from "./utils.ts";
 import { CalendarEvent, DateClickInfo, EventLogs } from "./types.ts";
 import { Category } from "../../api/Category.ts";
 import { EventClickArg, DatesSetArg } from "@fullcalendar/core";
 import interactionPlugin from '@fullcalendar/interaction';
 import { useDateStore } from "../../stores/dateStore.ts";
+import { useSettingsStore } from "../../stores/settingsStore.ts";
 import {
     get_all_google_calendar_events,
     google_oauth_login,
@@ -60,6 +61,7 @@ export default function RenderCalendarContent({
 }: RenderCalendarContentProps) {
     const queryClient = useQueryClient();
     const { showToast, updateToast, removeToast } = useToast();
+    const lastGoogleEventsErrorToastRef = useRef<string | null>(null);
     const [editingCalendar, setEditingCalendar] = useState<GoogleCalendar | null>(null);
     const [newCalendarName, setNewCalendarName] = useState("");
     const [newCalendarColor, setNewCalendarColor] = useState("#4285f4");
@@ -72,6 +74,8 @@ export default function RenderCalendarContent({
             return false;
         }
     });
+
+    const { calendarStartHour, timeBlockSettings } = useSettingsStore();
 
     const handleRelogin = async () => {
         setIsRelogging(true);
@@ -153,9 +157,19 @@ export default function RenderCalendarContent({
     };
 
     const weekStart = getWeekStart(date);
+    const slotMinTime = `${String(calendarStartHour).padStart(2, "0")}:00:00`;
+    const slotMaxTime = `${String(calendarStartHour + 24).padStart(2, "0")}:00:00`;
+    const scrollTime = slotMinTime;
     const { data, isLoading, error } = useQuery({
-        queryKey: ["week", weekStart.toISOString()],
-        queryFn: async () => await get_week(weekStart),
+        queryKey: [
+            "week",
+            weekStart.toISOString(),
+            timeBlockSettings.minLogDuration,
+            timeBlockSettings.maxAttachDistance,
+            timeBlockSettings.lookaheadWindow,
+            timeBlockSettings.minDuration,
+        ],
+        queryFn: async () => await get_week(weekStart, timeBlockSettings),
         enabled: !!weekStart && !isNaN(weekStart.getTime()),
         refetchOnWindowFocus: true, // Refetch when window gains focus
     });
@@ -212,6 +226,39 @@ export default function RenderCalendarContent({
             console.error("[GCal Render] Error details:", JSON.stringify(googleEventsError, null, 2));
         }
     }, [googleEventsError]);
+
+    useEffect(() => {
+        if (!googleEventsError) {
+            lastGoogleEventsErrorToastRef.current = null;
+            return;
+        }
+
+        if (isAuthExpired) return;
+
+        const errorText = toErrorString(googleEventsError);
+        const dnsLike =
+            /dns error|No such host is known|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT/i.test(errorText) ||
+            /connect/i.test(errorText);
+
+        if (lastGoogleEventsErrorToastRef.current === errorText) return;
+        lastGoogleEventsErrorToastRef.current = errorText;
+
+        if (isShowingCachedEvents) {
+            showToast(
+                dnsLike ? "No internet connection. Using cached Google Calendar events." : "Using cached Google Calendar events.",
+                "error",
+                5000,
+                errorText
+            );
+        } else {
+            showToast(
+                dnsLike ? "No internet connection. Couldn't load Google Calendar events." : "Couldn't load Google Calendar events.",
+                "error",
+                5000,
+                errorText
+            );
+        }
+    }, [googleEventsError, isAuthExpired, isShowingCachedEvents, showToast]);
 
     useEffect(() => {
         console.log("[GCal Render] state update:", {
@@ -572,9 +619,9 @@ export default function RenderCalendarContent({
                 <div className="flex-1 h-full overflow-hidden min-h-0">
                     <FullCalendar
                         height="100%"
-                        slotMinTime="06:00:00"
-                        slotMaxTime="30:00:00"
-                        scrollTime="06:00:00"
+                        slotMinTime={slotMinTime}
+                        slotMaxTime={slotMaxTime}
+                        scrollTime={scrollTime}
                         ref={ref}
                         plugins={[timeGridPlugin, interactionPlugin]}
                         initialView="timeGridWeek"
