@@ -278,7 +278,7 @@ export default function AppsInTimeBlock({
     const sortedCategories = [...categories].sort((a, b) => b.priority - a.priority);
 
     return (
-        <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col h-full">
+        <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
             <div className={`flex-shrink-0 ${isCategoryFilter ? 'mb-4' : 'mb-6'}`}>
                 <div className="flex items-center justify-between mb-3">
                     <h2 className="text-xl font-bold text-white">{selectedEvent.title}</h2>
@@ -310,7 +310,7 @@ export default function AppsInTimeBlock({
 
             {!isCategoryFilter && <hr className="border-gray-700 mb-6 flex-shrink-0" />}
 
-            <div className="flex-1 overflow-y-auto mb-6">
+            <div className="flex-1 overflow-y-auto nice-scrollbar mb-6 min-h-0">
                 <h3 className="text-sm font-semibold text-gray-300 mb-3">App Activity</h3>
                 {sortedLogs.length === 0 ? (
                     <div className="text-gray-500 text-sm">No app activity recorded</div>
@@ -404,7 +404,7 @@ export default function AppsInTimeBlock({
             {categorizeMenu && (
                 <div
                     ref={categorizeMenuRef}
-                    className="fixed z-[200] min-w-[12rem] max-h-64 overflow-y-auto rounded-lg border border-gray-600 bg-gray-900 py-1 shadow-xl"
+                    className="fixed z-[200] min-w-[12rem] max-h-64 overflow-y-auto nice-scrollbar rounded-lg border border-gray-600 bg-gray-900 py-1 shadow-xl"
                     style={{ left: categorizeMenu.x, top: categorizeMenu.y }}
                     role="menu"
                 >

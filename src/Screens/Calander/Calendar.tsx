@@ -663,7 +663,8 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                               view={rightSideBarView} setView={setRightSideBarView} selectedDate={selectedDate}
                               setSelectedDate={setSelectedDate} setCurrentView={setCurrentView}
                               selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory}
-                              isLoadingCategory={isLoadingCategory}/>
+                              isLoadingCategory={isLoadingCategory}
+                />
             </div>
 
 

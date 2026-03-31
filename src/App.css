@@ -46,3 +46,28 @@ body {
 .fc-theme-standard th {
     border-color: #374151 !important;
 }
+
+.nice-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #6b7280 #111827;
+}
+
+.nice-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.nice-scrollbar::-webkit-scrollbar-track {
+    background: #111827;
+    border-radius: 9999px;
+}
+
+.nice-scrollbar::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #6b7280 0%, #4b5563 100%);
+    border: 2px solid #111827;
+    border-radius: 9999px;
+}
+
+.nice-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #9ca3af 0%, #6b7280 100%);
+}

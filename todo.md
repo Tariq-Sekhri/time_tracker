@@ -1,5 +1,35 @@
 - High priority
     - distribution 
+    - remove "include selected Google calendars in statistics" feature
+        - previous implementation details (for re-adding later)
+            - `Calendar.tsx` owned `const [includeGoogleInStats, setIncludeGoogleInStats] = useState(false)`
+            - `Calendar.tsx` passed `includeGoogleInStats` to:
+                - `RenderCalenderContent.tsx` (to render/toggle the checkbox)
+                - `RightSideBar.tsx` (to feed week/day stats sidebars)
+            - `RenderCalenderContent.tsx` rendered a checkbox in the left panel under Google Calendars:
+                - label text: "Include selected Google calendars in statistics"
+                - checked bound to `includeGoogleInStats`
+                - onChange bound to `setIncludeGoogleInStats(e.target.checked)`
+            - `RightSideBar.tsx` forwarded `includeGoogleInStats`, `visibleCalendars`, `googleCalendars` into:
+                - `StatisticsSidebar.tsx`
+                - `DayStatisticsSidebar.tsx`
+            - `StatisticsSidebar.tsx` behavior:
+                - conditionally queried `get_all_google_calendar_events(week_start, week_end)` when `includeGoogleInStats && visibleCalendars.size > 0`
+                - grouped Google events by `calendar_id`, mapped to pseudo-categories using calendar name/color
+                - merged tracking categories with Google categories and recalculated top categories / donut data
+                - total time was `weekStats.total_time + googleTotalDuration` when include toggle was true
+                - total time change display was hidden when include toggle was true
+            - `DayStatisticsSidebar.tsx` behavior:
+                - conditionally queried `get_all_google_calendar_events(dayStart, dayEnd)` when `includeGoogleInStats && visibleCalendars.size > 0`
+                - grouped Google events by `calendar_id`, mapped to pseudo-categories using calendar name/color
+                - merged tracking categories with Google categories and recalculated top categories / donut data
+                - total time was `dayStats.total_time + googleTotalDuration` when include toggle was true
+        - removal steps completed
+            - remove state + prop wiring from `Calendar.tsx`
+            - remove checkbox UI from `RenderCalenderContent.tsx`
+            - remove include-google props from `RightSideBar.tsx`, `StatisticsSidebar.tsx`, `DayStatisticsSidebar.tsx`
+            - remove Google-events-in-stats query/merge logic from week/day statistics sidebars
+            - keep Google Calendar event rendering/filtering in calendar grid unchanged
 - mid priority
     - users can see all app names, allow them to more easily make regex
 - low priority

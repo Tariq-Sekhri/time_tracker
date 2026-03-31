@@ -184,7 +184,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
 
     return (
         <div className="flex h-full overflow-hidden">
-            <div className="flex-1 p-6 text-white h-full overflow-y-auto">
+            <div className="flex-1 p-6 text-white h-full overflow-y-auto nice-scrollbar">
                 <div className="flex items-center justify-between mb-6">
                     <button
                         onClick={onBack}
@@ -401,7 +401,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                 </div>
             </div>
 
-            <div ref={sidebarRef} className="w-96 border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
+            <div ref={sidebarRef} className="w-96 border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col">
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
                         <div

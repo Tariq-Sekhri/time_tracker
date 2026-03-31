@@ -1,12 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
-import { get_week_statistics } from "../../../api/statistics.ts";
+import { useMemo, useState } from "react";
+import { get_week_statistics, CategoryStat } from "../../../api/statistics.ts";
 import { getWeekRange } from "../../../utils.ts";
 import { formatDuration, formatPercentage } from "../utils.ts";
 import { DonutChart } from "../DonutChart.tsx";
 
-type DisplayMode = "percentage" | "time" | "count";
+type DisplayMode = "percentage" | "time";
 
+type CombinedCategory = CategoryStat & {
+    source: "tracking";
+};
 
 interface StatisticsSidebarProps {
     weekDate: Date;
@@ -15,37 +18,84 @@ interface StatisticsSidebarProps {
     onCategoryClick?: (category: string) => void;
 }
 
-export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList, onCategoryClick }: StatisticsSidebarProps) {
+export default function StatisticsSidebar({
+    weekDate,
+    onMoreInfo,
+    onAppsList,
+    onCategoryClick,
+}: StatisticsSidebarProps) {
     const [displayMode, setDisplayMode] = useState<DisplayMode>("percentage");
 
     const { week_start, week_end } = getWeekRange(weekDate);
-
-    useEffect(() => {
-
-    }, [week_start, week_end]);
 
     const {
         data: weekStats,
         isLoading,
         error,
-        isError
+        isError,
     } = useQuery({
         queryKey: ["week_statistics", week_start, week_end],
-        queryFn: async () => {
-            return await get_week_statistics(week_start, week_end);
-        },
+        queryFn: async () => await get_week_statistics(week_start, week_end),
     });
 
-    const stats = weekStats;
+    const topCategories = useMemo<CombinedCategory[]>(() => {
+        if (!weekStats) return [] as CombinedCategory[];
+        return weekStats.categories.slice(0, 5).map((c) => ({
+            ...c,
+            source: "tracking" as const,
+        }));
+    }, [weekStats]);
 
+    const maxCategoryDuration = topCategories.length > 0 ? topCategories[0].total_duration : 1;
 
-    if (isLoading || (!stats && !isError)) {
+    const donutData = useMemo(() => {
+        return topCategories.map((cat) => ({
+            label: cat.category,
+            value: cat.total_duration,
+            color: cat.color || "#6b7280",
+        }));
+    }, [topCategories]);
+
+    const categoryColors = useMemo(() => {
+        const map = new Map<string, string>();
+        topCategories.forEach((cat) => {
+            if (cat.color) map.set(cat.category, cat.color);
+        });
+        return map;
+    }, [topCategories]);
+
+    const totalTime = useMemo(() => {
+        if (!weekStats) return 0;
+        return weekStats.total_time;
+    }, [weekStats]);
+
+    const showTotalChange = weekStats?.total_time_change !== null;
+
+    const calculateTimeChange = (currentDuration: number, percentageChange: number): number => {
+        if (percentageChange === 0) return 0;
+        if (percentageChange === -100) return -1;
+        return (currentDuration * percentageChange) / (100 + percentageChange);
+    };
+
+    const formatChange = (currentDuration: number, percentageChange: number | null): string | null => {
+        if (percentageChange === null) return null;
+        if (displayMode === "time") {
+            const timeChange = calculateTimeChange(currentDuration, percentageChange);
+            const sign = timeChange >= 0 ? "+" : "";
+            return `${sign}${formatDuration(Math.abs(timeChange))}`;
+        }
+        return formatPercentage(percentageChange);
+    };
+
+    const canClickCategory = (cat: CombinedCategory) => {
+        return !!onCategoryClick && cat.source === "tracking";
+    };
+
+    if (isLoading || (!weekStats && !isError)) {
         return (
-            <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
+            <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
                 <div className="flex-1">
-                    <h2 className="text-xl font-bold text-white mb-4">
-                        Week Statistics
-                    </h2>
+                    <h2 className="text-xl font-bold text-white mb-4">Week Statistics</h2>
                     <div className="text-gray-500 mb-4">Loading statistics...</div>
                 </div>
                 <div className="mt-auto pt-4 border-t border-gray-700">
@@ -62,11 +112,9 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList, on
 
     if (isError) {
         return (
-            <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
+            <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
                 <div className="flex-1">
-                    <h2 className="text-xl font-bold text-white mb-4">
-                        Week Statistics
-                    </h2>
+                    <h2 className="text-xl font-bold text-white mb-4">Week Statistics</h2>
                     <div className="text-red-400 mb-2">Error loading statistics</div>
                     <div className="text-gray-500 text-sm mb-4">
                         {error instanceof Error ? error.message : "Unknown error occurred"}
@@ -84,13 +132,11 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList, on
         );
     }
 
-    if (!stats) {
+    if (!weekStats) {
         return (
-            <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
+            <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
                 <div className="flex-1">
-                    <h2 className="text-xl font-bold text-white mb-4">
-                        Week Statistics
-                    </h2>
+                    <h2 className="text-xl font-bold text-white mb-4">Week Statistics</h2>
                     <div className="text-gray-500 mb-4">No statistics available</div>
                 </div>
                 <div className="mt-auto pt-4 border-t border-gray-700">
@@ -105,83 +151,54 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList, on
         );
     }
 
-    const categoryColors = new Map<string, string>();
-    stats.categories.forEach(cat => {
-        if (cat.color) {
-            categoryColors.set(cat.category, cat.color);
-        }
-    });
-
-    const donutData = stats.categories.slice(0, 5).map(cat => ({
-        label: cat.category,
-        value: cat.total_duration,
-        color: cat.color || "#6b7280",
-    }));
-
-    const topCategories = stats.categories.slice(0, 5);
-    const maxCategoryDuration = topCategories.length > 0 ? topCategories[0].total_duration : 1;
-
-    const calculateTimeChange = (currentDuration: number, percentageChange: number): number => {
-        if (percentageChange === 0) return 0;
-        if (percentageChange === -100) {
-            return -1;
-        }
-        return (currentDuration * percentageChange) / (100 + percentageChange);
-    };
-
-    const formatChange = (currentDuration: number, percentageChange: number | null): string | null => {
-        if (percentageChange === null) return null;
-        if (displayMode === "time") {
-            const timeChange = calculateTimeChange(currentDuration, percentageChange);
-            const sign = timeChange >= 0 ? "+" : "";
-            return `${sign}${formatDuration(Math.abs(timeChange))}`;
-        }
-        return formatPercentage(percentageChange);
-    };
-
     return (
-        <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col">
+        <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
             <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold text-white">
-                    Week Statistics
-                </h2>
+                <h2 className="text-xl font-bold text-white">Week Statistics</h2>
                 <div className="flex gap-1 bg-gray-800 rounded p-1">
                     <button
                         onClick={() => setDisplayMode("percentage")}
-                        className={`px-2 py-1 text-xs rounded ${displayMode === "percentage" ? "bg-gray-700 text-white" : "text-gray-400"}`}
+                        className={`px-2 py-1 text-xs rounded ${
+                            displayMode === "percentage" ? "bg-gray-700 text-white" : "text-gray-400"
+                        }`}
                     >
                         %
                     </button>
                     <button
                         onClick={() => setDisplayMode("time")}
-                        className={`px-2 py-1 text-xs rounded ${displayMode === "time" ? "bg-gray-700 text-white" : "text-gray-400"}`}
+                        className={`px-2 py-1 text-xs rounded ${
+                            displayMode === "time" ? "bg-gray-700 text-white" : "text-gray-400"
+                        }`}
                     >
                         Time
                     </button>
                 </div>
             </div>
 
-            {stats && (
-                <div className="mb-4">
-                    <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm text-gray-400">Total time</span>
-                        <span className="text-lg font-semibold text-white">{formatDuration(stats.total_time)}</span>
-                    </div>
-                    {stats.total_time_change !== null && (
-                        <div
-                            className={`text-xs min-w-[50px] text-right ${stats.total_time_change >= 0 ? "text-green-400" : "text-red-400"}`}>
-                            {displayMode === "time"
-                                ? (() => {
-                                    const timeChange = calculateTimeChange(stats.total_time, stats.total_time_change);
-                                    const sign = timeChange >= 0 ? "+" : "";
-                                    return `${sign}${formatDuration(Math.abs(timeChange))}`;
-                                })()
-                                : formatPercentage(stats.total_time_change)
-                            }
-                        </div>
-                    )}
+            <div className="mb-4">
+                <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm text-gray-400">Total time</span>
+                    <span className="text-lg font-semibold text-white">{formatDuration(totalTime)}</span>
                 </div>
-            )}
+                {showTotalChange && (
+                    <div
+                        className={`text-xs min-w-[50px] text-right ${
+                            weekStats.total_time_change! >= 0 ? "text-green-400" : "text-red-400"
+                        }`}
+                    >
+                        {displayMode === "time"
+                            ? (() => {
+                                  const timeChange = calculateTimeChange(
+                                      weekStats.total_time,
+                                      weekStats.total_time_change!
+                                  );
+                                  const sign = timeChange >= 0 ? "+" : "";
+                                  return `${sign}${formatDuration(Math.abs(timeChange))}`;
+                              })()
+                            : formatPercentage(weekStats.total_time_change!)}
+                    </div>
+                )}
+            </div>
 
             <div className="mb-6">
                 <DonutChart data={donutData} colors={categoryColors} />
@@ -190,42 +207,49 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList, on
             <div className="mb-6">
                 <h3 className="text-sm font-semibold text-gray-300 mb-3">Categories</h3>
                 <div className="space-y-2">
-                    {topCategories.map((cat, idx) => (
-                        <div key={idx} className="space-y-1">
-                            <div 
-                                className={`flex items-center justify-between ${onCategoryClick ? "cursor-pointer hover:bg-gray-800 rounded p-1 -m-1 transition-colors" : ""}`}
-                                onClick={() => onCategoryClick?.(cat.category)}
-                            >
-                                <div className="flex items-center gap-2">
-                                    <div
-                                        className="w-3 h-3 rounded-full"
-                                        style={{ backgroundColor: cat.color || "#6b7280" }}
-                                    />
-                                    <span className="text-sm text-gray-200">{cat.category}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm text-gray-400">
-                                        {formatDuration(cat.total_duration)}
-                                    </span>
-                                    {formatChange(cat.total_duration, cat.percentage_change) !== null && (
-                                        <span
-                                            className={`text-xs min-w-[50px] text-right ${cat.percentage_change! >= 0 ? "text-green-400" : "text-red-400"}`}>
-                                            {formatChange(cat.total_duration, cat.percentage_change)}
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-                            <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
+                    {topCategories.map((cat, idx) => {
+                        const clickable = canClickCategory(cat);
+                        const onClick = clickable ? () => onCategoryClick?.(cat.category) : undefined;
+                        return (
+                            <div key={`${cat.category}-${idx}`} className="space-y-1">
                                 <div
-                                    className="h-full"
-                                    style={{
-                                        width: `${(cat.total_duration / maxCategoryDuration) * 100}%`,
-                                        backgroundColor: cat.color || "#6b7280",
-                                    }}
-                                />
+                                    className={`flex items-center justify-between ${
+                                        clickable ? "cursor-pointer hover:bg-gray-800 rounded p-1 -m-1 transition-colors" : ""
+                                    }`}
+                                    onClick={onClick}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <div
+                                            className="w-3 h-3 rounded-full"
+                                            style={{ backgroundColor: cat.color || "#6b7280" }}
+                                        />
+                                        <span className="text-sm text-gray-200">{cat.category}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm text-gray-400">{formatDuration(cat.total_duration)}</span>
+                                        {formatChange(cat.total_duration, cat.percentage_change) !== null && (
+                                            <span
+                                                className={`text-xs min-w-[50px] text-right ${
+                                                    cat.percentage_change! >= 0 ? "text-green-400" : "text-red-400"
+                                                }`}
+                                            >
+                                                {formatChange(cat.total_duration, cat.percentage_change)}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full"
+                                        style={{
+                                            width: `${(cat.total_duration / maxCategoryDuration) * 100}%`,
+                                            backgroundColor: cat.color || "#6b7280",
+                                        }}
+                                    />
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
 
@@ -242,16 +266,17 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList, on
                     )}
                 </div>
                 <div className="space-y-2">
-                    {stats.top_apps.map((app, idx) => (
+                    {weekStats.top_apps.map((app, idx) => (
                         <div key={idx} className="flex items-center justify-between">
                             <span className="text-sm text-gray-200">{app.app}</span>
                             <div className="flex items-center gap-2">
-                                <span className="text-sm text-gray-400">
-                                    {formatDuration(app.total_duration)}
-                                </span>
+                                <span className="text-sm text-gray-400">{formatDuration(app.total_duration)}</span>
                                 {formatChange(app.total_duration, app.percentage_change) !== null && (
                                     <span
-                                        className={`text-xs min-w-[50px] text-right ${app.percentage_change! >= 0 ? "text-green-400" : "text-red-400"}`}>
+                                        className={`text-xs min-w-[50px] text-right ${
+                                            app.percentage_change! >= 0 ? "text-green-400" : "text-red-400"
+                                        }`}
+                                    >
                                         {formatChange(app.total_duration, app.percentage_change)}
                                     </span>
                                 )}
@@ -272,3 +297,4 @@ export default function StatisticsSidebar({ weekDate, onMoreInfo, onAppsList, on
         </div>
     );
 }
+

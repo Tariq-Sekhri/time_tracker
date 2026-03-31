@@ -171,7 +171,7 @@ function AppInner() {
                 </div>
             )}
 
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1 overflow-auto nice-scrollbar">
                 {currentView === "calendar" && <Calendar setCurrentView={setCurrentView} />}
                 {currentView === "categories" && <CategoriesView />}
                 {currentView === "regex" && <CategoryRegexView />}

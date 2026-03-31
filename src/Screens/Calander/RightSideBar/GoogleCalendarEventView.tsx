@@ -180,7 +180,7 @@ export default function GoogleCalendarEventView({
     const dateStr = selectedEvent.start.toLocaleDateString();
 
     return (
-        <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto flex flex-col h-full">
+        <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
             <div className="flex-1">
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="text-xl font-bold text-white">Google Calendar Event</h2>
