@@ -2,7 +2,7 @@ import {useQuery, useQueryClient} from "@tanstack/react-query";
 import {get_categories} from "../../api/Category.ts";
 import {get_logs_for_time_block, get_logs_by_category} from "../../api/Log.ts";
 import {get_week} from "../../api/week.ts";
-import { getWeekRange } from "../../utils.ts";
+import { getCalendarDayRangeUnix, getWeekRange } from "../../utils.ts";
 import {useState, useMemo, useEffect, useRef} from "react";
 import {EventClickArg, DatesSetArg} from "@fullcalendar/core";
 import RenderCalendarContent from "./RenderCalenderContent.tsx";
@@ -18,10 +18,23 @@ import {getCachedCalendars, setCachedCalendars} from "../../stores/googleCalenda
 import {getCurrentWindow} from "@tauri-apps/api/window";
 import { useSettingsStore } from "../../stores/settingsStore.ts";
 
+const INCLUDE_GOOGLE_IN_STATS_KEY = "time-tracker:include-google-in-stats";
+
+function readIncludeGoogleInStats(): boolean {
+    try {
+        const v = localStorage.getItem(INCLUDE_GOOGLE_IN_STATS_KEY);
+        if (v === "1") return true;
+        if (v === "0") return false;
+    } catch {
+    }
+    return false;
+}
+
 export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View) => void }) {
     const [rightSideBarView, setRightSideBarView] = useState<SideBarView>("Week")
     const {date, setDate} = useDateStore();
-    const { timeBlockSettings } = useSettingsStore();
+    const { timeBlockSettings, calendarStartHour } = useSettingsStore();
+    const [includeGoogleInStats, setIncludeGoogleInStats] = useState(readIncludeGoogleInStats);
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [selectedEvent, setSelectedEvent] = useState<CalendarEvent>(null);
     const [selectedEventLogs, setSelectedEventLogs] = useState<EventLogs>([]);
@@ -34,7 +47,15 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
 
     const [visibleCategories, setVisibleCategories] = useState<Set<string>>(new Set());
     const [visibleCalendars, setVisibleCalendars] = useState<Set<number>>(new Set());
+    const [calendarsInStats, setCalendarsInStats] = useState<Set<number>>(new Set());
     const queryClient = useQueryClient();
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(INCLUDE_GOOGLE_IN_STATS_KEY, includeGoogleInStats ? "1" : "0");
+        } catch {
+        }
+    }, [includeGoogleInStats]);
 
     const {data: categories = []} = useQuery({
         queryKey: ["categories"],
@@ -188,6 +209,74 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         }
     }, [visibleCalendars, displayCalendars]);
 
+    const hasInitializedStatsCalendars = useRef(false);
+    useEffect(() => {
+        if (displayCalendars.length > 0 && !hasInitializedStatsCalendars.current) {
+            try {
+                const saved = localStorage.getItem("googleCalendarsInStats");
+                const allCalendarIds = displayCalendars.map((cal) => cal.id);
+
+                if (saved) {
+                    const savedArray = JSON.parse(saved) as number[];
+                    const savedSet = new Set<number>(savedArray);
+
+                    const mergedSet = new Set<number>();
+                    allCalendarIds.forEach((id) => {
+                        if (savedSet.has(id)) {
+                            mergedSet.add(id);
+                        } else {
+                            const known = localStorage.getItem("knownGoogleCalendarsInStats");
+                            if (known) {
+                                const knownSet = new Set<number>(JSON.parse(known));
+                                if (!knownSet.has(id)) {
+                                    mergedSet.add(id);
+                                }
+                            } else {
+                                mergedSet.add(id);
+                            }
+                        }
+                    });
+
+                    setCalendarsInStats(mergedSet);
+                    localStorage.setItem("knownGoogleCalendarsInStats", JSON.stringify(allCalendarIds));
+                } else {
+                    let initial = new Set(allCalendarIds);
+                    const visRaw = localStorage.getItem("visibleCalendars");
+                    if (visRaw) {
+                        try {
+                            const visArr = JSON.parse(visRaw) as number[];
+                            const fromVis = new Set(visArr.filter((id) => allCalendarIds.includes(id)));
+                            if (fromVis.size > 0) {
+                                initial = fromVis;
+                            }
+                        } catch {
+                        }
+                    }
+                    setCalendarsInStats(initial);
+                    localStorage.setItem("googleCalendarsInStats", JSON.stringify([...initial]));
+                    localStorage.setItem("knownGoogleCalendarsInStats", JSON.stringify(allCalendarIds));
+                }
+            } catch (e) {
+                console.error("Failed to initialize Google calendars in stats:", e);
+                const allCalendarIds = displayCalendars.map((cal) => cal.id);
+                setCalendarsInStats(new Set(allCalendarIds));
+            }
+            hasInitializedStatsCalendars.current = true;
+        }
+    }, [displayCalendars]);
+
+    useEffect(() => {
+        if (hasInitializedStatsCalendars.current && displayCalendars.length > 0) {
+            try {
+                localStorage.setItem("googleCalendarsInStats", JSON.stringify([...calendarsInStats]));
+                const allCalendarIds = displayCalendars.map((cal) => cal.id);
+                localStorage.setItem("knownGoogleCalendarsInStats", JSON.stringify(allCalendarIds));
+            } catch (e) {
+                console.error("Failed to save Google calendars in stats:", e);
+            }
+        }
+    }, [calendarsInStats, displayCalendars]);
+
     const categoryColorMap = useMemo(() => {
         const map = new Map<string, string>();
         categories.forEach(cat => {
@@ -254,17 +343,16 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         }
 
         if (selectedEvent && weekData) {
-            const eventExists = weekData.some((block) => {
-                const blockStart = new Date(block.startTime * 1000);
-                const blockEnd = new Date(block.endTime * 1000);
-                const eventStart = selectedEvent.start;
-                const eventEnd = selectedEvent.end;
-
-                const startMatch = Math.abs(blockStart.getTime() - eventStart.getTime()) < 1000;
-                const endMatch = Math.abs(blockEnd.getTime() - eventEnd.getTime()) < 1000;
-
-                return startMatch && endMatch;
-            });
+            const eventStartMs = selectedEvent.start.getTime();
+            const eventEndMs = selectedEvent.end.getTime();
+            const eventExists =
+                selectedEvent.timeBlockId != null
+                    ? weekData.some((block) => block.id === selectedEvent.timeBlockId)
+                    : weekData.some((block) => {
+                          const blockStartMs = block.startTime * 1000;
+                          const blockEndMs = block.endTime * 1000;
+                          return eventStartMs < blockEndMs && blockStartMs < eventEndMs;
+                      });
 
             if (!eventExists) {
                 setSelectedEvent(null);
@@ -282,12 +370,9 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                 let title: string;
 
                 if (selectedDate) {
-                    const dayStart = new Date(selectedDate);
-                    dayStart.setHours(0, 0, 0, 0);
-                    const dayEnd = new Date(selectedDate);
-                    dayEnd.setHours(23, 59, 59, 999);
-                    startTime = Math.floor(dayStart.getTime() / 1000);
-                    endTime = Math.floor(dayEnd.getTime() / 1000);
+                    const { day_start, day_end } = getCalendarDayRangeUnix(selectedDate, calendarStartHour);
+                    startTime = day_start;
+                    endTime = day_end;
                     title = `${selectedCategory} - ${selectedDate.toLocaleDateString()}`;
                 } else {
                     const weekRange = getWeekRange(date);
@@ -365,7 +450,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         };
 
         fetchCategoryLogs();
-    }, [selectedCategory, rightSideBarView, selectedDate, date]);
+    }, [selectedCategory, rightSideBarView, selectedDate, date, calendarStartHour]);
 
     useEffect(() => {
         if (rightSideBarView === "CategoryFilter") {
@@ -403,11 +488,13 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                 setSelectedEventLogs([]);
                 setRightSideBarView("Event");
             } else {
+                const timeBlockId = clickInfo.event.extendedProps?.timeBlockId as number | undefined;
                 const event = {
                     title: clickInfo.event.title,
                     start: clickInfo.event.start,
                     end: clickInfo.event.end,
                     apps: (clickInfo.event.extendedProps?.apps || []) as { app: string; totalDuration: number }[],
+                    ...(timeBlockId != null ? { timeBlockId } : {}),
                 };
                 setSelectedEvent(event);
                 setSelectedDate(null); // Clear date selection when event is selected
@@ -462,6 +549,18 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
 
     const toggleCalendar = (calendarId: number) => {
         setVisibleCalendars(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(calendarId)) {
+                newSet.delete(calendarId);
+            } else {
+                newSet.add(calendarId);
+            }
+            return newSet;
+        });
+    };
+
+    const toggleCalendarInStats = (calendarId: number) => {
+        setCalendarsInStats((prev) => {
             const newSet = new Set(prev);
             if (newSet.has(calendarId)) {
                 newSet.delete(calendarId);
@@ -655,6 +754,10 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             googleCalendars={displayCalendars}
                             visibleCalendars={visibleCalendars}
                             toggleCalendar={toggleCalendar}
+                            calendarsInStats={calendarsInStats}
+                            toggleCalendarInStats={toggleCalendarInStats}
+                            includeGoogleInStats={includeGoogleInStats}
+                            setIncludeGoogleInStats={setIncludeGoogleInStats}
                         />
                     </div>
                 </div>
@@ -664,6 +767,9 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                               setSelectedDate={setSelectedDate} setCurrentView={setCurrentView}
                               selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory}
                               isLoadingCategory={isLoadingCategory}
+                              includeGoogleInStats={includeGoogleInStats}
+                              calendarsInStats={calendarsInStats}
+                              googleCalendars={displayCalendars}
                 />
             </div>
 

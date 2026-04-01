@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import {
     get_google_calendar_by_id,
     GoogleCalendar,
@@ -13,12 +13,14 @@ interface GoogleCalendarEventViewProps {
     selectedEvent: CalendarEvent;
     setSelectedEvent: (event: CalendarEvent) => void;
     setRightSideBarView: (view: "Week" | "Day" | "Event" | "CategoryFilter") => void;
+    trailingToolbar?: ReactNode;
 }
 
 export default function GoogleCalendarEventView({
     selectedEvent,
     setSelectedEvent,
     setRightSideBarView,
+    trailingToolbar,
 }: GoogleCalendarEventViewProps) {
     const calendarId = selectedEvent?.googleCalendarId;
     const eventId = selectedEvent?.googleCalendarEventId;
@@ -182,17 +184,20 @@ export default function GoogleCalendarEventView({
     return (
         <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
             <div className="flex-1">
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-bold text-white">Google Calendar Event</h2>
-                    <button
-                        onClick={() => {
-                            setSelectedEvent(null);
-                            setRightSideBarView("Week");
-                        }}
-                        className="text-gray-400 hover:text-white"
-                    >
-                        ✕
-                    </button>
+                <div className="flex items-center justify-between mb-4 gap-2">
+                    <h2 className="text-xl font-bold text-white min-w-0 truncate">Google Calendar Event</h2>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <button
+                            onClick={() => {
+                                setSelectedEvent(null);
+                                setRightSideBarView("Week");
+                            }}
+                            className="text-gray-400 hover:text-white"
+                        >
+                            ✕
+                        </button>
+                        {trailingToolbar}
+                    </div>
                 </div>
 
                 {calendar && (

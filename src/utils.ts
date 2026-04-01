@@ -31,6 +31,23 @@ export function getWeekRange(date: Date): {
     };
 }
 
+export function getCalendarDayRangeUnix(
+    calendarDate: Date,
+    calendarStartHour: number
+): { day_start: number; day_end: number } {
+    const hour = Number.isFinite(calendarStartHour)
+        ? Math.min(23, Math.max(0, Math.floor(calendarStartHour)))
+        : 6;
+    const start = new Date(calendarDate);
+    start.setHours(hour, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    end.setMilliseconds(-1);
+    return {
+        day_start: Math.floor(start.getTime() / 1000),
+        day_end: Math.floor(end.getTime() / 1000),
+    };
+}
 
 
 

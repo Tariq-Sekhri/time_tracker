@@ -74,6 +74,23 @@ export type GoogleCalendarEvent = {
     location?: string;
 };
 
+export function googleEventDurationInRange(
+    e: GoogleCalendarEvent,
+    rangeStart: number,
+    rangeEnd: number,
+    progressEnd: number
+): number {
+    const cap = Math.min(rangeEnd, progressEnd);
+    const segStart = Math.max(e.start, rangeStart);
+    const segEnd = Math.min(e.end, cap);
+    if (segEnd <= segStart) return 0;
+    return segEnd - segStart;
+}
+
+export function googleEventPastDurationSeconds(e: GoogleCalendarEvent, nowUnixSec: number): number {
+    return googleEventDurationInRange(e, e.start, e.end, nowUnixSec);
+}
+
 export type CreateGoogleCalendarEvent = {
     calendar_id: number;
     title: string;

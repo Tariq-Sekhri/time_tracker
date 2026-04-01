@@ -17,14 +17,31 @@ import {
     google_oauth_login,
     GoogleCalendarEvent,
     GoogleCalendar,
-    update_google_calendar,
-    delete_google_calendar,
-    UpdateGoogleCalendar
 } from "../../api/GoogleCalendar.ts";
 import { getWeekRange } from "../../utils.ts";
 import { getCachedEvents, setCachedEvents } from "../../stores/googleCalendarCache.ts";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "../../Componants/Toast.tsx";
+
+function IconWeekGrid({ className }: { className?: string }) {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+            <rect width="18" height="18" x="3" y="4" rx="2" />
+            <path d="M3 10h18" />
+            <path d="M9 4v18" />
+        </svg>
+    );
+}
+
+function IconBarChart({ className }: { className?: string }) {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+            <path d="M12 20V10" />
+            <path d="M18 20V4" />
+            <path d="M6 20v-4" />
+        </svg>
+    );
+}
 
 interface RenderCalendarContentProps {
     ref: any;
@@ -41,6 +58,10 @@ interface RenderCalendarContentProps {
     googleCalendars: GoogleCalendar[];
     visibleCalendars: Set<number>;
     toggleCalendar: (calendarId: number) => void;
+    calendarsInStats: Set<number>;
+    toggleCalendarInStats: (calendarId: number) => void;
+    includeGoogleInStats: boolean;
+    setIncludeGoogleInStats: (v: boolean) => void;
 }
 
 export default function RenderCalendarContent({
@@ -58,13 +79,14 @@ export default function RenderCalendarContent({
     googleCalendars,
     visibleCalendars,
     toggleCalendar,
+    calendarsInStats,
+    toggleCalendarInStats,
+    includeGoogleInStats,
+    setIncludeGoogleInStats,
 }: RenderCalendarContentProps) {
     const queryClient = useQueryClient();
     const { showToast, updateToast, removeToast } = useToast();
     const lastGoogleEventsErrorToastRef = useRef<string | null>(null);
-    const [editingCalendar, setEditingCalendar] = useState<GoogleCalendar | null>(null);
-    const [newCalendarName, setNewCalendarName] = useState("");
-    const [newCalendarColor, setNewCalendarColor] = useState("#4285f4");
     const [isRelogging, setIsRelogging] = useState(false);
     const LEFT_SIDEBAR_COLLAPSED_KEY = "time-tracker:left-sidebar-collapsed";
     const [isLeftCollapsed, setIsLeftCollapsed] = useState(() => {
@@ -106,54 +128,6 @@ export default function RenderCalendarContent({
         } finally {
             setIsRelogging(false);
         }
-    };
-
-    const updateCalendarMutation = useMutation({
-        mutationFn: async (update: UpdateGoogleCalendar) => {
-            return await update_google_calendar(update);
-        },
-        onSuccess: async () => {
-            await queryClient.invalidateQueries({ queryKey: ["googleCalendars"] });
-            queryClient.invalidateQueries({
-                predicate: (query) => query.queryKey[0] === "googleCalendarEvents"
-            });
-            await refetchGoogleEvents();
-            queryClient.invalidateQueries({ queryKey: ["week"] });
-            setEditingCalendar(null);
-            setNewCalendarName("");
-            setNewCalendarColor("#4285f4");
-            showToast("Calendar updated successfully", "success");
-        },
-        onError: (error: any) => {
-            console.error("Failed to update calendar:", error);
-            const fullError = JSON.stringify(error, null, 2);
-            showToast("Failed to update calendar", "error", 5000, fullError);
-        },
-    });
-
-
-    const handleUpdate = () => {
-        if (!editingCalendar) return;
-
-        const update: UpdateGoogleCalendar = {
-            id: editingCalendar.id,
-        };
-
-        if (editingCalendar.name !== newCalendarName) {
-            update.name = newCalendarName;
-        }
-
-        if (editingCalendar.color !== newCalendarColor) {
-            update.color = newCalendarColor;
-        }
-
-        updateCalendarMutation.mutate(update);
-    };
-
-    const handleEdit = (calendar: GoogleCalendar) => {
-        setEditingCalendar(calendar);
-        setNewCalendarName(calendar.name);
-        setNewCalendarColor(calendar.color);
     };
 
     const weekStart = getWeekStart(date);
@@ -290,13 +264,6 @@ export default function RenderCalendarContent({
         return () => clearTimeout(timeoutId);
     }, [isLeftCollapsed, ref]);
 
-    useEffect(() => {
-        if (editingCalendar && isLeftCollapsed) {
-            setIsLeftCollapsed(false);
-        }
-    }, [editingCalendar, isLeftCollapsed]);
-
-
     const events = useMemo(() => {
         const timeBlockEvents = (data || [])
             .filter((block: TimeBlock) => visibleCategories.has(block.category))
@@ -325,6 +292,7 @@ export default function RenderCalendarContent({
                     extendedProps: {
                         apps: block.apps,
                         type: "timeblock",
+                        timeBlockId: block.id,
                     },
                 };
             })
@@ -526,86 +494,106 @@ export default function RenderCalendarContent({
                                 Google Calendars
                             </h3>
                         </div>
-                        <p className={`text-xs text-gray-500 mb-2 ${isLeftCollapsed ? "hidden" : ""}`}>
-                            Manage calendars in Google Calendar settings
+                        <p className={`text-xs text-gray-500 mb-3 ${isLeftCollapsed ? "hidden" : ""}`}>
+                            Overlay on the week view; optionally merge into the stats panel.
                         </p>
+                        <label
+                            className={`flex items-center gap-3 p-2 rounded-lg hover:bg-gray-900/80 cursor-pointer border border-transparent hover:border-gray-800 ${isLeftCollapsed ? "hidden" : ""}`}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={includeGoogleInStats}
+                                onChange={(e) => setIncludeGoogleInStats(e.target.checked)}
+                                className="w-4 h-4 rounded cursor-pointer accent-blue-600"
+                            />
+                            <span className="text-sm text-gray-200 flex-1 leading-snug">
+                                Merge Google events into week statistics
+                            </span>
+                        </label>
 
-                        {editingCalendar && (
-                            <div className="mb-4 p-3 bg-gray-900 rounded-lg space-y-2">
-                                <input
-                                    type="text"
-                                    value={newCalendarName}
-                                    onChange={(e) => setNewCalendarName(e.target.value)}
-                                    className="w-full px-2 py-1 bg-gray-800 text-white rounded text-sm"
-                                    placeholder="Calendar Name"
-                                />
-                                <div className="flex gap-2 items-center">
-                                    <input
-                                        type="color"
-                                        value={newCalendarColor}
-                                        onChange={(e) => setNewCalendarColor(e.target.value)}
-                                        className="w-10 h-8 rounded cursor-pointer"
-                                    />
-                                    <input
-                                        type="text"
-                                        value={newCalendarColor}
-                                        onChange={(e) => setNewCalendarColor(e.target.value)}
-                                        className="flex-1 px-2 py-1 bg-gray-800 text-white rounded text-sm"
-                                    />
-                                </div>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={handleUpdate}
-                                        disabled={updateCalendarMutation.isPending}
-                                        className="flex-1 px-2 py-1 text-sm bg-blue-600 hover:bg-blue-700 rounded text-white disabled:opacity-50"
-                                    >
-                                        Save
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            setEditingCalendar(null);
-                                            setNewCalendarName("");
-                                            setNewCalendarColor("#4285f4");
-                                        }}
-                                        className="px-2 py-1 text-sm bg-gray-700 hover:bg-gray-600 rounded text-white"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="space-y-2">
+                        <div className={`space-y-1 ${isLeftCollapsed ? "space-y-0" : ""}`}>
                             {googleCalendars.map((calendar) => {
                                 const isVisible = visibleCalendars.has(calendar.id);
-                                const isEditing = editingCalendar?.id === calendar.id;
+                                const inStats = calendarsInStats.has(calendar.id);
+
+                                const pillOn =
+                                    "bg-slate-600 text-white shadow-sm ring-1 ring-white/10";
+                                const pillOff =
+                                    "bg-gray-950/80 text-gray-500 hover:bg-gray-800/90 hover:text-gray-300";
+
+                                if (isLeftCollapsed) {
+                                    return (
+                                        <div
+                                            key={calendar.id}
+                                            className="flex flex-col items-center gap-1.5 py-2 rounded-lg hover:bg-gray-900/80"
+                                        >
+                                            <div
+                                                className="h-2.5 w-2.5 shrink-0 rounded-sm border border-gray-600 ring-1 ring-black/20"
+                                                style={{ backgroundColor: calendar.color }}
+                                            />
+                                            <div className="flex flex-col gap-1">
+                                                <button
+                                                    type="button"
+                                                    aria-pressed={isVisible}
+                                                    aria-label="Show on week view"
+                                                    title="Week view"
+                                                    onClick={() => toggleCalendar(calendar.id)}
+                                                    className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${isVisible ? pillOn : pillOff}`}
+                                                >
+                                                    <IconWeekGrid className="h-4 w-4" />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    aria-pressed={inStats}
+                                                    aria-label="Include in statistics"
+                                                    title="Statistics"
+                                                    onClick={() => toggleCalendarInStats(calendar.id)}
+                                                    className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${inStats ? pillOn : pillOff}`}
+                                                >
+                                                    <IconBarChart className="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                }
 
                                 return (
                                     <div
                                         key={calendar.id}
-                                        className={`flex items-center gap-2 p-2 rounded hover:bg-gray-900 ${isEditing ? "bg-gray-800" : ""}`}
+                                        className="grid grid-cols-[12px_1fr] gap-x-2.5 gap-y-2 rounded-lg border border-gray-800/80 bg-gray-950/30 p-2.5 transition-colors hover:border-gray-700/90"
                                     >
-                                        <input
-                                            type="checkbox"
-                                            checked={isVisible}
-                                            onChange={() => toggleCalendar(calendar.id)}
-                                            className="w-4 h-4 rounded cursor-pointer"
-                                        />
                                         <div
-                                            className="w-4 h-4 rounded border border-gray-600"
+                                            className="row-span-2 mt-0.5 h-3 w-3 shrink-0 self-start rounded-sm border border-gray-600 ring-1 ring-black/30"
                                             style={{ backgroundColor: calendar.color }}
                                         />
-                                        <span className={`text-sm text-gray-200 flex-1 truncate ${isLeftCollapsed ? "hidden" : ""}`}>
+                                        <span className="min-w-0 truncate text-sm font-medium leading-tight text-gray-100">
                                             {calendar.name}
                                         </span>
-                                        <div className={`flex gap-1 ${isLeftCollapsed ? "hidden" : ""}`}>
-                                            <button
-                                                onClick={() => handleEdit(calendar)}
-                                                className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded text-white"
-                                                title="Edit"
-                                            >
-                                                ✎
-                                            </button>
+                                        <div className="col-start-2 flex min-w-0">
+                                            <div className="inline-flex w-full max-w-full rounded-lg border border-gray-700/90 bg-black/40 p-0.5 shadow-inner">
+                                                <button
+                                                    type="button"
+                                                    aria-pressed={isVisible}
+                                                    onClick={() => toggleCalendar(calendar.id)}
+                                                    className={`inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] font-medium transition-all sm:justify-start sm:px-2.5 ${
+                                                        isVisible ? pillOn : pillOff
+                                                    }`}
+                                                >
+                                                    <IconWeekGrid className="h-3.5 w-3.5 shrink-0 opacity-90" />
+                                                    <span className="truncate">Week</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    aria-pressed={inStats}
+                                                    onClick={() => toggleCalendarInStats(calendar.id)}
+                                                    className={`inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] font-medium transition-all sm:justify-start sm:px-2.5 ${
+                                                        inStats ? pillOn : pillOff
+                                                    }`}
+                                                >
+                                                    <IconBarChart className="h-3.5 w-3.5 shrink-0 opacity-90" />
+                                                    <span className="truncate">Stats</span>
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 );

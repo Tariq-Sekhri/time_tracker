@@ -1,14 +1,43 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { get_week_statistics, CategoryStat } from "../../../api/statistics.ts";
 import { getWeekRange } from "../../../utils.ts";
 import { formatDuration, formatPercentage } from "../utils.ts";
 import { DonutChart } from "../DonutChart.tsx";
+import {
+    get_all_google_calendar_events,
+    googleEventDurationInRange,
+    GoogleCalendar,
+    GoogleCalendarEvent,
+} from "../../../api/GoogleCalendar.ts";
 
 type DisplayMode = "percentage" | "time";
 
+function percentageChangeVsPrevious(current: number, previous: number): number | null {
+    if (previous > 0) {
+        return ((current - previous) / previous) * 100;
+    }
+    if (current > 0) {
+        return 100;
+    }
+    return null;
+}
+
+function inferPreviousTrackingTotal(current: number, pctChange: number | null): number | null {
+    if (pctChange === null) {
+        return current === 0 ? 0 : null;
+    }
+    if (pctChange === -100) {
+        return null;
+    }
+    if (pctChange === 100) {
+        return 0;
+    }
+    return current / (1 + pctChange / 100);
+}
+
 type CombinedCategory = CategoryStat & {
-    source: "tracking";
+    source: "tracking" | "google";
 };
 
 interface StatisticsSidebarProps {
@@ -16,6 +45,10 @@ interface StatisticsSidebarProps {
     onMoreInfo: () => void;
     onAppsList?: () => void;
     onCategoryClick?: (category: string) => void;
+    includeGoogleInStats: boolean;
+    calendarsInStats: Set<number>;
+    googleCalendars: GoogleCalendar[];
+    trailingToolbar?: ReactNode;
 }
 
 export default function StatisticsSidebar({
@@ -23,10 +56,16 @@ export default function StatisticsSidebar({
     onMoreInfo,
     onAppsList,
     onCategoryClick,
+    includeGoogleInStats,
+    calendarsInStats,
+    googleCalendars,
+    trailingToolbar,
 }: StatisticsSidebarProps) {
     const [displayMode, setDisplayMode] = useState<DisplayMode>("percentage");
 
     const { week_start, week_end } = getWeekRange(weekDate);
+    const prevWeekStart = week_start - 7 * 86400;
+    const prevWeekEnd = prevWeekStart + (week_end - week_start);
 
     const {
         data: weekStats,
@@ -38,13 +77,140 @@ export default function StatisticsSidebar({
         queryFn: async () => await get_week_statistics(week_start, week_end),
     });
 
+    const {
+        data: googleEvents,
+        isLoading: isLoadingGoogleEvents,
+        isError: isGoogleEventsError,
+    } = useQuery({
+        queryKey: ["google_calendar_events", week_start, week_end],
+        queryFn: async () => await get_all_google_calendar_events(week_start, week_end),
+        enabled: includeGoogleInStats && calendarsInStats.size > 0,
+    });
+
+    const {
+        data: prevGoogleEvents,
+        isLoading: isLoadingPrevGoogleEvents,
+        isError: isPrevGoogleEventsError,
+    } = useQuery({
+        queryKey: ["google_calendar_events", prevWeekStart, prevWeekEnd],
+        queryFn: async () => await get_all_google_calendar_events(prevWeekStart, prevWeekEnd),
+        enabled: includeGoogleInStats && calendarsInStats.size > 0,
+    });
+
+    const calendarMap = useMemo(() => {
+        const map = new Map<number, GoogleCalendar>();
+        googleCalendars.forEach((c) => map.set(c.id, c));
+        return map;
+    }, [googleCalendars]);
+
+    const filteredGoogleEvents = useMemo(() => {
+        const events = (googleEvents ?? []) as GoogleCalendarEvent[];
+        if (calendarsInStats.size === 0) return [];
+        return events.filter((e) => calendarsInStats.has(e.calendar_id));
+    }, [googleEvents, calendarsInStats]);
+
+    const filteredPrevGoogleEvents = useMemo(() => {
+        const events = (prevGoogleEvents ?? []) as GoogleCalendarEvent[];
+        if (calendarsInStats.size === 0) return [];
+        return events.filter((e) => calendarsInStats.has(e.calendar_id));
+    }, [prevGoogleEvents, calendarsInStats]);
+
+    const googleCategories = useMemo<CombinedCategory[]>(() => {
+        if (!includeGoogleInStats) return [];
+        if (isLoadingGoogleEvents || isGoogleEventsError || isLoadingPrevGoogleEvents) return [];
+
+        const compareEnd = Math.min(week_end, Math.floor(Date.now() / 1000));
+        const prevCompareEnd = prevWeekStart + (compareEnd - week_start);
+
+        const durationByCalendarId = new Map<number, number>();
+        filteredGoogleEvents.forEach((e) => {
+            const durationSec = googleEventDurationInRange(e, week_start, week_end, compareEnd);
+            if (durationSec <= 0) return;
+            durationByCalendarId.set(
+                e.calendar_id,
+                (durationByCalendarId.get(e.calendar_id) ?? 0) + durationSec
+            );
+        });
+
+        const prevDurationByCalendarId = new Map<number, number>();
+        if (!isPrevGoogleEventsError) {
+            filteredPrevGoogleEvents.forEach((e) => {
+                const durationSec = googleEventDurationInRange(e, prevWeekStart, prevWeekEnd, prevCompareEnd);
+                if (durationSec <= 0) return;
+                prevDurationByCalendarId.set(
+                    e.calendar_id,
+                    (prevDurationByCalendarId.get(e.calendar_id) ?? 0) + durationSec
+                );
+            });
+        }
+
+        const sorted = Array.from(durationByCalendarId.entries()).sort((a, b) => b[1] - a[1]);
+
+        return sorted.map(([calendarId, dur]) => {
+            const cal = calendarMap.get(calendarId);
+            const name = cal?.name ?? `Calendar ${calendarId}`;
+            const color = cal?.color ?? "#4285f4";
+            const prevDur = prevDurationByCalendarId.get(calendarId) ?? 0;
+            const pctCh = isPrevGoogleEventsError ? null : percentageChangeVsPrevious(dur, prevDur);
+            return {
+                category: name,
+                total_duration: dur,
+                percentage: 0,
+                percentage_change: pctCh,
+                color,
+                source: "google" as const,
+            };
+        });
+    }, [
+        includeGoogleInStats,
+        isLoadingGoogleEvents,
+        isGoogleEventsError,
+        isLoadingPrevGoogleEvents,
+        isPrevGoogleEventsError,
+        filteredGoogleEvents,
+        filteredPrevGoogleEvents,
+        calendarMap,
+        week_start,
+        week_end,
+        prevWeekStart,
+        prevWeekEnd,
+    ]);
+
+    const prevGoogleTotalDuration = useMemo(() => {
+        if (!includeGoogleInStats || isPrevGoogleEventsError) return 0;
+        const compareEnd = Math.min(week_end, Math.floor(Date.now() / 1000));
+        const prevCompareEnd = prevWeekStart + (compareEnd - week_start);
+        let sum = 0;
+        filteredPrevGoogleEvents.forEach((e) => {
+            sum += googleEventDurationInRange(e, prevWeekStart, prevWeekEnd, prevCompareEnd);
+        });
+        return sum;
+    }, [
+        includeGoogleInStats,
+        isPrevGoogleEventsError,
+        filteredPrevGoogleEvents,
+        prevWeekStart,
+        prevWeekEnd,
+        week_start,
+        week_end,
+    ]);
+
     const topCategories = useMemo<CombinedCategory[]>(() => {
         if (!weekStats) return [] as CombinedCategory[];
-        return weekStats.categories.slice(0, 5).map((c) => ({
+
+        const trackingCategories = weekStats.categories.map((c) => ({
             ...c,
             source: "tracking" as const,
         }));
-    }, [weekStats]);
+
+        if (!includeGoogleInStats) {
+            return trackingCategories.slice(0, 5);
+        }
+
+        const combined = [...trackingCategories, ...googleCategories];
+        combined.sort((a, b) => b.total_duration - a.total_duration);
+        return combined.slice(0, 5);
+    }, [weekStats, includeGoogleInStats, googleCategories]);
 
     const maxCategoryDuration = topCategories.length > 0 ? topCategories[0].total_duration : 1;
 
@@ -64,12 +230,42 @@ export default function StatisticsSidebar({
         return map;
     }, [topCategories]);
 
+    const googleTotalDuration = useMemo(() => {
+        if (!includeGoogleInStats) return 0;
+        return googleCategories.reduce((sum, c) => sum + c.total_duration, 0);
+    }, [includeGoogleInStats, googleCategories]);
+
     const totalTime = useMemo(() => {
         if (!weekStats) return 0;
-        return weekStats.total_time;
-    }, [weekStats]);
+        if (!includeGoogleInStats) return weekStats.total_time;
+        return weekStats.total_time + googleTotalDuration;
+    }, [weekStats, includeGoogleInStats, googleTotalDuration]);
 
-    const showTotalChange = weekStats?.total_time_change !== null;
+    const combinedTotalTimeChange = useMemo((): number | null => {
+        if (!weekStats || !includeGoogleInStats) return null;
+        if (isLoadingGoogleEvents || isLoadingPrevGoogleEvents) return null;
+        const prevTrack = inferPreviousTrackingTotal(weekStats.total_time, weekStats.total_time_change);
+        if (prevTrack === null) return null;
+        const prevCombined = prevTrack + prevGoogleTotalDuration;
+        const currCombined = weekStats.total_time + googleTotalDuration;
+        return percentageChangeVsPrevious(currCombined, prevCombined);
+    }, [
+        weekStats,
+        includeGoogleInStats,
+        prevGoogleTotalDuration,
+        googleTotalDuration,
+        isLoadingGoogleEvents,
+        isLoadingPrevGoogleEvents,
+    ]);
+
+    const displayTotalTimeChange =
+        includeGoogleInStats
+            ? isLoadingGoogleEvents || isLoadingPrevGoogleEvents
+                ? null
+                : combinedTotalTimeChange
+            : (weekStats?.total_time_change ?? null);
+
+    const showTotalChange = displayTotalTimeChange !== null;
 
     const calculateTimeChange = (currentDuration: number, percentageChange: number): number => {
         if (percentageChange === 0) return 0;
@@ -95,7 +291,10 @@ export default function StatisticsSidebar({
         return (
             <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
                 <div className="flex-1">
-                    <h2 className="text-xl font-bold text-white mb-4">Week Statistics</h2>
+                    <div className="flex items-center justify-between gap-2 mb-4">
+                        <h2 className="text-xl font-bold text-white min-w-0 truncate">Week Statistics</h2>
+                        {trailingToolbar}
+                    </div>
                     <div className="text-gray-500 mb-4">Loading statistics...</div>
                 </div>
                 <div className="mt-auto pt-4 border-t border-gray-700">
@@ -114,7 +313,10 @@ export default function StatisticsSidebar({
         return (
             <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
                 <div className="flex-1">
-                    <h2 className="text-xl font-bold text-white mb-4">Week Statistics</h2>
+                    <div className="flex items-center justify-between gap-2 mb-4">
+                        <h2 className="text-xl font-bold text-white min-w-0 truncate">Week Statistics</h2>
+                        {trailingToolbar}
+                    </div>
                     <div className="text-red-400 mb-2">Error loading statistics</div>
                     <div className="text-gray-500 text-sm mb-4">
                         {error instanceof Error ? error.message : "Unknown error occurred"}
@@ -136,7 +338,10 @@ export default function StatisticsSidebar({
         return (
             <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
                 <div className="flex-1">
-                    <h2 className="text-xl font-bold text-white mb-4">Week Statistics</h2>
+                    <div className="flex items-center justify-between gap-2 mb-4">
+                        <h2 className="text-xl font-bold text-white min-w-0 truncate">Week Statistics</h2>
+                        {trailingToolbar}
+                    </div>
                     <div className="text-gray-500 mb-4">No statistics available</div>
                 </div>
                 <div className="mt-auto pt-4 border-t border-gray-700">
@@ -153,25 +358,28 @@ export default function StatisticsSidebar({
 
     return (
         <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
-            <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold text-white">Week Statistics</h2>
-                <div className="flex gap-1 bg-gray-800 rounded p-1">
-                    <button
-                        onClick={() => setDisplayMode("percentage")}
-                        className={`px-2 py-1 text-xs rounded ${
-                            displayMode === "percentage" ? "bg-gray-700 text-white" : "text-gray-400"
-                        }`}
-                    >
-                        %
-                    </button>
-                    <button
-                        onClick={() => setDisplayMode("time")}
-                        className={`px-2 py-1 text-xs rounded ${
-                            displayMode === "time" ? "bg-gray-700 text-white" : "text-gray-400"
-                        }`}
-                    >
-                        Time
-                    </button>
+            <div className="flex justify-between items-center gap-2 mb-4 min-w-0">
+                <h2 className="text-xl font-bold text-white min-w-0 truncate">Week Statistics</h2>
+                <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex gap-1 bg-gray-800 rounded p-1">
+                        <button
+                            onClick={() => setDisplayMode("percentage")}
+                            className={`px-2 py-1 text-xs rounded ${
+                                displayMode === "percentage" ? "bg-gray-700 text-white" : "text-gray-400"
+                            }`}
+                        >
+                            %
+                        </button>
+                        <button
+                            onClick={() => setDisplayMode("time")}
+                            className={`px-2 py-1 text-xs rounded ${
+                                displayMode === "time" ? "bg-gray-700 text-white" : "text-gray-400"
+                            }`}
+                        >
+                            Time
+                        </button>
+                    </div>
+                    {trailingToolbar}
                 </div>
             </div>
 
@@ -183,19 +391,19 @@ export default function StatisticsSidebar({
                 {showTotalChange && (
                     <div
                         className={`text-xs min-w-[50px] text-right ${
-                            weekStats.total_time_change! >= 0 ? "text-green-400" : "text-red-400"
+                            displayTotalTimeChange! >= 0 ? "text-green-400" : "text-red-400"
                         }`}
                     >
                         {displayMode === "time"
                             ? (() => {
                                   const timeChange = calculateTimeChange(
-                                      weekStats.total_time,
-                                      weekStats.total_time_change!
+                                      totalTime,
+                                      displayTotalTimeChange!
                                   );
                                   const sign = timeChange >= 0 ? "+" : "";
                                   return `${sign}${formatDuration(Math.abs(timeChange))}`;
                               })()
-                            : formatPercentage(weekStats.total_time_change!)}
+                            : formatPercentage(displayTotalTimeChange!)}
                     </div>
                 )}
             </div>

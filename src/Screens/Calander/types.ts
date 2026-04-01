@@ -6,6 +6,7 @@ export type CalendarEvent = {
     start: Date;
     end: Date;
     apps: { app: string; totalDuration: number }[];
+    timeBlockId?: number;
     googleCalendarEventId?: string;
     googleCalendarId?: number;
     description?: string;
