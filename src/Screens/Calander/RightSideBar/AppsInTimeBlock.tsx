@@ -5,7 +5,7 @@ import {
     delete_logs_by_ids,
     delete_logs_for_time_block
 } from "../../../api/Log.ts";
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, type ReactNode } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SideBarView } from "./RightSideBar.tsx";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
@@ -36,14 +36,16 @@ export default function AppsInTimeBlock({
     selectedEventLogs,
     setSelectedEventLogs,
     setRightSideBarView,
-    isCategoryFilter = false
+    isCategoryFilter = false,
+    trailingToolbar,
 }: {
     selectedEvent: SelectedEvent,
     setSelectedEvent: (newEvent: CalendarEvent) => void,
     selectedEventLogs: EventLogs,
     setSelectedEventLogs: (newLogs: EventLogs) => void,
     setRightSideBarView: (newView: SideBarView) => void,
-    isCategoryFilter?: boolean
+    isCategoryFilter?: boolean,
+    trailingToolbar?: ReactNode,
 }) {
     const queryClient = useQueryClient();
 
@@ -280,23 +282,26 @@ export default function AppsInTimeBlock({
     return (
         <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
             <div className={`flex-shrink-0 ${isCategoryFilter ? 'mb-4' : 'mb-6'}`}>
-                <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-xl font-bold text-white">{selectedEvent.title}</h2>
-                    <button
-                        onClick={() => {
-                            setRightSideBarView("Week");
-                            setSelectedEvent(null);
-                            setSelectedEventLogs([]);
-                        }}
-                        className="text-gray-400 hover:text-white transition-colors"
-                        aria-label="Close"
-                        title="Close"
-                    >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
+                <div className="flex items-center justify-between mb-3 gap-2">
+                    <h2 className="text-xl font-bold text-white min-w-0 truncate">{selectedEvent.title}</h2>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <button
+                            onClick={() => {
+                                setRightSideBarView("Week");
+                                setSelectedEvent(null);
+                                setSelectedEventLogs([]);
+                            }}
+                            className="text-gray-400 hover:text-white transition-colors"
+                            aria-label="Close"
+                            title="Close"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                    d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                        {trailingToolbar}
+                    </div>
                 </div>
                 {!isCategoryFilter && (
                     <div className="text-sm text-gray-400 mb-1">

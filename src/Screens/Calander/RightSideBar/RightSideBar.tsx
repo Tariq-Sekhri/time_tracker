@@ -6,6 +6,7 @@ import { CalendarEvent, EventLogs } from "../types.ts";
 import { SelectedEvent } from "./AppsInTimeBlock.tsx";
 import DayStatisticsSidebar from "./DayStatisticsSidebar.tsx";
 import GoogleCalendarEventView from "./GoogleCalendarEventView.tsx";
+import { GoogleCalendar } from "../../../api/GoogleCalendar.ts";
 import { useEffect, useState } from "react";
 import { useSettingsStore } from "../../../stores/settingsStore.ts";
 
@@ -23,7 +24,10 @@ export function RightSideBar({
     setSelectedEventLogs,
     selectedCategory,
     setSelectedCategory,
-    isLoadingCategory
+    isLoadingCategory,
+    includeGoogleInStats,
+    calendarsInStats,
+    googleCalendars
 }: {
     view: SideBarView,
     setView: (newView: SideBarView) => void,
@@ -36,7 +40,10 @@ export function RightSideBar({
     setSelectedEventLogs: (newLogs: EventLogs) => void,
     selectedCategory: string | null,
     setSelectedCategory: (category: string | null) => void,
-    isLoadingCategory: boolean
+    isLoadingCategory: boolean,
+    includeGoogleInStats: boolean,
+    calendarsInStats: Set<number>,
+    googleCalendars: GoogleCalendar[]
 }) {
     const { date } = useDateStore();
     const { rightSidebarWidth } = useSettingsStore();
@@ -56,6 +63,17 @@ export function RightSideBar({
         }
     }, [isCollapsed]);
 
+    const collapseSidebarButton = (
+        <button
+            type="button"
+            onClick={() => setIsCollapsed(true)}
+            className="shrink-0 h-8 w-8 flex items-center justify-center text-sm bg-gray-800 hover:bg-gray-700 text-white rounded-md transition-colors"
+            aria-label="Collapse right sidebar"
+        >
+            »
+        </button>
+    );
+
     if (isCollapsed) {
         return (
             <div className="w-16 h-full min-h-0 overflow-hidden flex-shrink-0 border-l border-gray-700 bg-black p-2 flex flex-col items-center">
@@ -72,15 +90,7 @@ export function RightSideBar({
     }
 
     return (
-        <div className={"h-full min-h-0 overflow-hidden flex-shrink-0 relative"} style={{ width: `${rightSidebarWidth}px` }}>
-            <button
-                type="button"
-                onClick={() => setIsCollapsed(true)}
-                className="absolute top-2 right-2 z-10 shrink-0 px-2 py-1 text-sm bg-gray-800 hover:bg-gray-700 text-white rounded transition-colors"
-                aria-label="Collapse right sidebar"
-            >
-                »
-            </button>
+        <div className="h-full min-h-0 overflow-hidden flex-shrink-0" style={{ width: `${rightSidebarWidth}px` }}>
             {view === "Week" && <StatisticsSidebar
                 weekDate={date}
                 onMoreInfo={() => setCurrentView("detailed")}
@@ -89,6 +99,10 @@ export function RightSideBar({
                     setSelectedCategory(category);
                     setView("CategoryFilter");
                 }}
+                includeGoogleInStats={includeGoogleInStats}
+                calendarsInStats={calendarsInStats}
+                googleCalendars={googleCalendars}
+                trailingToolbar={collapseSidebarButton}
             />}
             {view === "Day" && selectedDate && <DayStatisticsSidebar
                 selectedDate={selectedDate}
@@ -101,6 +115,10 @@ export function RightSideBar({
                     setSelectedCategory(category);
                     setView("CategoryFilter");
                 }}
+                includeGoogleInStats={includeGoogleInStats}
+                calendarsInStats={calendarsInStats}
+                googleCalendars={googleCalendars}
+                trailingToolbar={collapseSidebarButton}
             />}
             {view === "Event" && selectedEvent && (
                 selectedEvent.googleCalendarEventId ? (
@@ -108,18 +126,21 @@ export function RightSideBar({
                         selectedEvent={selectedEvent}
                         setSelectedEvent={setSelectedEvent}
                         setRightSideBarView={setView}
+                        trailingToolbar={collapseSidebarButton}
                     />
                 ) : (
                     <AppsInTimeBlock selectedEvent={selectedEvent as SelectedEvent}
                         setSelectedEventLogs={setSelectedEventLogs}
                         setSelectedEvent={setSelectedEvent} selectedEventLogs={selectedEventLogs}
                         setRightSideBarView={setView}
-                        isCategoryFilter={false} />
+                        isCategoryFilter={false}
+                        trailingToolbar={collapseSidebarButton} />
                 )
             )}
             {view === "CategoryFilter" && (
                 isLoadingCategory ? (
                     <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
+                        <div className="flex justify-end shrink-0 mb-4">{collapseSidebarButton}</div>
                         <div className="flex-1 flex items-center justify-center">
                             <div className="text-gray-500">Loading category data...</div>
                         </div>
@@ -140,9 +161,11 @@ export function RightSideBar({
                                 setSelectedCategory(null);
                             }
                         }}
-                        isCategoryFilter={true} />
+                        isCategoryFilter={true}
+                        trailingToolbar={collapseSidebarButton} />
                 ) : selectedCategory ? (
                     <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
+                        <div className="flex justify-end shrink-0 mb-4">{collapseSidebarButton}</div>
                         <div className="flex-1">
                             <h2 className="text-xl font-bold text-white mb-4">Category: {selectedCategory}</h2>
                             <div className="text-gray-500">No data available for this category in the selected time period.</div>
@@ -162,6 +185,7 @@ export function RightSideBar({
                     </div>
                 ) : (
                     <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
+                        <div className="flex justify-end shrink-0 mb-4">{collapseSidebarButton}</div>
                         <div className="flex-1 flex items-center justify-center">
                             <div className="text-gray-500">No category selected</div>
                         </div>
