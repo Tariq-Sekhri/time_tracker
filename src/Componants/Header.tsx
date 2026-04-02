@@ -44,7 +44,7 @@ export default function Header({ currentView, setCurrentView }: {
         const newStatus = !isTracking;
         setIsTracking(newStatus);
         await invoke("set_tracking_status", { isTracking: newStatus });
-        await invoke("refresh_tray_menu_cmd");
+        await invoke("refresh_tray_menu");
     };
 
     const checkForUpdates = async () => {
