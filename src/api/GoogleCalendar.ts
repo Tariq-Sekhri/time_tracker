@@ -132,12 +132,34 @@ export type GoogleCalendarEvent = {
     location?: string;
 };
 
+export function isGoogleCalendarEventExcludedFromTimeStats(e: GoogleCalendarEvent): boolean {
+    const dur = e.end - e.start;
+    if (dur <= 0) return true;
+    if (dur >= 86400 && dur % 86400 === 0) return true;
+    const start = new Date(e.start * 1000);
+    const end = new Date(e.end * 1000);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return true;
+    const isMidnightStart =
+        start.getHours() === 0 && start.getMinutes() === 0 && start.getSeconds() === 0;
+    const isMidnightEnd = end.getHours() === 0 && end.getMinutes() === 0 && end.getSeconds() === 0;
+    if (isMidnightStart && isMidnightEnd) {
+        const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+        const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+        const daysDiff = Math.round(
+            (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
+        );
+        if (daysDiff === 0 || daysDiff === 1) return true;
+    }
+    return false;
+}
+
 export function googleEventDurationInRange(
     e: GoogleCalendarEvent,
     rangeStart: number,
     rangeEnd: number,
     progressEnd: number
 ): number {
+    if (isGoogleCalendarEventExcludedFromTimeStats(e)) return 0;
     const cap = Math.min(rangeEnd, progressEnd);
     const segStart = Math.max(e.start, rangeStart);
     const segEnd = Math.min(e.end, cap);

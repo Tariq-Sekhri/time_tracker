@@ -17,6 +17,7 @@ import {
     google_oauth_login,
     GoogleCalendarEvent,
     GoogleCalendar,
+    isGoogleCalendarEventExcludedFromTimeStats,
 } from "../../api/GoogleCalendar.ts";
 import { getWeekRange } from "../../utils.ts";
 import { getCachedEvents, setCachedEvents } from "../../stores/googleCalendarCache.ts";
@@ -290,24 +291,15 @@ export default function RenderCalendarContent({
         const googleEvents = displayGoogleEvents
             .filter((event: GoogleCalendarEvent) => visibleCalendars.has(event.calendar_id))
             .map((event: GoogleCalendarEvent) => {
+                if (isGoogleCalendarEventExcludedFromTimeStats(event)) {
+                    return null;
+                }
+
                 const start = new Date(event.start * 1000);
                 const end = new Date(event.end * 1000);
 
                 if (isNaN(start.getTime()) || isNaN(end.getTime())) {
                     return null;
-                }
-
-                const isMidnightStart = start.getHours() === 0 && start.getMinutes() === 0 && start.getSeconds() === 0;
-                const isMidnightEnd = end.getHours() === 0 && end.getMinutes() === 0 && end.getSeconds() === 0;
-
-                if (isMidnightStart && isMidnightEnd) {
-                    const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-                    const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-                    const daysDiff = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-
-                    if (daysDiff === 0 || daysDiff === 1) {
-                        return null;
-                    }
                 }
 
                 const calendar = googleCalendarMap.get(event.calendar_id);
