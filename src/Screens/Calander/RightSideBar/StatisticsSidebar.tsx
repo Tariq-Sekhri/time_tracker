@@ -10,6 +10,7 @@ import {
     GoogleCalendar,
     GoogleCalendarEvent,
 } from "../../../api/GoogleCalendar.ts";
+import { useSettingsStore } from "../../../stores/settingsStore.ts";
 
 type DisplayMode = "percentage" | "time";
 
@@ -62,6 +63,7 @@ export default function StatisticsSidebar({
     trailingToolbar,
 }: StatisticsSidebarProps) {
     const [displayMode, setDisplayMode] = useState<DisplayMode>("percentage");
+    const { categorySidebarCount } = useSettingsStore();
 
     const { week_start, week_end } = getWeekRange(weekDate);
     const prevWeekStart = week_start - 7 * 86400;
@@ -204,13 +206,13 @@ export default function StatisticsSidebar({
         }));
 
         if (!includeGoogleInStats) {
-            return trackingCategories.slice(0, 5);
+            return trackingCategories.slice(0, categorySidebarCount);
         }
 
         const combined = [...trackingCategories, ...googleCategories];
         combined.sort((a, b) => b.total_duration - a.total_duration);
-        return combined.slice(0, 5);
-    }, [weekStats, includeGoogleInStats, googleCategories]);
+        return combined.slice(0, categorySidebarCount);
+    }, [weekStats, includeGoogleInStats, googleCategories, categorySidebarCount]);
 
     const maxCategoryDuration = topCategories.length > 0 ? topCategories[0].total_duration : 1;
 

@@ -12,16 +12,18 @@ export type SettingsState = {
     rightSidebarWidth: number;
     timeBlockSettings: TimeBlockSettings;
     uiMinAppDuration: number;
+    categorySidebarCount: number;
     setCalendarStartHour: (hour: number) => void;
     setRightSidebarWidth: (width: number) => void;
     setTimeBlockSettings: (patch: Partial<TimeBlockSettings>) => void;
     setUiMinAppDuration: (seconds: number) => void;
+    setCategorySidebarCount: (count: number) => void;
     resetSettings: () => void;
 };
 
 const STORAGE_KEY = "time-tracker:settings";
 
-const DEFAULT_SETTINGS: Omit<SettingsState, "setCalendarStartHour" | "setRightSidebarWidth" | "setTimeBlockSettings" | "setUiMinAppDuration" | "resetSettings"> = {
+const DEFAULT_SETTINGS: Omit<SettingsState, "setCalendarStartHour" | "setRightSidebarWidth" | "setTimeBlockSettings" | "setUiMinAppDuration" | "setCategorySidebarCount" | "resetSettings"> = {
     calendarStartHour: 6,
     rightSidebarWidth: 480,
     timeBlockSettings: {
@@ -31,6 +33,7 @@ const DEFAULT_SETTINGS: Omit<SettingsState, "setCalendarStartHour" | "setRightSi
         minDuration: 60,
     },
     uiMinAppDuration: 60,
+    categorySidebarCount: 5,
 };
 
 function isFiniteNumber(n: unknown): n is number {
@@ -44,7 +47,7 @@ function clampInt(value: number, min: number, max: number): number {
 
 function loadStoredSettings(): Omit<
     SettingsState,
-    "setCalendarStartHour" | "setRightSidebarWidth" | "setTimeBlockSettings" | "setUiMinAppDuration" | "resetSettings"
+    "setCalendarStartHour" | "setRightSidebarWidth" | "setTimeBlockSettings" | "setUiMinAppDuration" | "setCategorySidebarCount" | "resetSettings"
 > {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
@@ -78,11 +81,16 @@ function loadStoredSettings(): Omit<
             ? Math.max(1, Math.floor(parsed.uiMinAppDuration))
             : DEFAULT_SETTINGS.uiMinAppDuration;
 
+        const categorySidebarCount = isFiniteNumber(parsed?.categorySidebarCount)
+            ? clampInt(parsed.categorySidebarCount, 1, 30)
+            : DEFAULT_SETTINGS.categorySidebarCount;
+
         return {
             calendarStartHour,
             rightSidebarWidth,
             timeBlockSettings,
             uiMinAppDuration,
+            categorySidebarCount,
         };
     } catch {
         return DEFAULT_SETTINGS;
@@ -91,11 +99,15 @@ function loadStoredSettings(): Omit<
 
 function persistSettings(settings: Omit<
     SettingsState,
-    "setCalendarStartHour" | "setRightSidebarWidth" | "setTimeBlockSettings" | "setUiMinAppDuration" | "resetSettings"
+    "setCalendarStartHour" | "setRightSidebarWidth" | "setTimeBlockSettings" | "setUiMinAppDuration" | "setCategorySidebarCount" | "resetSettings"
 >): void {
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-    } catch {
+    } catch (e) {
+        console.error(
+            "[settingsStore] Failed to persist settings to localStorage (quota or access denied):",
+            e
+        );
     }
 }
 
@@ -105,7 +117,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
     const setAndPersist = (
         next: Omit<
             SettingsState,
-            "setCalendarStartHour" | "setRightSidebarWidth" | "setTimeBlockSettings" | "setUiMinAppDuration" | "resetSettings"
+            "setCalendarStartHour" | "setRightSidebarWidth" | "setTimeBlockSettings" | "setUiMinAppDuration" | "setCategorySidebarCount" | "resetSettings"
         >
     ) => {
         persistSettings(next);
@@ -122,6 +134,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
                 rightSidebarWidth: cur.rightSidebarWidth,
                 timeBlockSettings: cur.timeBlockSettings,
                 uiMinAppDuration: cur.uiMinAppDuration,
+                categorySidebarCount: cur.categorySidebarCount,
             });
         },
         setRightSidebarWidth: (width) => {
@@ -132,6 +145,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
                 rightSidebarWidth,
                 timeBlockSettings: cur.timeBlockSettings,
                 uiMinAppDuration: cur.uiMinAppDuration,
+                categorySidebarCount: cur.categorySidebarCount,
             });
         },
         setTimeBlockSettings: (patch) => {
@@ -164,6 +178,20 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
                 rightSidebarWidth: cur.rightSidebarWidth,
                 timeBlockSettings: cur.timeBlockSettings,
                 uiMinAppDuration,
+                categorySidebarCount: cur.categorySidebarCount,
+            });
+        },
+        setCategorySidebarCount: (count) => {
+            const categorySidebarCount = isFiniteNumber(count)
+                ? clampInt(count, 1, 30)
+                : DEFAULT_SETTINGS.categorySidebarCount;
+            const cur = get();
+            setAndPersist({
+                calendarStartHour: cur.calendarStartHour,
+                rightSidebarWidth: cur.rightSidebarWidth,
+                timeBlockSettings: cur.timeBlockSettings,
+                uiMinAppDuration: cur.uiMinAppDuration,
+                categorySidebarCount,
             });
         },
         resetSettings: () => {

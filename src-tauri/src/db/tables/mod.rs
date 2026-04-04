@@ -1,3 +1,4 @@
+pub mod app_metadata_kv;
 pub mod cat_regex;
 pub mod category;
 pub mod log;

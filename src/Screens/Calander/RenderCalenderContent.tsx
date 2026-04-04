@@ -87,6 +87,7 @@ export default function RenderCalendarContent({
     const queryClient = useQueryClient();
     const { showToast, updateToast, removeToast } = useToast();
     const lastGoogleEventsErrorToastRef = useRef<string | null>(null);
+    const calendarHostRef = useRef<HTMLDivElement>(null);
     const [isRelogging, setIsRelogging] = useState(false);
     const LEFT_SIDEBAR_COLLAPSED_KEY = "time-tracker:left-sidebar-collapsed";
     const [isLeftCollapsed, setIsLeftCollapsed] = useState(() => {
@@ -252,18 +253,6 @@ export default function RenderCalendarContent({
         }
     }, [isLeftCollapsed]);
 
-    useEffect(() => {
-        const timeoutId = setTimeout(() => {
-            try {
-                const api = ref?.current?.getApi?.();
-                api?.updateSize?.();
-            } catch {
-            }
-        }, 250);
-
-        return () => clearTimeout(timeoutId);
-    }, [isLeftCollapsed, ref]);
-
     const events = useMemo(() => {
         const timeBlockEvents = (data || [])
             .filter((block: TimeBlock) => visibleCategories.has(block.category))
@@ -348,6 +337,38 @@ export default function RenderCalendarContent({
         return allEvents;
     }, [data, categoryColorMap, visibleCategories, displayGoogleEvents, visibleCalendars, googleCalendarMap]);
 
+    const showFullCalendarGrid = useMemo(() => {
+        if (isLoading || (isLoadingGoogleEvents && !(cachedEvents?.length ?? 0))) return false;
+        if (error) return false;
+        const hasTimeBlocks = data && data.length > 0;
+        const hasGoogleEvents =
+            displayGoogleEvents.length > 0 &&
+            displayGoogleEvents.some((event: GoogleCalendarEvent) => visibleCalendars.has(event.calendar_id));
+        return !!(hasTimeBlocks || hasGoogleEvents);
+    }, [isLoading, isLoadingGoogleEvents, cachedEvents, error, data, displayGoogleEvents, visibleCalendars]);
+
+    useEffect(() => {
+        if (!showFullCalendarGrid) return;
+        const el = calendarHostRef.current;
+        if (!el || typeof ResizeObserver === "undefined") return;
+        let raf = 0;
+        const schedule = () => {
+            cancelAnimationFrame(raf);
+            raf = requestAnimationFrame(() => {
+                try {
+                    ref?.current?.getApi?.()?.updateSize?.();
+                } catch {
+                }
+            });
+        };
+        const ro = new ResizeObserver(schedule);
+        ro.observe(el);
+        schedule();
+        return () => {
+            cancelAnimationFrame(raf);
+            ro.disconnect();
+        };
+    }, [ref, showFullCalendarGrid]);
 
     if (isLoading || (isLoadingGoogleEvents && !(cachedEvents?.length ?? 0))) {
         return <CalendarSkeleton />;
@@ -604,7 +625,7 @@ export default function RenderCalendarContent({
                         </div>
                     </div>
                 </div>
-                <div className="flex-1 h-full overflow-hidden min-h-0">
+                <div ref={calendarHostRef} className="flex-1 h-full overflow-hidden min-h-0 min-w-0">
                     <FullCalendar
                         height="100%"
                         slotMinTime={slotMinTime}

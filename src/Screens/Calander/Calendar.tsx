@@ -17,24 +17,23 @@ import {get_google_calendars, GoogleCalendar} from "../../api/GoogleCalendar.ts"
 import {getCachedCalendars, setCachedCalendars} from "../../stores/googleCalendarCache.ts";
 import {getCurrentWindow} from "@tauri-apps/api/window";
 import { useSettingsStore } from "../../stores/settingsStore.ts";
-
-const INCLUDE_GOOGLE_IN_STATS_KEY = "time-tracker:include-google-in-stats";
-
-function readIncludeGoogleInStats(): boolean {
-    try {
-        const v = localStorage.getItem(INCLUDE_GOOGLE_IN_STATS_KEY);
-        if (v === "1") return true;
-        if (v === "0") return false;
-    } catch {
-    }
-    return false;
-}
+import {
+    loadCalendarViewPrefs,
+    saveCalendarViewPrefs,
+    type CalendarViewPrefsV1,
+} from "../../api/calendarViewPrefs.ts";
 
 export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View) => void }) {
     const [rightSideBarView, setRightSideBarView] = useState<SideBarView>("Week")
     const {date, setDate} = useDateStore();
     const { timeBlockSettings, calendarStartHour } = useSettingsStore();
-    const [includeGoogleInStats, setIncludeGoogleInStats] = useState(readIncludeGoogleInStats);
+    const [includeGoogleInStats, setIncludeGoogleInStats] = useState(false);
+
+    const { data: viewPrefs } = useQuery({
+        queryKey: ["calendarViewPrefs"],
+        queryFn: loadCalendarViewPrefs,
+        staleTime: Infinity,
+    });
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [selectedEvent, setSelectedEvent] = useState<CalendarEvent>(null);
     const [selectedEventLogs, setSelectedEventLogs] = useState<EventLogs>([]);
@@ -49,13 +48,16 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const [visibleCalendars, setVisibleCalendars] = useState<Set<number>>(new Set());
     const [calendarsInStats, setCalendarsInStats] = useState<Set<number>>(new Set());
     const queryClient = useQueryClient();
+    const savePrefsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const hasInitializedCalendars = useRef(false);
+    const hasInitializedStatsCalendars = useRef(false);
+    const prevDisplayCalendarsLenRef = useRef<number | null>(null);
 
     useEffect(() => {
-        try {
-            localStorage.setItem(INCLUDE_GOOGLE_IN_STATS_KEY, includeGoogleInStats ? "1" : "0");
-        } catch {
+        if (viewPrefs) {
+            setIncludeGoogleInStats(viewPrefs.includeGoogleInStats);
         }
-    }, [includeGoogleInStats]);
+    }, [viewPrefs]);
 
     const {data: categories = []} = useQuery({
         queryKey: ["categories"],
@@ -92,190 +94,181 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     }, [displayCalendars]);
 
     useEffect(() => {
-        if (categories.length > 0 && !hasInitialized.current) {
-            try {
-                const saved = localStorage.getItem("visibleCategories");
-                const allCategoryNames = categories.map(cat => cat.name);
+        const n = displayCalendars.length;
+        const prev = prevDisplayCalendarsLenRef.current;
+        if (prev !== null && prev === 0 && n > 0) {
+            hasInitializedCalendars.current = false;
+            hasInitializedStatsCalendars.current = false;
+        }
+        prevDisplayCalendarsLenRef.current = n;
+    }, [displayCalendars.length]);
 
-                if (saved) {
-                    const savedArray = JSON.parse(saved) as string[];
-                    const savedSet = new Set<string>(savedArray);
+    useEffect(() => {
+        if (categories.length === 0 || !viewPrefs || hasInitialized.current) return;
+        try {
+            const savedArray = viewPrefs.visibleCategories;
+            const allCategoryNames = categories.map((cat) => cat.name);
+            const hasSavedState =
+                savedArray.length > 0 || viewPrefs.knownCategories.length > 0;
 
-                    const mergedSet = new Set<string>();
-                    allCategoryNames.forEach(name => {
-                        if (savedSet.has(name)) {
+            if (hasSavedState) {
+                const savedSet = new Set<string>(savedArray);
+                const knownSet = new Set<string>(viewPrefs.knownCategories);
+                const mergedSet = new Set<string>();
+                allCategoryNames.forEach((name) => {
+                    if (savedSet.has(name)) {
+                        mergedSet.add(name);
+                    } else if (viewPrefs.knownCategories.length > 0) {
+                        if (!knownSet.has(name)) {
                             mergedSet.add(name);
-                        } else {
-                            const knownCategories = localStorage.getItem("knownCategories");
-                            if (knownCategories) {
-                                const knownSet = new Set<string>(JSON.parse(knownCategories));
-                                if (knownSet.has(name)) {
-                                } else {
-                                    mergedSet.add(name);
-                                }
-                            } else {
-                                mergedSet.add(name);
-                            }
                         }
-                    });
-
-                    setVisibleCategories(mergedSet);
-                    localStorage.setItem("knownCategories", JSON.stringify(allCategoryNames));
-                } else {
-                    const allVisible = new Set(allCategoryNames);
-                    setVisibleCategories(allVisible);
-                    localStorage.setItem("visibleCategories", JSON.stringify([...allVisible]));
-                    localStorage.setItem("knownCategories", JSON.stringify(allCategoryNames));
-                }
-            } catch (e) {
-                console.error("Failed to initialize visible categories:", e);
-                const allCategoryNames = categories.map(cat => cat.name);
-                setVisibleCategories(new Set(allCategoryNames));
+                    } else {
+                        mergedSet.add(name);
+                    }
+                });
+                setVisibleCategories(mergedSet);
+            } else {
+                const allVisible = new Set(allCategoryNames);
+                setVisibleCategories(allVisible);
             }
-            hasInitialized.current = true;
+        } catch (e) {
+            console.error("Failed to initialize visible categories:", e);
+            const allCategoryNames = categories.map((cat) => cat.name);
+            setVisibleCategories(new Set(allCategoryNames));
         }
-    }, [categories]);
+        hasInitialized.current = true;
+    }, [categories, viewPrefs]);
 
     useEffect(() => {
-        if (hasInitialized.current && categories.length > 0) {
-            try {
-                localStorage.setItem("visibleCategories", JSON.stringify([...visibleCategories]));
-                const allCategoryNames = categories.map(cat => cat.name);
-                localStorage.setItem("knownCategories", JSON.stringify(allCategoryNames));
-            } catch (e) {
-                console.error("Failed to save visible categories to localStorage:", e);
-            }
+        if (!viewPrefs) return;
+        if (displayCalendars.length === 0) {
+            if (!hasInitializedCalendars.current) hasInitializedCalendars.current = true;
+            if (!hasInitializedStatsCalendars.current) hasInitializedStatsCalendars.current = true;
+            return;
         }
-    }, [visibleCategories, categories]);
+        if (hasInitializedCalendars.current) return;
+        try {
+            const allCalendarIds = displayCalendars.map((cal) => cal.id);
+            const savedArray = viewPrefs.visibleCalendars;
+            const hasSavedState =
+                savedArray.length > 0 || viewPrefs.knownCalendars.length > 0;
 
-    const hasInitializedCalendars = useRef(false);
-    useEffect(() => {
-        console.log("[GCal Calendar] visibleCalendars init effect: displayCalendars.length=", displayCalendars.length, "hasInitialized=", hasInitializedCalendars.current);
-        if (displayCalendars.length > 0 && !hasInitializedCalendars.current) {
-            try {
-                const saved = localStorage.getItem("visibleCalendars");
-                const allCalendarIds = displayCalendars.map(cal => cal.id);
-                console.log("[GCal Calendar] initializing visibleCalendars: saved=", saved, "allIds=", allCalendarIds);
-
-                if (saved) {
-                    const savedArray = JSON.parse(saved) as number[];
-                    const savedSet = new Set<number>(savedArray);
-
-                    const mergedSet = new Set<number>();
-                    allCalendarIds.forEach(id => {
-                        if (savedSet.has(id)) {
+            if (hasSavedState) {
+                const savedSet = new Set<number>(savedArray);
+                const knownSet = new Set<number>(viewPrefs.knownCalendars);
+                const mergedSet = new Set<number>();
+                allCalendarIds.forEach((id) => {
+                    if (savedSet.has(id)) {
+                        mergedSet.add(id);
+                    } else if (viewPrefs.knownCalendars.length > 0) {
+                        if (!knownSet.has(id)) {
                             mergedSet.add(id);
-                        } else {
-                            const knownCalendars = localStorage.getItem("knownCalendars");
-                            if (knownCalendars) {
-                                const knownSet = new Set<number>(JSON.parse(knownCalendars));
-                                if (!knownSet.has(id)) {
-                                    mergedSet.add(id);
-                                }
-                            } else {
-                                mergedSet.add(id);
-                            }
                         }
-                    });
-
-                    console.log("[GCal Calendar] visibleCalendars resolved to:", [...mergedSet]);
-                    setVisibleCalendars(mergedSet);
-                    localStorage.setItem("knownCalendars", JSON.stringify(allCalendarIds));
-                } else {
-                    const allVisible = new Set(allCalendarIds);
-                    console.log("[GCal Calendar] no saved visibleCalendars, showing all:", [...allVisible]);
-                    setVisibleCalendars(allVisible);
-                    localStorage.setItem("visibleCalendars", JSON.stringify([...allVisible]));
-                    localStorage.setItem("knownCalendars", JSON.stringify(allCalendarIds));
-                }
-            } catch (e) {
-                console.error("[GCal Calendar] Failed to initialize visible calendars:", e);
-                const allCalendarIds = displayCalendars.map(cal => cal.id);
+                    } else {
+                        mergedSet.add(id);
+                    }
+                });
+                setVisibleCalendars(mergedSet);
+            } else {
                 setVisibleCalendars(new Set(allCalendarIds));
             }
-            hasInitializedCalendars.current = true;
+        } catch (e) {
+            console.error("[GCal Calendar] Failed to initialize visible calendars:", e);
+            const allCalendarIds = displayCalendars.map((cal) => cal.id);
+            setVisibleCalendars(new Set(allCalendarIds));
         }
-    }, [displayCalendars]);
+        hasInitializedCalendars.current = true;
+    }, [displayCalendars, viewPrefs]);
 
     useEffect(() => {
-        if (hasInitializedCalendars.current && displayCalendars.length > 0) {
-            try {
-                localStorage.setItem("visibleCalendars", JSON.stringify([...visibleCalendars]));
-                const allCalendarIds = displayCalendars.map(cal => cal.id);
-                localStorage.setItem("knownCalendars", JSON.stringify(allCalendarIds));
-            } catch (e) {
-                console.error("Failed to save visible calendars to localStorage:", e);
-            }
+        if (!viewPrefs) return;
+        if (displayCalendars.length === 0) {
+            if (!hasInitializedStatsCalendars.current) hasInitializedStatsCalendars.current = true;
+            return;
         }
-    }, [visibleCalendars, displayCalendars]);
+        if (hasInitializedStatsCalendars.current) return;
+        try {
+            const allCalendarIds = displayCalendars.map((cal) => cal.id);
+            const savedArray = viewPrefs.googleCalendarsInStats;
+            const hasSavedState =
+                savedArray.length > 0 ||
+                viewPrefs.knownGoogleCalendarsInStats.length > 0;
 
-    const hasInitializedStatsCalendars = useRef(false);
-    useEffect(() => {
-        if (displayCalendars.length > 0 && !hasInitializedStatsCalendars.current) {
-            try {
-                const saved = localStorage.getItem("googleCalendarsInStats");
-                const allCalendarIds = displayCalendars.map((cal) => cal.id);
-
-                if (saved) {
-                    const savedArray = JSON.parse(saved) as number[];
-                    const savedSet = new Set<number>(savedArray);
-
-                    const mergedSet = new Set<number>();
-                    allCalendarIds.forEach((id) => {
-                        if (savedSet.has(id)) {
+            if (hasSavedState) {
+                const savedSet = new Set<number>(savedArray);
+                const knownSet = new Set<number>(viewPrefs.knownGoogleCalendarsInStats);
+                const mergedSet = new Set<number>();
+                allCalendarIds.forEach((id) => {
+                    if (savedSet.has(id)) {
+                        mergedSet.add(id);
+                    } else if (viewPrefs.knownGoogleCalendarsInStats.length > 0) {
+                        if (!knownSet.has(id)) {
                             mergedSet.add(id);
-                        } else {
-                            const known = localStorage.getItem("knownGoogleCalendarsInStats");
-                            if (known) {
-                                const knownSet = new Set<number>(JSON.parse(known));
-                                if (!knownSet.has(id)) {
-                                    mergedSet.add(id);
-                                }
-                            } else {
-                                mergedSet.add(id);
-                            }
                         }
-                    });
-
-                    setCalendarsInStats(mergedSet);
-                    localStorage.setItem("knownGoogleCalendarsInStats", JSON.stringify(allCalendarIds));
-                } else {
-                    let initial = new Set(allCalendarIds);
-                    const visRaw = localStorage.getItem("visibleCalendars");
-                    if (visRaw) {
-                        try {
-                            const visArr = JSON.parse(visRaw) as number[];
-                            const fromVis = new Set(visArr.filter((id) => allCalendarIds.includes(id)));
-                            if (fromVis.size > 0) {
-                                initial = fromVis;
-                            }
-                        } catch {
-                        }
+                    } else {
+                        mergedSet.add(id);
                     }
-                    setCalendarsInStats(initial);
-                    localStorage.setItem("googleCalendarsInStats", JSON.stringify([...initial]));
-                    localStorage.setItem("knownGoogleCalendarsInStats", JSON.stringify(allCalendarIds));
+                });
+                setCalendarsInStats(mergedSet);
+            } else {
+                let initial = new Set(allCalendarIds);
+                const visArr = viewPrefs.visibleCalendars;
+                if (visArr.length > 0) {
+                    const fromVis = new Set(visArr.filter((id) => allCalendarIds.includes(id)));
+                    if (fromVis.size > 0) {
+                        initial = fromVis;
+                    }
                 }
-            } catch (e) {
-                console.error("Failed to initialize Google calendars in stats:", e);
-                const allCalendarIds = displayCalendars.map((cal) => cal.id);
-                setCalendarsInStats(new Set(allCalendarIds));
+                setCalendarsInStats(initial);
             }
-            hasInitializedStatsCalendars.current = true;
+        } catch (e) {
+            console.error("Failed to initialize Google calendars in stats:", e);
+            const allCalendarIds = displayCalendars.map((cal) => cal.id);
+            setCalendarsInStats(new Set(allCalendarIds));
         }
-    }, [displayCalendars]);
+        hasInitializedStatsCalendars.current = true;
+    }, [displayCalendars, viewPrefs]);
 
     useEffect(() => {
-        if (hasInitializedStatsCalendars.current && displayCalendars.length > 0) {
-            try {
-                localStorage.setItem("googleCalendarsInStats", JSON.stringify([...calendarsInStats]));
-                const allCalendarIds = displayCalendars.map((cal) => cal.id);
-                localStorage.setItem("knownGoogleCalendarsInStats", JSON.stringify(allCalendarIds));
-            } catch (e) {
-                console.error("Failed to save Google calendars in stats:", e);
-            }
+        if (!viewPrefs) return;
+        if (
+            !hasInitialized.current ||
+            !hasInitializedCalendars.current ||
+            !hasInitializedStatsCalendars.current
+        ) {
+            return;
         }
-    }, [calendarsInStats, displayCalendars]);
+        if (savePrefsDebounceRef.current) {
+            clearTimeout(savePrefsDebounceRef.current);
+        }
+        savePrefsDebounceRef.current = setTimeout(() => {
+            const payload: CalendarViewPrefsV1 = {
+                includeGoogleInStats,
+                visibleCategories: [...visibleCategories],
+                knownCategories: categories.map((c) => c.name),
+                visibleCalendars: [...visibleCalendars],
+                knownCalendars: displayCalendars.map((c) => c.id),
+                googleCalendarsInStats: [...calendarsInStats],
+                knownGoogleCalendarsInStats: displayCalendars.map((c) => c.id),
+            };
+            saveCalendarViewPrefs(payload).catch((e) => {
+                console.error("[Calendar] Failed to save calendar view prefs:", e);
+            });
+        }, 250);
+        return () => {
+            if (savePrefsDebounceRef.current) {
+                clearTimeout(savePrefsDebounceRef.current);
+            }
+        };
+    }, [
+        viewPrefs,
+        includeGoogleInStats,
+        visibleCategories,
+        visibleCalendars,
+        calendarsInStats,
+        categories,
+        displayCalendars,
+    ]);
 
     const categoryColorMap = useMemo(() => {
         const map = new Map<string, string>();
