@@ -5,11 +5,79 @@ on:
   push:
     branches:
       - master
+      - cross-platform
   release:
     types: [published]
 
 jobs:
+  rust-lib-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev pkg-config xvfb
+
+      - name: cargo test (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: src-tauri
+        run: xvfb-run -a cargo test --lib
+
+      - name: cargo test
+        if: matrix.os != 'ubuntu-latest'
+        working-directory: src-tauri
+        run: cargo test --lib
+
+  build-branch:
+    needs: rust-lib-tests
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/cross-platform') || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/master')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: "npm"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Tauri build (verify only, no release)
+        run: npm run tauri -- build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+          VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.VITE_GOOGLE_CLIENT_SECRET }}
+
   build:
+    needs: rust-lib-tests
+    if: github.event_name == 'release' || (github.event_name == 'push' && github.ref == 'refs/heads/master') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
     permissions:
       contents: write
     runs-on: windows-latest
