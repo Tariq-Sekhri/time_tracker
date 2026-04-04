@@ -1,7 +1,7 @@
 - High priority
-    - distribution 
 - mid priority
-    - users can see all app names, allow them to more easily make regex
 - low priority
+    - distribution 
+    - users can see all app names, allow them to more easily make regex
 - not planned
     - afk detection

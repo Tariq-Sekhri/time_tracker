@@ -1,7 +1,13 @@
-import { useMemo } from "react";
-import { useSettingsStore } from "../stores/settingsStore.ts";
+import { useEffect, useMemo, useState } from "react";
+import { useToast } from "../Componants/Toast.tsx";
+import {
+    RIGHT_SIDEBAR_WIDTH_MAX,
+    RIGHT_SIDEBAR_WIDTH_MIN,
+    useSettingsStore,
+} from "../stores/settingsStore.ts";
 
 export default function Settings() {
+    const { showToast } = useToast();
     const {
         calendarStartHour,
         setCalendarStartHour,
@@ -15,6 +21,14 @@ export default function Settings() {
         setCategorySidebarCount,
         resetSettings,
     } = useSettingsStore();
+
+    const [rightSidebarDraft, setRightSidebarDraft] = useState(() =>
+        String(rightSidebarWidth)
+    );
+
+    useEffect(() => {
+        setRightSidebarDraft(String(rightSidebarWidth));
+    }, [rightSidebarWidth]);
 
     const windowEndHour = useMemo(() => calendarStartHour + 24, [calendarStartHour]);
     const windowText = useMemo(() => {
@@ -61,11 +75,38 @@ export default function Settings() {
                             <label className="text-sm text-gray-300">Right sidebar width (px)</label>
                             <input
                                 type="number"
-                                min={280}
-                                max={800}
                                 step={1}
-                                value={rightSidebarWidth}
-                                onChange={(e) => setRightSidebarWidth(Number(e.target.value))}
+                                value={rightSidebarDraft}
+                                onChange={(e) => setRightSidebarDraft(e.target.value)}
+                                onBlur={() => {
+                                    const t = rightSidebarDraft.trim();
+                                    const revert = () =>
+                                        setRightSidebarDraft(String(rightSidebarWidth));
+                                    if (t === "") {
+                                        showToast("Sidebar width: enter a number.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    const n = Number(t);
+                                    if (!Number.isFinite(n)) {
+                                        showToast("Sidebar width: not a valid number.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    const w = Math.trunc(n);
+                                    if (w < RIGHT_SIDEBAR_WIDTH_MIN || w > RIGHT_SIDEBAR_WIDTH_MAX) {
+                                        showToast(
+                                            `Sidebar width: use ${RIGHT_SIDEBAR_WIDTH_MIN}–${RIGHT_SIDEBAR_WIDTH_MAX} px.`,
+                                            "error"
+                                        );
+                                        revert();
+                                        return;
+                                    }
+                                    setRightSidebarDraft(String(w));
+                                    if (w !== rightSidebarWidth) {
+                                        setRightSidebarWidth(w);
+                                    }
+                                }}
                                 className="w-24 px-2 py-1 bg-gray-800 text-white rounded text-sm"
                             />
                         </div>
