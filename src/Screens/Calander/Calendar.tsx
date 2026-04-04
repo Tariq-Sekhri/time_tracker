@@ -725,13 +725,13 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
 
 
     return (
-        <div className="flex flex-col h-full w-full">
+        <div className="flex flex-col flex-1 min-h-0 w-full">
             <CalenderHeader headerTitle={headerTitle} onClick={goToPrevWeek} d={date} onClick1={goToNextWeek}
                             onClick2={goToToday}/>
 
             <div className="flex flex-1 overflow-hidden min-h-0">
                 <div className="flex-1 overflow-hidden min-h-0">
-                    <div className="h-full p-4 flex flex-col" onClick={handleCalendarClick}>
+                    <div className="h-full min-h-0 flex flex-col" onClick={handleCalendarClick}>
                         <RenderCalendarContent
                             ref={calenderRef}
                             date={date}

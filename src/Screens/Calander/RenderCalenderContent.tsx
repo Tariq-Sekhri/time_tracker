@@ -617,7 +617,7 @@ export default function RenderCalendarContent({
                         </div>
                     </div>
                 </div>
-                <div ref={calendarHostRef} className="flex-1 h-full overflow-hidden min-h-0 min-w-0">
+                <div ref={calendarHostRef} className="calendar-fc-host flex-1 h-full min-h-0 min-w-0 overflow-hidden">
                     <FullCalendar
                         height="100%"
                         slotMinTime={slotMinTime}
