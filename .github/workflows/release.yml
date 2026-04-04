@@ -39,12 +39,24 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             libx11-dev \
-            xvfb
+            xvfb \
+            openbox \
+            x11-apps \
+            xdotool
 
       - name: cargo test (Linux)
         if: matrix.os == 'ubuntu-latest'
         working-directory: src-tauri
-        run: xvfb-run -a cargo test --lib
+        run: |
+          xvfb-run -a bash -c '
+            openbox > /dev/null 2>&1 &
+            sleep 2
+            xclock -geometry 80x80+100+100 > /dev/null 2>&1 &
+            sleep 2
+            xdotool search --class Xclock windowactivate 2>/dev/null || true
+            sleep 1
+            cargo test --lib
+          '
 
       - name: cargo test
         if: matrix.os != 'ubuntu-latest'

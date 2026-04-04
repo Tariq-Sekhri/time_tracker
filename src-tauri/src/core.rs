@@ -161,7 +161,7 @@ fn get_foreground_app() -> Result<String, Error> {
 
         xlib::XGetInputFocus(display, &mut focus_return, &mut revert_to);
 
-        if focus_return == 0 {
+        if focus_return == 0 || focus_return == 1 {
             xlib::XCloseDisplay(display);
             return Err(anyhow::anyhow!("Failed to get focused window").into());
         }
