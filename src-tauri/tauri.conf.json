@@ -42,6 +42,12 @@
       "nsis": {
         "installerHooks": "./nsis-hooks.nsh"
       }
+    },
+    "linux": {
+      "deb": {
+        "postInstallScript": "./bundle-scripts/deb-postinst.sh",
+        "postRemoveScript": "./bundle-scripts/deb-postrm.sh"
+      }
     }
   },
   "plugins": {
