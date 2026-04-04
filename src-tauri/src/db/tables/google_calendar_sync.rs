@@ -218,6 +218,11 @@ async fn fetch_google_calendar_events_internal(
             let start = parse_event_time(&event.start)?;
             let end = parse_event_time(&event.end)?;
 
+            let dur_sec = end.timestamp() - start.timestamp();
+            if dur_sec > 0 && dur_sec >= 86400 && dur_sec % 86400 == 0 {
+                return None;
+            }
+
             let start_time = start.time();
             let end_time = end.time();
             let start_date = start.date_naive();
