@@ -23,6 +23,9 @@ export type SettingsState = {
 
 const STORAGE_KEY = "time-tracker:settings";
 
+export const RIGHT_SIDEBAR_WIDTH_MIN = 280;
+export const RIGHT_SIDEBAR_WIDTH_MAX = 800;
+
 const DEFAULT_SETTINGS: Omit<SettingsState, "setCalendarStartHour" | "setRightSidebarWidth" | "setTimeBlockSettings" | "setUiMinAppDuration" | "setCategorySidebarCount" | "resetSettings"> = {
     calendarStartHour: 6,
     rightSidebarWidth: 480,
@@ -58,7 +61,7 @@ function loadStoredSettings(): Omit<
             ? clampInt(parsed.calendarStartHour, 0, 23)
             : DEFAULT_SETTINGS.calendarStartHour;
         const rightSidebarWidth = isFiniteNumber(parsed?.rightSidebarWidth)
-            ? clampInt(parsed.rightSidebarWidth, 280, 800)
+            ? clampInt(parsed.rightSidebarWidth, RIGHT_SIDEBAR_WIDTH_MIN, RIGHT_SIDEBAR_WIDTH_MAX)
             : DEFAULT_SETTINGS.rightSidebarWidth;
 
         const tb = parsed?.timeBlockSettings ?? {};
@@ -138,7 +141,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
             });
         },
         setRightSidebarWidth: (width) => {
-            const rightSidebarWidth = isFiniteNumber(width) ? clampInt(width, 280, 800) : DEFAULT_SETTINGS.rightSidebarWidth;
+            const rightSidebarWidth = isFiniteNumber(width)
+                ? clampInt(width, RIGHT_SIDEBAR_WIDTH_MIN, RIGHT_SIDEBAR_WIDTH_MAX)
+                : DEFAULT_SETTINGS.rightSidebarWidth;
             const cur = get();
             setAndPersist({
                 calendarStartHour: cur.calendarStartHour,
