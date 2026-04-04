@@ -30,6 +30,12 @@ body {
     height: 0;
 }
 
+.calendar-fc-host,
+.calendar-fc-host .fc {
+    height: 100%;
+    min-height: 0;
+}
+
 /* FullCalendar dark theme styling */
 .fc-theme-standard .fc-col-header-cell {
     background-color: #1f2937 !important; /* gray-800 */
