@@ -205,6 +205,32 @@ fn get_foreground_app() -> Result<String, Error> {
     }
 }
 
+#[cfg(test)]
+mod foreground_app_tests {
+    use super::get_foreground_app;
+
+    #[test]
+    #[cfg(all(test, target_os = "windows"))]
+    fn get_foreground_app_returns_non_empty_on_windows() {
+        let s = get_foreground_app().expect("foreground app");
+        assert!(!s.trim().is_empty());
+    }
+
+    #[test]
+    #[cfg(all(test, target_os = "macos"))]
+    fn get_foreground_app_returns_non_empty_on_macos() {
+        let s = get_foreground_app().expect("foreground app");
+        assert!(!s.trim().is_empty());
+    }
+
+    #[test]
+    #[cfg(all(test, target_os = "linux"))]
+    fn get_foreground_app_returns_non_empty_on_linux() {
+        let s = get_foreground_app().expect("foreground app");
+        assert!(!s.trim().is_empty());
+    }
+}
+
 fn generate_log() -> Result<NewLog, Error> {
     let foreground_window = get_foreground_app()?;
     let sanitized_app = sanitize_app_name(&foreground_window);

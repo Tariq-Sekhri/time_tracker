@@ -1,6 +1,3 @@
-#[cfg(not(target_os = "windows"))]
-compile_error!("time-tracker supports only Windows. macOS and Linux builds are not supported.");
-
 mod core;
 mod db;
 mod tray;
