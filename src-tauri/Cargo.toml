@@ -30,6 +30,7 @@ chrono = { version = "0.4", features = ["clock"] }
 regex = "1"
 anyhow = "1"
 tauri-plugin-clipboard-manager = "2.3.2"
+tauri-plugin-autostart = "2"
 reqwest = { version = "0.12", features = ["json"] }
 oauth2 = "4.4"
 axum = "0.7"

@@ -68,6 +68,7 @@ pub fn run() {
     
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_autostart::Builder::new().build())
         .setup(|app| {
             app.manage(UpdateState {
                 update: Mutex::new(None),
@@ -84,6 +85,13 @@ pub fn run() {
             }
 
             tray::setup_tray(app.handle())?;
+
+            #[cfg(all(target_os = "macos", not(debug_assertions)))]
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                let _ = app.handle().autolaunch().enable();
+            }
+
             tauri::async_runtime::spawn(supervisor(app.handle().clone()));
 
             let handle = app.handle().clone();
