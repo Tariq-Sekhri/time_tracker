@@ -1,4 +1,3 @@
-use crate::db;
 use crate::db::Error;
 use crate::db::tables::google_calendar::{
     get_google_calendar_by_id, get_google_calendars, GoogleCalendar, GoogleCalendarInfo,
@@ -104,10 +103,9 @@ struct GoogleApiCalendarListResponse {
 }
 
 #[tauri::command]
-pub async fn list_available_google_calendars(
-    client_id: String,
-    client_secret: String,
-) -> Result<Vec<GoogleCalendarInfo>, Error> {
+pub async fn list_available_google_calendars() -> Result<Vec<GoogleCalendarInfo>, Error> {
+    let (client_id, client_secret) =
+        crate::google_oauth::resolve_google_oauth_app_credentials().await?;
     let access_token = get_valid_access_token(&client_id, &client_secret).await?;
     
     let selected_calendars = get_google_calendars().await?;
@@ -267,9 +265,9 @@ fn parse_event_time(time: &GoogleApiEventTime) -> Option<DateTime<Utc>> {
 #[tauri::command]
 pub async fn get_google_calendar_events(
     params: GetGoogleCalendarEventsParams,
-    client_id: String,
-    client_secret: String,
 ) -> Result<Vec<GoogleCalendarEvent>, Error> {
+    let (client_id, client_secret) =
+        crate::google_oauth::resolve_google_oauth_app_credentials().await?;
     let calendar = get_google_calendar_by_id(params.calendar_id).await?;
     fetch_google_calendar_events_internal(
         &calendar,
@@ -284,14 +282,15 @@ pub async fn get_google_calendar_events(
 #[tauri::command]
 pub async fn get_all_google_calendar_events(
     params: GetAllGoogleCalendarEventsParams,
-    client_id: String,
-    client_secret: String,
 ) -> Result<Vec<GoogleCalendarEvent>, Error> {
     let calendars = get_google_calendars().await?;
 
     if calendars.is_empty() {
         return Ok(Vec::new());
     }
+
+    let (client_id, client_secret) =
+        crate::google_oauth::resolve_google_oauth_app_credentials().await?;
 
     let mut all_events = Vec::new();
     let mut success_count = 0;
@@ -334,9 +333,9 @@ pub async fn get_all_google_calendar_events(
 #[tauri::command]
 pub async fn create_google_calendar_event(
     params: CreateGoogleCalendarEventParams,
-    client_id: String,
-    client_secret: String,
 ) -> Result<String, Error> {
+    let (client_id, client_secret) =
+        crate::google_oauth::resolve_google_oauth_app_credentials().await?;
     let calendar = get_google_calendar_by_id(params.calendar_id).await?;
     let access_token = get_valid_access_token(&client_id, &client_secret).await?;
 
@@ -384,9 +383,9 @@ pub async fn create_google_calendar_event(
 #[tauri::command]
 pub async fn update_google_calendar_event(
     update: UpdateGoogleCalendarEventParams,
-    client_id: String,
-    client_secret: String,
 ) -> Result<(), Error> {
+    let (client_id, client_secret) =
+        crate::google_oauth::resolve_google_oauth_app_credentials().await?;
     let calendar = get_google_calendar_by_id(update.calendar_id).await?;
     let access_token = get_valid_access_token(&client_id, &client_secret).await?;
 
@@ -430,9 +429,9 @@ pub async fn update_google_calendar_event(
 #[tauri::command]
 pub async fn delete_google_calendar_event(
     params: DeleteGoogleCalendarEventParams,
-    client_id: String,
-    client_secret: String,
 ) -> Result<(), Error> {
+    let (client_id, client_secret) =
+        crate::google_oauth::resolve_google_oauth_app_credentials().await?;
     let calendar = get_google_calendar_by_id(params.calendar_id).await?;
     let access_token = get_valid_access_token(&client_id, &client_secret).await?;
 

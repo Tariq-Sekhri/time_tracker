@@ -1,3 +1,5 @@
+use crate::db::get_pool;
+use crate::db::tables::app_metadata_kv::{self, META_GOOGLE_CLIENT_ID, META_GOOGLE_CLIENT_SECRET};
 use crate::db::tables::google_calendar::{
     delete_google_oauth, get_google_oauth, save_google_oauth, update_google_oauth_tokens,
     NewGoogleOAuth,
@@ -35,11 +37,58 @@ struct OAuthState {
     error: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct GoogleOAuthAppCredentials {
+    pub client_id: String,
+    pub client_secret: String,
+}
+
+pub async fn resolve_google_oauth_app_credentials() -> Result<(String, String), Error> {
+    let pool = get_pool().await?;
+    let client_id = app_metadata_kv::metadata_get(&pool, META_GOOGLE_CLIENT_ID)
+        .await?
+        .unwrap_or_default();
+    let client_secret = app_metadata_kv::metadata_get(&pool, META_GOOGLE_CLIENT_SECRET)
+        .await?
+        .unwrap_or_default();
+    if client_id.is_empty() || client_secret.is_empty() {
+        return Err(anyhow::anyhow!(
+            "Google OAuth app credentials not configured. Set them in the app or database."
+        )
+        .into());
+    }
+    Ok((client_id, client_secret))
+}
+
 #[tauri::command]
-pub async fn google_oauth_login(
+pub async fn get_google_oauth_app_credentials() -> Result<GoogleOAuthAppCredentials, Error> {
+    let pool = get_pool().await?;
+    let client_id = app_metadata_kv::metadata_get(&pool, META_GOOGLE_CLIENT_ID)
+        .await?
+        .unwrap_or_default();
+    let client_secret = app_metadata_kv::metadata_get(&pool, META_GOOGLE_CLIENT_SECRET)
+        .await?
+        .unwrap_or_default();
+    Ok(GoogleOAuthAppCredentials {
+        client_id,
+        client_secret,
+    })
+}
+
+#[tauri::command]
+pub async fn set_google_oauth_app_credentials(
     client_id: String,
     client_secret: String,
-) -> Result<AuthStatus, Error> {
+) -> Result<(), Error> {
+    let pool = get_pool().await?;
+    app_metadata_kv::metadata_set(&pool, META_GOOGLE_CLIENT_ID, &client_id).await?;
+    app_metadata_kv::metadata_set(&pool, META_GOOGLE_CLIENT_SECRET, &client_secret).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn google_oauth_login() -> Result<AuthStatus, Error> {
+    let (client_id, client_secret) = resolve_google_oauth_app_credentials().await?;
     let client = BasicClient::new(
         ClientId::new(client_id),
         Some(ClientSecret::new(client_secret)),
@@ -205,10 +254,7 @@ pub async fn google_oauth_logout() -> Result<(), Error> {
     Ok(())
 }
 
-pub async fn get_valid_access_token(
-    client_id: &str,
-    client_secret: &str,
-) -> Result<String, Error> {
+pub async fn get_valid_access_token(client_id: &str, client_secret: &str) -> Result<String, Error> {
     let oauth = get_google_oauth()
         .await?
         .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;

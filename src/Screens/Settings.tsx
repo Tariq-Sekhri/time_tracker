@@ -11,6 +11,8 @@ export default function Settings() {
         setTimeBlockSettings,
         uiMinAppDuration,
         setUiMinAppDuration,
+        categorySidebarCount,
+        setCategorySidebarCount,
         resetSettings,
     } = useSettingsStore();
 
@@ -64,6 +66,19 @@ export default function Settings() {
                                 step={1}
                                 value={rightSidebarWidth}
                                 onChange={(e) => setRightSidebarWidth(Number(e.target.value))}
+                                className="w-24 px-2 py-1 bg-gray-800 text-white rounded text-sm"
+                            />
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4">
+                            <label className="text-sm text-gray-300">Categories in stats sidebar</label>
+                            <input
+                                type="number"
+                                min={1}
+                                max={30}
+                                step={1}
+                                value={categorySidebarCount}
+                                onChange={(e) => setCategorySidebarCount(Number(e.target.value))}
                                 className="w-24 px-2 py-1 bg-gray-800 text-white rounded text-sm"
                             />
                         </div>

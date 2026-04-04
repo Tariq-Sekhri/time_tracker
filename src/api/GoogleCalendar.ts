@@ -3,31 +3,89 @@ import { invokeOrThrow } from "../utils.ts";
 const DEFAULT_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const DEFAULT_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || "";
 
-let CLIENT_ID = localStorage.getItem("google_oauth_client_id") || DEFAULT_CLIENT_ID;
-let CLIENT_SECRET = localStorage.getItem("google_oauth_client_secret") || DEFAULT_CLIENT_SECRET;
+export type GoogleOAuthAppCredentials = {
+    client_id: string;
+    client_secret: string;
+};
 
-export function setGoogleOAuthCredentials(clientId: string, clientSecret: string) {
-    CLIENT_ID = clientId;
-    CLIENT_SECRET = clientSecret;
-    localStorage.setItem("google_oauth_client_id", clientId);
-    localStorage.setItem("google_oauth_client_secret", clientSecret);
+let credsCache: { clientId: string; clientSecret: string } | null = null;
+
+function applyCache(raw: GoogleOAuthAppCredentials) {
+    credsCache = {
+        clientId: raw.client_id,
+        clientSecret: raw.client_secret,
+    };
+}
+
+export async function hydrateGoogleOAuthCredentials(): Promise<void> {
+    const fromDb = await invokeOrThrow<GoogleOAuthAppCredentials>(
+        "get_google_oauth_app_credentials"
+    );
+    let clientId = fromDb.client_id || "";
+    let clientSecret = fromDb.client_secret || "";
+
+    try {
+        const legacyId = localStorage.getItem("google_oauth_client_id");
+        const legacySecret = localStorage.getItem("google_oauth_client_secret");
+        if (legacyId && legacySecret) {
+            clientId = legacyId;
+            clientSecret = legacySecret;
+            await invokeOrThrow("set_google_oauth_app_credentials", {
+                clientId,
+                clientSecret,
+            });
+            localStorage.removeItem("google_oauth_client_id");
+            localStorage.removeItem("google_oauth_client_secret");
+            applyCache({ client_id: clientId, client_secret: clientSecret });
+            return;
+        }
+    } catch (e) {
+        console.error("[Google OAuth] Failed to migrate credentials from localStorage:", e);
+    }
+
+    if (!clientId && !clientSecret && DEFAULT_CLIENT_ID && DEFAULT_CLIENT_SECRET) {
+        clientId = DEFAULT_CLIENT_ID;
+        clientSecret = DEFAULT_CLIENT_SECRET;
+        await invokeOrThrow("set_google_oauth_app_credentials", {
+            clientId,
+            clientSecret,
+        });
+    }
+
+    applyCache({ client_id: clientId, client_secret: clientSecret });
+}
+
+export async function setGoogleOAuthCredentials(clientId: string, clientSecret: string): Promise<void> {
+    await invokeOrThrow("set_google_oauth_app_credentials", {
+        clientId,
+        clientSecret,
+    });
+    applyCache({ client_id: clientId, client_secret: clientSecret });
 }
 
 export function getGoogleOAuthCredentials(): { clientId: string; clientSecret: string } {
-    return { clientId: CLIENT_ID, clientSecret: CLIENT_SECRET };
+    return credsCache ?? {
+        clientId: DEFAULT_CLIENT_ID,
+        clientSecret: DEFAULT_CLIENT_SECRET,
+    };
 }
 
 export function hasGoogleOAuthCredentials(): boolean {
-    return CLIENT_ID !== "" && 
-           CLIENT_SECRET !== "" && 
-           CLIENT_ID.includes(".apps.googleusercontent.com") &&
-           CLIENT_SECRET.startsWith("GOCSPX-") &&
-           !CLIENT_ID.includes("YOUR_DEFAULT") &&
-           !CLIENT_SECRET.includes("YOUR_DEFAULT");
+    const CLIENT_ID = credsCache?.clientId ?? DEFAULT_CLIENT_ID;
+    const CLIENT_SECRET = credsCache?.clientSecret ?? DEFAULT_CLIENT_SECRET;
+    return (
+        CLIENT_ID !== "" &&
+        CLIENT_SECRET !== "" &&
+        CLIENT_ID.includes(".apps.googleusercontent.com") &&
+        CLIENT_SECRET.startsWith("GOCSPX-") &&
+        !CLIENT_ID.includes("YOUR_DEFAULT") &&
+        !CLIENT_SECRET.includes("YOUR_DEFAULT")
+    );
 }
 
 export function isUsingDefaultCredentials(): boolean {
-    return CLIENT_ID === DEFAULT_CLIENT_ID || CLIENT_SECRET === DEFAULT_CLIENT_SECRET;
+    const { clientId, clientSecret } = getGoogleOAuthCredentials();
+    return clientId === DEFAULT_CLIENT_ID || clientSecret === DEFAULT_CLIENT_SECRET;
 }
 
 export type AuthStatus = {
@@ -68,8 +126,8 @@ export type GoogleCalendarEvent = {
     calendar_id: number;
     event_id: string;
     title: string;
-    start: number; // Unix timestamp
-    end: number;   // Unix timestamp
+    start: number;
+    end: number;
     description?: string;
     location?: string;
 };
@@ -94,8 +152,8 @@ export function googleEventPastDurationSeconds(e: GoogleCalendarEvent, nowUnixSe
 export type CreateGoogleCalendarEvent = {
     calendar_id: number;
     title: string;
-    start: number; // Unix timestamp
-    end: number;   // Unix timestamp
+    start: number;
+    end: number;
     description?: string;
 };
 
@@ -103,8 +161,8 @@ export type UpdateGoogleCalendarEvent = {
     calendar_id: number;
     event_id: string;
     title: string;
-    start: number; // Unix timestamp
-    end: number;   // Unix timestamp
+    start: number;
+    end: number;
     description?: string;
 };
 
@@ -113,15 +171,11 @@ export type DeleteGoogleCalendarEvent = {
     event_id: string;
 };
 
-
 export async function google_oauth_login(): Promise<AuthStatus> {
     if (!hasGoogleOAuthCredentials()) {
         throw new Error("OAuth credentials not configured. Please contact the app developer.");
     }
-    return invokeOrThrow<AuthStatus>("google_oauth_login", {
-        clientId: CLIENT_ID,
-        clientSecret: CLIENT_SECRET,
-    });
+    return invokeOrThrow<AuthStatus>("google_oauth_login");
 }
 
 export async function google_oauth_logout(): Promise<null> {
@@ -132,15 +186,11 @@ export async function get_google_auth_status(): Promise<AuthStatus> {
     return invokeOrThrow<AuthStatus>("get_google_auth_status");
 }
 
-
 export async function list_available_google_calendars(): Promise<GoogleCalendarInfo[]> {
     if (!hasGoogleOAuthCredentials()) {
         throw new Error("Google OAuth credentials not set");
     }
-    return invokeOrThrow<GoogleCalendarInfo[]>("list_available_google_calendars", {
-        clientId: CLIENT_ID,
-        clientSecret: CLIENT_SECRET,
-    });
+    return invokeOrThrow<GoogleCalendarInfo[]>("list_available_google_calendars");
 }
 
 export async function get_google_calendars(): Promise<GoogleCalendar[]> {
@@ -163,7 +213,6 @@ export async function delete_google_calendar(id: number): Promise<null> {
     return invokeOrThrow<null>("delete_google_calendar", { id });
 }
 
-
 export async function get_google_calendar_events(
     calendar_id: number,
     start_time: number,
@@ -173,11 +222,11 @@ export async function get_google_calendar_events(
         return [];
     }
     return invokeOrThrow<GoogleCalendarEvent[]>("get_google_calendar_events", {
-        calendarId: calendar_id,
-        startTime: start_time,
-        endTime: end_time,
-        clientId: CLIENT_ID,
-        clientSecret: CLIENT_SECRET,
+        params: {
+            calendarId: calendar_id,
+            startTime: start_time,
+            endTime: end_time,
+        },
     });
 }
 
@@ -193,8 +242,6 @@ export async function get_all_google_calendar_events(
             startTime: start_time,
             endTime: end_time,
         },
-        clientId: CLIENT_ID,
-        clientSecret: CLIENT_SECRET,
     });
 }
 
@@ -206,8 +253,6 @@ export async function create_google_calendar_event(
     }
     return invokeOrThrow<string>("create_google_calendar_event", {
         params: event,
-        clientId: CLIENT_ID,
-        clientSecret: CLIENT_SECRET,
     });
 }
 
@@ -219,8 +264,6 @@ export async function update_google_calendar_event(
     }
     return invokeOrThrow<null>("update_google_calendar_event", {
         update,
-        clientId: CLIENT_ID,
-        clientSecret: CLIENT_SECRET,
     });
 }
 
@@ -232,7 +275,5 @@ export async function delete_google_calendar_event(
     }
     return invokeOrThrow<null>("delete_google_calendar_event", {
         params,
-        clientId: CLIENT_ID,
-        clientSecret: CLIENT_SECRET,
     });
 }

@@ -268,9 +268,9 @@ export default function GoogleCalendarsView() {
                                     <li>Create a project and enable "Google Calendar API"</li>
                                     <li>Create OAuth 2.0 credentials (Desktop app type)</li>
                                     <li>Add redirect URI: <code className="bg-gray-900 px-1 rounded text-xs">http://localhost:8742/oauth/callback</code></li>
-                                    <li>Open <code className="bg-gray-900 px-1 rounded text-xs">src/api/GoogleCalendar.ts</code></li>
-                                    <li>Replace <code className="bg-gray-900 px-1 rounded text-xs">YOUR_DEFAULT_CLIENT_ID_HERE</code> and <code className="bg-gray-900 px-1 rounded text-xs">YOUR_DEFAULT_CLIENT_SECRET_HERE</code> with your actual credentials</li>
-                                    <li>Rebuild the app - all users can now just click "Connect Google Account"!</li>
+                                    <li>Add <code className="bg-gray-900 px-1 rounded text-xs">VITE_GOOGLE_CLIENT_ID</code> and <code className="bg-gray-900 px-1 rounded text-xs">VITE_GOOGLE_CLIENT_SECRET</code> to your <code className="bg-gray-900 px-1 rounded text-xs">.env</code> (or replace defaults in the build)</li>
+                                    <li>Rebuild the app: on first launch the app stores those credentials in your local database together with your session data</li>
+                                    <li>Users can then click "Connect Google Account" without editing source files</li>
                                 </ol>
                             </div>
                             <div className="p-3 bg-blue-900/20 border border-blue-700 rounded">

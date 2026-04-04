@@ -5,6 +5,7 @@ mod core;
 mod db;
 mod tray;
 mod google_oauth;
+mod app_prefs;
 mod commands;
 
 use std::sync::{atomic::AtomicBool, Mutex};
@@ -36,7 +37,11 @@ use db::tables::google_calendar_sync::{
     create_google_calendar_event, delete_google_calendar_event, get_all_google_calendar_events,
     get_google_calendar_events, list_available_google_calendars, update_google_calendar_event,
 };
-use google_oauth::{get_google_auth_status, google_oauth_login, google_oauth_logout};
+use google_oauth::{
+    get_google_auth_status, get_google_oauth_app_credentials, google_oauth_login,
+    google_oauth_logout, set_google_oauth_app_credentials,
+};
+use app_prefs::{get_calendar_view_prefs, set_calendar_view_prefs};
 use db::{
     get_all_db_data, get_db_path_cmd, reset_database, wipe_all_data,
     list_backups, create_manual_backup, restore_backup, get_backup_dir,
@@ -203,6 +208,10 @@ pub fn run() {
             google_oauth_login,
             google_oauth_logout,
             get_google_auth_status,
+            get_google_oauth_app_credentials,
+            set_google_oauth_app_credentials,
+            get_calendar_view_prefs,
+            set_calendar_view_prefs,
             list_backups,
             create_manual_backup,
             restore_backup,

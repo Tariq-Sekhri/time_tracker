@@ -40,7 +40,7 @@ export default function DayStatisticsSidebar({
     googleCalendars,
     trailingToolbar,
 }: DayStatisticsSidebarProps) {
-    const { calendarStartHour } = useSettingsStore();
+    const { calendarStartHour, categorySidebarCount } = useSettingsStore();
     const { day_start: dayStart, day_end: dayEnd } = useMemo(
         () => getCalendarDayRangeUnix(selectedDate, calendarStartHour),
         [selectedDate, calendarStartHour]
@@ -123,13 +123,13 @@ export default function DayStatisticsSidebar({
         }));
 
         if (!includeGoogleInStats) {
-            return trackingCategories.slice(0, 5);
+            return trackingCategories.slice(0, categorySidebarCount);
         }
 
         const combined = [...trackingCategories, ...googleCategories];
         combined.sort((a, b) => b.total_duration - a.total_duration);
-        return combined.slice(0, 5);
-    }, [dayStats, includeGoogleInStats, googleCategories]);
+        return combined.slice(0, categorySidebarCount);
+    }, [dayStats, includeGoogleInStats, googleCategories, categorySidebarCount]);
 
     const maxCategoryDuration = topCategories.length > 0 ? topCategories[0].total_duration : 1;
 
