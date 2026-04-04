@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - master
-      - cross-platform
   release:
     types: [published]
 
@@ -14,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -27,6 +26,23 @@ jobs:
         with:
           workspaces: "./src-tauri -> target"
 
+      - name: cargo test
+        working-directory: src-tauri
+        run: cargo test --lib
+
+  build:
+    needs: rust-lib-tests
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Install Linux dependencies
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -38,77 +54,13 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            libx11-dev \
-            xvfb \
-            openbox \
-            x11-apps \
-            xdotool
-
-      - name: cargo test (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        working-directory: src-tauri
-        run: |
-          xvfb-run -a bash -c '
-            openbox > /dev/null 2>&1 &
-            sleep 2
-            xclock -geometry 80x80+100+100 > /dev/null 2>&1 &
-            sleep 2
-            xdotool search --class Xclock windowactivate 2>/dev/null || true
-            sleep 1
-            cargo test --lib
-          '
-
-      - name: cargo test
-        if: matrix.os != 'ubuntu-latest'
-        working-directory: src-tauri
-        run: cargo test --lib
-
-  build-branch:
-    needs: rust-lib-tests
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/cross-platform') || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/master')
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
+            patchelf
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
-          cache: "npm"
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: "./src-tauri -> target"
-
-      - name: Install frontend dependencies
-        run: npm ci
-
-      - name: Tauri build (verify only, no release)
-        run: npm run tauri -- build
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
-          VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.VITE_GOOGLE_CLIENT_SECRET }}
-
-  build:
-    needs: rust-lib-tests
-    if: github.event_name == 'release' || (github.event_name == 'push' && github.ref == 'refs/heads/master') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
-    permissions:
-      contents: write
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: "npm"
+          cache: npm
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -132,6 +84,6 @@ jobs:
         with:
           tagName: app-v__VERSION__
           releaseName: "Time Tracker v__VERSION__"
-          releaseBody: "Download and run the .exe installer from Assets. Ignore .sig and latest.json files; they are used internally for automatic updates."
+          releaseBody: "Installers for Windows (.exe), macOS (.dmg), and Linux (.deb) are in Assets. Ignore .sig and latest.json where present; they are used for automatic updates."
           releaseDraft: false
           prerelease: false
