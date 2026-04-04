@@ -171,28 +171,52 @@ fn get_foreground_app() -> Result<String, Error> {
         let result = xlib::XFetchName(display, focus_return, &mut name);
 
         if result == 0 || name.is_null() {
-            // Try to get the window class name as fallback
             let mut class_hint: xlib::XClassHint = xlib::XClassHint {
                 res_name: ptr::null_mut(),
                 res_class: ptr::null_mut(),
             };
 
             if xlib::XGetClassHint(display, focus_return, &mut class_hint) != 0 {
+                let res_class_str = if !class_hint.res_class.is_null() {
+                    Some(
+                        std::ffi::CStr::from_ptr(class_hint.res_class as *const i8)
+                            .to_str()
+                            .context("Failed to convert class name")?
+                            .to_string(),
+                    )
+                } else {
+                    None
+                };
+                let res_name_str = if !class_hint.res_name.is_null() {
+                    Some(
+                        std::ffi::CStr::from_ptr(class_hint.res_name as *const i8)
+                            .to_str()
+                            .context("Failed to convert instance name")?
+                            .to_string(),
+                    )
+                } else {
+                    None
+                };
                 if !class_hint.res_class.is_null() {
-                    let class_name = std::ffi::CStr::from_ptr(class_hint.res_class as *const i8)
-                        .to_str()
-                        .context("Failed to convert class name")?
-                        .to_string();
                     xlib::XFree(class_hint.res_class as *mut std::ffi::c_void);
-                    if !class_hint.res_name.is_null() {
-                        xlib::XFree(class_hint.res_name as *mut std::ffi::c_void);
-                    }
-                    xlib::XCloseDisplay(display);
-                    return Ok(class_name);
                 }
                 if !class_hint.res_name.is_null() {
                     xlib::XFree(class_hint.res_name as *mut std::ffi::c_void);
                 }
+                xlib::XCloseDisplay(display);
+                if let Some(s) = res_class_str {
+                    let t = s.trim();
+                    if !t.is_empty() {
+                        return Ok(t.to_string());
+                    }
+                }
+                if let Some(s) = res_name_str {
+                    let t = s.trim();
+                    if !t.is_empty() {
+                        return Ok(t.to_string());
+                    }
+                }
+                return Err(anyhow::anyhow!("Failed to get window name or class").into());
             }
 
             xlib::XCloseDisplay(display);
@@ -217,22 +241,46 @@ fn get_foreground_app() -> Result<String, Error> {
         };
 
         if xlib::XGetClassHint(display, focus_return, &mut class_hint) != 0 {
+            let res_class_str = if !class_hint.res_class.is_null() {
+                Some(
+                    std::ffi::CStr::from_ptr(class_hint.res_class as *const i8)
+                        .to_str()
+                        .context("Failed to convert class name")?
+                        .to_string(),
+                )
+            } else {
+                None
+            };
+            let res_name_str = if !class_hint.res_name.is_null() {
+                Some(
+                    std::ffi::CStr::from_ptr(class_hint.res_name as *const i8)
+                        .to_str()
+                        .context("Failed to convert instance name")?
+                        .to_string(),
+                )
+            } else {
+                None
+            };
             if !class_hint.res_class.is_null() {
-                let class_name = std::ffi::CStr::from_ptr(class_hint.res_class as *const i8)
-                    .to_str()
-                    .context("Failed to convert class name")?
-                    .to_string();
                 xlib::XFree(class_hint.res_class as *mut std::ffi::c_void);
-                if !class_hint.res_name.is_null() {
-                    xlib::XFree(class_hint.res_name as *mut std::ffi::c_void);
-                }
-                xlib::XCloseDisplay(display);
-                if !class_name.trim().is_empty() {
-                    return Ok(class_name);
-                }
-            } else if !class_hint.res_name.is_null() {
+            }
+            if !class_hint.res_name.is_null() {
                 xlib::XFree(class_hint.res_name as *mut std::ffi::c_void);
             }
+            xlib::XCloseDisplay(display);
+            if let Some(s) = res_class_str {
+                let t = s.trim();
+                if !t.is_empty() {
+                    return Ok(t.to_string());
+                }
+            }
+            if let Some(s) = res_name_str {
+                let t = s.trim();
+                if !t.is_empty() {
+                    return Ok(t.to_string());
+                }
+            }
+            return Err(anyhow::anyhow!("Failed to get window name or class").into());
         }
 
         xlib::XCloseDisplay(display);
