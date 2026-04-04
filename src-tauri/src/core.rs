@@ -292,6 +292,89 @@ fn get_foreground_app() -> Result<String, Error> {
 mod foreground_app_tests {
     use super::get_foreground_app;
 
+    #[cfg(all(test, target_os = "linux"))]
+    fn log_linux_foreground_diagnostics() {
+        use std::ptr;
+        use x11::xlib;
+
+        eprintln!(
+            "[linux fg test] DISPLAY={:?} WAYLAND_DISPLAY={:?}",
+            std::env::var("DISPLAY"),
+            std::env::var("WAYLAND_DISPLAY")
+        );
+
+        unsafe {
+            let display = xlib::XOpenDisplay(ptr::null());
+            if display.is_null() {
+                eprintln!("[linux fg test] XOpenDisplay -> null (no X connection)");
+                return;
+            }
+            eprintln!("[linux fg test] XOpenDisplay -> ok");
+
+            let mut focus_return: xlib::Window = 0;
+            let mut revert_to: i32 = 0;
+            xlib::XGetInputFocus(display, &mut focus_return, &mut revert_to);
+            eprintln!(
+                "[linux fg test] XGetInputFocus -> focus_window={} revert_to={}",
+                focus_return, revert_to
+            );
+
+            if focus_return == 0 || focus_return == 1 {
+                eprintln!("[linux fg test] focus is root/none; skipping name/class probes");
+                xlib::XCloseDisplay(display);
+                return;
+            }
+
+            let mut name: *mut i8 = ptr::null_mut();
+            let fetch_status = xlib::XFetchName(display, focus_return, &mut name);
+            eprintln!(
+                "[linux fg test] XFetchName -> status={} name_ptr_is_null={}",
+                fetch_status,
+                name.is_null()
+            );
+            if !name.is_null() {
+                let s = std::ffi::CStr::from_ptr(name);
+                eprintln!(
+                    "[linux fg test] XFetchName -> bytes={:?}",
+                    s.to_bytes()
+                );
+                xlib::XFree(name as *mut std::ffi::c_void);
+            }
+
+            let mut class_hint: xlib::XClassHint = xlib::XClassHint {
+                res_name: ptr::null_mut(),
+                res_class: ptr::null_mut(),
+            };
+            let hint_ok = xlib::XGetClassHint(display, focus_return, &mut class_hint);
+            eprintln!("[linux fg test] XGetClassHint -> nonzero={}", hint_ok);
+            if hint_ok != 0 {
+                if !class_hint.res_name.is_null() {
+                    let s = std::ffi::CStr::from_ptr(class_hint.res_name as *const i8);
+                    eprintln!(
+                        "[linux fg test] XGetClassHint -> res_name bytes={:?}",
+                        s.to_bytes()
+                    );
+                    xlib::XFree(class_hint.res_name as *mut std::ffi::c_void);
+                } else {
+                    eprintln!("[linux fg test] XGetClassHint -> res_name=null");
+                }
+                if !class_hint.res_class.is_null() {
+                    let s = std::ffi::CStr::from_ptr(class_hint.res_class as *const i8);
+                    eprintln!(
+                        "[linux fg test] XGetClassHint -> res_class bytes={:?}",
+                        s.to_bytes()
+                    );
+                    xlib::XFree(class_hint.res_class as *mut std::ffi::c_void);
+                } else {
+                    eprintln!("[linux fg test] XGetClassHint -> res_class=null");
+                }
+            }
+
+            xlib::XCloseDisplay(display);
+            eprintln!("[linux fg test] diagnostics done");
+        }
+    }
+
     #[test]
     #[cfg(all(test, target_os = "windows"))]
     fn get_foreground_app_returns_non_empty_on_windows() {
@@ -329,7 +412,10 @@ mod foreground_app_tests {
     #[test]
     #[cfg(all(test, target_os = "linux"))]
     fn get_foreground_app_returns_non_empty_on_linux() {
-        match get_foreground_app() {
+        log_linux_foreground_diagnostics();
+        let outcome = get_foreground_app();
+        eprintln!("[linux fg test] get_foreground_app() -> {:?}", outcome);
+        match outcome {
             Ok(s) => assert!(
                 !s.trim().is_empty(),
                 "expected non-empty foreground name; got Ok(len={}, repr={:?})",
