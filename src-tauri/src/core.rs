@@ -184,8 +184,14 @@ fn get_foreground_app() -> Result<String, Error> {
                         .context("Failed to convert class name")?
                         .to_string();
                     xlib::XFree(class_hint.res_class as *mut std::ffi::c_void);
+                    if !class_hint.res_name.is_null() {
+                        xlib::XFree(class_hint.res_name as *mut std::ffi::c_void);
+                    }
                     xlib::XCloseDisplay(display);
                     return Ok(class_name);
+                }
+                if !class_hint.res_name.is_null() {
+                    xlib::XFree(class_hint.res_name as *mut std::ffi::c_void);
                 }
             }
 
@@ -199,9 +205,38 @@ fn get_foreground_app() -> Result<String, Error> {
             .to_string();
 
         xlib::XFree(name as *mut std::ffi::c_void);
-        xlib::XCloseDisplay(display);
 
-        Ok(window_name)
+        if !window_name.trim().is_empty() {
+            xlib::XCloseDisplay(display);
+            return Ok(window_name);
+        }
+
+        let mut class_hint: xlib::XClassHint = xlib::XClassHint {
+            res_name: ptr::null_mut(),
+            res_class: ptr::null_mut(),
+        };
+
+        if xlib::XGetClassHint(display, focus_return, &mut class_hint) != 0 {
+            if !class_hint.res_class.is_null() {
+                let class_name = std::ffi::CStr::from_ptr(class_hint.res_class as *const i8)
+                    .to_str()
+                    .context("Failed to convert class name")?
+                    .to_string();
+                xlib::XFree(class_hint.res_class as *mut std::ffi::c_void);
+                if !class_hint.res_name.is_null() {
+                    xlib::XFree(class_hint.res_name as *mut std::ffi::c_void);
+                }
+                xlib::XCloseDisplay(display);
+                if !class_name.trim().is_empty() {
+                    return Ok(class_name);
+                }
+            } else if !class_hint.res_name.is_null() {
+                xlib::XFree(class_hint.res_name as *mut std::ffi::c_void);
+            }
+        }
+
+        xlib::XCloseDisplay(display);
+        Err(anyhow::anyhow!("Failed to get window name or class").into())
     }
 }
 
@@ -212,22 +247,52 @@ mod foreground_app_tests {
     #[test]
     #[cfg(all(test, target_os = "windows"))]
     fn get_foreground_app_returns_non_empty_on_windows() {
-        let s = get_foreground_app().expect("foreground app");
-        assert!(!s.trim().is_empty());
+        match get_foreground_app() {
+            Ok(s) => assert!(
+                !s.trim().is_empty(),
+                "expected non-empty foreground name; got Ok(len={}, repr={:?})",
+                s.len(),
+                s
+            ),
+            Err(e) => panic!(
+                "expected Ok(non-empty) from get_foreground_app(); got Err({:?})",
+                e
+            ),
+        }
     }
 
     #[test]
     #[cfg(all(test, target_os = "macos"))]
     fn get_foreground_app_returns_non_empty_on_macos() {
-        let s = get_foreground_app().expect("foreground app");
-        assert!(!s.trim().is_empty());
+        match get_foreground_app() {
+            Ok(s) => assert!(
+                !s.trim().is_empty(),
+                "expected non-empty foreground name; got Ok(len={}, repr={:?})",
+                s.len(),
+                s
+            ),
+            Err(e) => panic!(
+                "expected Ok(non-empty) from get_foreground_app(); got Err({:?})",
+                e
+            ),
+        }
     }
 
     #[test]
     #[cfg(all(test, target_os = "linux"))]
     fn get_foreground_app_returns_non_empty_on_linux() {
-        let s = get_foreground_app().expect("foreground app");
-        assert!(!s.trim().is_empty());
+        match get_foreground_app() {
+            Ok(s) => assert!(
+                !s.trim().is_empty(),
+                "expected non-empty foreground name; got Ok(len={}, repr={:?})",
+                s.len(),
+                s
+            ),
+            Err(e) => panic!(
+                "expected Ok(non-empty) from get_foreground_app(); got Err({:?})",
+                e
+            ),
+        }
     }
 }
 
