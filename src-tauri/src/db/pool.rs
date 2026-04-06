@@ -1,5 +1,4 @@
 use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
-use std::env;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -14,12 +13,11 @@ pub fn drop_all() -> std::io::Result<()> {
 }
 
 pub fn get_db_path() -> PathBuf {
-    let appdata = env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
-
     let db_filename = "app.db";
-  // let db_filename = "app-test.db";
-
-    PathBuf::from(appdata).join("time-tracker").join(db_filename)
+    dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("time-tracker")
+        .join(db_filename)
 }
 
 pub async fn reset_pool() -> Result<(), sqlx::Error> {

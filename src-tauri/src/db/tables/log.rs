@@ -20,7 +20,7 @@ pub struct MergedLog {
     pub duration: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NewLog {
     pub app: String,
     pub timestamp: i64,

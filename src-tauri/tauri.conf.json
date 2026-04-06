@@ -45,6 +45,7 @@
     },
     "linux": {
       "deb": {
+        "depends": ["xdotool"],
         "postInstallScript": "./bundle-scripts/deb-postinst.sh",
         "postRemoveScript": "./bundle-scripts/deb-postrm.sh"
       }
