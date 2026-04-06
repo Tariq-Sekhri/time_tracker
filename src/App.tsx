@@ -34,6 +34,15 @@ function AppInner() {
     const [updateError, setUpdateError] = useState<string | null>(null);
     const lastDownloadPctRef = useRef<number | null>(null);
     const didShowUnknownDownloadRef = useRef(false);
+    const showToastRef = useRef(showToast);
+    const updateToastRef = useRef(updateToast);
+    const removeToastRef = useRef(removeToast);
+
+    useEffect(() => {
+        showToastRef.current = showToast;
+        updateToastRef.current = updateToast;
+        removeToastRef.current = removeToast;
+    }, [showToast, updateToast, removeToast]);
 
     useEffect(() => {
         let unlistenFn: (() => void) | null = null;
@@ -54,14 +63,14 @@ function AppInner() {
             unlistenErr = await listen<string>("update-error", (e) => {
                 const msg = typeof e.payload === "string" ? e.payload : toErrorString(e.payload);
                 setUpdateError(msg);
-                showToast("Update error", "error", 0, msg);
+                showToastRef.current("Update error", "error", 0, msg);
             });
 
             unlistenDownloading = await listen("update-downloading", () => {
                 if (!updaterToastId) {
-                    updaterToastId = showToast("Downloading update…", "loading", 0);
+                    updaterToastId = showToastRef.current("Downloading update…", "loading", 0);
                 } else {
-                    updateToast(updaterToastId, "Downloading update…", "loading");
+                    updateToastRef.current(updaterToastId, "Downloading update…", "loading");
                 }
                 didShowUnknownDownloadRef.current = true;
             });
@@ -70,13 +79,13 @@ function AppInner() {
                 "update-download-progress",
                 (e) => {
                     if (!updaterToastId) {
-                        updaterToastId = showToast("Downloading update…", "loading", 0);
+                        updaterToastId = showToastRef.current("Downloading update…", "loading", 0);
                     }
                     const downloaded = e.payload?.downloaded ?? 0;
                     const total = e.payload?.total ?? 0;
                     if (total <= 0) {
                         if (!didShowUnknownDownloadRef.current) {
-                            updateToast(updaterToastId, "Downloading update…", "loading");
+                            updateToastRef.current(updaterToastId, "Downloading update…", "loading");
                             didShowUnknownDownloadRef.current = true;
                         }
                         return;
@@ -87,7 +96,7 @@ function AppInner() {
                     }
                     lastDownloadPctRef.current = pct;
                     didShowUnknownDownloadRef.current = false;
-                    updateToast(
+                    updateToastRef.current(
                         updaterToastId,
                         `Downloading update… ${pct}%`,
                         "loading"
@@ -97,22 +106,22 @@ function AppInner() {
 
             unlistenInstalling = await listen("update-installing", () => {
                 if (!updaterToastId) {
-                    updaterToastId = showToast("Installing update…", "loading", 0);
+                    updaterToastId = showToastRef.current("Installing update…", "loading", 0);
                 } else {
-                    updateToast(updaterToastId, "Installing update…", "loading");
+                    updateToastRef.current(updaterToastId, "Installing update…", "loading");
                 }
             });
 
             unlistenInstalled = await listen("update-installed", () => {
                 if (updaterToastId) {
-                    updateToast(updaterToastId, "Update installed", "success");
+                    updateToastRef.current(updaterToastId, "Update installed", "success");
                     const id = updaterToastId;
                     updaterToastId = null;
                     lastDownloadPctRef.current = null;
                     didShowUnknownDownloadRef.current = false;
-                    setTimeout(() => removeToast(id), 2000);
+                    setTimeout(() => removeToastRef.current(id), 2000);
                 } else {
-                    showToast("Update installed", "success");
+                    showToastRef.current("Update installed", "success");
                 }
             });
         };
@@ -127,7 +136,7 @@ function AppInner() {
             if (unlistenInstalling) unlistenInstalling();
             if (unlistenInstalled) unlistenInstalled();
         };
-    }, [showToast, updateToast, removeToast]);
+    }, []);
 
     useEffect(() => {
         const onError = (e: Event) => {
