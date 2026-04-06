@@ -1,7 +1,9 @@
 - High priority
+    - wal 
+    - macos
+    - linux check scroll bar 
 - mid priority
 - low priority
     - distribution 
-    - users can see all app names, allow them to more easily make regex
 - not planned
     - afk detection
