@@ -1,7 +1,6 @@
 - High priority
     - wal 
     - macos
-    - linux check scroll bar 
     - add a lock to settings so it doesnt get reset 
 - mid priority
 - low priority
