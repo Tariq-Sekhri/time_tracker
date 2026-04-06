@@ -51,8 +51,26 @@ function AppInner() {
         let unlistenProgress: (() => void) | null = null;
         let unlistenInstalling: (() => void) | null = null;
         let unlistenInstalled: (() => void) | null = null;
+        let unknownDownloadAnimTimer: ReturnType<typeof setInterval> | null = null;
+        let unknownDownloadAnimStep = 0;
 
         let updaterToastId: string | null = null;
+        const startUnknownDownloadAnim = () => {
+            if (!updaterToastId) return;
+            if (unknownDownloadAnimTimer) return;
+            unknownDownloadAnimStep = 0;
+            unknownDownloadAnimTimer = setInterval(() => {
+                if (!updaterToastId) return;
+                const dots = ".".repeat((unknownDownloadAnimStep % 3) + 1);
+                unknownDownloadAnimStep += 1;
+                updateToastRef.current(updaterToastId, `Downloading${dots}`, "loading");
+            }, 500);
+        };
+        const stopUnknownDownloadAnim = () => {
+            if (!unknownDownloadAnimTimer) return;
+            clearInterval(unknownDownloadAnimTimer);
+            unknownDownloadAnimTimer = null;
+        };
 
         const setup = async () => {
             const unlisten = await listen("update-available", () => {
@@ -73,6 +91,7 @@ function AppInner() {
                     updateToastRef.current(updaterToastId, "Downloading update…", "loading");
                 }
                 didShowUnknownDownloadRef.current = true;
+                startUnknownDownloadAnim();
             });
 
             unlistenProgress = await listen<{ downloaded: number; total: number }>(
@@ -83,13 +102,14 @@ function AppInner() {
                     }
                     const downloaded = e.payload?.downloaded ?? 0;
                     const total = e.payload?.total ?? 0;
-                    if (total <= 0) {
+                    if (total <= 0 || downloaded <= 0) {
                         if (!didShowUnknownDownloadRef.current) {
-                            updateToastRef.current(updaterToastId, "Downloading update…", "loading");
                             didShowUnknownDownloadRef.current = true;
                         }
+                        startUnknownDownloadAnim();
                         return;
                     }
+                    stopUnknownDownloadAnim();
                     const pct = Math.floor((downloaded / total) * 100);
                     if (lastDownloadPctRef.current === pct) {
                         return;
@@ -105,6 +125,7 @@ function AppInner() {
             );
 
             unlistenInstalling = await listen("update-installing", () => {
+                stopUnknownDownloadAnim();
                 if (!updaterToastId) {
                     updaterToastId = showToastRef.current("Installing update…", "loading", 0);
                 } else {
@@ -113,6 +134,7 @@ function AppInner() {
             });
 
             unlistenInstalled = await listen("update-installed", () => {
+                stopUnknownDownloadAnim();
                 if (updaterToastId) {
                     updateToastRef.current(updaterToastId, "Update installed", "success");
                     const id = updaterToastId;
@@ -135,6 +157,7 @@ function AppInner() {
             if (unlistenProgress) unlistenProgress();
             if (unlistenInstalling) unlistenInstalling();
             if (unlistenInstalled) unlistenInstalled();
+            stopUnknownDownloadAnim();
         };
     }, []);
 
