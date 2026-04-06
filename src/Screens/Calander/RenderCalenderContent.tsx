@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getCategoryColor, getWeekStart, formatDuration } from "./utils.ts";
+import { getCategoryColor, getWeekStart, formatDuration, formatLocalDateYMD } from "./utils.ts";
 import { CalendarEvent, DateClickInfo, EventLogs } from "./types.ts";
 import { Category } from "../../api/Category.ts";
 import { EventClickArg, DatesSetArg } from "@fullcalendar/core";
@@ -139,7 +139,7 @@ export default function RenderCalendarContent({
     const { data, isLoading, error } = useQuery({
         queryKey: [
             "week",
-            weekStart.toISOString(),
+            formatLocalDateYMD(weekStart),
             timeBlockSettings.minLogDuration,
             timeBlockSettings.maxAttachDistance,
             timeBlockSettings.lookaheadWindow,
@@ -626,7 +626,7 @@ export default function RenderCalendarContent({
                         ref={ref}
                         plugins={[timeGridPlugin, interactionPlugin]}
                         initialView="timeGridWeek"
-                        initialDate={weekStart.toISOString().split('T')[0]}
+                        initialDate={formatLocalDateYMD(weekStart)}
                         events={events}
                         eventClick={handleEventClick}
                         allDaySlot={false}

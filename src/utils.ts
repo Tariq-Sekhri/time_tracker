@@ -15,12 +15,12 @@ export function getWeekRange(date: Date): {
     week_start: number;
     week_end: number;
 } {
-    const d = new Date(date);
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    const monday = new Date(d.setDate(diff));
-    monday.setHours(0, 0, 0, 0);
-
+    const y = date.getFullYear();
+    const m = date.getMonth();
+    const day = date.getDate();
+    const dow = date.getDay();
+    const offsetToMonday = dow === 0 ? -6 : 1 - dow;
+    const monday = new Date(y, m, day + offsetToMonday, 0, 0, 0, 0);
     const sunday = new Date(monday);
     sunday.setDate(monday.getDate() + 6);
     sunday.setHours(23, 59, 59, 999);
