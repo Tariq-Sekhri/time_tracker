@@ -37,6 +37,12 @@ export default function CategoryRegexView() {
     const [visibleCategoryIds, setVisibleCategoryIds] = useState<Set<number>>(new Set());
     const [isCategoryFilterOpen, setIsCategoryFilterOpen] = useState(false);
     const categoryFilterRef = useRef<HTMLDivElement | null>(null);
+    const newRegexCatMenuRef = useRef<HTMLDivElement | null>(null);
+    const sortMenuRef = useRef<HTMLDivElement | null>(null);
+    const editCatMenuRef = useRef<HTMLDivElement | null>(null);
+    const [newRegexCatMenuOpen, setNewRegexCatMenuOpen] = useState(false);
+    const [sortMenuOpen, setSortMenuOpen] = useState(false);
+    const [editCatMenuOpen, setEditCatMenuOpen] = useState(false);
 
     const hasInitializedVisibleCategories = useRef(false);
     const hasInitializedUiPrefs = useRef(false);
@@ -153,6 +159,26 @@ export default function CategoryRegexView() {
     }, [isCategoryFilterOpen]);
 
     useEffect(() => {
+        if (!newRegexCatMenuOpen && !sortMenuOpen && !editCatMenuOpen) return;
+
+        const onPointerDown = (e: PointerEvent) => {
+            const target = e.target as Node | null;
+            if (!target) return;
+            const inNew = newRegexCatMenuRef.current?.contains(target);
+            const inSort = sortMenuRef.current?.contains(target);
+            const inEdit = editCatMenuRef.current?.contains(target);
+            if (!inNew && !inSort && !inEdit) {
+                setNewRegexCatMenuOpen(false);
+                setSortMenuOpen(false);
+                setEditCatMenuOpen(false);
+            }
+        };
+
+        window.addEventListener("pointerdown", onPointerDown);
+        return () => window.removeEventListener("pointerdown", onPointerDown);
+    }, [newRegexCatMenuOpen, sortMenuOpen, editCatMenuOpen]);
+
+    useEffect(() => {
         if (!hasInitializedVisibleCategories.current || categories.length === 0) {
             return;
         }
@@ -236,6 +262,7 @@ export default function CategoryRegexView() {
             setNewRegexCatId("");
             setNewRegexPattern("");
             setRegexError(null);
+            setNewRegexCatMenuOpen(false);
             showToast("Regex pattern created successfully", "success");
         },
         onError: (error: any) => {
@@ -253,6 +280,7 @@ export default function CategoryRegexView() {
             queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
             setEditingRegex(null);
             setEditRegexError(null);
+            setEditCatMenuOpen(false);
             showToast("Regex pattern updated successfully", "success");
         },
         onError: (error: any) => {
@@ -332,17 +360,55 @@ export default function CategoryRegexView() {
             <div key={regex.id} className="p-4 bg-gray-900 rounded-lg flex items-center justify-between">
                 {editingRegex?.id === regex.id && !isCatchAll ? (
                     <div className="flex gap-3 flex-1">
-                        <select
-                            value={editingRegex.cat_id}
-                            onChange={(e) => setEditingRegex({ ...editingRegex, cat_id: parseInt(e.target.value) })}
-                            className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
-                        >
-                            {categories.map((cat) => (
-                                <option key={cat.id} value={cat.id}>
-                                    {cat.name}
-                                </option>
-                            ))}
-                        </select>
+                        <div className="relative shrink-0 max-w-[14rem]" ref={editCatMenuRef}>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setEditCatMenuOpen((v) => !v);
+                                    setNewRegexCatMenuOpen(false);
+                                    setSortMenuOpen(false);
+                                    setIsCategoryFilterOpen(false);
+                                }}
+                                className="min-h-9 w-full min-w-[10rem] px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white hover:bg-gray-700 flex items-center justify-between gap-2 text-left"
+                            >
+                                <span className="truncate">
+                                    {categories.find((c) => c.id === editingRegex.cat_id)?.name ?? "Category"}
+                                </span>
+                                <svg
+                                    className={`w-4 h-4 text-gray-400 transition-transform shrink-0 ${editCatMenuOpen ? "rotate-180" : ""}`}
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            {editCatMenuOpen && (
+                                <div className="absolute z-50 mt-2 left-0 w-64 max-h-[40vh] overflow-y-auto nice-scrollbar bg-gray-900 border border-gray-700 rounded-lg shadow-lg p-2">
+                                    {categories.map((cat) => (
+                                        <button
+                                            key={cat.id}
+                                            type="button"
+                                            onClick={() => {
+                                                setEditingRegex({ ...editingRegex, cat_id: cat.id });
+                                                setEditCatMenuOpen(false);
+                                            }}
+                                            className={`flex items-center gap-3 w-full p-2 rounded text-left hover:bg-gray-800 ${
+                                                editingRegex.cat_id === cat.id ? "bg-gray-800" : ""
+                                            }`}
+                                        >
+                                            {cat.color && (
+                                                <div
+                                                    className="w-4 h-4 rounded border border-gray-600 shrink-0"
+                                                    style={{ backgroundColor: cat.color }}
+                                                />
+                                            )}
+                                            <span className="text-sm text-gray-200 flex-1 truncate">{cat.name}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                         <div className="flex-1 flex flex-col">
                             <input
                                 type="text"
@@ -368,6 +434,7 @@ export default function CategoryRegexView() {
                             onClick={() => {
                                 setEditingRegex(null);
                                 setEditRegexError(null);
+                                setEditCatMenuOpen(false);
                             }}
                             disabled={updateRegexMutation.isPending}
                             className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded disabled:opacity-50 disabled:cursor-not-allowed"
@@ -395,7 +462,10 @@ export default function CategoryRegexView() {
                         {!isCatchAll && (
                             <div className="flex gap-2">
                                 <button
-                                    onClick={() => setEditingRegex(regex)}
+                                    onClick={() => {
+                                        setEditCatMenuOpen(false);
+                                        setEditingRegex(regex);
+                                    }}
                                     className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm"
                                 >
                                     Edit
@@ -415,7 +485,7 @@ export default function CategoryRegexView() {
     }
 
     return (
-        <div className="p-6 text-white">
+        <div className="p-6 text-white [color-scheme:dark]">
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold">Category Regex Patterns</h1>
                 <button
@@ -432,21 +502,59 @@ export default function CategoryRegexView() {
             <div className="mb-4 p-4 bg-gray-900 rounded-lg">
                 <h3 className="text-lg font-medium mb-3">Add New Regex</h3>
                 <div className="flex gap-3">
-                    <select
-                        value={newRegexCatId === "" ? "" : newRegexCatId}
-                        onChange={(e) => {
-                            const value = e.target.value;
-                            setNewRegexCatId(value ? parseInt(value, 10) : "");
-                        }}
-                        className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
-                    >
-                        <option value="">Select category</option>
-                        {categories.map((cat) => (
-                            <option key={cat.id} value={cat.id}>
-                                {cat.name}
-                            </option>
-                        ))}
-                    </select>
+                    <div className="relative shrink-0 max-w-[14rem]" ref={newRegexCatMenuRef}>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setNewRegexCatMenuOpen((v) => !v);
+                                setSortMenuOpen(false);
+                                setEditCatMenuOpen(false);
+                                setIsCategoryFilterOpen(false);
+                            }}
+                            className="min-h-9 w-full min-w-[10rem] max-w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white hover:bg-gray-700 flex items-center justify-between gap-2 text-left"
+                        >
+                            <span
+                                className={`truncate ${newRegexCatId === "" ? "text-gray-400" : "text-white"}`}
+                            >
+                                {newRegexCatId === ""
+                                    ? "Select category"
+                                    : categories.find((c) => c.id === newRegexCatId)?.name ?? "Select category"}
+                            </span>
+                            <svg
+                                className={`w-4 h-4 text-gray-400 transition-transform shrink-0 ${newRegexCatMenuOpen ? "rotate-180" : ""}`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+                        {newRegexCatMenuOpen && (
+                            <div className="absolute z-50 mt-2 left-0 w-64 max-h-[40vh] overflow-y-auto nice-scrollbar bg-gray-900 border border-gray-700 rounded-lg shadow-lg p-2">
+                                {categories.map((cat) => (
+                                    <button
+                                        key={cat.id}
+                                        type="button"
+                                        onClick={() => {
+                                            setNewRegexCatId(cat.id);
+                                            setNewRegexCatMenuOpen(false);
+                                        }}
+                                        className={`flex items-center gap-3 w-full p-2 rounded text-left hover:bg-gray-800 ${
+                                            newRegexCatId === cat.id ? "bg-gray-800" : ""
+                                        }`}
+                                    >
+                                        {cat.color && (
+                                            <div
+                                                className="w-4 h-4 rounded border border-gray-600 shrink-0"
+                                                style={{ backgroundColor: cat.color }}
+                                            />
+                                        )}
+                                        <span className="text-sm text-gray-200 flex-1 truncate">{cat.name}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                     <input
                         type="text"
                         placeholder="Regex pattern"
@@ -473,7 +581,12 @@ export default function CategoryRegexView() {
                 <div className="relative" ref={categoryFilterRef}>
                     <button
                         type="button"
-                        onClick={() => setIsCategoryFilterOpen((v) => !v)}
+                        onClick={() => {
+                            setNewRegexCatMenuOpen(false);
+                            setSortMenuOpen(false);
+                            setEditCatMenuOpen(false);
+                            setIsCategoryFilterOpen((v) => !v);
+                        }}
                         className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white hover:bg-gray-700 flex items-center gap-2"
                     >
                         <span>
@@ -541,14 +654,56 @@ export default function CategoryRegexView() {
                 </div>
 
                 <label className="text-gray-400 text-sm ml-2">Sort:</label>
-                <select
-                    value={sortOrder}
-                    onChange={(e) => setSortOrder(e.target.value as "oldest" | "newest")}
-                    className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
-                >
-                    <option value="newest">Newest first</option>
-                    <option value="oldest">Oldest first</option>
-                </select>
+                <div className="relative" ref={sortMenuRef}>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setSortMenuOpen((v) => !v);
+                            setNewRegexCatMenuOpen(false);
+                            setEditCatMenuOpen(false);
+                            setIsCategoryFilterOpen(false);
+                        }}
+                        className="min-h-9 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white hover:bg-gray-700 flex items-center gap-2"
+                    >
+                        <span>{sortOrder === "newest" ? "Newest first" : "Oldest first"}</span>
+                        <svg
+                            className={`w-4 h-4 text-gray-400 transition-transform shrink-0 ${sortMenuOpen ? "rotate-180" : ""}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+                    {sortMenuOpen && (
+                        <div className="absolute z-50 mt-2 left-0 min-w-full w-max bg-gray-900 border border-gray-700 rounded-lg shadow-lg p-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSortOrder("newest");
+                                    setSortMenuOpen(false);
+                                }}
+                                className={`block w-full text-left px-3 py-2 rounded text-sm hover:bg-gray-800 ${
+                                    sortOrder === "newest" ? "bg-gray-800 text-gray-100" : "text-gray-200"
+                                }`}
+                            >
+                                Newest first
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSortOrder("oldest");
+                                    setSortMenuOpen(false);
+                                }}
+                                className={`block w-full text-left px-3 py-2 rounded text-sm hover:bg-gray-800 ${
+                                    sortOrder === "oldest" ? "bg-gray-800 text-gray-100" : "text-gray-200"
+                                }`}
+                            >
+                                Oldest first
+                            </button>
+                        </div>
+                    )}
+                </div>
                 <label className="flex items-center gap-2 cursor-pointer ml-2 select-none">
                     <input
                         type="checkbox"

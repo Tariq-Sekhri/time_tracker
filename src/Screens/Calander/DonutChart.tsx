@@ -4,7 +4,8 @@ export function DonutChart({data, colors}: {
     data: { label: string; value: number; color: string }[];
     colors: Map<string, string>
 }) {
-    const total = data.reduce((sum, item) => sum + item.value, 0);
+    const positive = data.filter((item) => item.value > 0);
+    const total = positive.reduce((sum, item) => sum + item.value, 0);
     if (total === 0) {
         return (
             <div className="w-full h-48 flex items-center justify-center text-gray-500">
@@ -13,12 +14,31 @@ export function DonutChart({data, colors}: {
         );
     }
 
-    let currentAngle = -90; // Start at top
     const radius = 60;
     const centerX = 80;
     const centerY = 80;
+    const innerR = radius * 0.6;
 
-    const paths = data.map((item, index) => {
+    if (positive.length === 1) {
+        const item = positive[0];
+        const fill = item.color || colors.get(item.label) || "#6b7280";
+        return (
+            <div className="w-full flex justify-center">
+                <svg width="160" height="160" viewBox="0 0 160 160">
+                    <circle cx={centerX} cy={centerY} r={radius} fill={fill} className="hover:opacity-80 transition-opacity" />
+                    <circle cx={centerX} cy={centerY} r={innerR} fill="#111827"/>
+                    <text x={centerX} y={centerY} textAnchor="middle" dominantBaseline="middle" fill="white" fontSize="14"
+                          fontWeight="bold">
+                        {formatDuration(total)}
+                    </text>
+                </svg>
+            </div>
+        );
+    }
+
+    let currentAngle = -90;
+
+    const paths = positive.map((item, index) => {
         const percentage = (item.value / total) * 100;
         const angle = (percentage / 100) * 360;
         const startAngle = currentAngle;
@@ -49,7 +69,7 @@ export function DonutChart({data, colors}: {
         <div className="w-full flex justify-center">
             <svg width="160" height="160" viewBox="0 0 160 160">
                 {paths}
-                <circle cx={centerX} cy={centerY} r={radius * 0.6} fill="#111827"/>
+                <circle cx={centerX} cy={centerY} r={innerR} fill="#111827"/>
                 <text x={centerX} y={centerY} textAnchor="middle" dominantBaseline="middle" fill="white" fontSize="14"
                       fontWeight="bold">
                     {formatDuration(total)}
