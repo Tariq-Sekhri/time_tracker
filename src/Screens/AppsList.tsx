@@ -1,11 +1,19 @@
-import {useQuery} from "@tanstack/react-query";
-import {useState} from "react";
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {get_week_statistics} from "../api/statistics.ts";
 import { getWeekRange } from "../utils.ts";
 import {useDateStore} from "../stores/dateStore.ts";
 import { useSettingsStore } from "../stores/settingsStore.ts";
+import { get_categories } from "../api/Category.ts";
+import { get_cat_regex, insert_cat_regex, update_cat_regex_by_id } from "../api/CategoryRegex.ts";
+import { useToast } from "../Componants/Toast.tsx";
 
 type Tab = "week" | "dailyAvg" | "allTime";
+
+function exactAppRegexPattern(appName: string): string {
+    const escaped = appName.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+    return `^${escaped}$`;
+}
 
 function formatDuration(seconds: number): string {
     const hours = Math.floor(seconds / 3600);
@@ -22,8 +30,16 @@ function formatPercentage(value: number): string {
 }
 
 export default function AppsList({onBack}: { onBack: () => void }) {
+    const queryClient = useQueryClient();
+    const { showToast } = useToast();
     const [activeTab, setActiveTab] = useState<Tab>("week");
     const [visibleCount, setVisibleCount] = useState(20);
+    const categorizeMenuRef = useRef<HTMLDivElement>(null);
+    const [categorizeMenu, setCategorizeMenu] = useState<{
+        x: number;
+        y: number;
+        appName: string;
+    } | null>(null);
     const {date, setDate} = useDateStore();
     const { uiMinAppDuration, calendarStartHour } = useSettingsStore();
     const {week_start, week_end} = getWeekRange(date, calendarStartHour);
@@ -31,6 +47,63 @@ export default function AppsList({onBack}: { onBack: () => void }) {
     const {data: weekStats, isLoading} = useQuery({
         queryKey: ["week_statistics", week_start, week_end, calendarStartHour],
         queryFn: async () => await get_week_statistics(week_start, week_end),
+    });
+    const { data: categories = [] } = useQuery({
+        queryKey: ["categories"],
+        queryFn: get_categories,
+    });
+    const { data: catRegex = [] } = useQuery({
+        queryKey: ["cat_regex"],
+        queryFn: get_cat_regex,
+    });
+
+    useEffect(() => {
+        if (!categorizeMenu) return;
+        const close = (e: PointerEvent) => {
+            if (categorizeMenuRef.current?.contains(e.target as Node)) return;
+            setCategorizeMenu(null);
+        };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") setCategorizeMenu(null);
+        };
+        document.addEventListener("pointerdown", close);
+        window.addEventListener("keydown", onKey);
+        return () => {
+            document.removeEventListener("pointerdown", close);
+            window.removeEventListener("keydown", onKey);
+        };
+    }, [categorizeMenu]);
+
+    const assignAppCategoryMutation = useMutation({
+        mutationFn: async ({
+            catId,
+            appName,
+        }: {
+            catId: number;
+            appName: string;
+        }) => {
+            const pattern = exactAppRegexPattern(appName);
+            const existing = catRegex.find((r) => r.regex === pattern);
+            if (existing?.cat_id === catId) return false;
+            if (existing) {
+                await update_cat_regex_by_id({ ...existing, cat_id: catId });
+            } else {
+                await insert_cat_regex({ cat_id: catId, regex: pattern });
+            }
+            return true;
+        },
+        onSuccess: (didChange) => {
+            setCategorizeMenu(null);
+            if (!didChange) return;
+            queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
+            queryClient.invalidateQueries({ queryKey: ["week"] });
+            queryClient.invalidateQueries({ queryKey: ["week_statistics"] });
+            showToast("Category rule saved", "success");
+        },
+        onError: (e: unknown) => {
+            console.error("Failed to save category rule:", e);
+            showToast("Failed to save category rule", "error");
+        },
     });
 
     if (isLoading || !weekStats) {
@@ -52,6 +125,14 @@ export default function AppsList({onBack}: { onBack: () => void }) {
     const filteredApps = apps.filter((app) => app.total_duration >= uiMinAppDuration);
     const displayedApps = filteredApps.slice(0, visibleCount);
     const maxDuration = filteredApps.length > 0 ? filteredApps[0].total_duration : 1;
+    const sortedCategories = [...categories].sort((a, b) => b.priority - a.priority);
+    const categoryByApp = new Map<string, string>();
+    displayedApps.forEach(({ app }) => {
+        const pattern = exactAppRegexPattern(app);
+        const rule = catRegex.find((r) => r.regex === pattern);
+        const catName = categories.find((c) => c.id === rule?.cat_id)?.name;
+        categoryByApp.set(app, catName ?? "Miscellaneous");
+    });
 
 
     return (
@@ -100,10 +181,22 @@ export default function AppsList({onBack}: { onBack: () => void }) {
             <div className="space-y-2">
                 {displayedApps.map((app, idx) => {
                     const rank = idx + 1;
-                    const category = "Miscellaneous";
+                    const category = categoryByApp.get(app.app) ?? "Miscellaneous";
 
                     return (
-                        <div key={idx} className="flex items-center gap-4 p-4 bg-gray-900 rounded hover:bg-gray-800">
+                        <div
+                            key={idx}
+                            onContextMenu={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setCategorizeMenu({
+                                    x: e.clientX,
+                                    y: e.clientY,
+                                    appName: app.app,
+                                });
+                            }}
+                            className="flex items-center gap-4 p-4 bg-gray-900 rounded hover:bg-gray-800"
+                        >
                             <div className="w-8 text-center text-gray-400 font-semibold">
                                 {rank}
                             </div>
@@ -150,6 +243,37 @@ export default function AppsList({onBack}: { onBack: () => void }) {
                     >
                         Load 20 more
                     </button>
+                </div>
+            )}
+            {categorizeMenu && (
+                <div
+                    ref={categorizeMenuRef}
+                    className="fixed z-[200] min-w-[12rem] max-h-64 overflow-y-auto nice-scrollbar rounded-lg border border-gray-600 bg-gray-900 py-1 shadow-xl"
+                    style={{ left: categorizeMenu.x, top: categorizeMenu.y }}
+                    role="menu"
+                >
+                    <div
+                        className="px-3 py-2 text-xs text-gray-400 border-b border-gray-700 truncate"
+                        title={categorizeMenu.appName}
+                    >
+                        {categorizeMenu.appName}
+                    </div>
+                    {sortedCategories.map((cat) => (
+                        <button
+                            key={cat.id}
+                            type="button"
+                            disabled={assignAppCategoryMutation.isPending}
+                            className="w-full px-3 py-2 text-left text-sm text-gray-200 hover:bg-gray-800 disabled:opacity-50"
+                            onClick={() =>
+                                assignAppCategoryMutation.mutate({
+                                    catId: cat.id,
+                                    appName: categorizeMenu.appName,
+                                })
+                            }
+                        >
+                            {cat.name}
+                        </button>
+                    ))}
                 </div>
             )}
         </div>

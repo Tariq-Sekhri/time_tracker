@@ -482,7 +482,7 @@ export default function RenderCalendarContent({
             )}
             <div className="flex flex-1 overflow-hidden min-h-0">
                 <div
-                    className={`border-r border-gray-700 bg-black overflow-y-auto nice-scrollbar flex-shrink-0 transition-all duration-200 ease-in-out ${isLeftCollapsed ? "w-16 p-2" : "w-64 p-4"}`}
+                    className={`border-r border-gray-700 bg-black overflow-y-auto overflow-x-hidden nice-scrollbar flex-shrink-0 transition-all duration-200 ease-in-out ${isLeftCollapsed ? "w-16 p-2" : "w-64 p-4"}`}
                 >
                     <div className="flex items-center justify-between mb-4">
                         <h3 className={`text-lg font-semibold text-white ${isLeftCollapsed ? "hidden" : ""}`}>
