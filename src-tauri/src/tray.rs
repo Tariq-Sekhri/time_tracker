@@ -59,7 +59,6 @@ pub fn setup_tray(app: &AppHandle<tauri::Wry>) -> Result<(), Box<dyn std::error:
                         let _ = window.show();
                         let _ = window.set_focus();
                         let _ = window.unminimize();
-                        let _ = window.maximize();
                     }
 
                     let state = app.state::<UpdateState>();
@@ -99,7 +98,6 @@ pub fn setup_tray(app: &AppHandle<tauri::Wry>) -> Result<(), Box<dyn std::error:
                     let _ = window.show();
                     let _ = window.set_focus();
                     let _ = window.unminimize();
-                    let _ = window.maximize();
                 }
 
                 let state = app_clone.state::<UpdateState>();
@@ -150,7 +148,4 @@ pub fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
         return;
     }
 
-    if let WindowEvent::Focused { .. } = event {
-        let _ = window.maximize();
-    }
 }

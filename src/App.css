@@ -117,3 +117,13 @@ body {
 .calendar-fc-host .fc-scroller::-webkit-scrollbar-thumb:hover {
     background: linear-gradient(180deg, #e5e7eb 0%, #d1d5db 100%);
 }
+
+.calendar-fc-host .fc-scrollgrid-section-header .fc-scroller {
+    overflow: hidden !important;
+    scrollbar-width: none !important;
+}
+
+.calendar-fc-host .fc-scrollgrid-section-header .fc-scroller::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+}

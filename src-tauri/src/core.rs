@@ -7,10 +7,10 @@
     #[cfg(target_os = "macos")]
     use anyhow::Context;
 
-    #[cfg(all(debug_assertions, not(target_os = "linux")))]
+    #[cfg(debug_assertions)]
     pub static IS_SUSPENDED: AtomicBool = AtomicBool::new(true);
 
-    #[cfg(not(all(debug_assertions, not(target_os = "linux"))))]
+    #[cfg(not(debug_assertions))]
     pub static IS_SUSPENDED: AtomicBool = AtomicBool::new(false);
 
     #[tauri::command]
@@ -20,6 +20,11 @@
 
     #[tauri::command]
     pub fn set_tracking_status(is_tracking: bool) {
+        #[cfg(debug_assertions)]
+        {
+            let _ = is_tracking;
+        }
+        #[cfg(not(debug_assertions))]
         IS_SUSPENDED.store(!is_tracking, Ordering::Relaxed);
     }
 
