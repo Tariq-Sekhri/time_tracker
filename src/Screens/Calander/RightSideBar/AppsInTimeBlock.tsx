@@ -8,7 +8,6 @@ import {
 import { useState, useEffect, useRef, type ReactNode } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SideBarView } from "./RightSideBar.tsx";
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { useToast } from "../../../Componants/Toast.tsx";
 import { get_categories } from "../../../api/Category.ts";
 import { get_cat_regex, insert_cat_regex, update_cat_regex_by_id } from "../../../api/CategoryRegex.ts";
@@ -266,7 +265,7 @@ export default function AppsInTimeBlock({
 
     const appClicked = async (name: string) => {
         try {
-            await writeText(name)
+            await navigator.clipboard.writeText(name)
             showToast(`Copied ${name} To ClipBoard`, "success");
         } catch (e: any) {
             console.error("Failed to copy:", e);
