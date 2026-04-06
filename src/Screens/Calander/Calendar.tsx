@@ -6,7 +6,7 @@ import { getCalendarDayRangeUnix, getWeekRange } from "../../utils.ts";
 import {useState, useMemo, useEffect, useRef} from "react";
 import {EventClickArg, DatesSetArg} from "@fullcalendar/core";
 import RenderCalendarContent from "./RenderCalenderContent.tsx";
-import {getWeekStart, isCurrentWeek} from "./utils.ts";
+import {formatLocalDateYMD, getWeekStart, isCurrentWeek} from "./utils.ts";
 import {useDateStore} from "../../stores/dateStore.ts";
 import {View} from "../../App.tsx";
 import CalenderHeader from "./RightSideBar/CalanderHeader.tsx";
@@ -316,7 +316,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const {data: weekData} = useQuery({
         queryKey: [
             "week",
-            weekStart.toISOString(),
+            formatLocalDateYMD(weekStart),
             timeBlockSettings.minLogDuration,
             timeBlockSettings.maxAttachDistance,
             timeBlockSettings.lookaheadWindow,
@@ -581,8 +581,8 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
             const targetDate = new Date(date);
             targetDate.setHours(0, 0, 0, 0);
 
-            const calendarDateStr = calendarDate.toISOString().split('T')[0];
-            const targetDateStr = targetDate.toISOString().split('T')[0];
+            const calendarDateStr = formatLocalDateYMD(calendarDate);
+            const targetDateStr = formatLocalDateYMD(targetDate);
 
             if (calendarDateStr !== targetDateStr) {
                 isUpdatingFromStore.current = true;

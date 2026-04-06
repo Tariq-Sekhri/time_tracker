@@ -1,3 +1,5 @@
+import { getWeekRange } from "../../utils.ts";
+
 export const formatTime = (date: Date) =>
     date.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'}).toLowerCase();
 
@@ -11,13 +13,16 @@ export function formatDuration(seconds: number): string {
     return `${minutes}m`;
 }
 
+export function formatLocalDateYMD(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+}
+
 export function getWeekStart(d: Date): Date {
-    const date = new Date(d);
-    const day = date.getDay();
-    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-    date.setDate(diff);
-    date.setHours(0, 0, 0, 0);
-    return date;
+    const { week_start } = getWeekRange(d);
+    return new Date(week_start * 1000);
 }
 
 export function isCurrentWeek(d: Date): boolean {
