@@ -99,7 +99,8 @@ export default function RenderCalendarContent({
         }
     });
 
-    const { calendarStartHour, timeBlockSettings } = useSettingsStore();
+    const { calendarStartHour, calendarHeight, timeBlockSettings } = useSettingsStore();
+    const slotMinHeightPx = Math.max(12, Math.round((calendarHeight / 100) * 24));
 
     const handleRelogin = async () => {
         setIsRelogging(true);
@@ -371,7 +372,7 @@ export default function RenderCalendarContent({
             cancelAnimationFrame(raf);
             ro.disconnect();
         };
-    }, [ref, showFullCalendarGrid]);
+    }, [ref, showFullCalendarGrid, slotMinHeightPx]);
 
     useLayoutEffect(() => {
         if (!showFullCalendarGrid) return;
@@ -402,7 +403,7 @@ export default function RenderCalendarContent({
             cancelAnimationFrame(rafInner);
             timers.forEach(clearTimeout);
         };
-    }, [events, showFullCalendarGrid, ref]);
+    }, [events, showFullCalendarGrid, ref, slotMinHeightPx]);
 
     if (isLoading || (isLoadingGoogleEvents && !(cachedEvents?.length ?? 0))) {
         return <CalendarSkeleton />;
@@ -659,9 +660,15 @@ export default function RenderCalendarContent({
                         </div>
                     </div>
                 </div>
-                <div ref={calendarHostRef} className="calendar-fc-host flex-1 h-full min-h-0 min-w-0 overflow-hidden">
+                <div
+                    ref={calendarHostRef}
+                    className="calendar-fc-host flex-1 h-full min-h-0 min-w-0 overflow-hidden"
+                    style={{ ["--tt-slot-min-height" as any]: `${slotMinHeightPx}px` }}
+                >
                     <FullCalendar
+                        key={`calendar-${calendarStartHour}-${slotMinHeightPx}`}
                         height="100%"
+                        expandRows={false}
                         stickyHeaderDates={false}
                         slotMinTime={slotMinTime}
                         slotMaxTime={slotMaxTime}

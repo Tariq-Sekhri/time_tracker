@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useToast } from "../Componants/Toast.tsx";
 import {
+    CALENDAR_HEIGHT_MAX,
+    CALENDAR_HEIGHT_MIN,
     RIGHT_SIDEBAR_WIDTH_MAX,
     RIGHT_SIDEBAR_WIDTH_MIN,
     useSettingsStore,
@@ -11,6 +13,8 @@ export default function Settings() {
     const {
         calendarStartHour,
         setCalendarStartHour,
+        calendarHeight,
+        setCalendarHeight,
         rightSidebarWidth,
         setRightSidebarWidth,
         timeBlockSettings,
@@ -25,10 +29,16 @@ export default function Settings() {
     const [rightSidebarDraft, setRightSidebarDraft] = useState(() =>
         String(rightSidebarWidth)
     );
+    const [calendarHeightDraft, setCalendarHeightDraft] = useState(() =>
+        String(calendarHeight)
+    );
 
     useEffect(() => {
         setRightSidebarDraft(String(rightSidebarWidth));
     }, [rightSidebarWidth]);
+    useEffect(() => {
+        setCalendarHeightDraft(String(calendarHeight));
+    }, [calendarHeight]);
 
     const windowEndHour = useMemo(() => calendarStartHour + 24, [calendarStartHour]);
     const windowText = useMemo(() => {
@@ -69,6 +79,60 @@ export default function Settings() {
 
                         <div className="text-sm text-gray-400">
                             24-hour window: {windowText}
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4">
+                            <label className="text-sm text-gray-300">Calendar size (%)</label>
+                            <input
+                                type="number"
+                                step={1}
+                                value={calendarHeightDraft}
+                                onChange={(e) => {
+                                    const value = e.target.value;
+                                    setCalendarHeightDraft(value);
+                                    const n = Number(value);
+                                    if (!Number.isFinite(n)) {
+                                        return;
+                                    }
+                                    const h = Math.trunc(n);
+                                    if (h < CALENDAR_HEIGHT_MIN || h > CALENDAR_HEIGHT_MAX) {
+                                        return;
+                                    }
+                                    if (h !== calendarHeight) {
+                                        setCalendarHeight(h);
+                                    }
+                                }}
+                                onBlur={() => {
+                                    const t = calendarHeightDraft.trim();
+                                    const revert = () =>
+                                        setCalendarHeightDraft(String(calendarHeight));
+                                    if (t === "") {
+                                        showToast("Calendar height: enter a number.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    const n = Number(t);
+                                    if (!Number.isFinite(n)) {
+                                        showToast("Calendar height: not a valid number.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    const h = Math.trunc(n);
+                                    if (h < CALENDAR_HEIGHT_MIN || h > CALENDAR_HEIGHT_MAX) {
+                                        showToast(
+                                            `Calendar size: use ${CALENDAR_HEIGHT_MIN}-${CALENDAR_HEIGHT_MAX}%.`,
+                                            "error"
+                                        );
+                                        revert();
+                                        return;
+                                    }
+                                    setCalendarHeightDraft(String(h));
+                                    if (h !== calendarHeight) {
+                                        setCalendarHeight(h);
+                                    }
+                                }}
+                                className="w-24 px-2 py-1 bg-gray-800 text-white rounded text-sm"
+                            />
                         </div>
 
                         <div className="flex items-center justify-between gap-4">
