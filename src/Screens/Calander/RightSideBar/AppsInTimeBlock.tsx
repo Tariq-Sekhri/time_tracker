@@ -324,7 +324,13 @@ export default function AppsInTimeBlock({
                         {sortedLogs.map((log, idx) => (
                             <div
                                 key={idx}
-                                onClick={() => appClicked(log.app)}
+                                onClick={() => {
+                                    const selectedText = window.getSelection()?.toString() ?? "";
+                                    if (selectedText.trim().length > 0) {
+                                        return;
+                                    }
+                                    appClicked(log.app);
+                                }}
                                 onContextMenu={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
@@ -334,13 +340,30 @@ export default function AppsInTimeBlock({
                                         appName: log.app,
                                     });
                                 }}
-                                className="h-15 bg-gray-900 rounded-lg p-3 hover:bg-gray-800 transition-colors"
+                                className="h-15 bg-gray-900 rounded-lg p-3 hover:bg-gray-800 transition-colors select-text"
                             >
                                 <div className="flex items-center justify-between mb-1">
                                     <span
-                                        className="text-sm font-medium text-white truncate flex-1">
+                                        className="text-sm font-medium text-white truncate flex-1 select-text">
                                         {log.app}
                                     </span>
+                                    <svg
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            appClicked(log.app);
+                                        }}
+                                        className="w-4 h-4 cursor-pointer hover:text-blue-400 mr-2"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                        />
+                                    </svg>
                                     <svg onClick={(e) => {
                                         e.stopPropagation();
                                         handleDeleteLog(log.ids)
