@@ -13,12 +13,36 @@ use oauth2::{
 };
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use std::process::Command;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 const GOOGLE_AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const REDIRECT_PORT: u16 = 8742;
+
+fn open_auth_url(url: &str) -> Result<(), Error> {
+    #[cfg(target_os = "linux")]
+    {
+        let openers: [(&str, &[&str]); 4] = [
+            ("xdg-open", &[url]),
+            ("gio", &["open", url]),
+            ("firefox", &[url]),
+            ("snap", &["run", "firefox", url]),
+        ];
+        for (cmd, args) in openers {
+            if Command::new(cmd).args(args).spawn().is_ok() {
+                return Ok(());
+            }
+        }
+        return Err(anyhow::anyhow!("Failed to open browser on Linux").into());
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        tauri_plugin_opener::open_url(url, None::<&str>).context("Failed to open browser")?;
+        Ok(())
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AuthStatus {
@@ -132,8 +156,7 @@ pub async fn google_oauth_login() -> Result<AuthStatus, Error> {
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
     let auth_url_str = auth_url.to_string();
-    tauri_plugin_opener::open_url(&auth_url_str, None::<&str>)
-        .context("Failed to open browser")?;
+    open_auth_url(&auth_url_str)?;
 
     let start = std::time::Instant::now();
     let timeout = std::time::Duration::from_secs(120);
