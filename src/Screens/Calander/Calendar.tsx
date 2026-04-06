@@ -66,6 +66,26 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         setDate(adjustInstantToCalendarDayBoundary(new Date(), calendarStartHour));
     }, [calendarStartHour, setDate]);
 
+    useEffect(() => {
+        const host = document.querySelector(".calendar-fc-host");
+        if (!host) return;
+        const ae = document.activeElement;
+        if (ae instanceof HTMLElement && host.contains(ae)) {
+            ae.blur();
+        }
+        host.querySelectorAll(".fc-event-selected").forEach((el) => {
+            el.classList.remove("fc-event-selected");
+        });
+    }, [visibleCategories]);
+
+    useEffect(() => {
+        if (!selectedEvent?.category || selectedEvent.googleCalendarEventId != null) return;
+        if (visibleCategories.has(selectedEvent.category)) return;
+        setSelectedEvent(null);
+        setSelectedEventLogs([]);
+        setRightSideBarView((v) => (v === "Event" ? "Week" : v));
+    }, [visibleCategories, selectedEvent]);
+
     const {data: categories = []} = useQuery({
         queryKey: ["categories"],
         queryFn: get_categories,
@@ -490,11 +510,13 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                 setRightSideBarView("Event");
             } else {
                 const timeBlockId = clickInfo.event.extendedProps?.timeBlockId as number | undefined;
+                const category = clickInfo.event.extendedProps?.category as string | undefined;
                 const event = {
                     title: clickInfo.event.title,
                     start: clickInfo.event.start,
                     end: clickInfo.event.end,
                     apps: (clickInfo.event.extendedProps?.apps || []) as { app: string; totalDuration: number }[],
+                    ...(category != null && category !== "" ? { category } : {}),
                     ...(timeBlockId != null ? { timeBlockId } : {}),
                 };
                 setSelectedEvent(event);

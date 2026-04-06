@@ -4,7 +4,7 @@ import CalendarSkeleton from "./CalanderSkeletion.tsx";
 import { useQuery } from "@tanstack/react-query";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getCategoryColor, getWeekStart, formatDuration, formatLocalDateYMD } from "./utils.ts";
 import { CalendarEvent, DateClickInfo, EventLogs } from "./types.ts";
 import { Category } from "../../api/Category.ts";
@@ -293,6 +293,7 @@ export default function RenderCalendarContent({
                         apps: block.apps,
                         type: "timeblock",
                         timeBlockId: block.id,
+                        category: block.category,
                     },
                 };
             })
@@ -371,6 +372,37 @@ export default function RenderCalendarContent({
             ro.disconnect();
         };
     }, [ref, showFullCalendarGrid]);
+
+    useLayoutEffect(() => {
+        if (!showFullCalendarGrid) return;
+        let alive = true;
+        const timers: ReturnType<typeof setTimeout>[] = [];
+        const sync = () => {
+            if (!alive) return;
+            try {
+                const api = ref?.current?.getApi?.();
+                api?.render?.();
+                api?.updateSize?.();
+            } catch {
+            }
+        };
+        sync();
+        timers.push(setTimeout(sync, 0));
+        timers.push(setTimeout(sync, 80));
+        let rafOuter = 0;
+        let rafInner = 0;
+        rafOuter = requestAnimationFrame(() => {
+            rafInner = requestAnimationFrame(() => {
+                if (alive) sync();
+            });
+        });
+        return () => {
+            alive = false;
+            cancelAnimationFrame(rafOuter);
+            cancelAnimationFrame(rafInner);
+            timers.forEach(clearTimeout);
+        };
+    }, [events, showFullCalendarGrid, ref]);
 
     if (isLoading || (isLoadingGoogleEvents && !(cachedEvents?.length ?? 0))) {
         return <CalendarSkeleton />;
