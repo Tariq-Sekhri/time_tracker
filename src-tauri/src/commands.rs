@@ -49,6 +49,15 @@ pub async fn apply_update_cmd(app: AppHandle) -> Result<(), String> {
         let _ = w.emit("update-installed", ());
     }
 
+    #[cfg(target_os = "linux")]
+    {
+        let app_for_exit = app.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            app_for_exit.exit(0);
+        });
+    }
+
     Ok(())
 }
 
