@@ -5,8 +5,8 @@ body {
 }
 
 *::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 15px;
+    height: 15px;
 }
 
 *::-webkit-scrollbar-button {
@@ -28,15 +28,6 @@ body {
     display: block;
     width: 0;
     height: 0;
-}
-
-.calendar-fc-host,
-.calendar-fc-host .fc {
-    height: 100%;
-    min-height: 0;
-    --fc-page-bg-color: #111827;
-    --fc-border-color: #374151;
-    --fc-neutral-text-color: #9ca3af;
 }
 
 /* FullCalendar dark theme styling */
@@ -83,47 +74,25 @@ body {
 }
 
 .nice-scrollbar,
-.fc-theme-standard .fc-scroller,
-.calendar-fc-host .fc-scroller {
-    scrollbar-gutter: stable;
+.fc-theme-standard .fc-scroller {
     scrollbar-width: auto;
-    scrollbar-color: #9ca3af #4b5563;
-}
-
-.nice-scrollbar::-webkit-scrollbar,
-.fc-theme-standard .fc-scroller::-webkit-scrollbar,
-.calendar-fc-host .fc-scroller::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    scrollbar-color: auto;
 }
 
 .nice-scrollbar::-webkit-scrollbar-track,
-.fc-theme-standard .fc-scroller::-webkit-scrollbar-track,
-.calendar-fc-host .fc-scroller::-webkit-scrollbar-track {
-    background: #4b5563;
+.fc-theme-standard .fc-scroller::-webkit-scrollbar-track {
+    background: #111827;
     border-radius: 9999px;
 }
 
 .nice-scrollbar::-webkit-scrollbar-thumb,
-.fc-theme-standard .fc-scroller::-webkit-scrollbar-thumb,
-.calendar-fc-host .fc-scroller::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, #d1d5db 0%, #9ca3af 100%);
-    border: 1px solid #6b7280;
+.fc-theme-standard .fc-scroller::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #6b7280 0%, #4b5563 100%);
+    border: 2px solid #111827;
     border-radius: 9999px;
 }
 
 .nice-scrollbar::-webkit-scrollbar-thumb:hover,
-.fc-theme-standard .fc-scroller::-webkit-scrollbar-thumb:hover,
-.calendar-fc-host .fc-scroller::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, #e5e7eb 0%, #d1d5db 100%);
-}
-
-.calendar-fc-host .fc-scrollgrid-section-header .fc-scroller {
-    overflow: hidden !important;
-    scrollbar-width: none !important;
-}
-
-.calendar-fc-host .fc-scrollgrid-section-header .fc-scroller::-webkit-scrollbar {
-    width: 0 !important;
-    height: 0 !important;
+.fc-theme-standard .fc-scroller::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #9ca3af 0%, #6b7280 100%);
 }
