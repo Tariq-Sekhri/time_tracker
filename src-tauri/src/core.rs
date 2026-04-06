@@ -4,7 +4,7 @@
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
     use tauri::{AppHandle, Emitter};
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[cfg(target_os = "macos")]
     use anyhow::Context;
 
     #[cfg(debug_assertions)]
@@ -31,11 +31,9 @@
     ///    - You can only compile for the platform you're currently on (unless using cross-compilation tools)
     ///    - To build for macOS/Linux from Windows, you'll need to use cross-compilation or CI/CD
     ///
-    /// 2. **Linux Limitations**:
-    ///    - **X11 only**: This implementation only works with X11, NOT Wayland
-    ///    - Many modern Linux distributions use Wayland by default (GNOME, KDE Plasma 6+)
-    ///    - Users on Wayland will get an error message
-    ///    - **Solution**: Consider using `wlr-foreign-toplevel-management` or `xdg-desktop-portal` for Wayland support
+    /// 2. **Linux**:
+    ///    - Tries Hyprland (`hyprctl`), Sway (`swaymsg`), KDE (`kdotool`), AT-SPI, then `xdotool`
+    ///    - AT-SPI needs a session D-Bus and accessibility enabled where applicable
     ///
     /// 3. **macOS Limitations**:
     ///    - Requires proper entitlements in `Info.plist` for accessibility permissions
@@ -43,13 +41,6 @@
     ///    - The app name returned is the localized name (may vary by language)
     ///
     /// 4. **Windows**: Should work reliably, but window titles may not always match executable names
-    ///
-    /// **Alternative Approaches:**
-    /// - Use a cross-platform crate like `active-win` (but it may have its own limitations)
-    /// - Use Tauri's built-in APIs if they add foreground app detection
-    /// - Implement a hybrid approach: X11 for Linux X11, Wayland protocol for Wayland
-    ///
-    /// **Testing**: Make sure to test on each target platform before releasing!
 
     /// Sanitizes app names by removing invisible Unicode characters that can break regex patterns.
     /// Removes zero-width spaces, formatting characters, and other invisible characters.
@@ -93,8 +84,173 @@
                 ) && !matches!(*c, '\u{FE00}'..='\u{FE0F}') // Variation Selectors
             })
             .collect::<String>()
-            .trim() // Remove leading/trailing whitespace
+            .trim() 
             .to_string()
+    }
+
+    #[cfg(target_os = "linux")]
+    mod linux_fg {
+        use atspi::connection::set_session_accessibility;
+        use atspi::proxy::accessible::ObjectRefExt;
+        use atspi::zbus::Connection;
+        use atspi::{AccessibilityConnection, ObjectRefOwned, Role, State};
+
+        fn trim_output(stdout: &[u8]) -> String {
+            String::from_utf8_lossy(stdout).trim().to_string()
+        }
+
+        fn run_ok(cmd: &str, args: &[&str]) -> Option<Vec<u8>> {
+            let output = std::process::Command::new(cmd).args(args).output().ok()?;
+            output.status.success().then_some(output.stdout)
+        }
+
+        fn from_hyprctl() -> Option<String> {
+            let stdout = run_ok("hyprctl", &["-j", "activewindow"])?;
+            let v: serde_json::Value = serde_json::from_slice(&stdout).ok()?;
+            let title = v.get("title")?.as_str()?.trim();
+            if !title.is_empty() {
+                return Some(title.to_string());
+            }
+            v.get("class")?
+                .as_str()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        }
+
+        fn find_sway_focused_title(v: &serde_json::Value) -> Option<String> {
+            if v.get("focused").and_then(|x| x.as_bool()) == Some(true) {
+                if let Some(name) = v.get("name").and_then(|n| n.as_str()) {
+                    let name = name.trim();
+                    if !name.is_empty() {
+                        return Some(name.to_string());
+                    }
+                }
+            }
+            for key in ["nodes", "floating_nodes"] {
+                if let Some(arr) = v.get(key).and_then(|n| n.as_array()) {
+                    for child in arr {
+                        if let Some(t) = find_sway_focused_title(child) {
+                            return Some(t);
+                        }
+                    }
+                }
+            }
+            None
+        }
+
+        fn from_swaymsg() -> Option<String> {
+            let stdout = run_ok("swaymsg", &["-t", "get_tree"])?;
+            let v: serde_json::Value = serde_json::from_slice(&stdout).ok()?;
+            find_sway_focused_title(&v)
+        }
+
+        fn from_kdotool() -> Option<String> {
+            let stdout = run_ok("kdotool", &["getactivewindow", "getwindowname"])?;
+            let s = trim_output(&stdout);
+            (!s.is_empty()).then_some(s)
+        }
+
+        async fn deep_search_active_frame(
+            conn: &Connection,
+            root_ref: ObjectRefOwned,
+        ) -> Option<String> {
+            let mut stack = vec![root_ref];
+            while let Some(current) = stack.pop() {
+                if current.is_null() {
+                    continue;
+                }
+                let proxy = current.into_accessible_proxy(conn).await.ok()?;
+                let role = proxy.get_role().await.ok()?;
+                let state = proxy.get_state().await.ok()?;
+                if role == Role::Frame && state.contains(State::Active) {
+                    if let Ok(name) = proxy.name().await {
+                        let n = name.trim();
+                        if !n.is_empty() {
+                            return Some(n.to_string());
+                        }
+                    }
+                }
+                let count = proxy.child_count().await.ok()?;
+                for j in (0..count).rev() {
+                    let Ok(child_ref) = proxy.get_child_at_index(j).await else {
+                        continue;
+                    };
+                    if !child_ref.is_null() {
+                        stack.push(child_ref);
+                    }
+                }
+            }
+            None
+        }
+
+        async fn from_atspi_inner() -> Option<String> {
+            let _ = set_session_accessibility(true).await;
+            let conn = AccessibilityConnection::new().await.ok()?;
+            let zconn = conn.connection();
+            let root = conn.root_accessible_on_registry().await.ok()?;
+            let apps = root.get_children().await.ok()?;
+
+            for app_ref in apps.iter().cloned() {
+                if app_ref.is_null() {
+                    continue;
+                }
+                let app = app_ref.into_accessible_proxy(zconn).await.ok()?;
+                let n = app.child_count().await.ok()?;
+                for j in 0..n {
+                    let child_ref = app.get_child_at_index(j).await.ok()?;
+                    if child_ref.is_null() {
+                        continue;
+                    }
+                    let child = child_ref.into_accessible_proxy(zconn).await.ok()?;
+                    let role = child.get_role().await.ok()?;
+                    let state = child.get_state().await.ok()?;
+                    if role == Role::Frame && state.contains(State::Active) {
+                        if let Ok(name) = child.name().await {
+                            let t = name.trim();
+                            if !t.is_empty() {
+                                return Some(t.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+
+            for app_ref in apps {
+                if app_ref.is_null() {
+                    continue;
+                }
+                if let Some(t) = deep_search_active_frame(zconn, app_ref).await {
+                    return Some(t);
+                }
+            }
+
+            None
+        }
+
+        fn from_atspi() -> Option<String> {
+            match tokio::runtime::Handle::try_current() {
+                Ok(handle) => tokio::task::block_in_place(|| handle.block_on(from_atspi_inner())),
+                Err(_) => tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .ok()?
+                    .block_on(from_atspi_inner()),
+            }
+        }
+
+        fn from_xdotool() -> Option<String> {
+            let stdout = run_ok("xdotool", &["getactivewindow", "getwindowname"])?;
+            let s = trim_output(&stdout);
+            (!s.is_empty()).then_some(s)
+        }
+
+        pub fn active_window_title() -> Option<String> {
+            from_hyprctl()
+                .or_else(from_swaymsg)
+                .or_else(from_kdotool)
+                .or_else(from_atspi)
+                .or_else(from_xdotool)
+        }
     }
 
     #[cfg(target_os = "windows")]
@@ -147,145 +303,12 @@
 
     #[cfg(target_os = "linux")]
     fn get_foreground_app() -> Result<String, Error> {
-        use std::ptr;
-        use x11::xlib;
-
-        unsafe {
-            let display = xlib::XOpenDisplay(ptr::null());
-            if display.is_null() {
-                return Err(anyhow::anyhow!("Failed to open X display. Make sure you're running in an X11 environment (not Wayland).").into());
-            }
-
-            let mut focus_return: xlib::Window = 0;
-            let mut revert_to: i32 = 0;
-
-            xlib::XGetInputFocus(display, &mut focus_return, &mut revert_to);
-
-            if focus_return == 0 || focus_return == 1 {
-                xlib::XCloseDisplay(display);
-                return Err(anyhow::anyhow!("Failed to get focused window").into());
-            }
-
-            // Get window name using XFetchName (simpler than XGetWMName)
-            let mut name: *mut i8 = ptr::null_mut();
-            let result = xlib::XFetchName(display, focus_return, &mut name);
-
-            if result == 0 || name.is_null() {
-                let mut class_hint: xlib::XClassHint = xlib::XClassHint {
-                    res_name: ptr::null_mut(),
-                    res_class: ptr::null_mut(),
-                };
-
-                if xlib::XGetClassHint(display, focus_return, &mut class_hint) != 0 {
-                    let res_class_str = if !class_hint.res_class.is_null() {
-                        Some(
-                            std::ffi::CStr::from_ptr(class_hint.res_class as *const i8)
-                                .to_str()
-                                .context("Failed to convert class name")?
-                                .to_string(),
-                        )
-                    } else {
-                        None
-                    };
-                    let res_name_str = if !class_hint.res_name.is_null() {
-                        Some(
-                            std::ffi::CStr::from_ptr(class_hint.res_name as *const i8)
-                                .to_str()
-                                .context("Failed to convert instance name")?
-                                .to_string(),
-                        )
-                    } else {
-                        None
-                    };
-                    if !class_hint.res_class.is_null() {
-                        xlib::XFree(class_hint.res_class as *mut std::ffi::c_void);
-                    }
-                    if !class_hint.res_name.is_null() {
-                        xlib::XFree(class_hint.res_name as *mut std::ffi::c_void);
-                    }
-                    xlib::XCloseDisplay(display);
-                    if let Some(s) = res_class_str {
-                        let t = s.trim();
-                        if !t.is_empty() {
-                            return Ok(t.to_string());
-                        }
-                    }
-                    if let Some(s) = res_name_str {
-                        let t = s.trim();
-                        if !t.is_empty() {
-                            return Ok(t.to_string());
-                        }
-                    }
-                    return Err(anyhow::anyhow!("Failed to get window name or class").into());
-                }
-
-                xlib::XCloseDisplay(display);
-                return Err(anyhow::anyhow!("Failed to get window name or class").into());
-            }
-
-            let window_name = std::ffi::CStr::from_ptr(name)
-                .to_str()
-                .context("Failed to convert window name")?
-                .to_string();
-
-            xlib::XFree(name as *mut std::ffi::c_void);
-
-            if !window_name.trim().is_empty() {
-                xlib::XCloseDisplay(display);
-                return Ok(window_name);
-            }
-
-            let mut class_hint: xlib::XClassHint = xlib::XClassHint {
-                res_name: ptr::null_mut(),
-                res_class: ptr::null_mut(),
-            };
-
-            if xlib::XGetClassHint(display, focus_return, &mut class_hint) != 0 {
-                let res_class_str = if !class_hint.res_class.is_null() {
-                    Some(
-                        std::ffi::CStr::from_ptr(class_hint.res_class as *const i8)
-                            .to_str()
-                            .context("Failed to convert class name")?
-                            .to_string(),
-                    )
-                } else {
-                    None
-                };
-                let res_name_str = if !class_hint.res_name.is_null() {
-                    Some(
-                        std::ffi::CStr::from_ptr(class_hint.res_name as *const i8)
-                            .to_str()
-                            .context("Failed to convert instance name")?
-                            .to_string(),
-                    )
-                } else {
-                    None
-                };
-                if !class_hint.res_class.is_null() {
-                    xlib::XFree(class_hint.res_class as *mut std::ffi::c_void);
-                }
-                if !class_hint.res_name.is_null() {
-                    xlib::XFree(class_hint.res_name as *mut std::ffi::c_void);
-                }
-                xlib::XCloseDisplay(display);
-                if let Some(s) = res_class_str {
-                    let t = s.trim();
-                    if !t.is_empty() {
-                        return Ok(t.to_string());
-                    }
-                }
-                if let Some(s) = res_name_str {
-                    let t = s.trim();
-                    if !t.is_empty() {
-                        return Ok(t.to_string());
-                    }
-                }
-                return Err(anyhow::anyhow!("Failed to get window name or class").into());
-            }
-
-            xlib::XCloseDisplay(display);
-            Err(anyhow::anyhow!("Failed to get window name or class").into())
-        }
+        linux_fg::active_window_title().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Failed to get active window title (tried hyprctl, swaymsg, kdotool, AT-SPI, xdotool)"
+            )
+            .into()
+        })
     }
 
     #[cfg(test)]
