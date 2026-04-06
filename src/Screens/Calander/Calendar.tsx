@@ -2,11 +2,11 @@ import {useQuery, useQueryClient} from "@tanstack/react-query";
 import {get_categories} from "../../api/Category.ts";
 import {get_logs_for_time_block, get_logs_by_category} from "../../api/Log.ts";
 import {get_week} from "../../api/week.ts";
-import { getCalendarDayRangeUnix, getWeekRange } from "../../utils.ts";
+import { adjustInstantToCalendarDayBoundary, getCalendarDayRangeUnix, getWeekRange } from "../../utils.ts";
 import {useState, useMemo, useEffect, useRef} from "react";
 import {EventClickArg, DatesSetArg} from "@fullcalendar/core";
 import RenderCalendarContent from "./RenderCalenderContent.tsx";
-import {formatLocalDateYMD, getWeekStart, isCurrentWeek} from "./utils.ts";
+import {formatLocalDateYMD, getWeekStart} from "./utils.ts";
 import {useDateStore} from "../../stores/dateStore.ts";
 import {View} from "../../App.tsx";
 import CalenderHeader from "./RightSideBar/CalanderHeader.tsx";
@@ -42,6 +42,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const hasInitialized = useRef(false);
     const calenderRef = useRef<any>(null);
     const isUpdatingFromStore = useRef(false);
+    const didAlignInitialWeekToBoundary = useRef(false);
 
 
     const [visibleCategories, setVisibleCategories] = useState<Set<string>>(new Set());
@@ -58,6 +59,12 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
             setIncludeGoogleInStats(viewPrefs.includeGoogleInStats);
         }
     }, [viewPrefs]);
+
+    useEffect(() => {
+        if (didAlignInitialWeekToBoundary.current) return;
+        didAlignInitialWeekToBoundary.current = true;
+        setDate(adjustInstantToCalendarDayBoundary(new Date(), calendarStartHour));
+    }, [calendarStartHour, setDate]);
 
     const {data: categories = []} = useQuery({
         queryKey: ["categories"],
@@ -312,17 +319,18 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         };
     }, [queryClient]);
 
-    const weekStart = getWeekStart(date);
+    const weekStart = getWeekStart(date, calendarStartHour);
     const {data: weekData} = useQuery({
         queryKey: [
             "week",
             formatLocalDateYMD(weekStart),
+            calendarStartHour,
             timeBlockSettings.minLogDuration,
             timeBlockSettings.maxAttachDistance,
             timeBlockSettings.lookaheadWindow,
             timeBlockSettings.minDuration,
         ],
-        queryFn: async () => await get_week(weekStart, timeBlockSettings),
+        queryFn: async () => await get_week(weekStart, timeBlockSettings, calendarStartHour),
         enabled: !!weekStart && !isNaN(weekStart.getTime()) && !!selectedEvent,
     });
 
@@ -368,7 +376,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                     endTime = day_end;
                     title = `${selectedCategory} - ${selectedDate.toLocaleDateString()}`;
                 } else {
-                    const weekRange = getWeekRange(date);
+                    const weekRange = getWeekRange(date, calendarStartHour);
                     startTime = weekRange.week_start;
                     endTime = weekRange.week_end;
                     title = `${selectedCategory} - Week`;
@@ -577,22 +585,20 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     useEffect(() => {
         const calendarApi = calenderRef.current?.getApi();
         if (calendarApi && !isUpdatingFromStore.current) {
-            const calendarDate = calendarApi.getDate();
-            const targetDate = new Date(date);
-            targetDate.setHours(0, 0, 0, 0);
+            const calendarWeekYmd = formatLocalDateYMD(
+                getWeekStart(calendarApi.getDate(), calendarStartHour)
+            );
+            const storeWeekYmd = formatLocalDateYMD(getWeekStart(date, calendarStartHour));
 
-            const calendarDateStr = formatLocalDateYMD(calendarDate);
-            const targetDateStr = formatLocalDateYMD(targetDate);
-
-            if (calendarDateStr !== targetDateStr) {
+            if (calendarWeekYmd !== storeWeekYmd) {
                 isUpdatingFromStore.current = true;
-                calendarApi.gotoDate(targetDateStr);
+                calendarApi.gotoDate(storeWeekYmd);
                 setTimeout(() => {
                     isUpdatingFromStore.current = false;
                 }, 100);
             }
         }
-    }, [date]);
+    }, [date, calendarStartHour]);
 
     const handleDatesSet = (dates: DatesSetArg) => {
         if (isUpdatingFromStore.current) {
@@ -606,8 +612,8 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
             calendarDate.setHours(0, 0, 0, 0);
             storeDate.setHours(0, 0, 0, 0);
 
-            const calendarWeekStart = getWeekStart(calendarDate);
-            const storeWeekStart = getWeekStart(storeDate);
+            const calendarWeekStart = getWeekStart(calendarDate, calendarStartHour);
+            const storeWeekStart = getWeekStart(storeDate, calendarStartHour);
 
             if (calendarWeekStart.getTime() !== storeWeekStart.getTime()) {
                 setDate(calendarWeekStart);
@@ -687,7 +693,8 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     }, [queryClient]);
 
     const goToPrevWeek = () => {
-        const newDate = new Date(date);
+        const ws = getWeekStart(date, calendarStartHour);
+        const newDate = new Date(ws);
         newDate.setDate(newDate.getDate() - 7);
         setDate(newDate);
         setSelectedEvent(null);
@@ -697,7 +704,8 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     };
 
     const goToNextWeek = () => {
-        const newDate = new Date(date);
+        const ws = getWeekStart(date, calendarStartHour);
+        const newDate = new Date(ws);
         newDate.setDate(newDate.getDate() + 7);
         setDate(newDate);
         setSelectedEvent(null);
@@ -707,14 +715,14 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     };
 
     const goToToday = () => {
-        setDate(new Date());
+        setDate(adjustInstantToCalendarDayBoundary(new Date(), calendarStartHour));
         setSelectedEvent(null);
         setSelectedEventLogs([]);
         setSelectedDate(null);
         setSelectedCategory(null);
     };
 
-    const headerWeekStart = getWeekStart(date);
+    const headerWeekStart = getWeekStart(date, calendarStartHour);
     const weekEnd = new Date(headerWeekStart);
     weekEnd.setDate(weekEnd.getDate() + 6);
 
@@ -727,7 +735,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     return (
         <div className="flex flex-col flex-1 min-h-0 w-full">
             <CalenderHeader headerTitle={headerTitle} onClick={goToPrevWeek} d={date} onClick1={goToNextWeek}
-                            onClick2={goToToday}/>
+                            onClick2={goToToday} calendarStartHour={calendarStartHour}/>
 
             <div className="flex flex-1 overflow-hidden min-h-0">
                 <div className="flex-1 overflow-hidden min-h-0">

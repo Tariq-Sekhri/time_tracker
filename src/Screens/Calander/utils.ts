@@ -1,4 +1,4 @@
-import { getWeekRange } from "../../utils.ts";
+import { adjustInstantToCalendarDayBoundary, getWeekRange } from "../../utils.ts";
 
 export const formatTime = (date: Date) =>
     date.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'}).toLowerCase();
@@ -20,15 +20,15 @@ export function formatLocalDateYMD(d: Date): string {
     return `${y}-${m}-${day}`;
 }
 
-export function getWeekStart(d: Date): Date {
-    const { week_start } = getWeekRange(d);
+export function getWeekStart(d: Date, calendarStartHour: number): Date {
+    const { week_start } = getWeekRange(d, calendarStartHour);
     return new Date(week_start * 1000);
 }
 
-export function isCurrentWeek(d: Date): boolean {
-    const now = new Date();
-    const currentWeekStart = getWeekStart(now);
-    const selectedWeekStart = getWeekStart(d);
+export function isCurrentWeek(d: Date, calendarStartHour: number): boolean {
+    const nowForWeek = adjustInstantToCalendarDayBoundary(new Date(), calendarStartHour);
+    const currentWeekStart = getWeekStart(nowForWeek, calendarStartHour);
+    const selectedWeekStart = getWeekStart(d, calendarStartHour);
     return currentWeekStart.getTime() === selectedWeekStart.getTime();
 }
 

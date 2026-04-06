@@ -5,7 +5,8 @@ export default function CalanderHeader(props: {
     onClick: () => void,
     d: Date,
     onClick1: () => void,
-    onClick2: () => void
+    onClick2: () => void,
+    calendarStartHour: number,
 }) {
     return <div className="flex-shrink-0 p-4 border-b border-gray-700 bg-black">
         <div className="flex justify-between items-center">
@@ -18,12 +19,12 @@ export default function CalanderHeader(props: {
                     ‹
                 </button>
                 <button
-                    className={`px-3 py-1 rounded ${isCurrentWeek(props.d)
+                    className={`px-3 py-1 rounded ${isCurrentWeek(props.d, props.calendarStartHour)
                         ? "bg-gray-900 text-gray-600 cursor-not-allowed"
                         : "bg-gray-800 text-white hover:bg-gray-700"
                     }`}
                     onClick={props.onClick1}
-                    disabled={isCurrentWeek(props.d)}
+                    disabled={isCurrentWeek(props.d, props.calendarStartHour)}
                 >
                     ›
                 </button>

@@ -30,8 +30,12 @@ function transformTimeBlock(block: TimeBlockBackend): TimeBlock {
     };
 }
 
-export async function get_week(date: Date, timeBlockSettings: TimeBlockSettings): Promise<TimeBlock[]> {
-    const {week_start, week_end} = getWeekRange(date);
+export async function get_week(
+    date: Date,
+    timeBlockSettings: TimeBlockSettings,
+    calendarStartHour: number
+): Promise<TimeBlock[]> {
+    const {week_start, week_end} = getWeekRange(date, calendarStartHour);
     const result = await invokeOrThrow<TimeBlockBackend[]>("get_week", {
         weekStart: week_start,
         weekEnd: week_end,
