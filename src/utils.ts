@@ -11,24 +11,53 @@ export async function invokeOrThrow<T>(
  * Calculate the start and end timestamps for the week containing the given date
  * Week starts on Monday and ends on Sunday
  */
-export function getWeekRange(date: Date): {
+export function getWeekRange(
+    date: Date,
+    calendarStartHour: number = 6
+): {
     week_start: number;
     week_end: number;
 } {
+    const h = Number.isFinite(calendarStartHour)
+        ? Math.min(23, Math.max(0, Math.floor(calendarStartHour)))
+        : 6;
+
     const y = date.getFullYear();
     const m = date.getMonth();
     const day = date.getDate();
     const dow = date.getDay();
     const offsetToMonday = dow === 0 ? -6 : 1 - dow;
-    const monday = new Date(y, m, day + offsetToMonday, 0, 0, 0, 0);
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    sunday.setHours(23, 59, 59, 999);
+    const mondayCal = new Date(y, m, day + offsetToMonday, 0, 0, 0, 0);
+
+    const weekStart = new Date(mondayCal);
+    weekStart.setHours(h, 0, 0, 0);
+
+    const weekEndExclusive = new Date(weekStart);
+    weekEndExclusive.setDate(weekEndExclusive.getDate() + 7);
+
+    const week_end = Math.floor(weekEndExclusive.getTime() / 1000) - 1;
 
     return {
-        week_start: Math.floor(monday.getTime() / 1000),
-        week_end: Math.floor(sunday.getTime() / 1000),
+        week_start: Math.floor(weekStart.getTime() / 1000),
+        week_end,
     };
+}
+
+export function adjustInstantToCalendarDayBoundary(
+    d: Date,
+    calendarStartHour: number
+): Date {
+    const h = Number.isFinite(calendarStartHour)
+        ? Math.min(23, Math.max(0, Math.floor(calendarStartHour)))
+        : 6;
+    const y = d.getFullYear();
+    const m = d.getMonth();
+    const day = d.getDate();
+    const boundary = new Date(y, m, day, h, 0, 0, 0);
+    if (d.getTime() < boundary.getTime()) {
+        return new Date(y, m, day - 1, 12, 0, 0, 0);
+    }
+    return new Date(y, m, day, 12, 0, 0, 0);
 }
 
 export function getCalendarDayRangeUnix(

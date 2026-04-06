@@ -25,11 +25,11 @@ export default function AppsList({onBack}: { onBack: () => void }) {
     const [activeTab, setActiveTab] = useState<Tab>("week");
     const [visibleCount, setVisibleCount] = useState(20);
     const {date, setDate} = useDateStore();
-    const { uiMinAppDuration } = useSettingsStore();
-    const {week_start, week_end} = getWeekRange(date);
+    const { uiMinAppDuration, calendarStartHour } = useSettingsStore();
+    const {week_start, week_end} = getWeekRange(date, calendarStartHour);
 
     const {data: weekStats, isLoading} = useQuery({
-        queryKey: ["week_statistics", week_start, week_end],
+        queryKey: ["week_statistics", week_start, week_end, calendarStartHour],
         queryFn: async () => await get_week_statistics(week_start, week_end),
     });
 

@@ -132,7 +132,7 @@ export default function RenderCalendarContent({
         }
     };
 
-    const weekStart = getWeekStart(date);
+    const weekStart = getWeekStart(date, calendarStartHour);
     const slotMinTime = `${String(calendarStartHour).padStart(2, "0")}:00:00`;
     const slotMaxTime = `${String(calendarStartHour + 24).padStart(2, "0")}:00:00`;
     const scrollTime = slotMinTime;
@@ -140,17 +140,21 @@ export default function RenderCalendarContent({
         queryKey: [
             "week",
             formatLocalDateYMD(weekStart),
+            calendarStartHour,
             timeBlockSettings.minLogDuration,
             timeBlockSettings.maxAttachDistance,
             timeBlockSettings.lookaheadWindow,
             timeBlockSettings.minDuration,
         ],
-        queryFn: async () => await get_week(weekStart, timeBlockSettings),
+        queryFn: async () => await get_week(weekStart, timeBlockSettings, calendarStartHour),
         enabled: !!weekStart && !isNaN(weekStart.getTime()),
         refetchOnWindowFocus: true, // Refetch when window gains focus
     });
 
-    const weekRange = useMemo(() => getWeekRange(date), [date]);
+    const weekRange = useMemo(
+        () => getWeekRange(date, calendarStartHour),
+        [date, calendarStartHour]
+    );
     const calendarIds = useMemo(() => googleCalendars.map(cal => cal.id).sort().join(','), [googleCalendars]);
     
     const queryEnabled = !!weekStart && !isNaN(weekStart.getTime()) && googleCalendars.length > 0;
@@ -171,7 +175,13 @@ export default function RenderCalendarContent({
         isLoading: isLoadingGoogleEvents,
         isError: isGoogleEventsError
     } = useQuery({
-        queryKey: ["googleCalendarEvents", weekRange.week_start, weekRange.week_end, calendarIds],
+        queryKey: [
+            "googleCalendarEvents",
+            weekRange.week_start,
+            weekRange.week_end,
+            calendarStartHour,
+            calendarIds,
+        ],
         queryFn: async () => {
             console.log("[GCal Render] queryFn executing: fetching events for range", weekRange.week_start, "-", weekRange.week_end);
             const data = await get_all_google_calendar_events(weekRange.week_start, weekRange.week_end);

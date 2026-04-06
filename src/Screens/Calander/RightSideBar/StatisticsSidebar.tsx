@@ -63,11 +63,15 @@ export default function StatisticsSidebar({
     trailingToolbar,
 }: StatisticsSidebarProps) {
     const [displayMode, setDisplayMode] = useState<DisplayMode>("percentage");
-    const { categorySidebarCount } = useSettingsStore();
+    const { categorySidebarCount, calendarStartHour } = useSettingsStore();
 
-    const { week_start, week_end } = getWeekRange(weekDate);
-    const prevWeekStart = week_start - 7 * 86400;
-    const prevWeekEnd = prevWeekStart + (week_end - week_start);
+    const { week_start, week_end } = getWeekRange(weekDate, calendarStartHour);
+    const prevAnchor = new Date(week_start * 1000);
+    prevAnchor.setDate(prevAnchor.getDate() - 7);
+    const { week_start: prevWeekStart, week_end: prevWeekEnd } = getWeekRange(
+        prevAnchor,
+        calendarStartHour
+    );
 
     const {
         data: weekStats,
@@ -75,7 +79,7 @@ export default function StatisticsSidebar({
         error,
         isError,
     } = useQuery({
-        queryKey: ["week_statistics", week_start, week_end],
+        queryKey: ["week_statistics", week_start, week_end, calendarStartHour],
         queryFn: async () => await get_week_statistics(week_start, week_end),
     });
 
@@ -84,7 +88,7 @@ export default function StatisticsSidebar({
         isLoading: isLoadingGoogleEvents,
         isError: isGoogleEventsError,
     } = useQuery({
-        queryKey: ["google_calendar_events", week_start, week_end],
+        queryKey: ["google_calendar_events", week_start, week_end, calendarStartHour],
         queryFn: async () => await get_all_google_calendar_events(week_start, week_end),
         enabled: includeGoogleInStats && calendarsInStats.size > 0,
     });
@@ -94,7 +98,7 @@ export default function StatisticsSidebar({
         isLoading: isLoadingPrevGoogleEvents,
         isError: isPrevGoogleEventsError,
     } = useQuery({
-        queryKey: ["google_calendar_events", prevWeekStart, prevWeekEnd],
+        queryKey: ["google_calendar_events", prevWeekStart, prevWeekEnd, calendarStartHour],
         queryFn: async () => await get_all_google_calendar_events(prevWeekStart, prevWeekEnd),
         enabled: includeGoogleInStats && calendarsInStats.size > 0,
     });

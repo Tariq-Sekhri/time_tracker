@@ -7,10 +7,6 @@
     #[cfg(target_os = "macos")]
     use anyhow::Context;
 
-    #[cfg(debug_assertions)]
-    pub static IS_SUSPENDED: AtomicBool = AtomicBool::new(true);
-
-    #[cfg(not(debug_assertions))]
     pub static IS_SUSPENDED: AtomicBool = AtomicBool::new(false);
 
     #[tauri::command]
