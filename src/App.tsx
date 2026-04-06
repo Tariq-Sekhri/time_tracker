@@ -2,6 +2,7 @@ import "./App.css";
 import { useState, useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { useRef } from "react";
 
 import Calendar from "./Screens/Calander/Calendar.tsx";
 import CategoriesView from "./Componants/CategoriesView.tsx";
@@ -31,6 +32,8 @@ function AppInner() {
     const [updateAvailable, setUpdateAvailable] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
     const [updateError, setUpdateError] = useState<string | null>(null);
+    const lastDownloadPctRef = useRef<number | null>(null);
+    const didShowUnknownDownloadRef = useRef(false);
 
     useEffect(() => {
         let unlistenFn: (() => void) | null = null;
@@ -60,6 +63,7 @@ function AppInner() {
                 } else {
                     updateToast(updaterToastId, "Downloading update…", "loading");
                 }
+                didShowUnknownDownloadRef.current = true;
             });
 
             unlistenProgress = await listen<{ downloaded: number; total: number }>(
@@ -70,10 +74,22 @@ function AppInner() {
                     }
                     const downloaded = e.payload?.downloaded ?? 0;
                     const total = e.payload?.total ?? 0;
-                    const pct = total > 0 ? Math.floor((downloaded / total) * 100) : 0;
+                    if (total <= 0) {
+                        if (!didShowUnknownDownloadRef.current) {
+                            updateToast(updaterToastId, "Downloading update…", "loading");
+                            didShowUnknownDownloadRef.current = true;
+                        }
+                        return;
+                    }
+                    const pct = Math.floor((downloaded / total) * 100);
+                    if (lastDownloadPctRef.current === pct) {
+                        return;
+                    }
+                    lastDownloadPctRef.current = pct;
+                    didShowUnknownDownloadRef.current = false;
                     updateToast(
                         updaterToastId,
-                        total > 0 ? `Downloading update… ${pct}%` : "Downloading update…",
+                        `Downloading update… ${pct}%`,
                         "loading"
                     );
                 }
@@ -92,6 +108,8 @@ function AppInner() {
                     updateToast(updaterToastId, "Update installed", "success");
                     const id = updaterToastId;
                     updaterToastId = null;
+                    lastDownloadPctRef.current = null;
+                    didShowUnknownDownloadRef.current = false;
                     setTimeout(() => removeToast(id), 2000);
                 } else {
                     showToast("Update installed", "success");
