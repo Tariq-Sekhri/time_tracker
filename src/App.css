@@ -1,20 +1,20 @@
 @import "tailwindcss";
 
 body {
-    background: black;
+  background: black;
 }
 
 *::-webkit-scrollbar {
-    width: 15px;
-    height: 15px;
+  width: 15px;
+  height: 15px;
 }
 
 *::-webkit-scrollbar-button {
-    -webkit-appearance: none;
-    appearance: none;
-    display: block;
-    width: 0;
-    height: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 0;
+  height: 0;
 }
 
 *::-webkit-scrollbar-button:vertical:start:decrement,
@@ -25,74 +25,81 @@ body {
 *::-webkit-scrollbar-button:horizontal:start:increment,
 *::-webkit-scrollbar-button:horizontal:end:decrement,
 *::-webkit-scrollbar-button:horizontal:end:increment {
-    display: block;
-    width: 0;
-    height: 0;
+  display: block;
+  width: 0;
+  height: 0;
 }
 
 /* FullCalendar dark theme styling */
 .fc-theme-standard .fc-col-header-cell {
-    background-color: #1f2937 !important; /* gray-800 */
-    color: white !important;
+  background-color: #1f2937 !important; /* gray-800 */
+  color: white !important;
 }
 
 .fc-theme-standard .fc-col-header-cell-cushion {
-    color: white !important;
+  color: white !important;
 }
 
 .fc-theme-standard .fc-daygrid-day-number {
-    color: white !important;
+  color: white !important;
 }
 
 .fc-theme-standard .fc-daygrid-day {
-    background-color: #111827 !important; /* gray-900 */
+  background-color: #111827 !important; /* gray-900 */
 }
 
 .fc-theme-standard .fc-timegrid-col {
-    background-color: #111827 !important;
+  background-color: #111827 !important;
 }
 
 .fc-theme-standard .fc-timegrid-slot {
-    background-color: #111827 !important;
+  background-color: #111827 !important;
 }
 
 .fc-theme-standard .fc-timegrid-slot-label {
-    color: #9ca3af !important; /* gray-400 */
+  color: #9ca3af !important; /* gray-400 */
 }
 
 .fc-theme-standard .fc-timegrid-axis {
-    color: #9ca3af !important;
+  color: #9ca3af !important;
 }
 
 .fc-theme-standard .fc-scrollgrid {
-    border-color: #374151 !important; /* gray-700 */
+  border-color: #374151 !important; /* gray-700 */
 }
 
 .fc-theme-standard td,
 .fc-theme-standard th {
-    border-color: #374151 !important;
+  border-color: #374151 !important;
+}
+
+.calendar-fc-host .fc .fc-timegrid-slots tr,
+.calendar-fc-host .fc .fc-timegrid-slot,
+.calendar-fc-host .fc .fc-timegrid-slot-lane {
+  height: var(--tt-slot-min-height, 24px) !important;
+  min-height: var(--tt-slot-min-height, 24px) !important;
 }
 
 .nice-scrollbar,
 .fc-theme-standard .fc-scroller {
-    scrollbar-width: auto;
-    scrollbar-color: auto;
+  scrollbar-width: auto;
+  scrollbar-color: auto;
 }
 
 .nice-scrollbar::-webkit-scrollbar-track,
 .fc-theme-standard .fc-scroller::-webkit-scrollbar-track {
-    background: #111827;
-    border-radius: 9999px;
+  background: #111827;
+  border-radius: 9999px;
 }
 
 .nice-scrollbar::-webkit-scrollbar-thumb,
 .fc-theme-standard .fc-scroller::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, #6b7280 0%, #4b5563 100%);
-    border: 2px solid #111827;
-    border-radius: 9999px;
+  background: linear-gradient(180deg, #6b7280 0%, #4b5563 100%);
+  border: 2px solid #111827;
+  border-radius: 9999px;
 }
 
 .nice-scrollbar::-webkit-scrollbar-thumb:hover,
 .fc-theme-standard .fc-scroller::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, #9ca3af 0%, #6b7280 100%);
+  background: linear-gradient(180deg, #9ca3af 0%, #6b7280 100%);
 }

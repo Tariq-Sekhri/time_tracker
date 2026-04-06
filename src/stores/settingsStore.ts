@@ -9,11 +9,13 @@ export type TimeBlockSettings = {
 
 export type SettingsState = {
     calendarStartHour: number;
+    calendarHeight: number;
     rightSidebarWidth: number;
     timeBlockSettings: TimeBlockSettings;
     uiMinAppDuration: number;
     categorySidebarCount: number;
     setCalendarStartHour: (hour: number) => void;
+    setCalendarHeight: (height: number) => void;
     setRightSidebarWidth: (width: number) => void;
     setTimeBlockSettings: (patch: Partial<TimeBlockSettings>) => void;
     setUiMinAppDuration: (seconds: number) => void;
@@ -25,9 +27,12 @@ const STORAGE_KEY = "time-tracker:settings";
 
 export const RIGHT_SIDEBAR_WIDTH_MIN = 280;
 export const RIGHT_SIDEBAR_WIDTH_MAX = 800;
+export const CALENDAR_HEIGHT_MIN = 50;
+export const CALENDAR_HEIGHT_MAX = 200;
 
-const DEFAULT_SETTINGS: Omit<SettingsState, "setCalendarStartHour" | "setRightSidebarWidth" | "setTimeBlockSettings" | "setUiMinAppDuration" | "setCategorySidebarCount" | "resetSettings"> = {
+const DEFAULT_SETTINGS: Omit<SettingsState, "setCalendarStartHour" | "setCalendarHeight" | "setRightSidebarWidth" | "setTimeBlockSettings" | "setUiMinAppDuration" | "setCategorySidebarCount" | "resetSettings"> = {
     calendarStartHour: 6,
+    calendarHeight: 100,
     rightSidebarWidth: 480,
     timeBlockSettings: {
         minLogDuration: 60,
@@ -50,7 +55,7 @@ function clampInt(value: number, min: number, max: number): number {
 
 function loadStoredSettings(): Omit<
     SettingsState,
-    "setCalendarStartHour" | "setRightSidebarWidth" | "setTimeBlockSettings" | "setUiMinAppDuration" | "setCategorySidebarCount" | "resetSettings"
+    "setCalendarStartHour" | "setCalendarHeight" | "setRightSidebarWidth" | "setTimeBlockSettings" | "setUiMinAppDuration" | "setCategorySidebarCount" | "resetSettings"
 > {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
@@ -60,6 +65,12 @@ function loadStoredSettings(): Omit<
         const calendarStartHour = isFiniteNumber(parsed?.calendarStartHour)
             ? clampInt(parsed.calendarStartHour, 0, 23)
             : DEFAULT_SETTINGS.calendarStartHour;
+        const rawCalendarHeight = parsed?.calendarHeight;
+        const calendarHeight = isFiniteNumber(rawCalendarHeight)
+            ? rawCalendarHeight > 300
+                ? DEFAULT_SETTINGS.calendarHeight
+                : clampInt(rawCalendarHeight, CALENDAR_HEIGHT_MIN, CALENDAR_HEIGHT_MAX)
+            : DEFAULT_SETTINGS.calendarHeight;
         const rightSidebarWidth = isFiniteNumber(parsed?.rightSidebarWidth)
             ? clampInt(parsed.rightSidebarWidth, RIGHT_SIDEBAR_WIDTH_MIN, RIGHT_SIDEBAR_WIDTH_MAX)
             : DEFAULT_SETTINGS.rightSidebarWidth;
@@ -90,6 +101,7 @@ function loadStoredSettings(): Omit<
 
         return {
             calendarStartHour,
+            calendarHeight,
             rightSidebarWidth,
             timeBlockSettings,
             uiMinAppDuration,
@@ -102,7 +114,7 @@ function loadStoredSettings(): Omit<
 
 function persistSettings(settings: Omit<
     SettingsState,
-    "setCalendarStartHour" | "setRightSidebarWidth" | "setTimeBlockSettings" | "setUiMinAppDuration" | "setCategorySidebarCount" | "resetSettings"
+    "setCalendarStartHour" | "setCalendarHeight" | "setRightSidebarWidth" | "setTimeBlockSettings" | "setUiMinAppDuration" | "setCategorySidebarCount" | "resetSettings"
 >): void {
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
@@ -120,7 +132,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
     const setAndPersist = (
         next: Omit<
             SettingsState,
-            "setCalendarStartHour" | "setRightSidebarWidth" | "setTimeBlockSettings" | "setUiMinAppDuration" | "setCategorySidebarCount" | "resetSettings"
+            "setCalendarStartHour" | "setCalendarHeight" | "setRightSidebarWidth" | "setTimeBlockSettings" | "setUiMinAppDuration" | "setCategorySidebarCount" | "resetSettings"
         >
     ) => {
         persistSettings(next);
@@ -134,6 +146,21 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
             const cur = get();
             setAndPersist({
                 calendarStartHour,
+                calendarHeight: cur.calendarHeight,
+                rightSidebarWidth: cur.rightSidebarWidth,
+                timeBlockSettings: cur.timeBlockSettings,
+                uiMinAppDuration: cur.uiMinAppDuration,
+                categorySidebarCount: cur.categorySidebarCount,
+            });
+        },
+        setCalendarHeight: (height) => {
+            const calendarHeight = isFiniteNumber(height)
+                ? clampInt(height, CALENDAR_HEIGHT_MIN, CALENDAR_HEIGHT_MAX)
+                : DEFAULT_SETTINGS.calendarHeight;
+            const cur = get();
+            setAndPersist({
+                calendarStartHour: cur.calendarStartHour,
+                calendarHeight,
                 rightSidebarWidth: cur.rightSidebarWidth,
                 timeBlockSettings: cur.timeBlockSettings,
                 uiMinAppDuration: cur.uiMinAppDuration,
@@ -147,6 +174,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
             const cur = get();
             setAndPersist({
                 calendarStartHour: cur.calendarStartHour,
+                calendarHeight: cur.calendarHeight,
                 rightSidebarWidth,
                 timeBlockSettings: cur.timeBlockSettings,
                 uiMinAppDuration: cur.uiMinAppDuration,
@@ -180,6 +208,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
             const cur = get();
             setAndPersist({
                 calendarStartHour: cur.calendarStartHour,
+                calendarHeight: cur.calendarHeight,
                 rightSidebarWidth: cur.rightSidebarWidth,
                 timeBlockSettings: cur.timeBlockSettings,
                 uiMinAppDuration,
@@ -193,6 +222,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
             const cur = get();
             setAndPersist({
                 calendarStartHour: cur.calendarStartHour,
+                calendarHeight: cur.calendarHeight,
                 rightSidebarWidth: cur.rightSidebarWidth,
                 timeBlockSettings: cur.timeBlockSettings,
                 uiMinAppDuration: cur.uiMinAppDuration,
