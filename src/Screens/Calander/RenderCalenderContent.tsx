@@ -1,16 +1,14 @@
 import { toErrorString } from "../../types/common.ts";
 import { get_week, TimeBlock } from "../../api/week.ts";
 import CalendarSkeleton from "./CalanderSkeletion.tsx";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getCategoryColor, getWeekStart, formatDuration, formatLocalDateYMD } from "./utils.ts";
-import { CalendarEvent, DateClickInfo, EventLogs } from "./types.ts";
 import { Category } from "../../api/Category.ts";
 import { EventClickArg, DatesSetArg } from "@fullcalendar/core";
 import interactionPlugin from '@fullcalendar/interaction';
-import { useDateStore } from "../../stores/dateStore.ts";
 import { useSettingsStore } from "../../stores/settingsStore.ts";
 import {
     get_all_google_calendar_events,
@@ -21,7 +19,6 @@ import {
 } from "../../api/GoogleCalendar.ts";
 import { getWeekRange } from "../../utils.ts";
 import { getCachedEvents, setCachedEvents } from "../../stores/googleCalendarCache.ts";
-import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "../../Componants/Toast.tsx";
 
 function IconWeekGrid({ className }: { className?: string }) {

@@ -1,6 +1,3 @@
-import { View } from "../../App.tsx";
-import { useDateStore } from "../../stores/dateStore.ts";
-
 export type CalendarEvent = {
     title: string;
     start: Date;

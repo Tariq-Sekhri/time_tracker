@@ -1,7 +1,6 @@
 import type { GoogleCalendarEvent, GoogleCalendar } from "../api/GoogleCalendar.ts";
 
 const EVENTS_PREFIX = "google_calendar_events:";
-const CALENDARS_KEY = "google_calendar_list";
 
 const eventsCache = new Map<string, GoogleCalendarEvent[]>();
 let calendarsCache: GoogleCalendar[] | null = null;

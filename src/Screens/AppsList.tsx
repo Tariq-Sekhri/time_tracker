@@ -45,7 +45,7 @@ export default function AppsList({onBack}: { onBack: () => void }) {
     const [skipPendingRegex, setSkipPendingRegex] = useState<string | null>(null);
     const [skipMatchingLogCount, setSkipMatchingLogCount] = useState(0);
     const [isCountingSkipLogs, setIsCountingSkipLogs] = useState(false);
-    const {date, setDate} = useDateStore();
+    const { date } = useDateStore();
     const { uiMinAppDuration, calendarStartHour } = useSettingsStore();
     const {week_start, week_end} = getWeekRange(date, calendarStartHour);
 

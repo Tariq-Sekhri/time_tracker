@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, type ReactNode } from "react";
 import {
     get_google_calendar_by_id,
-    GoogleCalendar,
     update_google_calendar_event,
     delete_google_calendar_event,
 } from "../../../api/GoogleCalendar.ts";
