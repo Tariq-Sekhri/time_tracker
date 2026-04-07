@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Dispatch, SetStateAction, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { View } from "../App.tsx"
 

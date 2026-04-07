@@ -9,7 +9,6 @@ import {
     get_google_auth_status,
     list_available_google_calendars,
     hasGoogleOAuthCredentials,
-    GoogleCalendar,
     GoogleCalendarInfo,
     NewGoogleCalendar,
 } from "../api/GoogleCalendar.ts";

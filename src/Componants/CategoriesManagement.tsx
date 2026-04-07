@@ -20,7 +20,6 @@ import {
     get_skipped_apps,
     insert_skipped_app,
     delete_skipped_app_by_id,
-    SkippedApp,
     NewSkippedApp
 } from "../api/SkippedApp.ts";
 import { useToast } from "./Toast.tsx";
@@ -139,7 +138,6 @@ export default function CategoriesManagement() {
         },
         onError: (error: any) => {
             console.error("Failed to create regex:", error);
-            const errorMessage = error?.message || error?.toString() || "Unknown error";
             const fullError = JSON.stringify(error, null, 2);
             showToast("Failed to create regex pattern", "error", 5000, fullError);
         },
@@ -157,7 +155,6 @@ export default function CategoriesManagement() {
         },
         onError: (error: any) => {
             console.error("Failed to update regex:", error);
-            const errorMessage = error?.message || error?.toString() || "Unknown error";
             const fullError = JSON.stringify(error, null, 2);
             showToast("Failed to update regex pattern", "error", 5000, fullError);
         },

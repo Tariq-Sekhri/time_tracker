@@ -51,7 +51,7 @@ export default function AppsInTimeBlock({
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [deleteLogCount, setDeleteLogCount] = useState(0);
     const [isCountingLogs, setIsCountingLogs] = useState(false);
-    const { showToast, removeToast, updateToast } = useToast();
+    const { showToast } = useToast();
 
     const categorizeMenuRef = useRef<HTMLDivElement>(null);
     const [categorizeMenu, setCategorizeMenu] = useState<{
