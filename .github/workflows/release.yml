@@ -10,7 +10,6 @@ on:
 
 jobs:
   rust-lib-tests:
-    if: false
     strategy:
       fail-fast: false
       matrix:
@@ -32,13 +31,14 @@ jobs:
         run: cargo test --lib
 
   build:
+    needs: rust-lib-tests
     if: github.event_name == 'release' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
     permissions:
       contents: write
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -84,6 +84,6 @@ jobs:
         with:
           tagName: app-v__VERSION__
           releaseName: "Time Tracker v__VERSION__"
-          releaseBody: "Installers for Windows (.exe) and Linux (.deb) are in Assets. Ignore .sig and latest.json where present; they are used for automatic updates."
+          releaseBody: "Installers for Windows (.exe), macOS (.dmg), and Linux (.deb) are in Assets. Ignore .sig and latest.json where present; they are used for automatic updates."
           releaseDraft: false
           prerelease: false
