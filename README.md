@@ -4,6 +4,10 @@ Private, automatic desktop time tracking for Windows and Linux. 100% local. No c
 
 Linux is supported and tested on **Ubuntu 24.04.4 Desktop amd64** ([`ubuntu-24.04.4-desktop-amd64.iso`](https://releases.ubuntu.com/24.04.4/)).
 
+## Demo
+
+[https://tariq-sekhri.github.io/time_tracker/](https://tariq-sekhri.github.io/time_tracker/)
+
 ## Why
 
 Manual time tracking is tedious and inconsistent. Time Tracker runs in the background and logs your active window usage automatically so you can see where your time goes.
