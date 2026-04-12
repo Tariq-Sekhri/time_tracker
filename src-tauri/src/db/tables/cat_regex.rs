@@ -41,7 +41,11 @@ const DEFAULT_REGEXES: &[(&str, &str, &str)] = &[
     ("social_zoom", "Social", "Zoom"),
     ("social_skype", "Social", "Skype"),
     ("social_messenger", "Social", "Messenger"),
-    ("watching_s1", "Watching", "S1"),
+    (
+        "watching_season",
+        "Watching",
+        r"(?i)\bS(?:0[1-9]|[1-9]\d?)\b|Season\s+(?:0[1-9]|[1-9]\d?)\b",
+    ),
     ("watching_steelseries_gg", "Watching", "SteelSeries GG"),
     ("watching_twitch", "Watching", "Twitch"),
     ("watching_voidflix", "Watching", "VoidFlix"),
@@ -79,6 +83,18 @@ const DEFAULT_REGEXES: &[(&str, &str, &str)] = &[
     ("gaming_gog_galaxy", "Gaming", "GOG Galaxy"),
     ("gaming_ea_app", "Gaming", "EA app"),
     ("gaming_ubisoft_connect", "Gaming", "Ubisoft Connect"),
+    ("gaming_hi_fi_rush", "Gaming", "Hi-Fi RUSH"),
+    (
+        "gaming_minecraft_multiplayer",
+        "Gaming",
+        "Minecraft 1.21.11 - Multiplayer (3rd-party Server)",
+    ),
+    ("gaming_battlenet_window", "Gaming", r"^Battle\.net$"),
+    ("gaming_call_of_duty", "Gaming", r"^Call of Duty®$"),
+    ("gaming_multimc", "Gaming", r"^New Instance - MultiMC 5$"),
+    ("gaming_ninjabrain_bot", "Gaming", r"^Ninjabrain Bot$"),
+    ("gaming_thefinals_exact", "Gaming", r"^THEFINALS$"),
+    ("gaming_xbox", "Gaming", r"^Xbox$"),
     ("coding_admin_powershell", "Coding", "Administrator: Windows PowerShell"),
     ("coding_cursor", "Coding", "Cursor"),
     ("coding_github_desktop", "Coding", "GitHub Desktop"),
@@ -99,17 +115,17 @@ const DEFAULT_REGEXES: &[(&str, &str, &str)] = &[
     ("coding_dbeaver", "Coding", "DBeaver"),
     ("coding_android_studio", "Coding", "Android Studio"),
     ("coding_xcode", "Coding", "Xcode"),
-    ("learning_coursera", "Learning", "Coursera"),
-    ("learning_udemy", "Learning", "Udemy"),
-    ("learning_duolingo", "Learning", "Duolingo"),
-    ("learning_khan_academy", "Learning", "Khan Academy"),
-    ("learning_edx", "Learning", "edX"),
-    ("learning_skillshare", "Learning", "Skillshare"),
-    ("learning_pluralsight", "Learning", "Pluralsight"),
-    ("learning_udacity", "Learning", "Udacity"),
-    ("learning_freecodecamp", "Learning", "freeCodeCamp"),
-    ("learning_leetcode", "Learning", "LeetCode"),
-    ("learning_geeksforgeeks", "Learning", "GeeksforGeeks"),
+    ("learning_coursera", "Reading", "Coursera"),
+    ("learning_udemy", "Reading", "Udemy"),
+    ("learning_duolingo", "Reading", "Duolingo"),
+    ("learning_khan_academy", "Reading", "Khan Academy"),
+    ("learning_edx", "Reading", "edX"),
+    ("learning_skillshare", "Reading", "Skillshare"),
+    ("learning_pluralsight", "Reading", "Pluralsight"),
+    ("learning_udacity", "Reading", "Udacity"),
+    ("learning_freecodecamp", "Reading", "freeCodeCamp"),
+    ("learning_leetcode", "Reading", "LeetCode"),
+    ("learning_geeksforgeeks", "Reading", "GeeksforGeeks"),
     ("reading_kindle", "Reading", "Kindle"),
     ("reading_adobe_acrobat", "Reading", "Adobe Acrobat"),
     ("reading_pdf_title", "Reading", " - PDF"),
@@ -240,11 +256,17 @@ async fn apply_default_regex_seed(
         .await?;
 
     if let Some(cat_id) = cat_id {
-        sqlx::query("INSERT OR IGNORE INTO category_regex (cat_id, regex) VALUES (?1, ?2)")
-            .bind(cat_id)
-            .bind(regex)
-            .execute(pool)
-            .await?;
+        sqlx::query(
+            "INSERT INTO category_regex (cat_id, regex)
+             SELECT ?1, ?2
+             WHERE NOT EXISTS (
+                 SELECT 1 FROM category_regex WHERE cat_id = ?1 AND regex = ?2
+             )",
+        )
+        .bind(cat_id)
+        .bind(regex)
+        .execute(pool)
+        .await?;
     }
 
     mark_seed_as_applied(pool, seed_key).await?;
