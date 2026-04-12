@@ -25,9 +25,9 @@ export const DEMO_DEFAULT_CATEGORIES = [
   },
   {
     "id": 5,
-    "name": "Learning",
-    "priority": 380,
-    "color": "#eab308"
+    "name": "Hidden",
+    "priority": 100,
+    "color": "#475569"
   },
   {
     "id": 6,
@@ -403,57 +403,57 @@ export const DEMO_DEFAULT_CAT_REGEX = [
   },
   {
     "id": 68,
-    "cat_id": 5,
+    "cat_id": 4,
     "regex": "Coursera"
   },
   {
     "id": 69,
-    "cat_id": 5,
+    "cat_id": 4,
     "regex": "Udemy"
   },
   {
     "id": 70,
-    "cat_id": 5,
+    "cat_id": 4,
     "regex": "Duolingo"
   },
   {
     "id": 71,
-    "cat_id": 5,
+    "cat_id": 4,
     "regex": "Khan Academy"
   },
   {
     "id": 72,
-    "cat_id": 5,
+    "cat_id": 4,
     "regex": "edX"
   },
   {
     "id": 73,
-    "cat_id": 5,
+    "cat_id": 4,
     "regex": "Skillshare"
   },
   {
     "id": 74,
-    "cat_id": 5,
+    "cat_id": 4,
     "regex": "Pluralsight"
   },
   {
     "id": 75,
-    "cat_id": 5,
+    "cat_id": 4,
     "regex": "Udacity"
   },
   {
     "id": 76,
-    "cat_id": 5,
+    "cat_id": 4,
     "regex": "freeCodeCamp"
   },
   {
     "id": 77,
-    "cat_id": 5,
+    "cat_id": 4,
     "regex": "LeetCode"
   },
   {
     "id": 78,
-    "cat_id": 5,
+    "cat_id": 4,
     "regex": "GeeksforGeeks"
   },
   {

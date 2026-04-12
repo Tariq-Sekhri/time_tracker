@@ -42,10 +42,10 @@ CREATE TABLE IF NOT EXISTS google_calendar_v2 (
 );
 
 INSERT OR IGNORE INTO category (name, priority, color) VALUES ('Miscellaneous', 0, '#9c9c9c');
+INSERT OR IGNORE INTO category (name, priority, color) VALUES ('Hidden', 100, '#475569');
 INSERT OR IGNORE INTO category (name, priority, color) VALUES ('Browsing', 200, '#ff7300');
 INSERT OR IGNORE INTO category (name, priority, color) VALUES ('Music', 250, '#ec4899');
 INSERT OR IGNORE INTO category (name, priority, color) VALUES ('Reading', 300, '#a855f7');
-INSERT OR IGNORE INTO category (name, priority, color) VALUES ('Learning', 380, '#eab308');
 INSERT OR IGNORE INTO category (name, priority, color) VALUES ('Coding', 400, '#1100ff');
 INSERT OR IGNORE INTO category (name, priority, color) VALUES ('Gaming', 500, '#2eff89');
 INSERT OR IGNORE INTO category (name, priority, color) VALUES ('Watching', 600, '#fff700');

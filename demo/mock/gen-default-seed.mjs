@@ -40,7 +40,7 @@ const cats = [
     ["Browsing", 200, "#ff7300"],
     ["Music", 250, "#ec4899"],
     ["Reading", 300, "#a855f7"],
-    ["Learning", 380, "#eab308"],
+    ["Hidden", 100, "#475569"],
     ["Coding", 400, "#1100ff"],
     ["Gaming", 500, "#2eff89"],
     ["Watching", 600, "#fff700"],
