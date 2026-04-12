@@ -114,7 +114,7 @@ export const DEMO_DEFAULT_CAT_REGEX = [
   {
     "id": 10,
     "cat_id": 8,
-    "regex": "S1"
+    "regex": "(?i)(?:\\bS(?:0[1-9]|[1-9]\\d?)(?![0-9])|Season\\s+(?:0[1-9]|[1-9]\\d?)(?!\\d))"
   },
   {
     "id": 11,
@@ -303,321 +303,361 @@ export const DEMO_DEFAULT_CAT_REGEX = [
   },
   {
     "id": 48,
-    "cat_id": 6,
-    "regex": "Administrator: Windows PowerShell"
+    "cat_id": 7,
+    "regex": "Hi-Fi RUSH"
   },
   {
     "id": 49,
-    "cat_id": 6,
-    "regex": "Cursor"
+    "cat_id": 7,
+    "regex": "Minecraft 1.21.11 - Multiplayer (3rd-party Server)"
   },
   {
     "id": 50,
-    "cat_id": 6,
-    "regex": "GitHub Desktop"
+    "cat_id": 7,
+    "regex": "^Battle\\.net$"
   },
   {
     "id": 51,
-    "cat_id": 6,
-    "regex": "Visual Studio Code"
+    "cat_id": 7,
+    "regex": "^Call of Duty®$"
   },
   {
     "id": 52,
-    "cat_id": 6,
-    "regex": "cmd.exe"
+    "cat_id": 7,
+    "regex": "^New Instance - MultiMC 5$"
   },
   {
     "id": 53,
-    "cat_id": 6,
-    "regex": "Terminal"
+    "cat_id": 7,
+    "regex": "^Ninjabrain Bot$"
   },
   {
     "id": 54,
-    "cat_id": 6,
-    "regex": "Windows PowerShell"
+    "cat_id": 7,
+    "regex": "^THEFINALS$"
   },
   {
     "id": 55,
-    "cat_id": 6,
-    "regex": "IntelliJ"
+    "cat_id": 7,
+    "regex": "^Xbox$"
   },
   {
     "id": 56,
     "cat_id": 6,
-    "regex": "PyCharm"
+    "regex": "Administrator: Windows PowerShell"
   },
   {
     "id": 57,
     "cat_id": 6,
-    "regex": "WebStorm"
+    "regex": "Cursor"
   },
   {
     "id": 58,
     "cat_id": 6,
-    "regex": "Rider"
+    "regex": "GitHub Desktop"
   },
   {
     "id": 59,
     "cat_id": 6,
-    "regex": "PhpStorm"
+    "regex": "Visual Studio Code"
   },
   {
     "id": 60,
     "cat_id": 6,
-    "regex": "GoLand"
+    "regex": "cmd.exe"
   },
   {
     "id": 61,
     "cat_id": 6,
-    "regex": "CLion"
+    "regex": "Terminal"
   },
   {
     "id": 62,
     "cat_id": 6,
-    "regex": "Neovim"
+    "regex": "Windows PowerShell"
   },
   {
     "id": 63,
     "cat_id": 6,
-    "regex": "Sublime Text"
+    "regex": "IntelliJ"
   },
   {
     "id": 64,
     "cat_id": 6,
-    "regex": "Postman"
+    "regex": "PyCharm"
   },
   {
     "id": 65,
     "cat_id": 6,
-    "regex": "DBeaver"
+    "regex": "WebStorm"
   },
   {
     "id": 66,
     "cat_id": 6,
-    "regex": "Android Studio"
+    "regex": "Rider"
   },
   {
     "id": 67,
     "cat_id": 6,
-    "regex": "Xcode"
+    "regex": "PhpStorm"
   },
   {
     "id": 68,
-    "cat_id": 4,
-    "regex": "Coursera"
+    "cat_id": 6,
+    "regex": "GoLand"
   },
   {
     "id": 69,
-    "cat_id": 4,
-    "regex": "Udemy"
+    "cat_id": 6,
+    "regex": "CLion"
   },
   {
     "id": 70,
-    "cat_id": 4,
-    "regex": "Duolingo"
+    "cat_id": 6,
+    "regex": "Neovim"
   },
   {
     "id": 71,
-    "cat_id": 4,
-    "regex": "Khan Academy"
+    "cat_id": 6,
+    "regex": "Sublime Text"
   },
   {
     "id": 72,
-    "cat_id": 4,
-    "regex": "edX"
+    "cat_id": 6,
+    "regex": "Postman"
   },
   {
     "id": 73,
-    "cat_id": 4,
-    "regex": "Skillshare"
+    "cat_id": 6,
+    "regex": "DBeaver"
   },
   {
     "id": 74,
-    "cat_id": 4,
-    "regex": "Pluralsight"
+    "cat_id": 6,
+    "regex": "Android Studio"
   },
   {
     "id": 75,
-    "cat_id": 4,
-    "regex": "Udacity"
+    "cat_id": 6,
+    "regex": "Xcode"
   },
   {
     "id": 76,
     "cat_id": 4,
-    "regex": "freeCodeCamp"
+    "regex": "Coursera"
   },
   {
     "id": 77,
     "cat_id": 4,
-    "regex": "LeetCode"
+    "regex": "Udemy"
   },
   {
     "id": 78,
     "cat_id": 4,
-    "regex": "GeeksforGeeks"
+    "regex": "Duolingo"
   },
   {
     "id": 79,
     "cat_id": 4,
-    "regex": "Kindle"
+    "regex": "Khan Academy"
   },
   {
     "id": 80,
     "cat_id": 4,
-    "regex": "Adobe Acrobat"
+    "regex": "edX"
   },
   {
     "id": 81,
     "cat_id": 4,
-    "regex": " - PDF"
+    "regex": "Skillshare"
   },
   {
     "id": 82,
     "cat_id": 4,
-    "regex": "\\.pdf"
+    "regex": "Pluralsight"
   },
   {
     "id": 83,
     "cat_id": 4,
-    "regex": "Google Docs"
+    "regex": "Udacity"
   },
   {
     "id": 84,
     "cat_id": 4,
-    "regex": "Notion"
+    "regex": "freeCodeCamp"
   },
   {
     "id": 85,
     "cat_id": 4,
-    "regex": "Medium"
+    "regex": "LeetCode"
   },
   {
     "id": 86,
     "cat_id": 4,
-    "regex": "Substack"
+    "regex": "GeeksforGeeks"
   },
   {
     "id": 87,
     "cat_id": 4,
-    "regex": "Wikipedia"
+    "regex": "Kindle"
   },
   {
     "id": 88,
     "cat_id": 4,
-    "regex": "Microsoft Word"
+    "regex": "Adobe Acrobat"
   },
   {
     "id": 89,
-    "cat_id": 3,
-    "regex": "Spotify"
+    "cat_id": 4,
+    "regex": " - PDF"
   },
   {
     "id": 90,
-    "cat_id": 3,
-    "regex": "YouTube Music"
+    "cat_id": 4,
+    "regex": "\\.pdf"
   },
   {
     "id": 91,
-    "cat_id": 3,
-    "regex": "iTunes"
+    "cat_id": 4,
+    "regex": "Google Docs"
   },
   {
     "id": 92,
-    "cat_id": 3,
-    "regex": "Apple Music"
+    "cat_id": 4,
+    "regex": "Notion"
   },
   {
     "id": 93,
-    "cat_id": 3,
-    "regex": "SoundCloud"
+    "cat_id": 4,
+    "regex": "Medium"
   },
   {
     "id": 94,
-    "cat_id": 3,
-    "regex": "Tidal"
+    "cat_id": 4,
+    "regex": "Substack"
   },
   {
     "id": 95,
-    "cat_id": 3,
-    "regex": "Deezer"
+    "cat_id": 4,
+    "regex": "Wikipedia"
   },
   {
     "id": 96,
-    "cat_id": 3,
-    "regex": "Amazon Music"
+    "cat_id": 4,
+    "regex": "Microsoft Word"
   },
   {
     "id": 97,
     "cat_id": 3,
-    "regex": "Pandora"
+    "regex": "Spotify"
   },
   {
     "id": 98,
     "cat_id": 3,
-    "regex": "Bandcamp"
+    "regex": "YouTube Music"
   },
   {
     "id": 99,
     "cat_id": 3,
-    "regex": "VLC"
+    "regex": "iTunes"
   },
   {
     "id": 100,
     "cat_id": 3,
-    "regex": "Winamp"
+    "regex": "Apple Music"
   },
   {
     "id": 101,
-    "cat_id": 2,
-    "regex": "Vivaldi"
+    "cat_id": 3,
+    "regex": "SoundCloud"
   },
   {
     "id": 102,
-    "cat_id": 2,
-    "regex": "Chrome"
+    "cat_id": 3,
+    "regex": "Tidal"
   },
   {
     "id": 103,
-    "cat_id": 2,
-    "regex": "Firefox"
+    "cat_id": 3,
+    "regex": "Deezer"
   },
   {
     "id": 104,
-    "cat_id": 2,
-    "regex": "Microsoft Edge"
+    "cat_id": 3,
+    "regex": "Amazon Music"
   },
   {
     "id": 105,
-    "cat_id": 2,
-    "regex": "Brave"
+    "cat_id": 3,
+    "regex": "Pandora"
   },
   {
     "id": 106,
-    "cat_id": 2,
-    "regex": "Safari"
+    "cat_id": 3,
+    "regex": "Bandcamp"
   },
   {
     "id": 107,
-    "cat_id": 2,
-    "regex": "Opera"
+    "cat_id": 3,
+    "regex": "VLC"
   },
   {
     "id": 108,
-    "cat_id": 2,
-    "regex": "Arc"
+    "cat_id": 3,
+    "regex": "Winamp"
   },
   {
     "id": 109,
     "cat_id": 2,
-    "regex": "DuckDuckGo"
+    "regex": "Vivaldi"
   },
   {
     "id": 110,
     "cat_id": 2,
-    "regex": "Floorp"
+    "regex": "Chrome"
   },
   {
     "id": 111,
+    "cat_id": 2,
+    "regex": "Firefox"
+  },
+  {
+    "id": 112,
+    "cat_id": 2,
+    "regex": "Microsoft Edge"
+  },
+  {
+    "id": 113,
+    "cat_id": 2,
+    "regex": "Brave"
+  },
+  {
+    "id": 114,
+    "cat_id": 2,
+    "regex": "Safari"
+  },
+  {
+    "id": 115,
+    "cat_id": 2,
+    "regex": "Opera"
+  },
+  {
+    "id": 116,
+    "cat_id": 2,
+    "regex": "Arc"
+  },
+  {
+    "id": 117,
+    "cat_id": 2,
+    "regex": "DuckDuckGo"
+  },
+  {
+    "id": 118,
+    "cat_id": 2,
+    "regex": "Floorp"
+  },
+  {
+    "id": 119,
     "cat_id": 2,
     "regex": "Waterfox"
   }
