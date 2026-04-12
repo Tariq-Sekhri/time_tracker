@@ -148,7 +148,7 @@ const defaultSkipped: SkippedRow[] = DEMO_DEFAULT_SKIPPED_REGEXES.map((regex, i)
     regex,
 }));
 
-const DEMO_CALENDAR_START_HOUR = 7;
+const DEMO_CALENDAR_START_HOUR = 6;
 
 function getWeekRangeSeconds(
     date: Date,
@@ -156,7 +156,7 @@ function getWeekRangeSeconds(
 ): { week_start: number; week_end: number } {
     const h = Number.isFinite(calendarStartHour)
         ? Math.min(23, Math.max(0, Math.floor(calendarStartHour)))
-        : 7;
+        : DEMO_CALENDAR_START_HOUR;
     const y = date.getFullYear();
     const m = date.getMonth();
     const day = date.getDate();
@@ -1439,7 +1439,7 @@ export async function invoke<T>(
                 ),
             })) as unknown as T;
         case "get_app_version":
-            return "1.8.0-demo" as unknown as T;
+            return "1.8.1-demo" as unknown as T;
         case "refresh_tray_menu":
             return null as T;
         case "check_update_cmd":

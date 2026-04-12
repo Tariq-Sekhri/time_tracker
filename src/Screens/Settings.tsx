@@ -653,10 +653,6 @@ export default function Settings() {
                                 className="w-28 px-2 py-1 bg-gray-800 text-white rounded text-sm"
                             />
                         </div>
-
-                        <div className="text-sm text-gray-400">
-                            Apps shorter than {uiMinAppDuration} sec are filtered out.
-                        </div>
                     </div>
                 </div>
             </div>
