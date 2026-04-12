@@ -78,6 +78,46 @@ type GoogleEv = {
     location?: string;
 };
 
+type DemoGoogleCalendarCatalogRow = {
+    google_calendar_id: string;
+    name: string;
+    color: string;
+    access_role: string;
+};
+
+const DEMO_GOOGLE_CALENDAR_CATALOG: DemoGoogleCalendarCatalogRow[] = [
+    {
+        google_calendar_id: "cal_family_time",
+        name: "Family time",
+        color: "#0B8043",
+        access_role: "owner",
+    },
+    {
+        google_calendar_id: "cal_friends",
+        name: "Friends",
+        color: "#7986CB",
+        access_role: "writer",
+    },
+    {
+        google_calendar_id: "cal_sleep",
+        name: "Sleep",
+        color: "#673AB7",
+        access_role: "reader",
+    },
+    {
+        google_calendar_id: "cal_work",
+        name: "Work",
+        color: "#039BE5",
+        access_role: "owner",
+    },
+    {
+        google_calendar_id: "cal_holidays",
+        name: "Holidays",
+        color: "#F4511E",
+        access_role: "reader",
+    },
+];
+
 const DEMO_CLIENT_ID = "123456789-demo.apps.googleusercontent.com";
 const DEMO_CLIENT_SECRET = "GOCSPX-abcdefghijklmnopqrstuvwxyz";
 
@@ -1343,31 +1383,14 @@ export async function invoke<T>(
             return null as T;
         }
         case "list_available_google_calendars":
-            return [
-                {
-                    google_calendar_id: "cal_family_time",
-                    name: "Family time",
-                    color: "#0B8043",
-                    access_role: "owner",
-                    selected: true,
-                },
-                {
-                    google_calendar_id: "cal_friends",
-                    name: "Friends",
-                    color: "#7986CB",
-                    access_role: "writer",
-                    selected: false,
-                },
-                {
-                    google_calendar_id: "cal_sleep",
-                    name: "Sleep",
-                    color: "#673AB7",
-                    access_role: "reader",
-                    selected: false,
-                },
-            ] as unknown as T;
+            return DEMO_GOOGLE_CALENDAR_CATALOG.map((c) => ({
+                ...c,
+                selected: googleCalendars.some(
+                    (g) => g.google_calendar_id === c.google_calendar_id
+                ),
+            })) as unknown as T;
         case "get_app_version":
-            return "1.7.8-demo" as unknown as T;
+            return "1.7.9-demo" as unknown as T;
         case "refresh_tray_menu":
             return null as T;
         case "check_update_cmd":

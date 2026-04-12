@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useToast } from "../Componants/Toast.tsx";
 import {
     CALENDAR_HEIGHT_MAX,
@@ -6,7 +6,14 @@ import {
     RIGHT_SIDEBAR_WIDTH_MAX,
     RIGHT_SIDEBAR_WIDTH_MIN,
     useSettingsStore,
+    type TimeBlockSettings,
 } from "../stores/settingsStore.ts";
+
+function blurOnEnter(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+        e.currentTarget.blur();
+    }
+}
 
 export default function Settings() {
     const { showToast } = useToast();
@@ -26,26 +33,65 @@ export default function Settings() {
         resetSettings,
     } = useSettingsStore();
 
-    const [rightSidebarDraft, setRightSidebarDraft] = useState(() =>
-        String(rightSidebarWidth)
+    const [calendarStartHourDraft, setCalendarStartHourDraft] = useState(() =>
+        String(calendarStartHour)
     );
     const [calendarHeightDraft, setCalendarHeightDraft] = useState(() =>
         String(calendarHeight)
     );
+    const [rightSidebarDraft, setRightSidebarDraft] = useState(() =>
+        String(rightSidebarWidth)
+    );
+    const [categorySidebarDraft, setCategorySidebarDraft] = useState(() =>
+        String(categorySidebarCount)
+    );
+    const [uiMinAppDurationDraft, setUiMinAppDurationDraft] = useState(() =>
+        String(uiMinAppDuration)
+    );
+    const [tbDraft, setTbDraft] = useState(() => ({
+        minLogDuration: String(timeBlockSettings.minLogDuration),
+        maxAttachDistance: String(timeBlockSettings.maxAttachDistance),
+        lookaheadWindow: String(timeBlockSettings.lookaheadWindow),
+        minDuration: String(timeBlockSettings.minDuration),
+    }));
 
+    const tbFocusRef = useRef<null | keyof TimeBlockSettings>(null);
+
+    useEffect(() => {
+        setCalendarStartHourDraft(String(calendarStartHour));
+    }, [calendarStartHour]);
+    useEffect(() => {
+        setCalendarHeightDraft(String(calendarHeight));
+    }, [calendarHeight]);
     useEffect(() => {
         setRightSidebarDraft(String(rightSidebarWidth));
     }, [rightSidebarWidth]);
     useEffect(() => {
-        setCalendarHeightDraft(String(calendarHeight));
-    }, [calendarHeight]);
-
-    const windowEndHour = useMemo(() => calendarStartHour + 24, [calendarStartHour]);
-    const windowText = useMemo(() => {
-        const start = String(calendarStartHour).padStart(2, "0");
-        const end = String(windowEndHour).padStart(2, "0");
-        return `${start}:00 to ${end}:00`;
-    }, [calendarStartHour, windowEndHour]);
+        setCategorySidebarDraft(String(categorySidebarCount));
+    }, [categorySidebarCount]);
+    useEffect(() => {
+        setUiMinAppDurationDraft(String(uiMinAppDuration));
+    }, [uiMinAppDuration]);
+    useEffect(() => {
+        setTbDraft((d) => ({
+            minLogDuration:
+                tbFocusRef.current === "minLogDuration"
+                    ? d.minLogDuration
+                    : String(timeBlockSettings.minLogDuration),
+            maxAttachDistance:
+                tbFocusRef.current === "maxAttachDistance"
+                    ? d.maxAttachDistance
+                    : String(timeBlockSettings.maxAttachDistance),
+            lookaheadWindow:
+                tbFocusRef.current === "lookaheadWindow"
+                    ? d.lookaheadWindow
+                    : String(timeBlockSettings.lookaheadWindow),
+            minDuration:
+                tbFocusRef.current === "minDuration"
+                    ? d.minDuration
+                    : String(timeBlockSettings.minDuration),
+        }));
+    }, [timeBlockSettings]);
 
     return (
         <div className="p-6 text-white h-full overflow-y-auto nice-scrollbar">
@@ -68,17 +114,38 @@ export default function Settings() {
                             <label className="text-sm text-gray-300">Start hour</label>
                             <input
                                 type="number"
-                                min={0}
-                                max={23}
                                 step={1}
-                                value={calendarStartHour}
-                                onChange={(e) => setCalendarStartHour(Number(e.target.value))}
+                                value={calendarStartHourDraft}
+                                onChange={(e) => setCalendarStartHourDraft(e.target.value)}
+                                onKeyDown={blurOnEnter}
+                                onBlur={() => {
+                                    const t = calendarStartHourDraft.trim();
+                                    const revert = () =>
+                                        setCalendarStartHourDraft(String(calendarStartHour));
+                                    if (t === "") {
+                                        showToast("Start hour: enter a number.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    const n = Number(t);
+                                    if (!Number.isFinite(n)) {
+                                        showToast("Start hour: not a valid number.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    const h = Math.trunc(n);
+                                    if (h < 0 || h > 23) {
+                                        showToast("Start hour: use 0–23.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    setCalendarStartHourDraft(String(h));
+                                    if (h !== calendarStartHour) {
+                                        setCalendarStartHour(h);
+                                    }
+                                }}
                                 className="w-24 px-2 py-1 bg-gray-800 text-white rounded text-sm"
                             />
-                        </div>
-
-                        <div className="text-sm text-gray-400">
-                            24-hour window: {windowText}
                         </div>
 
                         <div className="flex items-center justify-between gap-4">
@@ -87,21 +154,8 @@ export default function Settings() {
                                 type="number"
                                 step={1}
                                 value={calendarHeightDraft}
-                                onChange={(e) => {
-                                    const value = e.target.value;
-                                    setCalendarHeightDraft(value);
-                                    const n = Number(value);
-                                    if (!Number.isFinite(n)) {
-                                        return;
-                                    }
-                                    const h = Math.trunc(n);
-                                    if (h < CALENDAR_HEIGHT_MIN || h > CALENDAR_HEIGHT_MAX) {
-                                        return;
-                                    }
-                                    if (h !== calendarHeight) {
-                                        setCalendarHeight(h);
-                                    }
-                                }}
+                                onChange={(e) => setCalendarHeightDraft(e.target.value)}
+                                onKeyDown={blurOnEnter}
                                 onBlur={() => {
                                     const t = calendarHeightDraft.trim();
                                     const revert = () =>
@@ -142,6 +196,7 @@ export default function Settings() {
                                 step={1}
                                 value={rightSidebarDraft}
                                 onChange={(e) => setRightSidebarDraft(e.target.value)}
+                                onKeyDown={blurOnEnter}
                                 onBlur={() => {
                                     const t = rightSidebarDraft.trim();
                                     const revert = () =>
@@ -179,11 +234,36 @@ export default function Settings() {
                             <label className="text-sm text-gray-300">Categories in stats sidebar</label>
                             <input
                                 type="number"
-                                min={1}
-                                max={30}
                                 step={1}
-                                value={categorySidebarCount}
-                                onChange={(e) => setCategorySidebarCount(Number(e.target.value))}
+                                value={categorySidebarDraft}
+                                onChange={(e) => setCategorySidebarDraft(e.target.value)}
+                                onKeyDown={blurOnEnter}
+                                onBlur={() => {
+                                    const t = categorySidebarDraft.trim();
+                                    const revert = () =>
+                                        setCategorySidebarDraft(String(categorySidebarCount));
+                                    if (t === "") {
+                                        showToast("Categories count: enter a number.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    const n = Number(t);
+                                    if (!Number.isFinite(n)) {
+                                        showToast("Categories count: not a valid number.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    const c = Math.trunc(n);
+                                    if (c < 1 || c > 30) {
+                                        showToast("Categories count: use 1–30.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    setCategorySidebarDraft(String(c));
+                                    if (c !== categorySidebarCount) {
+                                        setCategorySidebarCount(c);
+                                    }
+                                }}
                                 className="w-24 px-2 py-1 bg-gray-800 text-white rounded text-sm"
                             />
                         </div>
@@ -198,12 +278,45 @@ export default function Settings() {
                             <label className="text-sm text-gray-300">Min log duration (sec)</label>
                             <input
                                 type="number"
-                                min={1}
                                 step={1}
-                                value={timeBlockSettings.minLogDuration}
+                                value={tbDraft.minLogDuration}
+                                onFocus={() => {
+                                    tbFocusRef.current = "minLogDuration";
+                                }}
                                 onChange={(e) =>
-                                    setTimeBlockSettings({ minLogDuration: Number(e.target.value) })
+                                    setTbDraft((d) => ({ ...d, minLogDuration: e.target.value }))
                                 }
+                                onKeyDown={blurOnEnter}
+                                onBlur={() => {
+                                    tbFocusRef.current = null;
+                                    const t = tbDraft.minLogDuration.trim();
+                                    const revert = () =>
+                                        setTbDraft((d) => ({
+                                            ...d,
+                                            minLogDuration: String(timeBlockSettings.minLogDuration),
+                                        }));
+                                    if (t === "") {
+                                        showToast("Min log duration: enter a number.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    const n = Number(t);
+                                    if (!Number.isFinite(n)) {
+                                        showToast("Min log duration: not a valid number.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    const v = Math.trunc(n);
+                                    if (v < 1) {
+                                        showToast("Min log duration: use at least 1.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    setTbDraft((d) => ({ ...d, minLogDuration: String(v) }));
+                                    if (v !== timeBlockSettings.minLogDuration) {
+                                        setTimeBlockSettings({ minLogDuration: v });
+                                    }
+                                }}
                                 className="w-28 px-2 py-1 bg-gray-800 text-white rounded text-sm"
                             />
                         </div>
@@ -212,12 +325,50 @@ export default function Settings() {
                             <label className="text-sm text-gray-300">Max attach distance (sec)</label>
                             <input
                                 type="number"
-                                min={0}
                                 step={1}
-                                value={timeBlockSettings.maxAttachDistance}
+                                value={tbDraft.maxAttachDistance}
+                                onFocus={() => {
+                                    tbFocusRef.current = "maxAttachDistance";
+                                }}
                                 onChange={(e) =>
-                                    setTimeBlockSettings({ maxAttachDistance: Number(e.target.value) })
+                                    setTbDraft((d) => ({ ...d, maxAttachDistance: e.target.value }))
                                 }
+                                onKeyDown={blurOnEnter}
+                                onBlur={() => {
+                                    tbFocusRef.current = null;
+                                    const t = tbDraft.maxAttachDistance.trim();
+                                    const revert = () =>
+                                        setTbDraft((d) => ({
+                                            ...d,
+                                            maxAttachDistance: String(
+                                                timeBlockSettings.maxAttachDistance
+                                            ),
+                                        }));
+                                    if (t === "") {
+                                        showToast("Max attach distance: enter a number.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    const n = Number(t);
+                                    if (!Number.isFinite(n)) {
+                                        showToast(
+                                            "Max attach distance: not a valid number.",
+                                            "error"
+                                        );
+                                        revert();
+                                        return;
+                                    }
+                                    const v = Math.trunc(n);
+                                    if (v < 0) {
+                                        showToast("Max attach distance: use 0 or more.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    setTbDraft((d) => ({ ...d, maxAttachDistance: String(v) }));
+                                    if (v !== timeBlockSettings.maxAttachDistance) {
+                                        setTimeBlockSettings({ maxAttachDistance: v });
+                                    }
+                                }}
                                 className="w-28 px-2 py-1 bg-gray-800 text-white rounded text-sm"
                             />
                         </div>
@@ -226,12 +377,45 @@ export default function Settings() {
                             <label className="text-sm text-gray-300">Lookahead window (sec)</label>
                             <input
                                 type="number"
-                                min={0}
                                 step={1}
-                                value={timeBlockSettings.lookaheadWindow}
+                                value={tbDraft.lookaheadWindow}
+                                onFocus={() => {
+                                    tbFocusRef.current = "lookaheadWindow";
+                                }}
                                 onChange={(e) =>
-                                    setTimeBlockSettings({ lookaheadWindow: Number(e.target.value) })
+                                    setTbDraft((d) => ({ ...d, lookaheadWindow: e.target.value }))
                                 }
+                                onKeyDown={blurOnEnter}
+                                onBlur={() => {
+                                    tbFocusRef.current = null;
+                                    const t = tbDraft.lookaheadWindow.trim();
+                                    const revert = () =>
+                                        setTbDraft((d) => ({
+                                            ...d,
+                                            lookaheadWindow: String(timeBlockSettings.lookaheadWindow),
+                                        }));
+                                    if (t === "") {
+                                        showToast("Lookahead window: enter a number.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    const n = Number(t);
+                                    if (!Number.isFinite(n)) {
+                                        showToast("Lookahead window: not a valid number.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    const v = Math.trunc(n);
+                                    if (v < 0) {
+                                        showToast("Lookahead window: use 0 or more.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    setTbDraft((d) => ({ ...d, lookaheadWindow: String(v) }));
+                                    if (v !== timeBlockSettings.lookaheadWindow) {
+                                        setTimeBlockSettings({ lookaheadWindow: v });
+                                    }
+                                }}
                                 className="w-28 px-2 py-1 bg-gray-800 text-white rounded text-sm"
                             />
                         </div>
@@ -240,12 +424,48 @@ export default function Settings() {
                             <label className="text-sm text-gray-300">Min timeblock duration (sec)</label>
                             <input
                                 type="number"
-                                min={1}
                                 step={1}
-                                value={timeBlockSettings.minDuration}
+                                value={tbDraft.minDuration}
+                                onFocus={() => {
+                                    tbFocusRef.current = "minDuration";
+                                }}
                                 onChange={(e) =>
-                                    setTimeBlockSettings({ minDuration: Number(e.target.value) })
+                                    setTbDraft((d) => ({ ...d, minDuration: e.target.value }))
                                 }
+                                onKeyDown={blurOnEnter}
+                                onBlur={() => {
+                                    tbFocusRef.current = null;
+                                    const t = tbDraft.minDuration.trim();
+                                    const revert = () =>
+                                        setTbDraft((d) => ({
+                                            ...d,
+                                            minDuration: String(timeBlockSettings.minDuration),
+                                        }));
+                                    if (t === "") {
+                                        showToast("Min timeblock duration: enter a number.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    const n = Number(t);
+                                    if (!Number.isFinite(n)) {
+                                        showToast(
+                                            "Min timeblock duration: not a valid number.",
+                                            "error"
+                                        );
+                                        revert();
+                                        return;
+                                    }
+                                    const v = Math.trunc(n);
+                                    if (v < 1) {
+                                        showToast("Min timeblock duration: use at least 1.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    setTbDraft((d) => ({ ...d, minDuration: String(v) }));
+                                    if (v !== timeBlockSettings.minDuration) {
+                                        setTimeBlockSettings({ minDuration: v });
+                                    }
+                                }}
                                 className="w-28 px-2 py-1 bg-gray-800 text-white rounded text-sm"
                             />
                         </div>
@@ -260,10 +480,36 @@ export default function Settings() {
                             <label className="text-sm text-gray-300">Min app duration (sec)</label>
                             <input
                                 type="number"
-                                min={1}
                                 step={1}
-                                value={uiMinAppDuration}
-                                onChange={(e) => setUiMinAppDuration(Number(e.target.value))}
+                                value={uiMinAppDurationDraft}
+                                onChange={(e) => setUiMinAppDurationDraft(e.target.value)}
+                                onKeyDown={blurOnEnter}
+                                onBlur={() => {
+                                    const t = uiMinAppDurationDraft.trim();
+                                    const revert = () =>
+                                        setUiMinAppDurationDraft(String(uiMinAppDuration));
+                                    if (t === "") {
+                                        showToast("Min app duration: enter a number.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    const n = Number(t);
+                                    if (!Number.isFinite(n)) {
+                                        showToast("Min app duration: not a valid number.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    const v = Math.trunc(n);
+                                    if (v < 1) {
+                                        showToast("Min app duration: use at least 1.", "error");
+                                        revert();
+                                        return;
+                                    }
+                                    setUiMinAppDurationDraft(String(v));
+                                    if (v !== uiMinAppDuration) {
+                                        setUiMinAppDuration(v);
+                                    }
+                                }}
                                 className="w-28 px-2 py-1 bg-gray-800 text-white rounded text-sm"
                             />
                         </div>
@@ -277,4 +523,3 @@ export default function Settings() {
         </div>
     );
 }
-
