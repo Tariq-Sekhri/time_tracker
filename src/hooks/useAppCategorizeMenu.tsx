@@ -170,9 +170,8 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
                         <div className="text-gray-300 font-mono break-all leading-snug">
                             {menuRuleInfo?.matchedRegex ?? "No rule matched"}
                         </div>
-                        <div className="text-gray-500 leading-snug">
-                            <span className="text-gray-400">Category:</span>{" "}
-                            <span className="text-gray-200">{menuRuleInfo?.categoryName ?? "—"}</span>
+                        <div className="text-gray-400 break-words leading-snug">
+                            category: {menuRuleInfo?.categoryName ?? "—"}
                         </div>
                     </div>
                     {sortedCategories.map((cat) => (
