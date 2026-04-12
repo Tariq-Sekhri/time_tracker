@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { get_week_statistics, CategoryStat } from "../../../api/statistics.ts";
 import { getWeekRange } from "../../../utils.ts";
 import { formatDuration, formatPercentage } from "../utils.ts";
@@ -11,6 +11,7 @@ import {
     GoogleCalendarEvent,
 } from "../../../api/GoogleCalendar.ts";
 import { useSettingsStore } from "../../../stores/settingsStore.ts";
+import { toErrorString } from "../../../types/common.ts";
 
 type DisplayMode = "percentage" | "time";
 
@@ -78,10 +79,40 @@ export default function StatisticsSidebar({
         isLoading,
         error,
         isError,
+        isFetching,
+        failureCount,
+        failureReason,
     } = useQuery({
         queryKey: ["week_statistics", week_start, week_end, calendarStartHour],
-        queryFn: async () => await get_week_statistics(week_start, week_end),
+        queryFn: async () => {
+            console.log("[WeekStats] queryFn start", { week_start, week_end, calendarStartHour });
+            try {
+                const stats = await get_week_statistics(week_start, week_end);
+                console.log("[WeekStats] queryFn ok", {
+                    categories: stats.categories?.length,
+                    total_time: stats.total_time,
+                });
+                return stats;
+            } catch (e) {
+                console.error("[WeekStats] queryFn threw:", e);
+                console.error("[WeekStats] toErrorString:", toErrorString(e));
+                console.error("[WeekStats] typeof:", typeof e, "instanceof Error:", e instanceof Error);
+                throw e;
+            }
+        },
     });
+
+    useEffect(() => {
+        console.log("[WeekStats] query state", {
+            isLoading,
+            isFetching,
+            isError,
+            failureCount,
+            failureReason,
+            hasData: !!weekStats,
+            errorText: error ? toErrorString(error) : null,
+        });
+    }, [isLoading, isFetching, isError, failureCount, failureReason, weekStats, error]);
 
     const {
         data: googleEvents,
@@ -325,7 +356,7 @@ export default function StatisticsSidebar({
                     </div>
                     <div className="text-red-400 mb-2">Error loading statistics</div>
                     <div className="text-gray-500 text-sm mb-4">
-                        {error instanceof Error ? error.message : "Unknown error occurred"}
+                        {toErrorString(error)}
                     </div>
                 </div>
                 <div className="mt-auto pt-4 border-t border-gray-700">

@@ -134,7 +134,8 @@ export default function RenderCalendarContent({
     const slotMinTime = `${String(calendarStartHour).padStart(2, "0")}:00:00`;
     const slotMaxTime = `${String(calendarStartHour + 24).padStart(2, "0")}:00:00`;
     const scrollTime = slotMinTime;
-    const { data, isLoading, error } = useQuery({
+    const weekQueryEnabled = !!weekStart && !isNaN(weekStart.getTime());
+    const { data, isLoading, error, isError, isFetching, failureCount, failureReason } = useQuery({
         queryKey: [
             "week",
             formatLocalDateYMD(weekStart),
@@ -144,10 +145,39 @@ export default function RenderCalendarContent({
             timeBlockSettings.lookaheadWindow,
             timeBlockSettings.minDuration,
         ],
-        queryFn: async () => await get_week(weekStart, timeBlockSettings, calendarStartHour),
-        enabled: !!weekStart && !isNaN(weekStart.getTime()),
-        refetchOnWindowFocus: true, // Refetch when window gains focus
+        queryFn: async () => {
+            console.log("[Week] queryFn start", {
+                weekStartYmd: formatLocalDateYMD(weekStart),
+                calendarStartHour,
+                timeBlockSettings,
+            });
+            try {
+                const rows = await get_week(weekStart, timeBlockSettings, calendarStartHour);
+                console.log("[Week] queryFn ok", { blockCount: rows.length });
+                return rows;
+            } catch (e) {
+                console.error("[Week] queryFn threw:", e);
+                console.error("[Week] toErrorString:", toErrorString(e));
+                console.error("[Week] typeof:", typeof e, "instanceof Error:", e instanceof Error);
+                throw e;
+            }
+        },
+        enabled: weekQueryEnabled,
+        refetchOnWindowFocus: true,
     });
+
+    useEffect(() => {
+        console.log("[Week] query state", {
+            enabled: weekQueryEnabled,
+            isLoading,
+            isFetching,
+            isError,
+            failureCount,
+            failureReason,
+            dataLen: data?.length,
+            errorText: error ? toErrorString(error) : null,
+        });
+    }, [weekQueryEnabled, isLoading, isFetching, isError, failureCount, failureReason, data?.length, error]);
 
     const weekRange = useMemo(
         () => getWeekRange(date, calendarStartHour),
@@ -411,7 +441,7 @@ export default function RenderCalendarContent({
             <div className="flex items-center justify-center h-96">
                 <div className="text-center">
                     <div className="text-red-400 text-xl mb-2">Error loading data</div>
-                    <div className="text-gray-500">{error.message}</div>
+                    <div className="text-gray-500">{toErrorString(error)}</div>
                 </div>
             </div>
         );
