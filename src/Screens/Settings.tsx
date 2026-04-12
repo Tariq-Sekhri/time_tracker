@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useToast } from "../Componants/Toast.tsx";
 import {
     CALENDAR_HEIGHT_MAX,
@@ -56,6 +56,146 @@ export default function Settings() {
     }));
 
     const tbFocusRef = useRef<null | keyof TimeBlockSettings>(null);
+
+    const pendingDraftsRef = useRef({
+        calendarStartHourDraft,
+        calendarHeightDraft,
+        rightSidebarDraft,
+        categorySidebarDraft,
+        uiMinAppDurationDraft,
+        tbDraft,
+    });
+    pendingDraftsRef.current = {
+        calendarStartHourDraft,
+        calendarHeightDraft,
+        rightSidebarDraft,
+        categorySidebarDraft,
+        uiMinAppDurationDraft,
+        tbDraft,
+    };
+
+    useLayoutEffect(() => {
+        return () => {
+            const d = pendingDraftsRef.current;
+            const st = useSettingsStore.getState();
+
+            {
+                const t = d.calendarStartHourDraft.trim();
+                if (t !== "") {
+                    const n = Number(t);
+                    if (Number.isFinite(n)) {
+                        const h = Math.trunc(n);
+                        if (h >= 0 && h <= 23 && h !== st.calendarStartHour) {
+                            st.setCalendarStartHour(h);
+                        }
+                    }
+                }
+            }
+            {
+                const t = d.calendarHeightDraft.trim();
+                if (t !== "") {
+                    const n = Number(t);
+                    if (Number.isFinite(n)) {
+                        const h = Math.trunc(n);
+                        if (
+                            h >= CALENDAR_HEIGHT_MIN &&
+                            h <= CALENDAR_HEIGHT_MAX &&
+                            h !== st.calendarHeight
+                        ) {
+                            st.setCalendarHeight(h);
+                        }
+                    }
+                }
+            }
+            {
+                const t = d.rightSidebarDraft.trim();
+                if (t !== "") {
+                    const n = Number(t);
+                    if (Number.isFinite(n)) {
+                        const w = Math.trunc(n);
+                        if (
+                            w >= RIGHT_SIDEBAR_WIDTH_MIN &&
+                            w <= RIGHT_SIDEBAR_WIDTH_MAX &&
+                            w !== st.rightSidebarWidth
+                        ) {
+                            st.setRightSidebarWidth(w);
+                        }
+                    }
+                }
+            }
+            {
+                const t = d.categorySidebarDraft.trim();
+                if (t !== "") {
+                    const n = Number(t);
+                    if (Number.isFinite(n)) {
+                        const c = Math.trunc(n);
+                        if (c >= 1 && c <= 30 && c !== st.categorySidebarCount) {
+                            st.setCategorySidebarCount(c);
+                        }
+                    }
+                }
+            }
+            {
+                const t = d.uiMinAppDurationDraft.trim();
+                if (t !== "") {
+                    const n = Number(t);
+                    if (Number.isFinite(n)) {
+                        const v = Math.trunc(n);
+                        if (v >= 1 && v !== st.uiMinAppDuration) {
+                            st.setUiMinAppDuration(v);
+                        }
+                    }
+                }
+            }
+            {
+                const tb = st.timeBlockSettings;
+                const patch: Partial<TimeBlockSettings> = {};
+                {
+                    const t = d.tbDraft.minLogDuration.trim();
+                    if (t !== "") {
+                        const n = Number(t);
+                        if (Number.isFinite(n)) {
+                            const v = Math.trunc(n);
+                            if (v >= 1 && v !== tb.minLogDuration) patch.minLogDuration = v;
+                        }
+                    }
+                }
+                {
+                    const t = d.tbDraft.maxAttachDistance.trim();
+                    if (t !== "") {
+                        const n = Number(t);
+                        if (Number.isFinite(n)) {
+                            const v = Math.trunc(n);
+                            if (v >= 0 && v !== tb.maxAttachDistance) patch.maxAttachDistance = v;
+                        }
+                    }
+                }
+                {
+                    const t = d.tbDraft.lookaheadWindow.trim();
+                    if (t !== "") {
+                        const n = Number(t);
+                        if (Number.isFinite(n)) {
+                            const v = Math.trunc(n);
+                            if (v >= 0 && v !== tb.lookaheadWindow) patch.lookaheadWindow = v;
+                        }
+                    }
+                }
+                {
+                    const t = d.tbDraft.minDuration.trim();
+                    if (t !== "") {
+                        const n = Number(t);
+                        if (Number.isFinite(n)) {
+                            const v = Math.trunc(n);
+                            if (v >= 1 && v !== tb.minDuration) patch.minDuration = v;
+                        }
+                    }
+                }
+                if (Object.keys(patch).length > 0) {
+                    st.setTimeBlockSettings(patch);
+                }
+            }
+        };
+    }, []);
 
     useEffect(() => {
         setCalendarStartHourDraft(String(calendarStartHour));
