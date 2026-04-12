@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { get_day_statistics } from "../../../api/statistics.ts";
 import { getCalendarDayRangeUnix } from "../../../utils.ts";
 import { useSettingsStore } from "../../../stores/settingsStore.ts";
@@ -11,6 +11,7 @@ import {
     GoogleCalendar,
     GoogleCalendarEvent,
 } from "../../../api/GoogleCalendar.ts";
+import { toErrorString } from "../../../types/common.ts";
 
 interface DayStatisticsSidebarProps {
     selectedDate: Date;
@@ -46,19 +47,46 @@ export default function DayStatisticsSidebar({
         [selectedDate, calendarStartHour]
     );
 
+    const dayStatsEnabled = !!dayStart && !!dayEnd;
     const {
         data: dayStats,
         isLoading,
         error,
         isError,
+        isFetching,
+        failureCount,
     } = useQuery({
         queryKey: ["day_statistics", dayStart, dayEnd],
         queryFn: async () => {
             if (!dayStart || !dayEnd) return null;
-            return await get_day_statistics(dayStart, dayEnd);
+            console.log("[DayStats] queryFn start", { dayStart, dayEnd });
+            try {
+                const stats = await get_day_statistics(dayStart, dayEnd);
+                console.log("[DayStats] queryFn ok", {
+                    categories: stats.categories?.length,
+                    total_time: stats.total_time,
+                });
+                return stats;
+            } catch (e) {
+                console.error("[DayStats] queryFn threw:", e);
+                console.error("[DayStats] toErrorString:", toErrorString(e));
+                throw e;
+            }
         },
-        enabled: !!dayStart && !!dayEnd,
+        enabled: dayStatsEnabled,
     });
+
+    useEffect(() => {
+        console.log("[DayStats] query state", {
+            enabled: dayStatsEnabled,
+            isLoading,
+            isFetching,
+            isError,
+            failureCount,
+            hasData: !!dayStats,
+            errorText: error ? toErrorString(error) : null,
+        });
+    }, [dayStatsEnabled, isLoading, isFetching, isError, failureCount, dayStats, error]);
 
     const {
         data: googleEvents,
@@ -224,7 +252,7 @@ export default function DayStatisticsSidebar({
                     </div>
                     <div className="text-red-400 mb-2">Error loading statistics</div>
                     <div className="text-gray-500 text-sm mb-4">
-                        {error instanceof Error ? error.message : "Unknown error occurred"}
+                        {toErrorString(error)}
                     </div>
                 </div>
                 <div className="mt-auto pt-4 border-t border-gray-700">

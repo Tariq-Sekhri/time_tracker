@@ -21,6 +21,7 @@ import {
     saveCalendarViewPrefs,
     type CalendarViewPrefsV1,
 } from "../../api/calendarViewPrefs.ts";
+import { toErrorString } from "../../types/common.ts";
 
 export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View) => void }) {
     const [rightSideBarView, setRightSideBarView] = useState<SideBarView>("Week")
@@ -339,7 +340,16 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     }, [queryClient]);
 
     const weekStart = getWeekStart(date, calendarStartHour);
-    const {data: weekData} = useQuery({
+    const weekDataQueryEnabled =
+        !!weekStart && !isNaN(weekStart.getTime()) && !!selectedEvent;
+    const {
+        data: weekData,
+        error: weekDataError,
+        isError: isWeekDataError,
+        isLoading: isWeekDataLoading,
+        isFetching: isWeekDataFetching,
+        failureCount: weekDataFailureCount,
+    } = useQuery({
         queryKey: [
             "week",
             formatLocalDateYMD(weekStart),
@@ -349,9 +359,44 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
             timeBlockSettings.lookaheadWindow,
             timeBlockSettings.minDuration,
         ],
-        queryFn: async () => await get_week(weekStart, timeBlockSettings, calendarStartHour),
-        enabled: !!weekStart && !isNaN(weekStart.getTime()) && !!selectedEvent,
+        queryFn: async () => {
+            console.log("[Week Calendar.tsx] queryFn start", {
+                weekStartYmd: formatLocalDateYMD(weekStart),
+                selectedEvent: !!selectedEvent,
+                timeBlockSettings,
+            });
+            try {
+                const rows = await get_week(weekStart, timeBlockSettings, calendarStartHour);
+                console.log("[Week Calendar.tsx] queryFn ok", { blockCount: rows.length });
+                return rows;
+            } catch (e) {
+                console.error("[Week Calendar.tsx] queryFn threw:", e);
+                console.error("[Week Calendar.tsx] toErrorString:", toErrorString(e));
+                throw e;
+            }
+        },
+        enabled: weekDataQueryEnabled,
     });
+
+    useEffect(() => {
+        console.log("[Week Calendar.tsx] query state", {
+            enabled: weekDataQueryEnabled,
+            isLoading: isWeekDataLoading,
+            isFetching: isWeekDataFetching,
+            isError: isWeekDataError,
+            failureCount: weekDataFailureCount,
+            dataLen: weekData?.length,
+            errorText: weekDataError ? toErrorString(weekDataError) : null,
+        });
+    }, [
+        weekDataQueryEnabled,
+        isWeekDataLoading,
+        isWeekDataFetching,
+        isWeekDataError,
+        weekDataFailureCount,
+        weekData?.length,
+        weekDataError,
+    ]);
 
     useEffect(() => {
         if (rightSideBarView === "CategoryFilter") {
