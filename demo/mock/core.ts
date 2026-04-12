@@ -219,6 +219,51 @@ function isAppSkippedByRules(appName: string): boolean {
     return false;
 }
 
+type CachedDemoRegex = { re: RegExp; category: string; priority: number };
+
+function buildCachedDemoRegexTable(): CachedDemoRegex[] {
+    const catById = new Map(categories.map((c) => [c.id, c]));
+    const out: CachedDemoRegex[] = [];
+    for (const row of catRegex) {
+        const cat = catById.get(row.cat_id);
+        if (!cat) continue;
+        try {
+            out.push({ re: new RegExp(row.regex), category: cat.name, priority: cat.priority });
+        } catch {
+        }
+    }
+    out.sort((a, b) => b.priority - a.priority);
+    return out;
+}
+
+function deriveDemoCategoryForApp(app: string): string {
+    const table = buildCachedDemoRegexTable();
+    for (const entry of table) {
+        if (entry.re.test(app)) return entry.category;
+    }
+    return "Miscellaneous";
+}
+
+function syncDemoCategoriesFromRegexRules() {
+    mergedLogs = mergedLogs.map((m) => ({ ...m, category: deriveDemoCategoryForApp(m.app) }));
+    timeBlocks = timeBlocks.map((tb) => {
+        const weights = new Map<string, number>();
+        for (const a of tb.apps) {
+            const c = deriveDemoCategoryForApp(a.app);
+            weights.set(c, (weights.get(c) ?? 0) + a.total_duration);
+        }
+        let best = tb.category;
+        let bestW = -1;
+        for (const [c, w] of weights) {
+            if (w > bestW) {
+                bestW = w;
+                best = c;
+            }
+        }
+        return { ...tb, category: best };
+    });
+}
+
 function filterSkippedAppsFromBlock(b: TimeBlockRow): TimeBlockRow | null {
     const apps: { app: string; total_duration: number }[] = [];
     const appLogIds: number[] = [];
@@ -976,6 +1021,7 @@ export async function invoke<T>(
                     );
                 }
             }
+            syncDemoCategoriesFromRegexRules();
             return null as T;
         }
         case "delete_category_by_id": {
@@ -1005,6 +1051,7 @@ export async function invoke<T>(
             if (!nr) return null as T;
             const id = nextRegexId++;
             catRegex.push({ id, cat_id: nr.cat_id, regex: nr.regex });
+            syncDemoCategoriesFromRegexRules();
             return id as unknown as T;
         }
         case "update_cat_regex_by_id": {
@@ -1012,11 +1059,13 @@ export async function invoke<T>(
             if (!cr) return null as T;
             const i = catRegex.findIndex((x) => x.id === cr.id);
             if (i >= 0) catRegex[i] = { ...cr };
+            syncDemoCategoriesFromRegexRules();
             return null as T;
         }
         case "delete_cat_regex_by_id": {
             const id = Number((a as { id?: number }).id);
             catRegex = catRegex.filter((r) => r.id !== id);
+            syncDemoCategoriesFromRegexRules();
             return null as T;
         }
         case "get_logs":
