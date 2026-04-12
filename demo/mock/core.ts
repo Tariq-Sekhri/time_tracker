@@ -1439,7 +1439,7 @@ export async function invoke<T>(
                 ),
             })) as unknown as T;
         case "get_app_version":
-            return "1.8.1-demo" as unknown as T;
+            return "1.8.2-demo" as unknown as T;
         case "refresh_tray_menu":
             return null as T;
         case "check_update_cmd":

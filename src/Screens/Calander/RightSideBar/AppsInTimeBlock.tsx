@@ -114,6 +114,8 @@ export default function AppsInTimeBlock({
             if (!didChange) return;
             queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
             queryClient.invalidateQueries({ queryKey: ["week"] });
+            queryClient.invalidateQueries({ queryKey: ["week_statistics"] });
+            queryClient.invalidateQueries({ queryKey: ["day_statistics"] });
             showToast("Category rule saved", "success");
         },
         onError: (e: unknown) => {
@@ -130,6 +132,8 @@ export default function AppsInTimeBlock({
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["skipped_apps"] });
             queryClient.invalidateQueries({ queryKey: ["week"] });
+            queryClient.invalidateQueries({ queryKey: ["week_statistics"] });
+            queryClient.invalidateQueries({ queryKey: ["day_statistics"] });
             setCategorizeMenu(null);
             setSkipConfirmOpen(false);
             setSkipPendingRegex(null);
