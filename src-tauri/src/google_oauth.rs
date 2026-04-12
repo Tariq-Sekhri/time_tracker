@@ -13,6 +13,7 @@ use oauth2::{
 };
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+#[cfg(target_os = "linux")]
 use std::process::Command;
 use std::sync::Arc;
 use tokio::sync::Mutex;

@@ -37,10 +37,10 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     if row.count == 0 {
         let defaults: &[(&str, i32, Option<&str>)] = &[
             ("Miscellaneous", 0, Some("#9c9c9c")),
+            ("Hidden", 100, Some("#475569")),
             ("Browsing", 200, Some("#ff7300")),
             ("Music", 250, Some("#ec4899")),
             ("Reading", 300, Some("#a855f7")),
-            ("Learning", 380, Some("#eab308")),
             ("Coding", 400, Some("#1100ff")),
             ("Gaming", 500, Some("#2eff89")),
             ("Watching", 600, Some("#fff700")),
