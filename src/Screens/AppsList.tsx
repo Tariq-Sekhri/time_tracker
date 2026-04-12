@@ -9,8 +9,6 @@ import { get_cat_regex, insert_cat_regex, update_cat_regex_by_id } from "../api/
 import { count_matching_logs, insert_skipped_app_and_delete_logs } from "../api/SkippedApp.ts";
 import { useToast } from "../Componants/Toast.tsx";
 
-type Tab = "week" | "dailyAvg" | "allTime";
-
 function exactAppRegexPattern(appName: string): string {
     const escaped = appName.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
     return `^${escaped}$`;
@@ -33,8 +31,7 @@ function formatPercentage(value: number): string {
 export default function AppsList({onBack}: { onBack: () => void }) {
     const queryClient = useQueryClient();
     const { showToast } = useToast();
-    const [activeTab, setActiveTab] = useState<Tab>("week");
-    const [visibleCount, setVisibleCount] = useState(20);
+    const [visibleCount, setVisibleCount] = useState(100);
     const categorizeMenuRef = useRef<HTMLDivElement>(null);
     const [categorizeMenu, setCategorizeMenu] = useState<{
         x: number;
@@ -155,15 +152,7 @@ export default function AppsList({onBack}: { onBack: () => void }) {
         );
     }
     const allAppsForCalc = weekStats.all_apps || weekStats.top_apps;
-    const dailyAvgApps = allAppsForCalc.map(app => ({
-        ...app,
-        total_duration: weekStats.number_of_active_days > 0
-            ? Math.floor(app.total_duration / weekStats.number_of_active_days)
-            : 0,
-    }));
-
-    const apps = activeTab === "week" ? allAppsForCalc : activeTab === "dailyAvg" ? dailyAvgApps : allAppsForCalc;
-    const filteredApps = apps.filter((app) => app.total_duration >= uiMinAppDuration);
+    const filteredApps = allAppsForCalc.filter((app) => app.total_duration >= uiMinAppDuration);
     const displayedApps = filteredApps.slice(0, visibleCount);
     const maxDuration = filteredApps.length > 0 ? filteredApps[0].total_duration : 1;
     const sortedCategories = [...categories].sort((a, b) => b.priority - a.priority);
@@ -187,36 +176,6 @@ export default function AppsList({onBack}: { onBack: () => void }) {
                 </button>
                 <h1 className="text-2xl font-bold">Apps List</h1>
                 <div className="w-20"></div>
-            </div>
-
-            <div className="flex gap-2 mb-6 border-b border-gray-700">
-                <button
-                    onClick={() => {
-                        setActiveTab("week");
-                        setVisibleCount(20);
-                    }}
-                    className={`px-4 py-2 font-medium ${activeTab === "week" ? "border-b-2 border-blue-500 text-white" : "text-gray-400"}`}
-                >
-                    Week
-                </button>
-                <button
-                    onClick={() => {
-                        setActiveTab("dailyAvg");
-                        setVisibleCount(20);
-                    }}
-                    className={`px-4 py-2 font-medium ${activeTab === "dailyAvg" ? "border-b-2 border-blue-500 text-white" : "text-gray-400"}`}
-                >
-                    Daily Avg
-                </button>
-                <button
-                    onClick={() => {
-                        setActiveTab("allTime");
-                        setVisibleCount(20);
-                    }}
-                    className={`px-4 py-2 font-medium ${activeTab === "allTime" ? "border-b-2 border-blue-500 text-white" : "text-gray-400"}`}
-                >
-                    All Time
-                </button>
             </div>
 
             <div className="space-y-2">
@@ -255,7 +214,7 @@ export default function AppsList({onBack}: { onBack: () => void }) {
 
                             <div className="flex items-center gap-3">
                                 <span className="text-sm text-gray-300">{formatDuration(app.total_duration)}</span>
-                                {activeTab === "week" && app.percentage_change !== null && (
+                                {app.percentage_change !== null && (
                                     <span
                                         className={`text-xs ${app.percentage_change >= 0 ? "text-green-400" : "text-red-400"}`}>
                                         {formatPercentage(app.percentage_change)}
@@ -279,10 +238,10 @@ export default function AppsList({onBack}: { onBack: () => void }) {
             {displayedApps.length < filteredApps.length && (
                 <div className="mt-6 text-center">
                     <button
-                        onClick={() => setVisibleCount((c) => Math.min(c + 20, filteredApps.length))}
+                        onClick={() => setVisibleCount((c) => Math.min(c + 100, filteredApps.length))}
                         className="px-6 py-2 bg-gray-800 hover:bg-gray-700 rounded text-white"
                     >
-                        Load 20 more
+                        Load 100 more
                     </button>
                 </div>
             )}
