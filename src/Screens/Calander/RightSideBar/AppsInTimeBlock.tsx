@@ -5,18 +5,11 @@ import {
     delete_logs_by_ids,
     delete_logs_for_time_block
 } from "../../../api/Log.ts";
-import { useState, useEffect, useRef, type ReactNode } from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, type ReactNode } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { SideBarView } from "./RightSideBar.tsx";
 import { useToast } from "../../../Componants/Toast.tsx";
-import { get_categories } from "../../../api/Category.ts";
-import { get_cat_regex, insert_cat_regex, update_cat_regex_by_id } from "../../../api/CategoryRegex.ts";
-import { count_matching_logs, insert_skipped_app_and_delete_logs } from "../../../api/SkippedApp.ts";
-
-function exactAppRegexPattern(appName: string): string {
-    const escaped = appName.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
-    return `^${escaped}$`;
-}
+import { useAppCategorizeMenu } from "../../../hooks/useAppCategorizeMenu.tsx";
 
 export type SelectedEvent = {
     title: string
@@ -52,117 +45,7 @@ export default function AppsInTimeBlock({
     const [deleteLogCount, setDeleteLogCount] = useState(0);
     const [isCountingLogs, setIsCountingLogs] = useState(false);
     const { showToast } = useToast();
-
-    const categorizeMenuRef = useRef<HTMLDivElement>(null);
-    const [categorizeMenu, setCategorizeMenu] = useState<{
-        x: number;
-        y: number;
-        appName: string;
-    } | null>(null);
-    const [skipConfirmOpen, setSkipConfirmOpen] = useState(false);
-    const [skipPendingRegex, setSkipPendingRegex] = useState<string | null>(null);
-    const [skipMatchingLogCount, setSkipMatchingLogCount] = useState(0);
-    const [isCountingSkipLogs, setIsCountingSkipLogs] = useState(false);
-
-    const { data: categories = [] } = useQuery({
-        queryKey: ["categories"],
-        queryFn: get_categories,
-    });
-
-    const { data: catRegex = [] } = useQuery({
-        queryKey: ["cat_regex"],
-        queryFn: get_cat_regex,
-    });
-
-    useEffect(() => {
-        if (!categorizeMenu) return;
-        const close = (e: PointerEvent) => {
-            if (categorizeMenuRef.current?.contains(e.target as Node)) return;
-            setCategorizeMenu(null);
-        };
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === "Escape") setCategorizeMenu(null);
-        };
-        document.addEventListener("pointerdown", close);
-        window.addEventListener("keydown", onKey);
-        return () => {
-            document.removeEventListener("pointerdown", close);
-            window.removeEventListener("keydown", onKey);
-        };
-    }, [categorizeMenu]);
-
-    const assignAppCategoryMutation = useMutation({
-        mutationFn: async ({
-            catId,
-            appName,
-        }: {
-            catId: number;
-            appName: string;
-        }) => {
-            const pattern = exactAppRegexPattern(appName);
-            const existing = catRegex.find((r) => r.regex === pattern);
-            if (existing?.cat_id === catId) return false;
-            if (existing) {
-                await update_cat_regex_by_id({ ...existing, cat_id: catId });
-            } else {
-                await insert_cat_regex({ cat_id: catId, regex: pattern });
-            }
-            return true;
-        },
-        onSuccess: (didChange) => {
-            setCategorizeMenu(null);
-            if (!didChange) return;
-            queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
-            queryClient.invalidateQueries({ queryKey: ["week"] });
-            queryClient.invalidateQueries({ queryKey: ["week_statistics"] });
-            queryClient.invalidateQueries({ queryKey: ["day_statistics"] });
-            showToast("Category rule saved", "success");
-        },
-        onError: (e: unknown) => {
-            console.error("Failed to save category rule:", e);
-            const fullError = JSON.stringify(e, null, 2);
-            showToast("Failed to save category rule", "error", 5000, fullError);
-        },
-    });
-
-    const addSkipPatternMutation = useMutation({
-        mutationFn: async (regexPattern: string) => {
-            return await insert_skipped_app_and_delete_logs({ regex: regexPattern });
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["skipped_apps"] });
-            queryClient.invalidateQueries({ queryKey: ["week"] });
-            queryClient.invalidateQueries({ queryKey: ["week_statistics"] });
-            queryClient.invalidateQueries({ queryKey: ["day_statistics"] });
-            setCategorizeMenu(null);
-            setSkipConfirmOpen(false);
-            setSkipPendingRegex(null);
-            showToast("Added to skipped apps", "success");
-        },
-        onError: (e: unknown) => {
-            console.error("Failed to add skipped app:", e);
-            const fullError = JSON.stringify(e, null, 2);
-            showToast("Failed to add skipped app", "error", 5000, fullError);
-        },
-    });
-
-    const handleAddToSkippedApps = async () => {
-        if (!categorizeMenu) return;
-        const regexPattern = exactAppRegexPattern(categorizeMenu.appName);
-        setIsCountingSkipLogs(true);
-        try {
-            const count = await count_matching_logs(regexPattern);
-            setSkipMatchingLogCount(count);
-            setSkipPendingRegex(regexPattern);
-            setSkipConfirmOpen(true);
-        } catch (e: any) {
-            console.error("Failed to count matching logs for skip:", e);
-            const fullError = JSON.stringify(e, null, 2);
-            showToast("Failed to add skipped app", "error", 5000, fullError);
-        } finally {
-            setIsCountingSkipLogs(false);
-        }
-    };
+    const { openFromContextMenu, categorizeLayers } = useAppCategorizeMenu();
 
     const handleDeleteClick = async () => {
         if (!selectedEvent) return;
@@ -280,7 +163,6 @@ export default function AppsInTimeBlock({
 
     const sortedLogs = [...selectedEventLogs].sort((a, b) => b.duration - a.duration);
     const totalDuration = sortedLogs.reduce((sum, log) => sum + log.duration, 0);
-    const sortedCategories = [...categories].sort((a, b) => b.priority - a.priority);
 
     return (
         <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
@@ -334,15 +216,7 @@ export default function AppsInTimeBlock({
                                     }
                                     appClicked(log.app);
                                 }}
-                                onContextMenu={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setCategorizeMenu({
-                                        x: e.clientX,
-                                        y: e.clientY,
-                                        appName: log.app,
-                                    });
-                                }}
+                                onContextMenu={(e) => openFromContextMenu(e, log.app)}
                                 className="h-15 bg-gray-900 rounded-lg p-3 hover:bg-gray-800 transition-colors select-text"
                             >
                                 <div className="flex items-center justify-between mb-1">
@@ -432,46 +306,7 @@ export default function AppsInTimeBlock({
                 </button>
             </div>
 
-            {categorizeMenu && (
-                <div
-                    ref={categorizeMenuRef}
-                    className="fixed z-[200] min-w-[12rem] max-h-64 overflow-y-auto nice-scrollbar rounded-lg border border-gray-600 bg-gray-900 py-1 shadow-xl"
-                    style={{ left: categorizeMenu.x, top: categorizeMenu.y }}
-                    role="menu"
-                >
-                    <div
-                        className="px-3 py-2 text-xs text-gray-400 border-b border-gray-700 truncate"
-                        title={categorizeMenu.appName}
-                    >
-                        {categorizeMenu.appName}
-                    </div>
-                    {sortedCategories.map((cat) => (
-                        <button
-                            key={cat.id}
-                            type="button"
-                            disabled={assignAppCategoryMutation.isPending}
-                            className="w-full px-3 py-2 text-left text-sm text-gray-200 hover:bg-gray-800 disabled:opacity-50"
-                            onClick={() =>
-                                assignAppCategoryMutation.mutate({
-                                    catId: cat.id,
-                                    appName: categorizeMenu.appName,
-                                })
-                            }
-                        >
-                            {cat.name}
-                        </button>
-                    ))}
-                    <div className="border-t border-gray-700 my-1" />
-                    <button
-                        type="button"
-                        disabled={isCountingSkipLogs || addSkipPatternMutation.isPending}
-                        className="w-full px-3 py-2 text-left text-sm text-red-300 hover:bg-gray-800 disabled:opacity-50"
-                        onClick={handleAddToSkippedApps}
-                    >
-                        {isCountingSkipLogs ? "Checking..." : "Add to skipped apps"}
-                    </button>
-                </div>
-            )}
+            {categorizeLayers}
 
             {showDeleteConfirm && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
@@ -501,45 +336,6 @@ export default function AppsInTimeBlock({
                                 className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-white disabled:opacity-50"
                             >
                                 {deleteTimeBlockMutation.isPending ? "Deleting..." : "Delete"}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {skipConfirmOpen && skipPendingRegex && (
-                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-                    <div className="bg-gray-900 p-6 rounded-lg max-w-md w-full mx-4 border border-gray-700">
-                        <h3 className="text-xl font-bold mb-4 text-white">Confirm Skip</h3>
-                        <p className="text-gray-300 mb-2">
-                            This will permanently delete{" "}
-                            <span className="text-red-400 font-semibold">
-                                {skipMatchingLogCount} log{skipMatchingLogCount !== 1 ? "s" : ""}
-                            </span>{" "}
-                            that match the selected app.
-                        </p>
-                        {skipMatchingLogCount > 0 && (
-                            <p className="text-yellow-400 text-sm mb-4">
-                                ⚠️ This action cannot be undone!
-                            </p>
-                        )}
-                        <div className="flex gap-3 justify-end">
-                            <button
-                                onClick={() => {
-                                    setSkipConfirmOpen(false);
-                                    setSkipPendingRegex(null);
-                                }}
-                                disabled={addSkipPatternMutation.isPending}
-                                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white disabled:opacity-50"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={() => addSkipPatternMutation.mutate(skipPendingRegex)}
-                                disabled={addSkipPatternMutation.isPending}
-                                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-white disabled:opacity-50"
-                            >
-                                {addSkipPatternMutation.isPending ? "Adding..." : "Delete Logs & Add Pattern"}
                             </button>
                         </div>
                     </div>
