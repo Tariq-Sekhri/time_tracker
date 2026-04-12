@@ -1,5 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { get_day_statistics } from "../../../api/statistics.ts";
 import { getCalendarDayRangeUnix } from "../../../utils.ts";
 import { useSettingsStore } from "../../../stores/settingsStore.ts";
@@ -12,15 +12,7 @@ import {
     GoogleCalendarEvent,
 } from "../../../api/GoogleCalendar.ts";
 import { toErrorString } from "../../../types/common.ts";
-import { useToast } from "../../../Componants/Toast.tsx";
-import { get_categories } from "../../../api/Category.ts";
-import { get_cat_regex, insert_cat_regex, update_cat_regex_by_id } from "../../../api/CategoryRegex.ts";
-import { count_matching_logs, insert_skipped_app_and_delete_logs } from "../../../api/SkippedApp.ts";
-
-function exactAppRegexPattern(appName: string): string {
-    const escaped = appName.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
-    return `^${escaped}$`;
-}
+import { useAppCategorizeMenu } from "../../../hooks/useAppCategorizeMenu.tsx";
 
 interface DayStatisticsSidebarProps {
     selectedDate: Date;
@@ -51,18 +43,7 @@ export default function DayStatisticsSidebar({
     trailingToolbar,
 }: DayStatisticsSidebarProps) {
     const { calendarStartHour, categorySidebarCount } = useSettingsStore();
-    const queryClient = useQueryClient();
-    const { showToast } = useToast();
-    const categorizeMenuRef = useRef<HTMLDivElement>(null);
-    const [categorizeMenu, setCategorizeMenu] = useState<{
-        x: number;
-        y: number;
-        appName: string;
-    } | null>(null);
-    const [skipConfirmOpen, setSkipConfirmOpen] = useState(false);
-    const [skipPendingRegex, setSkipPendingRegex] = useState<string | null>(null);
-    const [skipMatchingLogCount, setSkipMatchingLogCount] = useState(0);
-    const [isCountingSkipLogs, setIsCountingSkipLogs] = useState(false);
+    const { openFromContextMenu, categorizeLayers } = useAppCategorizeMenu();
 
     const { day_start: dayStart, day_end: dayEnd } = useMemo(
         () => getCalendarDayRangeUnix(selectedDate, calendarStartHour),
@@ -109,111 +90,6 @@ export default function DayStatisticsSidebar({
             errorText: error ? toErrorString(error) : null,
         });
     }, [dayStatsEnabled, isLoading, isFetching, isError, failureCount, dayStats, error]);
-
-    const { data: categories = [] } = useQuery({
-        queryKey: ["categories"],
-        queryFn: get_categories,
-    });
-
-    const { data: catRegex = [] } = useQuery({
-        queryKey: ["cat_regex"],
-        queryFn: get_cat_regex,
-    });
-
-    useEffect(() => {
-        if (!categorizeMenu) return;
-        const close = (e: PointerEvent) => {
-            if (categorizeMenuRef.current?.contains(e.target as Node)) return;
-            setCategorizeMenu(null);
-        };
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === "Escape") setCategorizeMenu(null);
-        };
-        document.addEventListener("pointerdown", close);
-        window.addEventListener("keydown", onKey);
-        return () => {
-            document.removeEventListener("pointerdown", close);
-            window.removeEventListener("keydown", onKey);
-        };
-    }, [categorizeMenu]);
-
-    const assignAppCategoryMutation = useMutation({
-        mutationFn: async ({
-            catId,
-            appName,
-        }: {
-            catId: number;
-            appName: string;
-        }) => {
-            const pattern = exactAppRegexPattern(appName);
-            const existing = catRegex.find((r) => r.regex === pattern);
-            if (existing?.cat_id === catId) return false;
-            if (existing) {
-                await update_cat_regex_by_id({ ...existing, cat_id: catId });
-            } else {
-                await insert_cat_regex({ cat_id: catId, regex: pattern });
-            }
-            return true;
-        },
-        onSuccess: (didChange) => {
-            setCategorizeMenu(null);
-            if (!didChange) return;
-            queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
-            queryClient.invalidateQueries({ queryKey: ["week"] });
-            queryClient.invalidateQueries({ queryKey: ["week_statistics"] });
-            queryClient.invalidateQueries({ queryKey: ["day_statistics"] });
-            showToast("Category rule saved", "success");
-        },
-        onError: (e: unknown) => {
-            console.error("Failed to save category rule:", e);
-            const fullError = JSON.stringify(e, null, 2);
-            showToast("Failed to save category rule", "error", 5000, fullError);
-        },
-    });
-
-    const addSkipPatternMutation = useMutation({
-        mutationFn: async (regexPattern: string) => {
-            return await insert_skipped_app_and_delete_logs({ regex: regexPattern });
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["skipped_apps"] });
-            queryClient.invalidateQueries({ queryKey: ["week"] });
-            queryClient.invalidateQueries({ queryKey: ["week_statistics"] });
-            queryClient.invalidateQueries({ queryKey: ["day_statistics"] });
-            setCategorizeMenu(null);
-            setSkipConfirmOpen(false);
-            setSkipPendingRegex(null);
-            showToast("Added to skipped apps", "success");
-        },
-        onError: (e: unknown) => {
-            console.error("Failed to add skipped app:", e);
-            const fullError = JSON.stringify(e, null, 2);
-            showToast("Failed to add skipped app", "error", 5000, fullError);
-        },
-    });
-
-    const handleAddToSkippedApps = async () => {
-        if (!categorizeMenu) return;
-        const regexPattern = exactAppRegexPattern(categorizeMenu.appName);
-        setIsCountingSkipLogs(true);
-        try {
-            const count = await count_matching_logs(regexPattern);
-            setSkipMatchingLogCount(count);
-            setSkipPendingRegex(regexPattern);
-            setSkipConfirmOpen(true);
-        } catch (e: unknown) {
-            console.error("Failed to count matching logs for skip:", e);
-            const fullError = JSON.stringify(e, null, 2);
-            showToast("Failed to add skipped app", "error", 5000, fullError);
-        } finally {
-            setIsCountingSkipLogs(false);
-        }
-    };
-
-    const sortedCategories = useMemo(
-        () => [...categories].sort((a, b) => b.priority - a.priority),
-        [categories]
-    );
 
     const {
         data: googleEvents,
@@ -512,15 +388,7 @@ export default function DayStatisticsSidebar({
                     {dayStats.top_apps.map((app, idx) => (
                         <div
                             key={`${app.app}-${idx}`}
-                            onContextMenu={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setCategorizeMenu({
-                                    x: e.clientX,
-                                    y: e.clientY,
-                                    appName: app.app,
-                                });
-                            }}
+                            onContextMenu={(e) => openFromContextMenu(e, app.app)}
                             className="flex items-center justify-between rounded px-1 -mx-1 hover:bg-gray-900/80"
                         >
                             <span className="text-sm text-gray-200 truncate min-w-0 pr-2">{app.app}</span>
@@ -541,87 +409,7 @@ export default function DayStatisticsSidebar({
                 </button>
             </div>
 
-            {categorizeMenu && (
-                <div
-                    ref={categorizeMenuRef}
-                    className="fixed z-[200] min-w-[12rem] max-h-64 overflow-y-auto nice-scrollbar rounded-lg border border-gray-600 bg-gray-900 py-1 shadow-xl"
-                    style={{ left: categorizeMenu.x, top: categorizeMenu.y }}
-                    role="menu"
-                >
-                    <div
-                        className="px-3 py-2 text-xs text-gray-400 border-b border-gray-700 truncate"
-                        title={categorizeMenu.appName}
-                    >
-                        {categorizeMenu.appName}
-                    </div>
-                    {sortedCategories.map((cat) => (
-                        <button
-                            key={cat.id}
-                            type="button"
-                            disabled={assignAppCategoryMutation.isPending}
-                            className="w-full px-3 py-2 text-left text-sm text-gray-200 hover:bg-gray-800 disabled:opacity-50"
-                            onClick={() =>
-                                assignAppCategoryMutation.mutate({
-                                    catId: cat.id,
-                                    appName: categorizeMenu.appName,
-                                })
-                            }
-                        >
-                            {cat.name}
-                        </button>
-                    ))}
-                    <div className="border-t border-gray-700 my-1" />
-                    <button
-                        type="button"
-                        disabled={isCountingSkipLogs || addSkipPatternMutation.isPending}
-                        className="w-full px-3 py-2 text-left text-sm text-red-300 hover:bg-gray-800 disabled:opacity-50"
-                        onClick={handleAddToSkippedApps}
-                    >
-                        {isCountingSkipLogs ? "Checking..." : "Add to skipped apps"}
-                    </button>
-                </div>
-            )}
-
-            {skipConfirmOpen && skipPendingRegex && (
-                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[250]">
-                    <div className="bg-gray-900 p-6 rounded-lg max-w-md w-full mx-4 border border-gray-700">
-                        <h3 className="text-xl font-bold mb-4 text-white">Confirm Skip</h3>
-                        <p className="text-gray-300 mb-2">
-                            This will permanently delete{" "}
-                            <span className="text-red-400 font-semibold">
-                                {skipMatchingLogCount} log{skipMatchingLogCount !== 1 ? "s" : ""}
-                            </span>{" "}
-                            that match the selected app.
-                        </p>
-                        {skipMatchingLogCount > 0 && (
-                            <p className="text-yellow-400 text-sm mb-4">
-                                ⚠️ This action cannot be undone!
-                            </p>
-                        )}
-                        <div className="flex gap-3 justify-end">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setSkipConfirmOpen(false);
-                                    setSkipPendingRegex(null);
-                                }}
-                                disabled={addSkipPatternMutation.isPending}
-                                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white disabled:opacity-50"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => addSkipPatternMutation.mutate(skipPendingRegex)}
-                                disabled={addSkipPatternMutation.isPending}
-                                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-white disabled:opacity-50"
-                            >
-                                {addSkipPatternMutation.isPending ? "Adding..." : "Delete Logs & Add Pattern"}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {categorizeLayers}
         </div>
     );
 }
