@@ -638,7 +638,7 @@ function seed() {
 
             const placeLearningBig = () => {
                 const dur = jitter(randInt(7200, 16200), 800);
-                return placeFill(dur, "Learning", [[realisticLearningTitle(randInt), dur]]);
+                return placeFill(dur, "Reading", [[realisticLearningTitle(randInt), dur]]);
             };
 
             const placeDiscordBig = () => {
