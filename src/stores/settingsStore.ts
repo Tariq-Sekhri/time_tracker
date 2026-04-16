@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { storageKey } from "../storageKey.ts";
 
 export type TimeBlockSettings = {
     minLogDuration: number;
@@ -23,7 +24,7 @@ export type SettingsState = {
     resetSettings: () => void;
 };
 
-const STORAGE_KEY = "time-tracker:settings";
+const STORAGE_KEY = storageKey("time-tracker:settings");
 
 export const RIGHT_SIDEBAR_WIDTH_MIN = 280;
 export const RIGHT_SIDEBAR_WIDTH_MAX = 800;

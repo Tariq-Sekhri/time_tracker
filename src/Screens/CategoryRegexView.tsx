@@ -10,6 +10,13 @@ import {
     NewCategoryRegex
 } from "../api/CategoryRegex.ts";
 import { useToast } from "../Componants/Toast.tsx";
+import { storageKey } from "../storageKey.ts";
+
+const REGEX_VISIBLE_CATEGORY_IDS_KEY = storageKey("regex_visibleCategoryIds");
+const REGEX_KNOWN_CATEGORY_IDS_KEY = storageKey("regex_knownCategoryIds");
+const REGEX_SORT_ORDER_KEY = storageKey("regex_sortOrder");
+const REGEX_GROUP_BY_CATEGORY_KEY = storageKey("regex_groupByCategory");
+const REGEX_COLLAPSED_CATEGORY_IDS_KEY = storageKey("regex_collapsedCategoryIds");
 
 function validateRegex(pattern: string): string | null {
     if (!pattern.trim()) {
@@ -77,8 +84,8 @@ export default function CategoryRegexView() {
         }
 
         try {
-            const savedVisibleRaw = localStorage.getItem("regex_visibleCategoryIds");
-            const savedKnownRaw = localStorage.getItem("regex_knownCategoryIds");
+            const savedVisibleRaw = localStorage.getItem(REGEX_VISIBLE_CATEGORY_IDS_KEY);
+            const savedKnownRaw = localStorage.getItem(REGEX_KNOWN_CATEGORY_IDS_KEY);
             const allIds = categories.map((c) => c.id);
 
             if (savedVisibleRaw) {
@@ -100,12 +107,12 @@ export default function CategoryRegexView() {
                 }
 
                 setVisibleCategoryIds(merged);
-                localStorage.setItem("regex_knownCategoryIds", JSON.stringify(allIds));
+                localStorage.setItem(REGEX_KNOWN_CATEGORY_IDS_KEY, JSON.stringify(allIds));
             } else {
                 const allVisible = new Set<number>(allIds);
                 setVisibleCategoryIds(allVisible);
-                localStorage.setItem("regex_visibleCategoryIds", JSON.stringify([...allVisible]));
-                localStorage.setItem("regex_knownCategoryIds", JSON.stringify(allIds));
+                localStorage.setItem(REGEX_VISIBLE_CATEGORY_IDS_KEY, JSON.stringify([...allVisible]));
+                localStorage.setItem(REGEX_KNOWN_CATEGORY_IDS_KEY, JSON.stringify(allIds));
             }
         } catch {
             const allIds = categories.map((c) => c.id);
@@ -121,17 +128,17 @@ export default function CategoryRegexView() {
         }
 
         try {
-            const rawSortOrder = localStorage.getItem("regex_sortOrder");
+            const rawSortOrder = localStorage.getItem(REGEX_SORT_ORDER_KEY);
             if (rawSortOrder === "oldest" || rawSortOrder === "newest") {
                 setSortOrder(rawSortOrder);
             }
 
-            const rawGroup = localStorage.getItem("regex_groupByCategory");
+            const rawGroup = localStorage.getItem(REGEX_GROUP_BY_CATEGORY_KEY);
             if (rawGroup != null) {
                 setGroupByCategory(rawGroup === "true");
             }
 
-            const rawCollapsed = localStorage.getItem("regex_collapsedCategoryIds");
+            const rawCollapsed = localStorage.getItem(REGEX_COLLAPSED_CATEGORY_IDS_KEY);
             if (rawCollapsed) {
                 const ids = JSON.parse(rawCollapsed) as number[];
                 setCollapsedCategoryIds(new Set<number>(ids));
@@ -183,8 +190,8 @@ export default function CategoryRegexView() {
             return;
         }
         try {
-            localStorage.setItem("regex_visibleCategoryIds", JSON.stringify([...visibleCategoryIds]));
-            localStorage.setItem("regex_knownCategoryIds", JSON.stringify(categories.map((c) => c.id)));
+            localStorage.setItem(REGEX_VISIBLE_CATEGORY_IDS_KEY, JSON.stringify([...visibleCategoryIds]));
+            localStorage.setItem(REGEX_KNOWN_CATEGORY_IDS_KEY, JSON.stringify(categories.map((c) => c.id)));
         } catch {
         }
     }, [visibleCategoryIds, categories]);
@@ -194,7 +201,7 @@ export default function CategoryRegexView() {
             return;
         }
         try {
-            localStorage.setItem("regex_sortOrder", sortOrder);
+            localStorage.setItem(REGEX_SORT_ORDER_KEY, sortOrder);
         } catch {
         }
     }, [sortOrder]);
@@ -204,7 +211,7 @@ export default function CategoryRegexView() {
             return;
         }
         try {
-            localStorage.setItem("regex_groupByCategory", groupByCategory ? "true" : "false");
+            localStorage.setItem(REGEX_GROUP_BY_CATEGORY_KEY, groupByCategory ? "true" : "false");
         } catch {
         }
     }, [groupByCategory]);
@@ -214,7 +221,7 @@ export default function CategoryRegexView() {
             return;
         }
         try {
-            localStorage.setItem("regex_collapsedCategoryIds", JSON.stringify([...collapsedCategoryIds]));
+            localStorage.setItem(REGEX_COLLAPSED_CATEGORY_IDS_KEY, JSON.stringify([...collapsedCategoryIds]));
         } catch {
         }
     }, [collapsedCategoryIds]);

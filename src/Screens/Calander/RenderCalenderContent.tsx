@@ -20,6 +20,9 @@ import {
 import { getWeekRange } from "../../utils.ts";
 import { getCachedEvents, setCachedEvents } from "../../stores/googleCalendarCache.ts";
 import { useToast } from "../../Componants/Toast.tsx";
+import { storageKey } from "../../storageKey.ts";
+
+const LEFT_SIDEBAR_COLLAPSED_KEY = storageKey("time-tracker:left-sidebar-collapsed");
 
 function IconWeekGrid({ className }: { className?: string }) {
     return (
@@ -87,7 +90,6 @@ export default function RenderCalendarContent({
     const lastGoogleEventsErrorToastRef = useRef<string | null>(null);
     const calendarHostRef = useRef<HTMLDivElement>(null);
     const [isRelogging, setIsRelogging] = useState(false);
-    const LEFT_SIDEBAR_COLLAPSED_KEY = "time-tracker:left-sidebar-collapsed";
     const [isLeftCollapsed, setIsLeftCollapsed] = useState(() => {
         try {
             return localStorage.getItem(LEFT_SIDEBAR_COLLAPSED_KEY) === "1";

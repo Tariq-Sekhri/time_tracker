@@ -1,4 +1,5 @@
 import { invokeOrThrow } from "../utils.ts";
+import { storageKey } from "../storageKey.ts";
 
 const DEFAULT_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const DEFAULT_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || "";
@@ -25,8 +26,8 @@ export async function hydrateGoogleOAuthCredentials(): Promise<void> {
     let clientSecret = fromDb.client_secret || "";
 
     try {
-        const legacyId = localStorage.getItem("google_oauth_client_id");
-        const legacySecret = localStorage.getItem("google_oauth_client_secret");
+        const legacyId = localStorage.getItem(storageKey("google_oauth_client_id"));
+        const legacySecret = localStorage.getItem(storageKey("google_oauth_client_secret"));
         if (legacyId && legacySecret) {
             clientId = legacyId;
             clientSecret = legacySecret;
@@ -34,8 +35,8 @@ export async function hydrateGoogleOAuthCredentials(): Promise<void> {
                 clientId,
                 clientSecret,
             });
-            localStorage.removeItem("google_oauth_client_id");
-            localStorage.removeItem("google_oauth_client_secret");
+            localStorage.removeItem(storageKey("google_oauth_client_id"));
+            localStorage.removeItem(storageKey("google_oauth_client_secret"));
             applyCache({ client_id: clientId, client_secret: clientSecret });
             return;
         }
