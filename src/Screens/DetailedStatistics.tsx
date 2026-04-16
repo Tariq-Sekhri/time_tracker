@@ -322,87 +322,89 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                     </div>
                 </div>
 
-                <div className="mb-6">
-                    <h2 className="text-xl font-bold mb-4">Hourly Activity Distribution</h2>
-                    <div className="bg-gray-900 p-4 rounded">
-                        <div className="relative h-48">
-                            <svg width="100%" height="100%" viewBox="0 0 800 200" className="overflow-visible">
-                                <defs>
-                                    <linearGradient id="hourlyGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                                        <stop offset="0%" stopColor="#f97316" stopOpacity="0.8"/>
-                                        <stop offset="100%" stopColor="#f97316" stopOpacity="0.2"/>
-                                    </linearGradient>
-                                </defs>
-                                {Array.from({length: 25}, (_, i) => i).map(hour => (
-                                    <line
-                                        key={hour}
-                                        x1={(hour / 24) * 700 + 50}
-                                        y1="10"
-                                        x2={(hour / 24) * 700 + 50}
-                                        y2="190"
-                                        stroke="#374151"
-                                        strokeWidth="1"
-                                        strokeDasharray="2,2"
-                                    />
-                                ))}
-                                {[0, 1, 2, 3, 4].map(val => (
-                                    <text
-                                        key={val}
-                                        x="45"
-                                        y={190 - (val * 40)}
-                                        fill="#9ca3af"
-                                        fontSize="10"
-                                        textAnchor="end"
-                                    >
-                                        {val}h
-                                    </text>
-                                ))}
-                                {Array.from({length: 25}, (_, i) => i).map(hour => {
-                                    const x = (hour / 24) * 700 + 50;
-                                    return (
-                                        <text
+                {activeTab === "dailyAvg" && (
+                    <div className="mb-6">
+                        <h2 className="text-xl font-bold mb-4">Hourly Activity Distribution</h2>
+                        <div className="bg-gray-900 p-4 rounded">
+                            <div className="relative h-48">
+                                <svg width="100%" height="100%" viewBox="0 0 800 200" className="overflow-visible">
+                                    <defs>
+                                        <linearGradient id="hourlyGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                            <stop offset="0%" stopColor="#f97316" stopOpacity="0.8"/>
+                                            <stop offset="100%" stopColor="#f97316" stopOpacity="0.2"/>
+                                        </linearGradient>
+                                    </defs>
+                                    {Array.from({length: 25}, (_, i) => i).map(hour => (
+                                        <line
                                             key={hour}
-                                            x={x}
-                                            y="200"
+                                            x1={(hour / 24) * 700 + 50}
+                                            y1="10"
+                                            x2={(hour / 24) * 700 + 50}
+                                            y2="190"
+                                            stroke="#374151"
+                                            strokeWidth="1"
+                                            strokeDasharray="2,2"
+                                        />
+                                    ))}
+                                    {[0, 1, 2, 3, 4].map(val => (
+                                        <text
+                                            key={val}
+                                            x="45"
+                                            y={190 - (val * 40)}
                                             fill="#9ca3af"
-                                            fontSize="9"
+                                            fontSize="10"
                                             textAnchor="end"
-                                            transform={`rotate(-45 ${x} 200)`}
                                         >
-                                            {hour}:00
+                                            {val}h
                                         </text>
-                                    );
-                                })}
-                                <path
-                                    d={`M ${stats.hourly_distribution
-                                        .filter(h => h.hour >= 0 && h.hour <= 24)
-                                        .map((h, idx) => {
-                                            const x = (h.hour / 24) * 700 + 50;
-                                            const maxMinutes = Math.max(...stats.hourly_distribution.map(h => h.total_duration / 60), 1);
-                                            const y = 190 - ((h.total_duration / 60) / maxMinutes) * 160;
-                                            return `${idx === 0 ? 'M' : 'L'} ${x} ${y}`;
-                                        })
-                                        .join(' ')}`}
-                                    fill="none"
-                                    stroke="#f97316"
-                                    strokeWidth="2"
-                                />
-                                <path
-                                    d={`M 50 190 ${stats.hourly_distribution
-                                        .filter(h => h.hour >= 0 && h.hour <= 24)
-                                        .map((h) => {
-                                            const x = (h.hour / 24) * 700 + 50;
-                                            const maxMinutes = Math.max(...stats.hourly_distribution.map(h => h.total_duration / 60), 1);
-                                            const y = 190 - ((h.total_duration / 60) / maxMinutes) * 160;
-                                            return `L ${x} ${y}`;
-                                        })
-                                        .join(' ')} L ${((24) / 24) * 700 + 50} 190 Z`}
-                                    fill="url(#hourlyGradient)"
-                                />
-                            </svg>
+                                    ))}
+                                    {Array.from({length: 25}, (_, i) => i).map(hour => {
+                                        const x = (hour / 24) * 700 + 50;
+                                        return (
+                                            <text
+                                                key={hour}
+                                                x={x}
+                                                y="200"
+                                                fill="#9ca3af"
+                                                fontSize="9"
+                                                textAnchor="end"
+                                                transform={`rotate(-45 ${x} 200)`}
+                                            >
+                                                {hour}:00
+                                            </text>
+                                        );
+                                    })}
+                                    <path
+                                        d={`M ${stats.hourly_distribution
+                                            .filter(h => h.hour >= 0 && h.hour <= 24)
+                                            .map((h, idx) => {
+                                                const x = (h.hour / 24) * 700 + 50;
+                                                const maxMinutes = Math.max(...stats.hourly_distribution.map(h => h.total_duration / 60), 1);
+                                                const y = 190 - ((h.total_duration / 60) / maxMinutes) * 160;
+                                                return `${idx === 0 ? 'M' : 'L'} ${x} ${y}`;
+                                            })
+                                            .join(' ')}`}
+                                        fill="none"
+                                        stroke="#f97316"
+                                        strokeWidth="2"
+                                    />
+                                    <path
+                                        d={`M 50 190 ${stats.hourly_distribution
+                                            .filter(h => h.hour >= 0 && h.hour <= 24)
+                                            .map((h) => {
+                                                const x = (h.hour / 24) * 700 + 50;
+                                                const maxMinutes = Math.max(...stats.hourly_distribution.map(h => h.total_duration / 60), 1);
+                                                const y = 190 - ((h.total_duration / 60) / maxMinutes) * 160;
+                                                return `L ${x} ${y}`;
+                                            })
+                                            .join(' ')} L ${((24) / 24) * 700 + 50} 190 Z`}
+                                        fill="url(#hourlyGradient)"
+                                    />
+                                </svg>
+                            </div>
                         </div>
                     </div>
-                </div>
+                )}
             </div>
 
             <div ref={sidebarRef} className="w-96 border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col">
