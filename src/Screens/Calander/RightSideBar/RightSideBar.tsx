@@ -9,6 +9,9 @@ import GoogleCalendarEventView from "./GoogleCalendarEventView.tsx";
 import { GoogleCalendar } from "../../../api/GoogleCalendar.ts";
 import { useEffect, useState } from "react";
 import { useSettingsStore } from "../../../stores/settingsStore.ts";
+import { storageKey } from "../../../storageKey.ts";
+
+const RIGHT_SIDEBAR_COLLAPSED_KEY = storageKey("time-tracker:right-sidebar-collapsed");
 
 export type SideBarView = "Week" | "Day" | "Event" | "CategoryFilter"
 
@@ -47,7 +50,6 @@ export function RightSideBar({
 }) {
     const { date } = useDateStore();
     const { rightSidebarWidth } = useSettingsStore();
-    const RIGHT_SIDEBAR_COLLAPSED_KEY = "time-tracker:right-sidebar-collapsed";
     const [isCollapsed, setIsCollapsed] = useState(() => {
         try {
             return localStorage.getItem(RIGHT_SIDEBAR_COLLAPSED_KEY) === "1";

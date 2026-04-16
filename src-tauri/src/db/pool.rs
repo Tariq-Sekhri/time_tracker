@@ -7,17 +7,40 @@ use crate::db::validation;
 
 static POOL: Mutex<Option<SqlitePool>> = Mutex::new(None);
 
+fn app_data_time_tracker_dir() -> PathBuf {
+    dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("time-tracker")
+}
+
+#[cfg(debug_assertions)]
+fn refresh_dev_database_from_production(dev_path: &PathBuf) -> std::io::Result<()> {
+    let prod = app_data_time_tracker_dir().join("app.db");
+    if prod.exists()
+        && std::fs::metadata(&prod)
+            .map(|m| m.len() > 0)
+            .unwrap_or(false)
+    {
+        if let Some(parent) = dev_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::copy(&prod, dev_path)?;
+    }
+    Ok(())
+}
+
 pub fn drop_all() -> std::io::Result<()> {
     std::fs::remove_file(get_db_path())?;
     Ok(())
 }
 
 pub fn get_db_path() -> PathBuf {
-    let db_filename = "app.db";
-    dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("time-tracker")
-        .join(db_filename)
+    let db_filename = if cfg!(debug_assertions) {
+        "apptest.db"
+    } else {
+        "app.db"
+    };
+    app_data_time_tracker_dir().join(db_filename)
 }
 
 pub async fn reset_pool() -> Result<(), sqlx::Error> {
@@ -62,6 +85,10 @@ fn ensure_db_path(db_path: &PathBuf) -> Result<(), sqlx::Error> {
 
 async fn create_pool() -> Result<SqlitePool, sqlx::Error> {
     let db_path = get_db_path();
+    #[cfg(debug_assertions)]
+    {
+        refresh_dev_database_from_production(&db_path).map_err(sqlx::Error::Io)?;
+    }
     ensure_db_path(&db_path)?;
 
     if db_path.exists() && std::fs::metadata(&db_path).map(|m| m.len() > 0).unwrap_or(false) {

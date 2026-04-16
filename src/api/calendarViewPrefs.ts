@@ -1,4 +1,5 @@
 import { invokeOrThrow } from "../utils.ts";
+import { storageKey } from "../storageKey.ts";
 
 export type CalendarViewPrefsV1 = {
     includeGoogleInStats: boolean;
@@ -10,16 +11,16 @@ export type CalendarViewPrefsV1 = {
     knownGoogleCalendarsInStats: number[];
 };
 
-export const LEGACY_INCLUDE_GOOGLE_STATS_KEY = "time-tracker:include-google-in-stats";
+export const LEGACY_INCLUDE_GOOGLE_STATS_KEY = storageKey("time-tracker:include-google-in-stats");
 
 const LEGACY_KEYS = [
     LEGACY_INCLUDE_GOOGLE_STATS_KEY,
-    "visibleCategories",
-    "knownCategories",
-    "visibleCalendars",
-    "knownCalendars",
-    "googleCalendarsInStats",
-    "knownGoogleCalendarsInStats",
+    storageKey("visibleCategories"),
+    storageKey("knownCategories"),
+    storageKey("visibleCalendars"),
+    storageKey("knownCalendars"),
+    storageKey("googleCalendarsInStats"),
+    storageKey("knownGoogleCalendarsInStats"),
 ] as const;
 
 function defaultCalendarViewPrefs(): CalendarViewPrefsV1 {
@@ -43,7 +44,7 @@ function readLegacyCalendarViewPrefs(): CalendarViewPrefsV1 | null {
         if (includeRaw === "1") includeGoogleInStats = true;
         else if (includeRaw === "0") includeGoogleInStats = false;
         const parseArr = (key: string): unknown => {
-            const raw = localStorage.getItem(key);
+            const raw = localStorage.getItem(storageKey(key));
             if (!raw) return [];
             return JSON.parse(raw) as unknown;
         };
