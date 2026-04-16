@@ -65,8 +65,15 @@ pub fn run() {
     {
         let _ = dotenv::dotenv();
     }
-    
-    tauri::Builder::default()
+
+    #[allow(unused_mut)]
+    let mut builder = tauri::Builder::default();
+    #[cfg(all(desktop, not(debug_assertions)))]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}));
+    }
+
+    builder
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .setup(|app| {
