@@ -14,6 +14,7 @@ import Header from "./Componants/Header.tsx";
 import GoogleCalendarsView from "./Screens/GoogleCalendarsView.tsx";
 import Settings from "./Screens/Settings.tsx";
 import { ToastProvider, useToast } from "./Componants/Toast.tsx";
+import CalendarAppFilterIndicator from "./Componants/CalendarAppFilterIndicator.tsx";
 import { toErrorString } from "./types/common.ts";
 
 export type View =
@@ -244,6 +245,7 @@ function AppInner() {
                 {currentView === "settings" && <Settings />}
                 {currentView === "googleCalendars" && <GoogleCalendarsView />}
             </div>
+            <CalendarAppFilterIndicator />
         </main>
     );
 }

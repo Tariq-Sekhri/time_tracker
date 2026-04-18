@@ -4,6 +4,8 @@ import { get_total_statistics, WeekStatistics } from "../api/statistics.ts";
 import { get_logs_by_category, MergedLog } from "../api/Log.ts";
 import { useSettingsStore } from "../stores/settingsStore.ts";
 import { useAppCategorizeMenu } from "../hooks/useAppCategorizeMenu.tsx";
+import { logRowLeftClickCalendarFilter } from "../utils/calendarAppFilterRowClick.ts";
+import { useCalendarAppFilterActive } from "../stores/calendarAppFilterStore.ts";
 
 type Tab = "dailyAvg" | "total";
 
@@ -31,8 +33,9 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
     const { openFromContextMenu, categorizeLayers } = useAppCategorizeMenu({
         extraInvalidateQueryKeys: [["total_statistics"]],
     });
+    const calendarAppFilterActive = useCalendarAppFilterActive();
 
-    const { uiMinAppDuration } = useSettingsStore();
+    const { uiMinAppDuration, timeBlockSettings } = useSettingsStore();
 
     const sidebarRef = useRef<HTMLDivElement | null>(null);
     const categoriesRef = useRef<HTMLDivElement | null>(null);
@@ -95,6 +98,7 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                     category: selectedCategory,
                     start_time: startTime,
                     end_time: endTime,
+                    min_log_duration: timeBlockSettings.minLogDuration,
                 });
 
                 const logMap = new Map<string, { app: string; totalDuration: number }>();
@@ -119,7 +123,7 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
         };
 
         run();
-    }, [selectedCategory, totalStats]);
+    }, [selectedCategory, totalStats, timeBlockSettings.minLogDuration]);
 
     useEffect(() => {
         if (!selectedCategory) return;
@@ -183,8 +187,15 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                 totalDuration: app.total_duration,
             }));
 
-    const sidebarMaxDuration = Math.max(...sidebarApps.map((a) => a.totalDuration), 1);
-    const sidebarPercentDenom = selectedCategory ? selectedCategoryTotalDuration : stats.total_time;
+    const sidebarAppsFiltered = calendarAppFilterActive
+        ? sidebarApps.filter((a) => a.app === calendarAppFilterActive)
+        : sidebarApps;
+    const sidebarMaxDuration = Math.max(...sidebarAppsFiltered.map((a) => a.totalDuration), 1);
+    const sidebarPercentDenom = calendarAppFilterActive
+        ? Math.max(1, sidebarAppsFiltered.reduce((s, a) => s + a.totalDuration, 0))
+        : selectedCategory
+            ? selectedCategoryTotalDuration
+            : stats.total_time;
 
     return (
         <div className="flex h-full overflow-hidden">
@@ -431,7 +442,7 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                 <div className="space-y-2 flex-1">
                     {selectedCategory && isLoadingCategory ? (
                         <div className="text-gray-500 text-sm">Loading app contributions...</div>
-                    ) : sidebarApps.length === 0 ? (
+                    ) : sidebarAppsFiltered.length === 0 ? (
                         selectedCategory ? (
                                 <div className="text-gray-500 text-sm">
                                     No apps recorded for this category (at least {formatDuration(uiMinAppDuration)}).
@@ -440,13 +451,19 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                             <div className="text-gray-500 text-sm">No apps recorded.</div>
                         )
                     ) : (
-                                    sidebarApps.map((app) => {
+                                    sidebarAppsFiltered.map((app) => {
                                         const barPct = (app.totalDuration / sidebarMaxDuration) * 100;
                                         const pct = sidebarPercentDenom > 0 ? (app.totalDuration / sidebarPercentDenom) * 100 : 0;
                             return (
                                             <div
                                                 key={app.app}
+                                                onClick={(e) => logRowLeftClickCalendarFilter(e, app.app)}
                                                 onContextMenu={(e) => openFromContextMenu(e, app.app)}
+                                                className={`rounded px-1 -mx-1 py-1 cursor-pointer select-text ${
+                                                    calendarAppFilterActive === app.app
+                                                        ? "bg-gray-800 ring-1 ring-blue-500 ring-inset"
+                                                        : "hover:bg-gray-900/80"
+                                                }`}
                                             >
                                     <div className="flex items-center justify-between mb-1 gap-3">
                                         <span className="text-sm text-gray-200 truncate flex-1">{app.app}</span>

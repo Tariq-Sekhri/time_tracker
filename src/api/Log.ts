@@ -24,6 +24,14 @@ export type GetLogsByCategoryRequest = {
     category: string;
     start_time: number;
     end_time: number;
+    min_log_duration: number;
+};
+
+export type GetLogsForTimeBlockRequest = {
+    app_names: string[];
+    start_time: number;
+    end_time: number;
+    min_log_duration: number;
 };
 
 export async function delete_log_by_id(id: number): Promise<null> {
@@ -46,7 +54,7 @@ export async function count_logs_for_time_block(request: DeleteTimeBlockRequest)
     return invokeOrThrow<number>("count_logs_for_time_block", { request });
 }
 
-export async function get_logs_for_time_block(request: DeleteTimeBlockRequest): Promise<MergedLog[]> {
+export async function get_logs_for_time_block(request: GetLogsForTimeBlockRequest): Promise<MergedLog[]> {
     return invokeOrThrow<MergedLog[]>("get_logs_for_time_block", { request });
 }
 
@@ -58,5 +66,24 @@ export async function get_logs_by_category(request: GetLogsByCategoryRequest): P
     return invokeOrThrow<MergedLog[]>("get_logs_by_category", { request });
 }
 
+export type AppTimeRangeLog = {
+    id: number;
+    app: string;
+    timestamp: number;
+    duration: number;
+};
 
+export async function get_logs_for_app_in_time_range(
+    app: string,
+    rangeStart: number,
+    rangeEnd: number,
+    minLogDuration: number,
+): Promise<AppTimeRangeLog[]> {
+    return invokeOrThrow<AppTimeRangeLog[]>("get_logs_for_app_in_time_range", {
+        app,
+        rangeStart,
+        rangeEnd,
+        minLogDuration,
+    });
+}
 

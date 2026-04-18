@@ -13,6 +13,8 @@ import {
 } from "../../../api/GoogleCalendar.ts";
 import { toErrorString } from "../../../types/common.ts";
 import { useAppCategorizeMenu } from "../../../hooks/useAppCategorizeMenu.tsx";
+import { logRowLeftClickCalendarFilter } from "../../../utils/calendarAppFilterRowClick.ts";
+import { useCalendarAppFilterActive } from "../../../stores/calendarAppFilterStore.ts";
 
 interface DayStatisticsSidebarProps {
     selectedDate: Date;
@@ -44,6 +46,7 @@ export default function DayStatisticsSidebar({
 }: DayStatisticsSidebarProps) {
     const { calendarStartHour, categorySidebarCount } = useSettingsStore();
     const { openFromContextMenu, categorizeLayers } = useAppCategorizeMenu();
+    const calendarAppFilterActive = useCalendarAppFilterActive();
 
     const { day_start: dayStart, day_end: dayEnd } = useMemo(
         () => getCalendarDayRangeUnix(selectedDate, calendarStartHour),
@@ -190,6 +193,16 @@ export default function DayStatisticsSidebar({
         if (!includeGoogleInStats) return dayStats.total_time;
         return dayStats.total_time + googleTotalDuration;
     }, [dayStats, includeGoogleInStats, googleTotalDuration]);
+
+    const filteredDayTopApps = useMemo(() => {
+        if (!dayStats?.top_apps) {
+            return [];
+        }
+        if (!calendarAppFilterActive) {
+            return dayStats.top_apps;
+        }
+        return dayStats.top_apps.filter((a) => a.app === calendarAppFilterActive);
+    }, [dayStats, calendarAppFilterActive]);
 
     if (isLoading || (!dayStats && !isError)) {
         return (
@@ -385,11 +398,16 @@ export default function DayStatisticsSidebar({
             <div className="mb-6">
                 <h3 className="text-sm font-semibold text-gray-300 mb-3">Top Apps</h3>
                 <div className="space-y-2">
-                    {dayStats.top_apps.map((app, idx) => (
+                    {filteredDayTopApps.map((app, idx) => (
                         <div
                             key={`${app.app}-${idx}`}
+                            onClick={(e) => logRowLeftClickCalendarFilter(e, app.app)}
                             onContextMenu={(e) => openFromContextMenu(e, app.app)}
-                            className="flex items-center justify-between rounded px-1 -mx-1 hover:bg-gray-900/80"
+                            className={`flex items-center justify-between rounded px-1 -mx-1 cursor-pointer select-text ${
+                                calendarAppFilterActive === app.app
+                                    ? "bg-gray-800 ring-1 ring-blue-500 ring-inset"
+                                    : "hover:bg-gray-900/80"
+                            }`}
                         >
                             <span className="text-sm text-gray-200 truncate min-w-0 pr-2">{app.app}</span>
                             <span className="text-sm text-gray-400 shrink-0">

@@ -105,6 +105,14 @@ pub struct DeleteTimeBlockRequest {
     pub end_time: i64,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GetLogsForTimeBlockRequest {
+    pub app_names: Vec<String>,
+    pub start_time: i64,
+    pub end_time: i64,
+    pub min_log_duration: i64,
+}
+
 #[tauri::command]
 pub async fn delete_logs_for_time_block(request: DeleteTimeBlockRequest) -> Result<i64, Error> {
     let pool = db::get_pool().await?;
@@ -153,15 +161,16 @@ pub async fn count_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resul
 }
 
 #[tauri::command]
-pub async fn get_logs_for_time_block(request: DeleteTimeBlockRequest) -> Result<Vec<MergedLog>, Error> {
+pub async fn get_logs_for_time_block(request: GetLogsForTimeBlockRequest) -> Result<Vec<MergedLog>, Error> {
     let pool = db::get_pool().await?;
 
-    let logs = sqlx::query_as!(
-        Log,
-        "SELECT id, app, timestamp, duration FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2 ORDER BY duration DESC",
-        request.start_time,
-        request.end_time
+    let min_d = request.min_log_duration.max(1);
+    let logs = sqlx::query_as::<_, Log>(
+        "SELECT id, app, timestamp, duration FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2 AND duration >= ?3 ORDER BY duration DESC",
     )
+    .bind(request.start_time)
+    .bind(request.end_time)
+    .bind(min_d)
     .fetch_all(&pool)
     .await?;
 
@@ -199,6 +208,7 @@ pub struct GetLogsByCategoryRequest {
     pub category: String,
     pub start_time: i64,
     pub end_time: i64,
+    pub min_log_duration: i64,
 }
 
 #[tauri::command]
@@ -212,12 +222,13 @@ pub async fn get_logs_by_category(request: GetLogsByCategoryRequest) -> Result<V
 
     let pool = db::get_pool().await?;
 
-    let mut logs = sqlx::query_as!(
-        Log,
-        "SELECT id, app, timestamp, duration FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2 ORDER BY duration DESC",
-        request.start_time,
-        request.end_time
+    let min_d = request.min_log_duration.max(1);
+    let mut logs = sqlx::query_as::<_, Log>(
+        "SELECT id, app, timestamp, duration FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2 AND duration >= ?3 ORDER BY duration DESC",
     )
+    .bind(request.start_time)
+    .bind(request.end_time)
+    .bind(min_d)
     .fetch_all(&pool)
     .await?;
 
@@ -267,4 +278,44 @@ pub async fn get_logs_by_category(request: GetLogsByCategoryRequest) -> Result<V
         .collect();
 
     Ok(merge_logs_in_time_block(filtered_logs))
+}
+
+#[tauri::command]
+pub async fn get_logs_for_app_in_time_range(
+    app: String,
+    range_start: i64,
+    range_end: i64,
+    min_log_duration: i64,
+) -> Result<Vec<Log>, Error> {
+    use crate::db::tables::skipped_app::get_skipped_apps;
+    use regex::Regex;
+
+    let pool = db::get_pool().await?;
+
+    let skipped_apps = get_skipped_apps().await?;
+    let skipped_regexes: Vec<Regex> = skipped_apps
+        .iter()
+        .filter_map(|a| Regex::new(&a.regex).ok())
+        .collect();
+    let is_skipped =
+        |name: &str| -> bool { skipped_regexes.iter().any(|regex| regex.is_match(name)) };
+
+    if is_skipped(&app) {
+        return Ok(Vec::new());
+    }
+
+    let min_d = min_log_duration.max(1);
+    let logs = sqlx::query_as::<_, Log>(
+        "SELECT id, app, timestamp, duration FROM logs WHERE app = ?1 AND timestamp >= ?2 AND timestamp <= ?3 AND duration >= ?4 ORDER BY timestamp ASC",
+    )
+    .bind(&app)
+    .bind(range_start)
+    .bind(range_end)
+    .bind(min_d)
+    .fetch_all(&pool)
+    .await?;
+
+    let logs: Vec<Log> = logs.into_iter().filter(|log| !is_skipped(&log.app)).collect();
+
+    Ok(logs)
 }

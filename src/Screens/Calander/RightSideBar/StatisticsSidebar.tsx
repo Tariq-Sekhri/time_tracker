@@ -13,6 +13,8 @@ import {
 import { useSettingsStore } from "../../../stores/settingsStore.ts";
 import { toErrorString } from "../../../types/common.ts";
 import { useAppCategorizeMenu } from "../../../hooks/useAppCategorizeMenu.tsx";
+import { logRowLeftClickCalendarFilter } from "../../../utils/calendarAppFilterRowClick.ts";
+import { useCalendarAppFilterActive } from "../../../stores/calendarAppFilterStore.ts";
 
 type DisplayMode = "percentage" | "time";
 
@@ -67,6 +69,7 @@ export default function StatisticsSidebar({
     const [displayMode, setDisplayMode] = useState<DisplayMode>("percentage");
     const { categorySidebarCount, calendarStartHour } = useSettingsStore();
     const { openFromContextMenu, categorizeLayers } = useAppCategorizeMenu();
+    const calendarAppFilterActive = useCalendarAppFilterActive();
 
     const { week_start, week_end } = getWeekRange(weekDate, calendarStartHour);
     const prevAnchor = new Date(week_start * 1000);
@@ -103,6 +106,16 @@ export default function StatisticsSidebar({
             }
         },
     });
+
+    const filteredTopApps = useMemo(() => {
+        if (!weekStats?.top_apps) {
+            return [];
+        }
+        if (!calendarAppFilterActive) {
+            return weekStats.top_apps;
+        }
+        return weekStats.top_apps.filter((a) => a.app === calendarAppFilterActive);
+    }, [weekStats, calendarAppFilterActive]);
 
     useEffect(() => {
         console.log("[WeekStats] query state", {
@@ -513,11 +526,16 @@ export default function StatisticsSidebar({
                     )}
                 </div>
                 <div className="space-y-2">
-                    {weekStats.top_apps.map((app, idx) => (
+                    {filteredTopApps.map((app, idx) => (
                         <div
                             key={`${app.app}-${idx}`}
+                            onClick={(e) => logRowLeftClickCalendarFilter(e, app.app)}
                             onContextMenu={(e) => openFromContextMenu(e, app.app)}
-                            className="flex items-center justify-between rounded px-1 -mx-1 hover:bg-gray-900/80"
+                            className={`flex items-center justify-between rounded px-1 -mx-1 cursor-pointer select-text ${
+                                calendarAppFilterActive === app.app
+                                    ? "bg-gray-800 ring-1 ring-blue-500 ring-inset"
+                                    : "hover:bg-gray-900/80"
+                            }`}
                         >
                             <span className="text-sm text-gray-200 truncate min-w-0 pr-2">{app.app}</span>
                             <div className="flex items-center gap-2 shrink-0">
