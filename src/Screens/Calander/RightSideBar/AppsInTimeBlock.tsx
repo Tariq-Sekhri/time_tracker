@@ -10,6 +10,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { SideBarView } from "./RightSideBar.tsx";
 import { useToast } from "../../../Componants/Toast.tsx";
 import { useAppCategorizeMenu } from "../../../hooks/useAppCategorizeMenu.tsx";
+import { logRowLeftClickCalendarFilter } from "../../../utils/calendarAppFilterRowClick.ts";
+import { useCalendarAppFilterActive } from "../../../stores/calendarAppFilterStore.ts";
 
 export type SelectedEvent = {
     title: string
@@ -46,6 +48,7 @@ export default function AppsInTimeBlock({
     const [isCountingLogs, setIsCountingLogs] = useState(false);
     const { showToast } = useToast();
     const { openFromContextMenu, categorizeLayers } = useAppCategorizeMenu();
+    const calendarAppFilterActive = useCalendarAppFilterActive();
 
     const handleDeleteClick = async () => {
         if (!selectedEvent) return;
@@ -76,6 +79,7 @@ export default function AppsInTimeBlock({
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["week"] });
+            queryClient.invalidateQueries({ queryKey: ["logsForAppCalendar"] });
             setSelectedEvent(null);
             setSelectedEventLogs([]);
             setShowDeleteConfirm(false);
@@ -133,7 +137,7 @@ export default function AppsInTimeBlock({
             }
 
             queryClient.invalidateQueries({ queryKey: ["week"] });
-
+            queryClient.invalidateQueries({ queryKey: ["logsForAppCalendar"] });
             if (updatedLogs.length === 0) {
                 setSelectedEvent(null);
                 setRightSideBarView("Week");
@@ -162,7 +166,10 @@ export default function AppsInTimeBlock({
     };
 
     const sortedLogs = [...selectedEventLogs].sort((a, b) => b.duration - a.duration);
-    const totalDuration = sortedLogs.reduce((sum, log) => sum + log.duration, 0);
+    const displayedLogs = calendarAppFilterActive
+        ? sortedLogs.filter((log) => log.app === calendarAppFilterActive)
+        : sortedLogs;
+    const totalDuration = displayedLogs.reduce((sum, log) => sum + log.duration, 0);
 
     return (
         <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
@@ -202,22 +209,20 @@ export default function AppsInTimeBlock({
 
             <div className="flex-1 overflow-y-auto nice-scrollbar mb-6 min-h-0">
                 <h3 className="text-sm font-semibold text-gray-300 mb-3">App Activity</h3>
-                {sortedLogs.length === 0 ? (
+                {displayedLogs.length === 0 ? (
                     <div className="text-gray-500 text-sm">No app activity recorded</div>
                 ) : (
                     <div className="space-y-2">
-                        {sortedLogs.map((log, idx) => (
+                        {displayedLogs.map((log) => (
                             <div
-                                key={idx}
-                                onClick={() => {
-                                    const selectedText = window.getSelection()?.toString() ?? "";
-                                    if (selectedText.trim().length > 0) {
-                                        return;
-                                    }
-                                    appClicked(log.app);
-                                }}
+                                key={log.ids.join("-")}
+                                onClick={(e) => logRowLeftClickCalendarFilter(e, log.app)}
                                 onContextMenu={(e) => openFromContextMenu(e, log.app)}
-                                className="h-15 bg-gray-900 rounded-lg p-3 hover:bg-gray-800 transition-colors select-text"
+                                className={`h-15 rounded-lg p-3 transition-colors select-text cursor-pointer ${
+                                    calendarAppFilterActive === log.app
+                                        ? "bg-gray-800 ring-2 ring-blue-500 ring-offset-2 ring-offset-black"
+                                        : "bg-gray-900 hover:bg-gray-800"
+                                }`}
                             >
                                 <div className="flex items-center justify-between mb-1">
                                     <span

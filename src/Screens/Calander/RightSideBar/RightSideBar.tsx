@@ -30,7 +30,7 @@ export function RightSideBar({
     isLoadingCategory,
     includeGoogleInStats,
     calendarsInStats,
-    googleCalendars
+    googleCalendars,
 }: {
     view: SideBarView,
     setView: (newView: SideBarView) => void,
@@ -46,7 +46,7 @@ export function RightSideBar({
     isLoadingCategory: boolean,
     includeGoogleInStats: boolean,
     calendarsInStats: Set<number>,
-    googleCalendars: GoogleCalendar[]
+    googleCalendars: GoogleCalendar[],
 }) {
     const { date } = useDateStore();
     const { rightSidebarWidth } = useSettingsStore();

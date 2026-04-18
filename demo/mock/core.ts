@@ -1084,29 +1084,69 @@ export async function invoke<T>(
                 timestamp: new Date(r.timestamp * 1000),
             } as unknown as T;
         }
+        case "get_logs_for_app_in_time_range": {
+            const app = String((a as { app?: string }).app ?? "");
+            const rangeStart = Number((a as { rangeStart?: number }).rangeStart ?? 0);
+            const rangeEnd = Number((a as { rangeEnd?: number }).rangeEnd ?? 0);
+            const minLogDuration = Math.max(
+                1,
+                Math.floor(Number((a as { minLogDuration?: number }).minLogDuration ?? 60))
+            );
+            const rows = rawLogs.filter(
+                (r) =>
+                    r.app === app &&
+                    !isAppSkippedByRules(r.app) &&
+                    r.timestamp >= rangeStart &&
+                    r.timestamp <= rangeEnd &&
+                    r.duration >= minLogDuration
+            );
+            return rows
+                .sort((x, y) => x.timestamp - y.timestamp)
+                .map((r) => ({
+                    id: r.id,
+                    app: r.app,
+                    timestamp: r.timestamp,
+                    duration: r.duration,
+                })) as unknown as T;
+        }
         case "get_logs_by_category": {
-            const req = (a as { request?: { category: string; start_time: number; end_time: number } })
-                .request;
+            const req = (a as {
+                request?: {
+                    category: string;
+                    start_time: number;
+                    end_time: number;
+                    min_log_duration?: number;
+                };
+            }).request;
             if (!req) return [] as unknown as T;
+            const minD = Math.max(1, Math.floor(Number(req.min_log_duration ?? 60)));
             const rows = mergedLogs.filter(
                 (m) =>
                     !isAppSkippedByRules(m.app) &&
                     m.category === req.category &&
                     m.timestamp >= req.start_time &&
-                    m.timestamp <= req.end_time
+                    m.timestamp <= req.end_time &&
+                    m.duration >= minD
             );
             return rows.map(({ category, ...rest }) => rest) as unknown as T;
         }
         case "get_logs_for_time_block": {
             const req = (a as {
-                request?: { app_names: string[]; start_time: number; end_time: number };
+                request?: {
+                    app_names: string[];
+                    start_time: number;
+                    end_time: number;
+                    min_log_duration?: number;
+                };
             }).request;
             if (!req) return [] as unknown as T;
+            const minD = Math.max(1, Math.floor(Number(req.min_log_duration ?? 60)));
             const set = new Set(req.app_names);
             const rows = mergedLogs.filter(
                 (m) =>
                     !isAppSkippedByRules(m.app) &&
                     set.has(m.app) &&
+                    m.duration >= minD &&
                     m.timestamp + m.duration >= req.start_time &&
                     m.timestamp <= req.end_time
             );
@@ -1439,7 +1479,7 @@ export async function invoke<T>(
                 ),
             })) as unknown as T;
         case "get_app_version":
-            return "1.8.5-demo" as unknown as T;
+            return "1.9.0-demo" as unknown as T;
         case "refresh_tray_menu":
             return null as T;
         case "check_update_cmd":

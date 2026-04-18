@@ -1,6 +1,6 @@
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 import {get_categories} from "../../api/Category.ts";
-import {get_logs_for_time_block, get_logs_by_category} from "../../api/Log.ts";
+import {get_logs_for_time_block, get_logs_by_category, get_log_by_id} from "../../api/Log.ts";
 import {get_week} from "../../api/week.ts";
 import { adjustInstantToCalendarDayBoundary, getCalendarDayRangeUnix, getWeekRange } from "../../utils.ts";
 import {useState, useMemo, useEffect, useRef} from "react";
@@ -452,6 +452,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                         category: selectedCategory,
                         start_time: startTime,
                         end_time: endTime,
+                        min_log_duration: timeBlockSettings.minLogDuration,
                     });
 
                     console.log("Category logs result:", result);
@@ -515,7 +516,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         };
 
         fetchCategoryLogs();
-    }, [selectedCategory, rightSideBarView, selectedDate, date, calendarStartHour]);
+    }, [selectedCategory, rightSideBarView, selectedDate, date, calendarStartHour, timeBlockSettings.minLogDuration]);
 
     useEffect(() => {
         if (rightSideBarView === "CategoryFilter") {
@@ -566,24 +567,47 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                 setSelectedEvent(event);
                 setSelectedDate(null); // Clear date selection when event is selected
 
-                const startTime = Math.floor(event.start.getTime() / 1000);
-                const endTime = Math.floor(event.end.getTime() / 1000);
-                const appNames = event.apps.map(a => a.app);
+                const sourceLogIds = clickInfo.event.extendedProps?.sourceLogIds as number[] | undefined;
+                if (sourceLogIds?.length) {
+                    const minSec = timeBlockSettings.minLogDuration;
+                    const rows = await Promise.all(sourceLogIds.map((id) => get_log_by_id(id)));
+                    const logs = rows
+                        .filter((row) => row.duration >= minSec)
+                        .map((row) => {
+                        const tsSec =
+                            row.timestamp instanceof Date
+                                ? Math.floor(row.timestamp.getTime() / 1000)
+                                : Number(row.timestamp as unknown as number);
+                        return {
+                            ids: [row.id],
+                            app: row.app,
+                            timestamp: new Date(tsSec * 1000),
+                            duration: row.duration,
+                        };
+                    });
+                    logs.sort((a, b) => b.duration - a.duration);
+                    setSelectedEventLogs(logs);
+                } else {
+                    const startTime = Math.floor(event.start.getTime() / 1000);
+                    const endTime = Math.floor(event.end.getTime() / 1000);
+                    const appNames = event.apps.map((a) => a.app);
 
-                const result = await get_logs_for_time_block({
-                    app_names: appNames,
-                    start_time: startTime,
-                    end_time: endTime,
-                });
+                    const result = await get_logs_for_time_block({
+                        app_names: appNames,
+                        start_time: startTime,
+                        end_time: endTime,
+                        min_log_duration: timeBlockSettings.minLogDuration,
+                    });
 
-                const logs = result.map(log => ({
-                    ids: log.ids,
-                    app: log.app,
-                    timestamp: new Date(log.timestamp * 1000),
-                    duration: log.duration,
-                }));
-                logs.sort((a, b) => b.duration - a.duration);
-                setSelectedEventLogs(logs);
+                    const logs = result.map((log) => ({
+                        ids: log.ids,
+                        app: log.app,
+                        timestamp: new Date(log.timestamp * 1000),
+                        duration: log.duration,
+                    }));
+                    logs.sort((a, b) => b.duration - a.duration);
+                    setSelectedEventLogs(logs);
+                }
             }
         }
     };
@@ -750,6 +774,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
             queryClient.invalidateQueries({queryKey: ["week_statistics"]});
             queryClient.invalidateQueries({queryKey: ["day_statistics"]});
             queryClient.invalidateQueries({queryKey: ["googleCalendarEvents"]});
+            queryClient.invalidateQueries({queryKey: ["logsForAppCalendar"]});
         };
 
         window.addEventListener("focus", handleFocus);
@@ -796,7 +821,6 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         month: 'short',
         day: 'numeric'
     })} – ${weekEnd.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'})}`;
-
 
     return (
         <div className="flex flex-col flex-1 min-h-0 w-full">

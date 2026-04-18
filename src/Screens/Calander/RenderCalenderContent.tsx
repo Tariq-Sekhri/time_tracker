@@ -18,9 +18,11 @@ import {
     isGoogleCalendarEventExcludedFromTimeStats,
 } from "../../api/GoogleCalendar.ts";
 import { getWeekRange } from "../../utils.ts";
+import { get_logs_for_app_in_time_range, type AppTimeRangeLog } from "../../api/Log.ts";
 import { getCachedEvents, setCachedEvents } from "../../stores/googleCalendarCache.ts";
 import { useToast } from "../../Componants/Toast.tsx";
 import { storageKey } from "../../storageKey.ts";
+import { useCalendarAppFilterActive } from "../../stores/calendarAppFilterStore.ts";
 
 const LEFT_SIDEBAR_COLLAPSED_KEY = storageKey("time-tracker:left-sidebar-collapsed");
 
@@ -99,6 +101,7 @@ export default function RenderCalendarContent({
     });
 
     const { calendarStartHour, calendarHeight, timeBlockSettings } = useSettingsStore();
+    const calendarAppFilter = useCalendarAppFilterActive();
     const slotMinHeightPx = Math.max(12, Math.round((calendarHeight / 100) * 24));
 
     const handleRelogin = async () => {
@@ -185,6 +188,29 @@ export default function RenderCalendarContent({
         () => getWeekRange(date, calendarStartHour),
         [date, calendarStartHour]
     );
+
+    const {
+        data: appFilterRawLogs,
+        isLoading: isLoadingAppFilterLogs,
+        isFetching: isFetchingAppFilterLogs,
+    } = useQuery({
+        queryKey: [
+            "logsForAppCalendar",
+            weekRange.week_start,
+            weekRange.week_end,
+            calendarAppFilter,
+            timeBlockSettings.minLogDuration,
+        ],
+        queryFn: () =>
+            get_logs_for_app_in_time_range(
+                calendarAppFilter as string,
+                weekRange.week_start,
+                weekRange.week_end,
+                timeBlockSettings.minLogDuration,
+            ),
+        enabled: Boolean(calendarAppFilter) && weekQueryEnabled,
+    });
+
     const calendarIds = useMemo(() => googleCalendars.map(cal => cal.id).sort().join(','), [googleCalendars]);
     
     const queryEnabled = !!weekStart && !isNaN(weekStart.getTime()) && googleCalendars.length > 0;
@@ -295,6 +321,83 @@ export default function RenderCalendarContent({
     }, [isLeftCollapsed]);
 
     const events = useMemo(() => {
+        const filterColor = "#2563eb";
+        const filterBorder = "#1d4ed8";
+
+        const googleEvents = calendarAppFilter
+            ? []
+            : displayGoogleEvents
+                  .filter((event: GoogleCalendarEvent) => visibleCalendars.has(event.calendar_id))
+                  .map((event: GoogleCalendarEvent) => {
+                      if (isGoogleCalendarEventExcludedFromTimeStats(event)) {
+                          return null;
+                      }
+
+                      const start = new Date(event.start * 1000);
+                      const end = new Date(event.end * 1000);
+
+                      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+                          return null;
+                      }
+
+                      const calendar = googleCalendarMap.get(event.calendar_id);
+                      const color = calendar?.color || "#4285f4";
+                      const eventDurationSec = event.end - event.start;
+
+                      return {
+                          id: `google-${event.event_id}-${event.calendar_id}`,
+                          title: `${event.title} (${formatDuration(eventDurationSec)})`,
+                          start: start.toISOString(),
+                          end: end.toISOString(),
+                          backgroundColor: color,
+                          borderColor: color,
+                          textColor: "#ffffff",
+                          extendedProps: {
+                              type: "google_calendar",
+                              eventId: event.event_id,
+                              calendarId: event.calendar_id,
+                              description: event.description,
+                              location: event.location,
+                          },
+                      };
+                  })
+                  .filter((e): e is NonNullable<typeof e> => e !== null);
+
+        if (calendarAppFilter) {
+            const rows: AppTimeRangeLog[] = appFilterRawLogs ?? [];
+            const appLogEvents = rows
+                .map((log) => {
+                    const ts = Number(log.timestamp);
+                    const dur = Number(log.duration);
+                    if (!Number.isFinite(ts) || dur < 0) {
+                        return null;
+                    }
+                    const spanSec = Math.max(dur, 1);
+                    const start = new Date(ts * 1000);
+                    const end = new Date((ts + spanSec) * 1000);
+                    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+                        return null;
+                    }
+                    const appName = String(log.app);
+                    return {
+                        id: `app-log-${log.id}`,
+                        title: `${appName} (${formatDuration(Math.max(dur, 0))})`,
+                        start: start.toISOString(),
+                        end: end.toISOString(),
+                        backgroundColor: filterColor,
+                        borderColor: filterBorder,
+                        textColor: "#ffffff",
+                        extendedProps: {
+                            apps: [{ app: appName, totalDuration: Math.max(dur, 0) }],
+                            type: "timeblock",
+                            sourceLogIds: [Number(log.id)],
+                        },
+                    };
+                })
+                .filter((e): e is NonNullable<typeof e> => e !== null);
+            return [...appLogEvents, ...googleEvents];
+        }
+
         const timeBlockEvents = (data || [])
             .filter((block: TimeBlock) => visibleCategories.has(block.category))
             .map((block: TimeBlock) => {
@@ -329,56 +432,44 @@ export default function RenderCalendarContent({
             })
             .filter((e): e is NonNullable<typeof e> => e !== null);
 
-        const googleEvents = displayGoogleEvents
-            .filter((event: GoogleCalendarEvent) => visibleCalendars.has(event.calendar_id))
-            .map((event: GoogleCalendarEvent) => {
-                if (isGoogleCalendarEventExcludedFromTimeStats(event)) {
-                    return null;
-                }
-
-                const start = new Date(event.start * 1000);
-                const end = new Date(event.end * 1000);
-
-                if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-                    return null;
-                }
-
-                const calendar = googleCalendarMap.get(event.calendar_id);
-                const color = calendar?.color || "#4285f4"; // Default to Google blue if calendar not found
-                const eventDurationSec = event.end - event.start;
-
-                return {
-                    id: `google-${event.event_id}-${event.calendar_id}`,
-                    title: `${event.title} (${formatDuration(eventDurationSec)})`,
-                    start: start.toISOString(),
-                    end: end.toISOString(),
-                    backgroundColor: color,
-                    borderColor: color,
-                    textColor: "#ffffff",
-                    extendedProps: {
-                        type: "google_calendar",
-                        eventId: event.event_id,
-                        calendarId: event.calendar_id,
-                        description: event.description,
-                        location: event.location,
-                    },
-                };
-            }).filter((e): e is NonNullable<typeof e> => e !== null);
-
-        const allEvents = [...timeBlockEvents, ...googleEvents];
-
-        return allEvents;
-    }, [data, categoryColorMap, visibleCategories, displayGoogleEvents, visibleCalendars, googleCalendarMap]);
+        return [...timeBlockEvents, ...googleEvents];
+    }, [
+        data,
+        categoryColorMap,
+        visibleCategories,
+        displayGoogleEvents,
+        visibleCalendars,
+        googleCalendarMap,
+        calendarAppFilter,
+        appFilterRawLogs,
+    ]);
 
     const showFullCalendarGrid = useMemo(() => {
         if (isLoading || (isLoadingGoogleEvents && !(cachedEvents?.length ?? 0))) return false;
         if (error) return false;
-        const hasTimeBlocks = data && data.length > 0;
+        if (calendarAppFilter && (isLoadingAppFilterLogs || isFetchingAppFilterLogs) && !(appFilterRawLogs?.length ?? 0)) {
+            return false;
+        }
+        const hasTimeBlocks =
+            (!!calendarAppFilter && !isLoadingAppFilterLogs) || (!calendarAppFilter && data && data.length > 0);
         const hasGoogleEvents =
+            !calendarAppFilter &&
             displayGoogleEvents.length > 0 &&
             displayGoogleEvents.some((event: GoogleCalendarEvent) => visibleCalendars.has(event.calendar_id));
         return !!(hasTimeBlocks || hasGoogleEvents);
-    }, [isLoading, isLoadingGoogleEvents, cachedEvents, error, data, displayGoogleEvents, visibleCalendars]);
+    }, [
+        isLoading,
+        isLoadingGoogleEvents,
+        cachedEvents,
+        error,
+        data,
+        displayGoogleEvents,
+        visibleCalendars,
+        calendarAppFilter,
+        isLoadingAppFilterLogs,
+        isFetchingAppFilterLogs,
+        appFilterRawLogs?.length,
+    ]);
 
     useEffect(() => {
         if (!showFullCalendarGrid) return;
@@ -434,7 +525,13 @@ export default function RenderCalendarContent({
         };
     }, [events, showFullCalendarGrid, ref, slotMinHeightPx]);
 
-    if (isLoading || (isLoadingGoogleEvents && !(cachedEvents?.length ?? 0))) {
+    if (
+        isLoading ||
+        (isLoadingGoogleEvents && !(cachedEvents?.length ?? 0)) ||
+        (calendarAppFilter &&
+            (isLoadingAppFilterLogs || isFetchingAppFilterLogs) &&
+            appFilterRawLogs === undefined)
+    ) {
         return <CalendarSkeleton />;
     }
 
