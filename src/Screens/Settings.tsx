@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useToast } from "../Componants/Toast.tsx";
 import {
     CALENDAR_HEIGHT_MAX,
@@ -6,6 +6,7 @@ import {
     RIGHT_SIDEBAR_WIDTH_MAX,
     RIGHT_SIDEBAR_WIDTH_MIN,
     useSettingsStore,
+    type SettingsFieldKey,
     type TimeBlockSettings,
 } from "../stores/settingsStore.ts";
 
@@ -13,6 +14,97 @@ function blurOnEnter(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
         e.currentTarget.blur();
     }
+}
+
+function IconLockClosed({ className }: { className?: string }) {
+    return (
+        <svg
+            className={className}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+        >
+            <path d="M16.5 10.5V6.75C16.5 4.26472 14.4853 2.25 12 2.25C9.51472 2.25 7.5 4.26472 7.5 6.75V10.5M6.75 21.75H17.25C18.4926 21.75 19.5 20.7426 19.5 19.5V12.75C19.5 11.5074 18.4926 10.5 17.25 10.5H6.75C5.50736 10.5 4.5 11.5074 4.5 12.75V19.5C4.5 20.7426 5.50736 21.75 6.75 21.75Z" />
+        </svg>
+    );
+}
+
+function IconLockOpen({ className }: { className?: string }) {
+    return (
+        <svg
+            className={[className, "overflow-visible"].filter(Boolean).join(" ")}
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden
+        >
+            <g
+                transform="translate(3 0)"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            >
+                <path d="M13.5 10.5V6.75C13.5 4.26472 15.5147 2.25 18 2.25C20.4853 2.25 22.5 4.26472 22.5 6.75V10.5M3.75 21.75H14.25C15.4926 21.75 16.5 20.7426 16.5 19.5V12.75C16.5 11.5074 15.4926 10.5 14.25 10.5H3.75C2.50736 10.5 1.5 11.5074 1.5 12.75V19.5C1.5 20.7426 2.50736 21.75 3.75 21.75Z" />
+            </g>
+        </svg>
+    );
+}
+
+function IconReset({ className }: { className?: string }) {
+    return (
+        <svg
+            className={className}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+        >
+            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+            <path d="M21 3v5h-5" />
+            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+            <path d="M8 16H3v5" />
+        </svg>
+    );
+}
+
+function FieldLockReset({
+    locked,
+    onToggleLock,
+    onReset,
+}: {
+    locked: boolean;
+    onToggleLock: () => void;
+    onReset: () => void;
+}) {
+    return (
+        <span className="inline-flex items-center gap-2 shrink-0">
+            <button
+                type="button"
+                onClick={onToggleLock}
+                className="overflow-visible p-1.5 rounded text-gray-300 hover:bg-gray-800 hover:text-white"
+                title={locked ? "Unlock" : "Lock"}
+            >
+                {locked ? <IconLockClosed className="w-4 h-4" /> : <IconLockOpen className="w-4 h-4" />}
+            </button>
+            <button
+                type="button"
+                disabled={locked}
+                onClick={onReset}
+                className="p-1.5 rounded text-gray-300 hover:bg-gray-800 hover:text-white disabled:opacity-30 disabled:pointer-events-none"
+                title="Reset to default"
+            >
+                <IconReset className="w-4 h-4" />
+            </button>
+        </span>
+    );
 }
 
 export default function Settings() {
@@ -30,8 +122,16 @@ export default function Settings() {
         setUiMinAppDuration,
         categorySidebarCount,
         setCategorySidebarCount,
+        fieldLocks,
+        toggleFieldLock,
+        resetField,
         resetSettings,
     } = useSettingsStore();
+
+    const allFieldsLocked = useMemo(
+        () => (Object.values(fieldLocks) as boolean[]).every(Boolean),
+        [fieldLocks]
+    );
 
     const [calendarStartHourDraft, setCalendarStartHourDraft] = useState(() =>
         String(calendarStartHour)
@@ -78,8 +178,9 @@ export default function Settings() {
         return () => {
             const d = pendingDraftsRef.current;
             const st = useSettingsStore.getState();
+            const L = st.fieldLocks;
 
-            {
+            if (!L.calendarStartHour) {
                 const t = d.calendarStartHourDraft.trim();
                 if (t !== "") {
                     const n = Number(t);
@@ -91,7 +192,7 @@ export default function Settings() {
                     }
                 }
             }
-            {
+            if (!L.calendarHeight) {
                 const t = d.calendarHeightDraft.trim();
                 if (t !== "") {
                     const n = Number(t);
@@ -107,7 +208,7 @@ export default function Settings() {
                     }
                 }
             }
-            {
+            if (!L.rightSidebarWidth) {
                 const t = d.rightSidebarDraft.trim();
                 if (t !== "") {
                     const n = Number(t);
@@ -123,7 +224,7 @@ export default function Settings() {
                     }
                 }
             }
-            {
+            if (!L.categorySidebarCount) {
                 const t = d.categorySidebarDraft.trim();
                 if (t !== "") {
                     const n = Number(t);
@@ -135,7 +236,7 @@ export default function Settings() {
                     }
                 }
             }
-            {
+            if (!L.uiMinAppDuration) {
                 const t = d.uiMinAppDurationDraft.trim();
                 if (t !== "") {
                     const n = Number(t);
@@ -150,7 +251,7 @@ export default function Settings() {
             {
                 const tb = st.timeBlockSettings;
                 const patch: Partial<TimeBlockSettings> = {};
-                {
+                if (!L.minLogDuration) {
                     const t = d.tbDraft.minLogDuration.trim();
                     if (t !== "") {
                         const n = Number(t);
@@ -160,7 +261,7 @@ export default function Settings() {
                         }
                     }
                 }
-                {
+                if (!L.maxAttachDistance) {
                     const t = d.tbDraft.maxAttachDistance.trim();
                     if (t !== "") {
                         const n = Number(t);
@@ -170,7 +271,7 @@ export default function Settings() {
                         }
                     }
                 }
-                {
+                if (!L.lookaheadWindow) {
                     const t = d.tbDraft.lookaheadWindow.trim();
                     if (t !== "") {
                         const n = Number(t);
@@ -180,7 +281,7 @@ export default function Settings() {
                         }
                     }
                 }
-                {
+                if (!L.minDuration) {
                     const t = d.tbDraft.minDuration.trim();
                     if (t !== "") {
                         const n = Number(t);
@@ -233,13 +334,30 @@ export default function Settings() {
         }));
     }, [timeBlockSettings]);
 
+    const row = (key: SettingsFieldKey, label: string, control: ReactNode) => (
+        <div className="flex items-center justify-between gap-4">
+            <span className="text-sm text-gray-300 truncate min-w-0 flex-1">{label}</span>
+            <div className="flex items-center gap-2 shrink-0">
+                <FieldLockReset
+                    locked={fieldLocks[key]}
+                    onToggleLock={() => toggleFieldLock(key)}
+                    onReset={() => resetField(key)}
+                />
+                {control}
+            </div>
+        </div>
+    );
+
     return (
         <div className="p-6 text-white h-full overflow-y-auto nice-scrollbar">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
                 <h1 className="text-2xl font-bold">Settings</h1>
                 <button
+                    type="button"
+                    disabled={allFieldsLocked}
                     onClick={resetSettings}
-                    className="px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded text-white text-sm font-medium"
+                    title="Resets every unlocked setting to its default. Locked settings are left unchanged."
+                    className="px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded text-white text-sm font-medium shrink-0 self-start sm:self-auto disabled:opacity-40 disabled:pointer-events-none"
                 >
                     Reset
                 </button>
@@ -250,15 +368,18 @@ export default function Settings() {
                     <h2 className="text-lg font-semibold mb-4">Calendar</h2>
 
                     <div className="space-y-3">
-                        <div className="flex items-center justify-between gap-4">
-                            <label className="text-sm text-gray-300">Start hour</label>
+                        {row(
+                            "calendarStartHour",
+                            "Start hour",
                             <input
                                 type="number"
                                 step={1}
+                                disabled={fieldLocks.calendarStartHour}
                                 value={calendarStartHourDraft}
                                 onChange={(e) => setCalendarStartHourDraft(e.target.value)}
                                 onKeyDown={blurOnEnter}
                                 onBlur={() => {
+                                    if (fieldLocks.calendarStartHour) return;
                                     const t = calendarStartHourDraft.trim();
                                     const revert = () =>
                                         setCalendarStartHourDraft(String(calendarStartHour));
@@ -284,19 +405,22 @@ export default function Settings() {
                                         setCalendarStartHour(h);
                                     }
                                 }}
-                                className="w-24 px-2 py-1 bg-gray-800 text-white rounded text-sm"
+                                className="w-24 px-2 py-1 bg-gray-800 text-white rounded text-sm disabled:opacity-50"
                             />
-                        </div>
+                        )}
 
-                        <div className="flex items-center justify-between gap-4">
-                            <label className="text-sm text-gray-300">Calendar size (%)</label>
+                        {row(
+                            "calendarHeight",
+                            "Calendar size (%)",
                             <input
                                 type="number"
                                 step={1}
+                                disabled={fieldLocks.calendarHeight}
                                 value={calendarHeightDraft}
                                 onChange={(e) => setCalendarHeightDraft(e.target.value)}
                                 onKeyDown={blurOnEnter}
                                 onBlur={() => {
+                                    if (fieldLocks.calendarHeight) return;
                                     const t = calendarHeightDraft.trim();
                                     const revert = () =>
                                         setCalendarHeightDraft(String(calendarHeight));
@@ -325,19 +449,22 @@ export default function Settings() {
                                         setCalendarHeight(h);
                                     }
                                 }}
-                                className="w-24 px-2 py-1 bg-gray-800 text-white rounded text-sm"
+                                className="w-24 px-2 py-1 bg-gray-800 text-white rounded text-sm disabled:opacity-50"
                             />
-                        </div>
+                        )}
 
-                        <div className="flex items-center justify-between gap-4">
-                            <label className="text-sm text-gray-300">Right sidebar width (px)</label>
+                        {row(
+                            "rightSidebarWidth",
+                            "Right sidebar width (px)",
                             <input
                                 type="number"
                                 step={1}
+                                disabled={fieldLocks.rightSidebarWidth}
                                 value={rightSidebarDraft}
                                 onChange={(e) => setRightSidebarDraft(e.target.value)}
                                 onKeyDown={blurOnEnter}
                                 onBlur={() => {
+                                    if (fieldLocks.rightSidebarWidth) return;
                                     const t = rightSidebarDraft.trim();
                                     const revert = () =>
                                         setRightSidebarDraft(String(rightSidebarWidth));
@@ -366,19 +493,22 @@ export default function Settings() {
                                         setRightSidebarWidth(w);
                                     }
                                 }}
-                                className="w-24 px-2 py-1 bg-gray-800 text-white rounded text-sm"
+                                className="w-24 px-2 py-1 bg-gray-800 text-white rounded text-sm disabled:opacity-50"
                             />
-                        </div>
+                        )}
 
-                        <div className="flex items-center justify-between gap-4">
-                            <label className="text-sm text-gray-300">Categories in stats sidebar</label>
+                        {row(
+                            "categorySidebarCount",
+                            "Categories in stats sidebar",
                             <input
                                 type="number"
                                 step={1}
+                                disabled={fieldLocks.categorySidebarCount}
                                 value={categorySidebarDraft}
                                 onChange={(e) => setCategorySidebarDraft(e.target.value)}
                                 onKeyDown={blurOnEnter}
                                 onBlur={() => {
+                                    if (fieldLocks.categorySidebarCount) return;
                                     const t = categorySidebarDraft.trim();
                                     const revert = () =>
                                         setCategorySidebarDraft(String(categorySidebarCount));
@@ -404,9 +534,9 @@ export default function Settings() {
                                         setCategorySidebarCount(c);
                                     }
                                 }}
-                                className="w-24 px-2 py-1 bg-gray-800 text-white rounded text-sm"
+                                className="w-24 px-2 py-1 bg-gray-800 text-white rounded text-sm disabled:opacity-50"
                             />
-                        </div>
+                        )}
                     </div>
                 </div>
 
@@ -414,11 +544,13 @@ export default function Settings() {
                     <h2 className="text-lg font-semibold mb-4">Timeblock detection (advanced)</h2>
 
                     <div className="space-y-3">
-                        <div className="flex items-center justify-between gap-4">
-                            <label className="text-sm text-gray-300">Min log duration (sec)</label>
+                        {row(
+                            "minLogDuration",
+                            "Min log duration (sec)",
                             <input
                                 type="number"
                                 step={1}
+                                disabled={fieldLocks.minLogDuration}
                                 value={tbDraft.minLogDuration}
                                 onFocus={() => {
                                     tbFocusRef.current = "minLogDuration";
@@ -429,6 +561,7 @@ export default function Settings() {
                                 onKeyDown={blurOnEnter}
                                 onBlur={() => {
                                     tbFocusRef.current = null;
+                                    if (fieldLocks.minLogDuration) return;
                                     const t = tbDraft.minLogDuration.trim();
                                     const revert = () =>
                                         setTbDraft((d) => ({
@@ -457,15 +590,17 @@ export default function Settings() {
                                         setTimeBlockSettings({ minLogDuration: v });
                                     }
                                 }}
-                                className="w-28 px-2 py-1 bg-gray-800 text-white rounded text-sm"
+                                className="w-28 px-2 py-1 bg-gray-800 text-white rounded text-sm disabled:opacity-50"
                             />
-                        </div>
+                        )}
 
-                        <div className="flex items-center justify-between gap-4">
-                            <label className="text-sm text-gray-300">Max attach distance (sec)</label>
+                        {row(
+                            "maxAttachDistance",
+                            "Max attach distance (sec)",
                             <input
                                 type="number"
                                 step={1}
+                                disabled={fieldLocks.maxAttachDistance}
                                 value={tbDraft.maxAttachDistance}
                                 onFocus={() => {
                                     tbFocusRef.current = "maxAttachDistance";
@@ -476,6 +611,7 @@ export default function Settings() {
                                 onKeyDown={blurOnEnter}
                                 onBlur={() => {
                                     tbFocusRef.current = null;
+                                    if (fieldLocks.maxAttachDistance) return;
                                     const t = tbDraft.maxAttachDistance.trim();
                                     const revert = () =>
                                         setTbDraft((d) => ({
@@ -509,15 +645,17 @@ export default function Settings() {
                                         setTimeBlockSettings({ maxAttachDistance: v });
                                     }
                                 }}
-                                className="w-28 px-2 py-1 bg-gray-800 text-white rounded text-sm"
+                                className="w-28 px-2 py-1 bg-gray-800 text-white rounded text-sm disabled:opacity-50"
                             />
-                        </div>
+                        )}
 
-                        <div className="flex items-center justify-between gap-4">
-                            <label className="text-sm text-gray-300">Lookahead window (sec)</label>
+                        {row(
+                            "lookaheadWindow",
+                            "Lookahead window (sec)",
                             <input
                                 type="number"
                                 step={1}
+                                disabled={fieldLocks.lookaheadWindow}
                                 value={tbDraft.lookaheadWindow}
                                 onFocus={() => {
                                     tbFocusRef.current = "lookaheadWindow";
@@ -528,6 +666,7 @@ export default function Settings() {
                                 onKeyDown={blurOnEnter}
                                 onBlur={() => {
                                     tbFocusRef.current = null;
+                                    if (fieldLocks.lookaheadWindow) return;
                                     const t = tbDraft.lookaheadWindow.trim();
                                     const revert = () =>
                                         setTbDraft((d) => ({
@@ -556,15 +695,17 @@ export default function Settings() {
                                         setTimeBlockSettings({ lookaheadWindow: v });
                                     }
                                 }}
-                                className="w-28 px-2 py-1 bg-gray-800 text-white rounded text-sm"
+                                className="w-28 px-2 py-1 bg-gray-800 text-white rounded text-sm disabled:opacity-50"
                             />
-                        </div>
+                        )}
 
-                        <div className="flex items-center justify-between gap-4">
-                            <label className="text-sm text-gray-300">Min timeblock duration (sec)</label>
+                        {row(
+                            "minDuration",
+                            "Min timeblock duration (sec)",
                             <input
                                 type="number"
                                 step={1}
+                                disabled={fieldLocks.minDuration}
                                 value={tbDraft.minDuration}
                                 onFocus={() => {
                                     tbFocusRef.current = "minDuration";
@@ -575,6 +716,7 @@ export default function Settings() {
                                 onKeyDown={blurOnEnter}
                                 onBlur={() => {
                                     tbFocusRef.current = null;
+                                    if (fieldLocks.minDuration) return;
                                     const t = tbDraft.minDuration.trim();
                                     const revert = () =>
                                         setTbDraft((d) => ({
@@ -606,9 +748,9 @@ export default function Settings() {
                                         setTimeBlockSettings({ minDuration: v });
                                     }
                                 }}
-                                className="w-28 px-2 py-1 bg-gray-800 text-white rounded text-sm"
+                                className="w-28 px-2 py-1 bg-gray-800 text-white rounded text-sm disabled:opacity-50"
                             />
-                        </div>
+                        )}
                     </div>
                 </div>
 
@@ -616,15 +758,18 @@ export default function Settings() {
                     <h2 className="text-lg font-semibold mb-4">UI filters</h2>
 
                     <div className="space-y-3">
-                        <div className="flex items-center justify-between gap-4">
-                            <label className="text-sm text-gray-300">Min app duration (sec)</label>
+                        {row(
+                            "uiMinAppDuration",
+                            "Min app duration (sec)",
                             <input
                                 type="number"
                                 step={1}
+                                disabled={fieldLocks.uiMinAppDuration}
                                 value={uiMinAppDurationDraft}
                                 onChange={(e) => setUiMinAppDurationDraft(e.target.value)}
                                 onKeyDown={blurOnEnter}
                                 onBlur={() => {
+                                    if (fieldLocks.uiMinAppDuration) return;
                                     const t = uiMinAppDurationDraft.trim();
                                     const revert = () =>
                                         setUiMinAppDurationDraft(String(uiMinAppDuration));
@@ -650,9 +795,9 @@ export default function Settings() {
                                         setUiMinAppDuration(v);
                                     }
                                 }}
-                                className="w-28 px-2 py-1 bg-gray-800 text-white rounded text-sm"
+                                className="w-28 px-2 py-1 bg-gray-800 text-white rounded text-sm disabled:opacity-50"
                             />
-                        </div>
+                        )}
                     </div>
                 </div>
             </div>
