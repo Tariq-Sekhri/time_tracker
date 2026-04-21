@@ -298,6 +298,47 @@ pub async fn get_week(
     )
 }
 
+#[tauri::command]
+pub async fn get_week_for_app_filter(
+    week_start: i64,
+    week_end: i64,
+    app_name: String,
+    time_block_settings: TimeBlockSettings,
+) -> Result<Vec<TimeBlock>, Error> {
+    let mut logs = get_logs().await?;
+    let skipped_apps = get_skipped_apps().await?;
+
+    let skipped_regexes: Vec<Regex> = skipped_apps
+        .iter()
+        .filter_map(|app| Regex::new(&app.regex).ok())
+        .collect();
+
+    let is_skipped =
+        |app: &str| -> bool { skipped_regexes.iter().any(|regex| regex.is_match(app)) };
+
+    logs.retain(|log| !is_skipped(&log.app));
+
+    let cat_regex = get_cat_regex().await?;
+    let categories = get_categories().await?;
+    let regex = build_regex_table(&categories, &cat_regex)?;
+
+    let logs: Vec<Log> = logs
+        .into_iter()
+        .filter(|log| {
+            log.app == app_name && log.timestamp >= week_start && log.timestamp <= week_end
+        })
+        .collect();
+
+    if logs.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    transform_time_blocks(
+        get_time_blocks(&logs, &regex, &time_block_settings)?,
+        &time_block_settings,
+    )
+}
+
 fn ensure_non_overlapping(mut blocks: Vec<TimeBlock>) -> Vec<TimeBlock> {
     if blocks.is_empty() {
         return blocks;
