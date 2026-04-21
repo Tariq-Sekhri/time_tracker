@@ -44,3 +44,19 @@ export async function get_week(
     return result.map(transformTimeBlock);
 }
 
+export async function get_week_for_app_filter(
+    date: Date,
+    appName: string,
+    timeBlockSettings: TimeBlockSettings,
+    calendarStartHour: number
+): Promise<TimeBlock[]> {
+    const {week_start, week_end} = getWeekRange(date, calendarStartHour);
+    const result = await invokeOrThrow<TimeBlockBackend[]>("get_week_for_app_filter", {
+        weekStart: week_start,
+        weekEnd: week_end,
+        appName,
+        timeBlockSettings,
+    });
+    return result.map(transformTimeBlock);
+}
+

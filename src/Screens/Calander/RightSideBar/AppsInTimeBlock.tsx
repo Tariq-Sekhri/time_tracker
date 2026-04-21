@@ -165,10 +165,7 @@ export default function AppsInTimeBlock({
         }
     };
 
-    const sortedLogs = [...selectedEventLogs].sort((a, b) => b.duration - a.duration);
-    const displayedLogs = calendarAppFilterActive
-        ? sortedLogs.filter((log) => log.app === calendarAppFilterActive)
-        : sortedLogs;
+    const displayedLogs = [...selectedEventLogs].sort((a, b) => b.duration - a.duration);
     const totalDuration = displayedLogs.reduce((sum, log) => sum + log.duration, 0);
 
     return (

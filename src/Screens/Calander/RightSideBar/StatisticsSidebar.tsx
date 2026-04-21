@@ -45,6 +45,14 @@ type CombinedCategory = CategoryStat & {
     source: "tracking" | "google";
 };
 
+function filterGoogleEventsForStats(
+    events: GoogleCalendarEvent[],
+    calendarIdsInStats: Set<number>
+): GoogleCalendarEvent[] {
+    if (calendarIdsInStats.size === 0) return [];
+    return events.filter((event) => calendarIdsInStats.has(event.calendar_id));
+}
+
 interface StatisticsSidebarProps {
     weekDate: Date;
     onMoreInfo: () => void;
@@ -107,16 +115,6 @@ export default function StatisticsSidebar({
         },
     });
 
-    const filteredTopApps = useMemo(() => {
-        if (!weekStats?.top_apps) {
-            return [];
-        }
-        if (!calendarAppFilterActive) {
-            return weekStats.top_apps;
-        }
-        return weekStats.top_apps.filter((a) => a.app === calendarAppFilterActive);
-    }, [weekStats, calendarAppFilterActive]);
-
     useEffect(() => {
         console.log("[WeekStats] query state", {
             isLoading,
@@ -157,14 +155,12 @@ export default function StatisticsSidebar({
 
     const filteredGoogleEvents = useMemo(() => {
         const events = (googleEvents ?? []) as GoogleCalendarEvent[];
-        if (calendarsInStats.size === 0) return [];
-        return events.filter((e) => calendarsInStats.has(e.calendar_id));
+        return filterGoogleEventsForStats(events, calendarsInStats);
     }, [googleEvents, calendarsInStats]);
 
     const filteredPrevGoogleEvents = useMemo(() => {
         const events = (prevGoogleEvents ?? []) as GoogleCalendarEvent[];
-        if (calendarsInStats.size === 0) return [];
-        return events.filter((e) => calendarsInStats.has(e.calendar_id));
+        return filterGoogleEventsForStats(events, calendarsInStats);
     }, [prevGoogleEvents, calendarsInStats]);
 
     const googleCategories = useMemo<CombinedCategory[]>(() => {
@@ -295,7 +291,9 @@ export default function StatisticsSidebar({
 
     const combinedTotalTimeChange = useMemo((): number | null => {
         if (!weekStats || !includeGoogleInStats) return null;
-        if (isLoadingGoogleEvents || isLoadingPrevGoogleEvents) return null;
+        if (isLoadingGoogleEvents || isLoadingPrevGoogleEvents || isGoogleEventsError || isPrevGoogleEventsError) {
+            return null;
+        }
         const prevTrack = inferPreviousTrackingTotal(weekStats.total_time, weekStats.total_time_change);
         if (prevTrack === null) return null;
         const prevCombined = prevTrack + prevGoogleTotalDuration;
@@ -308,6 +306,8 @@ export default function StatisticsSidebar({
         googleTotalDuration,
         isLoadingGoogleEvents,
         isLoadingPrevGoogleEvents,
+        isGoogleEventsError,
+        isPrevGoogleEventsError,
     ]);
 
     const displayTotalTimeChange =
@@ -526,7 +526,7 @@ export default function StatisticsSidebar({
                     )}
                 </div>
                 <div className="space-y-2">
-                    {filteredTopApps.map((app, idx) => (
+                    {weekStats.top_apps.map((app, idx) => (
                         <div
                             key={`${app.app}-${idx}`}
                             onClick={(e) => logRowLeftClickCalendarFilter(e, app.app)}
@@ -568,4 +568,3 @@ export default function StatisticsSidebar({
         </div>
     );
 }
-
