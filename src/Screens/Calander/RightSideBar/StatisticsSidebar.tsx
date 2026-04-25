@@ -75,7 +75,8 @@ export default function StatisticsSidebar({
     trailingToolbar,
 }: StatisticsSidebarProps) {
     const [displayMode, setDisplayMode] = useState<DisplayMode>("percentage");
-    const { categorySidebarCount, calendarStartHour } = useSettingsStore();
+    const [showAllApps, setShowAllApps] = useState(false);
+    const { categorySidebarCount, calendarStartHour, uiMinAppDuration } = useSettingsStore();
     const { openFromContextMenu, categorizeLayers } = useAppCategorizeMenu();
     const calendarAppFilterActive = useCalendarAppFilterActive();
 
@@ -339,6 +340,16 @@ export default function StatisticsSidebar({
         return !!onCategoryClick && cat.source === "tracking";
     };
 
+    const filteredAllApps = useMemo(() => {
+        if (!weekStats) return [];
+        const apps = weekStats.all_apps.filter((app) => app.total_duration >= uiMinAppDuration);
+        if (!calendarAppFilterActive) return apps;
+        return apps.filter((app) => app.app === calendarAppFilterActive);
+    }, [weekStats, uiMinAppDuration, calendarAppFilterActive]);
+
+    const displayedApps = showAllApps ? filteredAllApps : filteredAllApps.slice(0, 5);
+    const canShowMoreApps = filteredAllApps.length > 5;
+
     if (isLoading || (!weekStats && !isError)) {
         return (
             <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
@@ -416,17 +427,15 @@ export default function StatisticsSidebar({
                     <div className="flex gap-1 bg-gray-800 rounded p-1">
                         <button
                             onClick={() => setDisplayMode("percentage")}
-                            className={`px-2 py-1 text-xs rounded ${
-                                displayMode === "percentage" ? "bg-gray-700 text-white" : "text-gray-400"
-                            }`}
+                            className={`px-2 py-1 text-xs rounded ${displayMode === "percentage" ? "bg-gray-700 text-white" : "text-gray-400"
+                                }`}
                         >
                             %
                         </button>
                         <button
                             onClick={() => setDisplayMode("time")}
-                            className={`px-2 py-1 text-xs rounded ${
-                                displayMode === "time" ? "bg-gray-700 text-white" : "text-gray-400"
-                            }`}
+                            className={`px-2 py-1 text-xs rounded ${displayMode === "time" ? "bg-gray-700 text-white" : "text-gray-400"
+                                }`}
                         >
                             Time
                         </button>
@@ -442,19 +451,18 @@ export default function StatisticsSidebar({
                 </div>
                 {showTotalChange && (
                     <div
-                        className={`text-xs min-w-[50px] text-right ${
-                            displayTotalTimeChange! >= 0 ? "text-green-400" : "text-red-400"
-                        }`}
+                        className={`text-xs min-w-[50px] text-right ${displayTotalTimeChange! >= 0 ? "text-green-400" : "text-red-400"
+                            }`}
                     >
                         {displayMode === "time"
                             ? (() => {
-                                  const timeChange = calculateTimeChange(
-                                      totalTime,
-                                      displayTotalTimeChange!
-                                  );
-                                  const sign = timeChange >= 0 ? "+" : "";
-                                  return `${sign}${formatDuration(Math.abs(timeChange))}`;
-                              })()
+                                const timeChange = calculateTimeChange(
+                                    totalTime,
+                                    displayTotalTimeChange!
+                                );
+                                const sign = timeChange >= 0 ? "+" : "";
+                                return `${sign}${formatDuration(Math.abs(timeChange))}`;
+                            })()
                             : formatPercentage(displayTotalTimeChange!)}
                     </div>
                 )}
@@ -473,9 +481,8 @@ export default function StatisticsSidebar({
                         return (
                             <div key={`${cat.category}-${idx}`} className="space-y-1">
                                 <div
-                                    className={`flex items-center justify-between ${
-                                        clickable ? "cursor-pointer hover:bg-gray-800 rounded p-1 -m-1 transition-colors" : ""
-                                    }`}
+                                    className={`flex items-center justify-between ${clickable ? "cursor-pointer hover:bg-gray-800 rounded p-1 -m-1 transition-colors" : ""
+                                        }`}
                                     onClick={onClick}
                                 >
                                     <div className="flex items-center gap-2">
@@ -489,9 +496,8 @@ export default function StatisticsSidebar({
                                         <span className="text-sm text-gray-400">{formatDuration(cat.total_duration)}</span>
                                         {formatChange(cat.total_duration, cat.percentage_change) !== null && (
                                             <span
-                                                className={`text-xs min-w-[50px] text-right ${
-                                                    cat.percentage_change! >= 0 ? "text-green-400" : "text-red-400"
-                                                }`}
+                                                className={`text-xs min-w-[50px] text-right ${cat.percentage_change! >= 0 ? "text-green-400" : "text-red-400"
+                                                    }`}
                                             >
                                                 {formatChange(cat.total_duration, cat.percentage_change)}
                                             </span>
@@ -525,26 +531,24 @@ export default function StatisticsSidebar({
                         </button>
                     )}
                 </div>
-                <div className="space-y-2">
-                    {weekStats.top_apps.map((app, idx) => (
+                <div className={`space-y-2 ${showAllApps ? "max-h-72 overflow-y-auto nice-scrollbar pr-1" : ""}`}>
+                    {displayedApps.map((app, idx) => (
                         <div
                             key={`${app.app}-${idx}`}
                             onClick={(e) => logRowLeftClickCalendarFilter(e, app.app)}
                             onContextMenu={(e) => openFromContextMenu(e, app.app)}
-                            className={`flex items-center justify-between rounded px-1 -mx-1 cursor-pointer select-text ${
-                                calendarAppFilterActive === app.app
+                            className={`flex items-center justify-between rounded px-1 -mx-1 cursor-pointer select-text ${calendarAppFilterActive === app.app
                                     ? "bg-gray-800 ring-1 ring-blue-500 ring-inset"
                                     : "hover:bg-gray-900/80"
-                            }`}
+                                }`}
                         >
                             <span className="text-sm text-gray-200 truncate min-w-0 pr-2">{app.app}</span>
                             <div className="flex items-center gap-2 shrink-0">
                                 <span className="text-sm text-gray-400">{formatDuration(app.total_duration)}</span>
                                 {formatChange(app.total_duration, app.percentage_change) !== null && (
                                     <span
-                                        className={`text-xs min-w-[50px] text-right ${
-                                            app.percentage_change! >= 0 ? "text-green-400" : "text-red-400"
-                                        }`}
+                                        className={`text-xs min-w-[50px] text-right ${app.percentage_change! >= 0 ? "text-green-400" : "text-red-400"
+                                            }`}
                                     >
                                         {formatChange(app.total_duration, app.percentage_change)}
                                     </span>
@@ -553,6 +557,14 @@ export default function StatisticsSidebar({
                         </div>
                     ))}
                 </div>
+                {canShowMoreApps && (
+                    <button
+                        onClick={() => setShowAllApps((prev) => !prev)}
+                        className="mt-3 text-sm text-blue-400 hover:text-blue-300"
+                    >
+                        {showAllApps ? "Show less" : `Show more`}
+                    </button>
+                )}
             </div>
 
             <div className="mt-auto pt-4 border-t border-gray-700">
