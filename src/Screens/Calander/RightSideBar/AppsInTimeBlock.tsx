@@ -5,7 +5,7 @@ import {
     delete_logs_by_ids,
     delete_logs_for_time_block
 } from "../../../api/Log.ts";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { SideBarView } from "./RightSideBar.tsx";
 import { useToast } from "../../../Componants/Toast.tsx";
@@ -46,6 +46,7 @@ export default function AppsInTimeBlock({
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [deleteLogCount, setDeleteLogCount] = useState(0);
     const [isCountingLogs, setIsCountingLogs] = useState(false);
+    const [selectedApps, setSelectedApps] = useState<Set<string>>(new Set());
     const { showToast } = useToast();
     const { openFromContextMenu, openFromContextMenuMany, categorizeLayers } = useAppCategorizeMenu();
     const calendarAppFilterActive = useCalendarAppFilterActive();
@@ -168,6 +169,38 @@ export default function AppsInTimeBlock({
     const displayedLogs = [...selectedEventLogs].sort((a, b) => b.duration - a.duration);
     const totalDuration = displayedLogs.reduce((sum, log) => sum + log.duration, 0);
     const allTimeBlockApps = Array.from(new Set(displayedLogs.map((log) => log.app)));
+    const allDisplayedAppNames = displayedLogs.map((log) => log.app);
+    const selectedAppNames = allDisplayedAppNames.filter((name) => selectedApps.has(name));
+
+    useEffect(() => {
+        setSelectedApps((prev) => {
+            const next = new Set<string>();
+            for (const name of allDisplayedAppNames) {
+                if (prev.has(name)) next.add(name);
+            }
+            return next;
+        });
+    }, [selectedEventLogs]);
+
+    const toggleAppSelected = (appName: string) => {
+        setSelectedApps((prev) => {
+            const next = new Set(prev);
+            if (next.has(appName)) {
+                next.delete(appName);
+            } else {
+                next.add(appName);
+            }
+            return next;
+        });
+    };
+
+    const selectAllApps = () => {
+        setSelectedApps(new Set(allDisplayedAppNames));
+    };
+
+    const clearSelectedApps = () => {
+        setSelectedApps(new Set());
+    };
 
     return (
         <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
@@ -212,7 +245,37 @@ export default function AppsInTimeBlock({
             {!isCategoryFilter && <hr className="border-gray-700 mb-6 flex-shrink-0" />}
 
             <div className="flex-1 overflow-y-auto nice-scrollbar mb-6 min-h-0">
-                <h3 className="text-sm font-semibold text-gray-300 mb-3">App Activity</h3>
+                <div className="flex items-center justify-between gap-2 mb-3">
+                    <h3 className="text-sm font-semibold text-gray-300">App Activity</h3>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={(e) => openFromContextMenuMany(e, selectedAppNames)}
+                            disabled={selectedAppNames.length === 0}
+                            className="text-xs text-gray-300 hover:text-white disabled:text-gray-600 disabled:cursor-not-allowed px-2 py-1 rounded bg-gray-800/60 hover:bg-gray-700/70"
+                        >
+                            Sort ({selectedAppNames.length})
+                        </button>
+                        <button
+                            onClick={clearSelectedApps}
+                            disabled={selectedAppNames.length === 0}
+                            className="text-xs text-gray-300 hover:text-white disabled:text-gray-600 disabled:cursor-not-allowed px-2 py-1 rounded bg-gray-800/60 hover:bg-gray-700/70"
+                        >
+                            Clear
+                        </button>
+                        <button
+                            onClick={selectAllApps}
+                            disabled={displayedLogs.length === 0}
+                            className="text-xs text-gray-300 hover:text-white disabled:text-gray-600 disabled:cursor-not-allowed px-2 py-1 rounded bg-gray-800/60 hover:bg-gray-700/70"
+                        >
+                            Select all
+                        </button>
+                    </div>
+                </div>
+                {selectedAppNames.length > 0 && (
+                    <div className="text-xs text-gray-500 mb-2">
+                        {selectedAppNames.length} selected
+                    </div>
+                )}
                 {displayedLogs.length === 0 ? (
                     <div className="text-gray-500 text-sm">No app activity recorded</div>
                 ) : (
@@ -222,17 +285,23 @@ export default function AppsInTimeBlock({
                                 key={log.ids.join("-")}
                                 onClick={(e) => logRowLeftClickCalendarFilter(e, log.app)}
                                 onContextMenu={(e) => openFromContextMenu(e, log.app)}
-                                className={`h-15 rounded-lg p-3 transition-colors select-text cursor-pointer ${
-                                    calendarAppFilterActive === log.app
+                                className={`h-15 rounded-lg p-3 transition-colors select-text cursor-pointer ${calendarAppFilterActive === log.app
                                         ? "bg-gray-800 ring-2 ring-blue-500 ring-offset-2 ring-offset-black"
                                         : "bg-gray-900 hover:bg-gray-800"
-                                }`}
+                                    }`}
                             >
                                 <div className="flex items-center justify-between mb-1">
                                     <span
                                         className="text-sm font-medium text-white truncate flex-1 select-text">
                                         {log.app}
                                     </span>
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedApps.has(log.app)}
+                                        onChange={() => toggleAppSelected(log.app)}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="w-4 h-4 rounded cursor-pointer mr-2"
+                                    />
                                     <svg
                                         onClick={(e) => {
                                             e.stopPropagation();
