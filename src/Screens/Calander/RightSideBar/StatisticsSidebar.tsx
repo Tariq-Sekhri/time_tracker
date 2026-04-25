@@ -531,7 +531,7 @@ export default function StatisticsSidebar({
                         </button>
                     )}
                 </div>
-                <div className={`space-y-2 ${showAllApps ? "max-h-72 overflow-y-auto nice-scrollbar pr-1" : ""}`}>
+                <div className="space-y-2 max-h-72 overflow-y-auto nice-scrollbar pr-1">
                     {displayedApps.map((app, idx) => (
                         <div
                             key={`${app.app}-${idx}`}
