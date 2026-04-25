@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useToast } from "../Componants/Toast.tsx";
 import { get_categories } from "../api/Category.ts";
 import { get_cat_regex, insert_cat_regex, update_cat_regex_by_id } from "../api/CategoryRegex.ts";
@@ -38,7 +38,7 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
     const queryClient = useQueryClient();
     const { showToast } = useToast();
     const menuRef = useRef<HTMLDivElement>(null);
-    const [menu, setMenu] = useState<{ x: number; y: number; appName: string } | null>(null);
+    const [menu, setMenu] = useState<{ x: number; y: number; appNames: string[] } | null>(null);
     const [skipConfirmOpen, setSkipConfirmOpen] = useState(false);
     const [skipPendingRegex, setSkipPendingRegex] = useState<string | null>(null);
     const [skipMatchingLogCount, setSkipMatchingLogCount] = useState(0);
@@ -58,7 +58,8 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
 
     const menuRuleInfo = useMemo(() => {
         if (!menu) return null;
-        return resolveCategoryRuleForApp(menu.appName, categories, catRegexRows);
+        if (menu.appNames.length !== 1) return null;
+        return resolveCategoryRuleForApp(menu.appNames[0], categories, catRegexRows);
     }, [menu, categories, catRegexRows]);
 
     useEffect(() => {
@@ -79,26 +80,32 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
     }, [menu]);
 
     const assignAppCategoryMutation = useMutation({
-        mutationFn: async ({ catId, appName }: { catId: number; appName: string }) => {
+        mutationFn: async ({ catId, appNames }: { catId: number; appNames: string[] }) => {
             const catRegex = await queryClient.ensureQueryData({
                 queryKey: ["cat_regex"],
                 queryFn: get_cat_regex,
             });
-            const pattern = exactAppRegexPattern(appName);
-            const existing = catRegex.find((r) => r.regex === pattern);
-            if (existing?.cat_id === catId) return false;
-            if (existing) {
-                await update_cat_regex_by_id({ ...existing, cat_id: catId });
-            } else {
-                await insert_cat_regex({ cat_id: catId, regex: pattern });
+            let didChange = false;
+            const uniqueAppNames = Array.from(new Set(appNames));
+
+            for (const appName of uniqueAppNames) {
+                const pattern = exactAppRegexPattern(appName);
+                const existing = catRegex.find((r) => r.regex === pattern);
+                if (existing?.cat_id === catId) continue;
+                if (existing) {
+                    await update_cat_regex_by_id({ ...existing, cat_id: catId });
+                } else {
+                    await insert_cat_regex({ cat_id: catId, regex: pattern });
+                }
+                didChange = true;
             }
-            return true;
+            return { didChange, appCount: uniqueAppNames.length };
         },
-        onSuccess: (didChange) => {
+        onSuccess: ({ didChange, appCount }) => {
             setMenu(null);
             if (!didChange) return;
             invalidateKeys(queryClient, [...ASSIGN_INVALIDATIONS, ...extra]);
-            showToast("Category rule saved", "success");
+            showToast(appCount > 1 ? "Category rules saved" : "Category rule saved", "success");
         },
         onError: (e: unknown) => {
             console.error("Failed to save category rule:", e);
@@ -127,7 +134,8 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
 
     const handleAddToSkippedApps = async () => {
         if (!menu) return;
-        const regexPattern = exactAppRegexPattern(menu.appName);
+        if (menu.appNames.length !== 1) return;
+        const regexPattern = exactAppRegexPattern(menu.appNames[0]);
         setIsCountingSkipLogs(true);
         try {
             const count = await count_matching_logs(regexPattern);
@@ -143,16 +151,22 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
         }
     };
 
-    const openFromContextMenu = (e: MouseEvent, appName: string) => {
+    const openFromContextMenu = (e: ReactMouseEvent | globalThis.MouseEvent, appName: string) => {
+        openFromContextMenuMany(e, [appName]);
+    };
+
+    const openFromContextMenuMany = (e: ReactMouseEvent | globalThis.MouseEvent, appNames: string[]) => {
         e.preventDefault();
         e.stopPropagation();
-        setMenu({ x: e.clientX, y: e.clientY, appName });
+        setMenu({ x: e.clientX, y: e.clientY, appNames });
     };
 
     const sortedCategories = useMemo(
         () => [...categories].sort((a, b) => b.priority - a.priority),
         [categories]
     );
+
+    const isBatchMenu = (menu?.appNames.length ?? 0) > 1;
 
     const categorizeLayers = (
         <>
@@ -165,13 +179,13 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
                 >
                     <div
                         className="px-3 py-2 text-xs border-b border-gray-700 space-y-1 max-w-[min(24rem,calc(100vw-2rem))]"
-                        title={menu.appName}
+                        title={isBatchMenu ? `${menu.appNames.length} apps` : menu.appNames[0]}
                     >
                         <div className="text-gray-300 font-mono break-all leading-snug">
-                            {menuRuleInfo?.matchedRegex ?? "No rule matched"}
+                            {isBatchMenu ? `${menu.appNames.length} apps selected` : (menuRuleInfo?.matchedRegex ?? "No rule matched")}
                         </div>
                         <div className="text-gray-400 break-words leading-snug">
-                            category: {menuRuleInfo?.categoryName ?? "—"}
+                            category: {isBatchMenu ? "Assign all selected apps" : (menuRuleInfo?.categoryName ?? "—")}
                         </div>
                     </div>
                     {sortedCategories.map((cat) => (
@@ -183,22 +197,26 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
                             onClick={() =>
                                 assignAppCategoryMutation.mutate({
                                     catId: cat.id,
-                                    appName: menu.appName,
+                                    appNames: menu.appNames,
                                 })
                             }
                         >
                             {cat.name}
                         </button>
                     ))}
-                    <div className="border-t border-gray-700 my-1" />
-                    <button
-                        type="button"
-                        disabled={isCountingSkipLogs || addSkipPatternMutation.isPending}
-                        className="w-full px-3 py-2 text-left text-sm text-red-300 hover:bg-gray-800 disabled:opacity-50"
-                        onClick={handleAddToSkippedApps}
-                    >
-                        {isCountingSkipLogs ? "Checking..." : "Add to skipped apps"}
-                    </button>
+                    {!isBatchMenu && (
+                        <>
+                            <div className="border-t border-gray-700 my-1" />
+                            <button
+                                type="button"
+                                disabled={isCountingSkipLogs || addSkipPatternMutation.isPending}
+                                className="w-full px-3 py-2 text-left text-sm text-red-300 hover:bg-gray-800 disabled:opacity-50"
+                                onClick={handleAddToSkippedApps}
+                            >
+                                {isCountingSkipLogs ? "Checking..." : "Add to skipped apps"}
+                            </button>
+                        </>
+                    )}
                 </div>
             )}
 
@@ -247,5 +265,5 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
         </>
     );
 
-    return { openFromContextMenu, categorizeLayers };
+    return { openFromContextMenu, openFromContextMenuMany, categorizeLayers };
 }

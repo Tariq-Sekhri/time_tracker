@@ -47,7 +47,7 @@ export default function AppsInTimeBlock({
     const [deleteLogCount, setDeleteLogCount] = useState(0);
     const [isCountingLogs, setIsCountingLogs] = useState(false);
     const { showToast } = useToast();
-    const { openFromContextMenu, categorizeLayers } = useAppCategorizeMenu();
+    const { openFromContextMenu, openFromContextMenuMany, categorizeLayers } = useAppCategorizeMenu();
     const calendarAppFilterActive = useCalendarAppFilterActive();
 
     const handleDeleteClick = async () => {
@@ -167,10 +167,17 @@ export default function AppsInTimeBlock({
 
     const displayedLogs = [...selectedEventLogs].sort((a, b) => b.duration - a.duration);
     const totalDuration = displayedLogs.reduce((sum, log) => sum + log.duration, 0);
+    const allTimeBlockApps = Array.from(new Set(displayedLogs.map((log) => log.app)));
 
     return (
         <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
-            <div className={`flex-shrink-0 ${isCategoryFilter ? 'mb-4' : 'mb-6'}`}>
+            <div
+                className={`flex-shrink-0 ${isCategoryFilter ? 'mb-4' : 'mb-6'}`}
+                onContextMenu={(e) => {
+                    if (allTimeBlockApps.length === 0) return;
+                    openFromContextMenuMany(e, allTimeBlockApps);
+                }}
+            >
                 <div className="flex items-center justify-between mb-3 gap-2">
                     <h2 className="text-xl font-bold text-white min-w-0 truncate">{selectedEvent.title}</h2>
                     <div className="flex items-center gap-2 shrink-0">
