@@ -22,7 +22,6 @@ import { getCachedEvents, setCachedEvents } from "../../stores/googleCalendarCac
 import { useToast } from "../../Componants/Toast.tsx";
 import { storageKey } from "../../storageKey.ts";
 import { useCalendarAppFilterActive } from "../../stores/calendarAppFilterStore.ts";
-import { useAppCategorizeMenu } from "../../hooks/useAppCategorizeMenu.tsx";
 
 const LEFT_SIDEBAR_COLLAPSED_KEY = storageKey("time-tracker:left-sidebar-collapsed");
 
@@ -65,6 +64,7 @@ interface RenderCalendarContentProps {
     toggleCalendarInStats: (calendarId: number) => void;
     includeGoogleInStats: boolean;
     setIncludeGoogleInStats: (v: boolean) => void;
+    onTimeBlockContextMenu?: (e: globalThis.MouseEvent, appNames: string[]) => void;
 }
 
 export default function RenderCalendarContent({
@@ -86,6 +86,7 @@ export default function RenderCalendarContent({
     toggleCalendarInStats,
     includeGoogleInStats,
     setIncludeGoogleInStats,
+    onTimeBlockContextMenu,
 }: RenderCalendarContentProps) {
     const queryClient = useQueryClient();
     const { showToast, updateToast, removeToast } = useToast();
@@ -102,9 +103,6 @@ export default function RenderCalendarContent({
 
     const { calendarStartHour, calendarHeight, timeBlockSettings } = useSettingsStore();
     const calendarAppFilter = useCalendarAppFilterActive();
-    const { openFromContextMenuMany, categorizeLayers } = useAppCategorizeMenu({
-        extraInvalidateQueryKeys: [["logsForAppCalendar"]],
-    });
     const slotMinHeightPx = Math.max(12, Math.round((calendarHeight / 100) * 24));
 
     const handleRelogin = async () => {
@@ -789,7 +787,7 @@ export default function RenderCalendarContent({
                                 const apps = (info.event.extendedProps?.apps ?? []) as { app: string; totalDuration: number }[];
                                 const appNames = Array.from(new Set(apps.map((a) => a.app)));
                                 if (appNames.length === 0) return;
-                                openFromContextMenuMany(e, appNames);
+                                onTimeBlockContextMenu?.(e, appNames);
                             };
                             info.el.addEventListener("contextmenu", handler);
                             (info.el as HTMLElement & { __ttContextMenuHandler?: (e: globalThis.MouseEvent) => void }).__ttContextMenuHandler = handler;
@@ -809,7 +807,6 @@ export default function RenderCalendarContent({
                     />
                 </div>
             </div>
-            {categorizeLayers}
 
         </div>
     );

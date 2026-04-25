@@ -43,8 +43,7 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
     const [skipPendingRegexes, setSkipPendingRegexes] = useState<string[]>([]);
     const [skipMatchingLogCount, setSkipMatchingLogCount] = useState(0);
     const [isCountingSkipLogs, setIsCountingSkipLogs] = useState(false);
-    const menuPointerRef = useRef<{ x: number; y: number } | null>(null);
-    const repositionTimerRef = useRef<number | null>(null);
+    const lastMenuSizeRef = useRef<{ width: number; height: number } | null>(null);
 
     const extra = options?.extraInvalidateQueryKeys ?? [];
 
@@ -82,13 +81,12 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
     }, [menu]);
 
     useEffect(() => {
-        return () => {
-            if (repositionTimerRef.current !== null) {
-                window.clearTimeout(repositionTimerRef.current);
-                repositionTimerRef.current = null;
-            }
-        };
-    }, []);
+        if (!menu || !menuRef.current) return;
+        const rect = menuRef.current.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+            lastMenuSizeRef.current = { width: rect.width, height: rect.height };
+        }
+    }, [menu]);
 
     const assignAppCategoryMutation = useMutation({
         mutationFn: async ({ catId, appNames }: { catId: number; appNames: string[] }) => {
@@ -173,43 +171,28 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
     const openFromContextMenuMany = (e: ReactMouseEvent | globalThis.MouseEvent, appNames: string[]) => {
         e.preventDefault();
         e.stopPropagation();
-        menuPointerRef.current = { x: e.clientX, y: e.clientY };
-        setMenu({ x: e.clientX, y: e.clientY, appNames });
-        if (repositionTimerRef.current !== null) {
-            window.clearTimeout(repositionTimerRef.current);
+        const pad = 8;
+        const cursorGap = 4;
+        const estimated = lastMenuSizeRef.current ?? { width: 288, height: 256 };
+        const viewportW = window.innerWidth;
+        const viewportH = window.innerHeight;
+        let x = e.clientX;
+        let y = e.clientY;
+
+        if (x + estimated.width + pad > viewportW) {
+            x = Math.max(pad, viewportW - estimated.width - pad);
         }
-        repositionTimerRef.current = window.setTimeout(() => {
-            const el = menuRef.current;
-            const pointer = menuPointerRef.current;
-            if (!el || !pointer) return;
-            const rect = el.getBoundingClientRect();
-            const pad = 8;
-            const cursorGap = 4;
-            const viewportW = window.innerWidth;
-            const viewportH = window.innerHeight;
-            let x = pointer.x;
-            let y = pointer.y;
+        if (x < pad) {
+            x = pad;
+        }
+        if (y + estimated.height + pad > viewportH) {
+            y = Math.max(pad, e.clientY - estimated.height - cursorGap);
+        }
+        if (y < pad) {
+            y = pad;
+        }
 
-            if (x + rect.width + pad > viewportW) {
-                x = Math.max(pad, viewportW - rect.width - pad);
-            }
-            if (x < pad) {
-                x = pad;
-            }
-            if (y + rect.height + pad > viewportH) {
-                y = Math.max(pad, pointer.y - rect.height - cursorGap);
-            }
-            if (y < pad) {
-                y = pad;
-            }
-
-            setMenu((prev) => {
-                if (!prev) return prev;
-                if (prev.x === x && prev.y === y) return prev;
-                return { ...prev, x, y };
-            });
-            repositionTimerRef.current = null;
-        }, 0);
+        setMenu({ x, y, appNames });
     };
 
     const sortedCategories = useMemo(

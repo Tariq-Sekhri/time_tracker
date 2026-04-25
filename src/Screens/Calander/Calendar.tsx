@@ -22,6 +22,7 @@ import {
     type CalendarViewPrefsV1,
 } from "../../api/calendarViewPrefs.ts";
 import { toErrorString } from "../../types/common.ts";
+import { useAppCategorizeMenu } from "../../hooks/useAppCategorizeMenu.tsx";
 
 export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View) => void }) {
     const [rightSideBarView, setRightSideBarView] = useState<SideBarView>("Week")
@@ -48,6 +49,9 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const [visibleCategories, setVisibleCategories] = useState<Set<string>>(new Set());
     const [visibleCalendars, setVisibleCalendars] = useState<Set<number>>(new Set());
     const [calendarsInStats, setCalendarsInStats] = useState<Set<number>>(new Set());
+    const { openFromContextMenuMany, categorizeLayers } = useAppCategorizeMenu({
+        extraInvalidateQueryKeys: [["logsForAppCalendar"]],
+    });
     const queryClient = useQueryClient();
     const savePrefsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const hasInitializedCalendars = useRef(false);
@@ -849,6 +853,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             toggleCalendarInStats={toggleCalendarInStats}
                             includeGoogleInStats={includeGoogleInStats}
                             setIncludeGoogleInStats={setIncludeGoogleInStats}
+                            onTimeBlockContextMenu={(e, appNames) => openFromContextMenuMany(e, appNames)}
                         />
                     </div>
                 </div>
@@ -863,6 +868,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                               googleCalendars={displayCalendars}
                 />
             </div>
+            {categorizeLayers}
 
 
         </div>
