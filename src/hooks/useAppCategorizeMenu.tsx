@@ -43,6 +43,8 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
     const [skipPendingRegexes, setSkipPendingRegexes] = useState<string[]>([]);
     const [skipMatchingLogCount, setSkipMatchingLogCount] = useState(0);
     const [isCountingSkipLogs, setIsCountingSkipLogs] = useState(false);
+    const menuPointerRef = useRef<{ x: number; y: number } | null>(null);
+    const repositionTimerRef = useRef<number | null>(null);
 
     const extra = options?.extraInvalidateQueryKeys ?? [];
 
@@ -78,6 +80,15 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
             window.removeEventListener("keydown", onKey);
         };
     }, [menu]);
+
+    useEffect(() => {
+        return () => {
+            if (repositionTimerRef.current !== null) {
+                window.clearTimeout(repositionTimerRef.current);
+                repositionTimerRef.current = null;
+            }
+        };
+    }, []);
 
     const assignAppCategoryMutation = useMutation({
         mutationFn: async ({ catId, appNames }: { catId: number; appNames: string[] }) => {
@@ -162,7 +173,43 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
     const openFromContextMenuMany = (e: ReactMouseEvent | globalThis.MouseEvent, appNames: string[]) => {
         e.preventDefault();
         e.stopPropagation();
+        menuPointerRef.current = { x: e.clientX, y: e.clientY };
         setMenu({ x: e.clientX, y: e.clientY, appNames });
+        if (repositionTimerRef.current !== null) {
+            window.clearTimeout(repositionTimerRef.current);
+        }
+        repositionTimerRef.current = window.setTimeout(() => {
+            const el = menuRef.current;
+            const pointer = menuPointerRef.current;
+            if (!el || !pointer) return;
+            const rect = el.getBoundingClientRect();
+            const pad = 8;
+            const cursorGap = 4;
+            const viewportW = window.innerWidth;
+            const viewportH = window.innerHeight;
+            let x = pointer.x;
+            let y = pointer.y;
+
+            if (x + rect.width + pad > viewportW) {
+                x = Math.max(pad, viewportW - rect.width - pad);
+            }
+            if (x < pad) {
+                x = pad;
+            }
+            if (y + rect.height + pad > viewportH) {
+                y = Math.max(pad, pointer.y - rect.height - cursorGap);
+            }
+            if (y < pad) {
+                y = pad;
+            }
+
+            setMenu((prev) => {
+                if (!prev) return prev;
+                if (prev.x === x && prev.y === y) return prev;
+                return { ...prev, x, y };
+            });
+            repositionTimerRef.current = null;
+        }, 0);
     };
 
     const sortedCategories = useMemo(
@@ -225,7 +272,7 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
             {skipConfirmOpen && skipPendingRegexes.length > 0 && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[250]">
                     <div className="bg-gray-900 p-6 rounded-lg max-w-md w-full mx-4 border border-gray-700">
-                        <h3 className="text-xl font-bold mb-4 text-white">Confirm Skip</h3>
+                        <h3 className="text-xl font-bold mb-4 text-white">Confirm Destructive Action</h3>
                         <p className="text-gray-300 mb-2">
                             This will permanently delete{" "}
                             <span className="text-red-400 font-semibold">
@@ -233,11 +280,9 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
                             </span>{" "}
                             that match the selected app.
                         </p>
-                        {skipMatchingLogCount > 0 && (
-                            <p className="text-yellow-400 text-sm mb-4">
-                                ⚠️ This action cannot be undone!
-                            </p>
-                        )}
+                        <p className="text-red-300 text-sm mb-4">
+                            WARNING: This is a destructive action and cannot be undone.
+                        </p>
                         <div className="flex gap-3 justify-end">
                             <button
                                 type="button"
@@ -257,8 +302,8 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
                                 className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-white disabled:opacity-50"
                             >
                                 {addSkipPatternMutation.isPending
-                                    ? "Adding..."
-                                    : "Delete Logs & Add Pattern"}
+                                    ? "Applying..."
+                                    : "Delete Logs & Add to Skipped Apps"}
                             </button>
                         </div>
                     </div>
