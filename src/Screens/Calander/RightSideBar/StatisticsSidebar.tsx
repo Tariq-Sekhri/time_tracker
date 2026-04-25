@@ -342,10 +342,8 @@ export default function StatisticsSidebar({
 
     const filteredAllApps = useMemo(() => {
         if (!weekStats) return [];
-        const apps = weekStats.all_apps.filter((app) => app.total_duration >= uiMinAppDuration);
-        if (!calendarAppFilterActive) return apps;
-        return apps.filter((app) => app.app === calendarAppFilterActive);
-    }, [weekStats, uiMinAppDuration, calendarAppFilterActive]);
+        return weekStats.all_apps.filter((app) => app.total_duration >= uiMinAppDuration);
+    }, [weekStats, uiMinAppDuration]);
 
     const displayedApps = showAllApps ? filteredAllApps : filteredAllApps.slice(0, 5);
     const canShowMoreApps = filteredAllApps.length > 5;
@@ -537,9 +535,9 @@ export default function StatisticsSidebar({
                             key={`${app.app}-${idx}`}
                             onClick={(e) => logRowLeftClickCalendarFilter(e, app.app)}
                             onContextMenu={(e) => openFromContextMenu(e, app.app)}
-                            className={`flex items-center justify-between rounded px-1 -mx-1 cursor-pointer select-text ${calendarAppFilterActive === app.app
-                                    ? "bg-gray-800 ring-1 ring-blue-500 ring-inset"
-                                    : "hover:bg-gray-900/80"
+                            className={`flex items-center justify-between rounded px-2 cursor-pointer select-text ${calendarAppFilterActive === app.app
+                                ? "bg-gray-800 ring-1 ring-blue-500 ring-inset"
+                                : "hover:bg-gray-900/80"
                                 }`}
                         >
                             <span className="text-sm text-gray-200 truncate min-w-0 pr-2">{app.app}</span>

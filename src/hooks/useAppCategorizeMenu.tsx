@@ -63,6 +63,21 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
         return resolveCategoryRuleForApp(menu.appNames[0], categories, catRegexRows);
     }, [menu, categories, catRegexRows]);
 
+    const handleCopyFromMenu = async () => {
+        if (!menu || menu.appNames.length === 0) return;
+        const valueToCopy = menu.appNames.length === 1
+            ? menu.appNames[0]
+            : menu.appNames.join("\n");
+        try {
+            await navigator.clipboard.writeText(valueToCopy);
+            showToast(menu.appNames.length === 1 ? "Copied app name" : `Copied ${menu.appNames.length} app names`, "success");
+            setMenu(null);
+        } catch (e: unknown) {
+            const fullError = JSON.stringify(e, null, 2);
+            showToast("Failed to copy", "error", 5000, fullError);
+        }
+    };
+
     useEffect(() => {
         if (!menu) return;
         const close = (e: PointerEvent) => {
@@ -215,8 +230,26 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
                         className="px-3 py-2 text-xs border-b border-gray-700 space-y-1 max-w-[min(24rem,calc(100vw-2rem))]"
                         title={isBatchMenu ? `${menu.appNames.length} apps` : menu.appNames[0]}
                     >
-                        <div className="text-gray-300 font-mono break-all leading-snug">
-                            {isBatchMenu ? `${menu.appNames.length} apps selected` : (menuRuleInfo?.matchedRegex ?? "No rule matched")}
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="text-gray-300 font-mono break-all leading-snug">
+                                {isBatchMenu ? `${menu.appNames.length} apps selected` : `Regex: ${menu.appNames[0]}`}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleCopyFromMenu}
+                                className="text-gray-400 hover:text-white p-1 rounded hover:bg-gray-800 flex-shrink-0"
+                                title={isBatchMenu ? `Copy ${menu.appNames.length} app names` : "Copy app name"}
+                                aria-label={isBatchMenu ? `Copy ${menu.appNames.length} app names` : "Copy app name"}
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                    />
+                                </svg>
+                            </button>
                         </div>
                         <div className="text-gray-400 break-words leading-snug">
                             category: {isBatchMenu ? "Assign all selected apps" : (menuRuleInfo?.categoryName ?? "—")}

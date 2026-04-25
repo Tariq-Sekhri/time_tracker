@@ -198,11 +198,8 @@ export default function DayStatisticsSidebar({
         if (!dayStats?.top_apps) {
             return [];
         }
-        if (!calendarAppFilterActive) {
-            return dayStats.top_apps;
-        }
-        return dayStats.top_apps.filter((a) => a.app === calendarAppFilterActive);
-    }, [dayStats, calendarAppFilterActive]);
+        return dayStats.top_apps;
+    }, [dayStats]);
 
     if (isLoading || (!dayStats && !isError)) {
         return (
@@ -403,11 +400,10 @@ export default function DayStatisticsSidebar({
                             key={`${app.app}-${idx}`}
                             onClick={(e) => logRowLeftClickCalendarFilter(e, app.app)}
                             onContextMenu={(e) => openFromContextMenu(e, app.app)}
-                            className={`flex items-center justify-between rounded px-1 -mx-1 cursor-pointer select-text ${
-                                calendarAppFilterActive === app.app
-                                    ? "bg-gray-800 ring-1 ring-blue-500 ring-inset"
-                                    : "hover:bg-gray-900/80"
-                            }`}
+                            className={`flex items-center justify-between rounded px-2 cursor-pointer select-text ${calendarAppFilterActive === app.app
+                                ? "bg-gray-800 ring-1 ring-blue-500 ring-inset"
+                                : "hover:bg-gray-900/80"
+                                }`}
                         >
                             <span className="text-sm text-gray-200 truncate min-w-0 pr-2">{app.app}</span>
                             <span className="text-sm text-gray-400 shrink-0">

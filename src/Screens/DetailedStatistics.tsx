@@ -187,15 +187,11 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                 totalDuration: app.total_duration,
             }));
 
-    const sidebarAppsFiltered = calendarAppFilterActive
-        ? sidebarApps.filter((a) => a.app === calendarAppFilterActive)
-        : sidebarApps;
+    const sidebarAppsFiltered = sidebarApps;
     const sidebarMaxDuration = Math.max(...sidebarAppsFiltered.map((a) => a.totalDuration), 1);
-    const sidebarPercentDenom = calendarAppFilterActive
-        ? Math.max(1, sidebarAppsFiltered.reduce((s, a) => s + a.totalDuration, 0))
-        : selectedCategory
-            ? selectedCategoryTotalDuration
-            : stats.total_time;
+    const sidebarPercentDenom = selectedCategory
+        ? selectedCategoryTotalDuration
+        : stats.total_time;
 
     return (
         <div className="flex h-full overflow-hidden">
@@ -459,11 +455,10 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                                                 key={app.app}
                                                 onClick={(e) => logRowLeftClickCalendarFilter(e, app.app)}
                                                 onContextMenu={(e) => openFromContextMenu(e, app.app)}
-                                                className={`rounded px-1 -mx-1 py-1 cursor-pointer select-text ${
-                                                    calendarAppFilterActive === app.app
-                                                        ? "bg-gray-800 ring-1 ring-blue-500 ring-inset"
-                                                        : "hover:bg-gray-900/80"
-                                                }`}
+                                                className={`rounded px-2 py-1 cursor-pointer select-text ${calendarAppFilterActive === app.app
+                                                    ? "bg-gray-800 ring-1 ring-blue-500 ring-inset"
+                                                    : "hover:bg-gray-900/80"
+                                                    }`}
                                             >
                                     <div className="flex items-center justify-between mb-1 gap-3">
                                         <span className="text-sm text-gray-200 truncate flex-1">{app.app}</span>

@@ -8,8 +8,8 @@ import { get_categories } from "../api/Category.ts";
 import { get_cat_regex } from "../api/CategoryRegex.ts";
 import { useAppCategorizeMenu } from "../hooks/useAppCategorizeMenu.tsx";
 import { logRowLeftClickCalendarFilter } from "../utils/calendarAppFilterRowClick.ts";
-import { useCalendarAppFilterActive } from "../stores/calendarAppFilterStore.ts";
 import { exactAppRegexPattern } from "../utils/exactAppRegexPattern.ts";
+import { useCalendarAppFilterActive } from "../stores/calendarAppFilterStore.ts";
 
 function formatDuration(seconds: number): string {
     const hours = Math.floor(seconds / 3600);
@@ -55,11 +55,8 @@ export default function AppsList({onBack}: { onBack: () => void }) {
     }
     const allAppsForCalc = weekStats.all_apps || weekStats.top_apps;
     const filteredApps = allAppsForCalc.filter((app) => app.total_duration >= uiMinAppDuration);
-    const calendarFiltered = calendarAppFilterActive
-        ? filteredApps.filter((app) => app.app === calendarAppFilterActive)
-        : filteredApps;
-    const displayedApps = calendarFiltered.slice(0, visibleCount);
-    const maxDuration = calendarFiltered.length > 0 ? calendarFiltered[0].total_duration : 1;
+    const displayedApps = filteredApps.slice(0, visibleCount);
+    const maxDuration = filteredApps.length > 0 ? filteredApps[0].total_duration : 1;
     const categoryByApp = new Map<string, string>();
     displayedApps.forEach(({ app }) => {
         const pattern = exactAppRegexPattern(app);
@@ -92,11 +89,10 @@ export default function AppsList({onBack}: { onBack: () => void }) {
                             key={idx}
                             onClick={(e) => logRowLeftClickCalendarFilter(e, app.app)}
                             onContextMenu={(e) => openFromContextMenu(e, app.app)}
-                            className={`flex items-center gap-4 p-4 rounded cursor-pointer select-text ${
-                                calendarAppFilterActive === app.app
-                                    ? "bg-gray-800 ring-2 ring-blue-500 ring-inset"
-                                    : "bg-gray-900 hover:bg-gray-800"
-                            }`}
+                            className={`flex items-center gap-4 p-4 rounded cursor-pointer select-text ${calendarAppFilterActive === app.app
+                                ? "bg-gray-800 ring-2 ring-blue-500 ring-inset"
+                                : "bg-gray-900 hover:bg-gray-800"
+                                }`}
                         >
                             <div className="w-8 text-center text-gray-400 font-semibold">
                                 {rank}
