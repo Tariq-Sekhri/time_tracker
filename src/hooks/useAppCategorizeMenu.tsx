@@ -40,7 +40,7 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
     const menuRef = useRef<HTMLDivElement>(null);
     const [menu, setMenu] = useState<{ x: number; y: number; appNames: string[] } | null>(null);
     const [skipConfirmOpen, setSkipConfirmOpen] = useState(false);
-    const [skipPendingRegex, setSkipPendingRegex] = useState<string | null>(null);
+    const [skipPendingRegexes, setSkipPendingRegexes] = useState<string[]>([]);
     const [skipMatchingLogCount, setSkipMatchingLogCount] = useState(0);
     const [isCountingSkipLogs, setIsCountingSkipLogs] = useState(false);
 
@@ -115,14 +115,17 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
     });
 
     const addSkipPatternMutation = useMutation({
-        mutationFn: async (regexPattern: string) => {
-            return await insert_skipped_app_and_delete_logs({ regex: regexPattern });
+        mutationFn: async (regexPatterns: string[]) => {
+            for (const regex of regexPatterns) {
+                await insert_skipped_app_and_delete_logs({ regex });
+            }
+            return regexPatterns.length;
         },
         onSuccess: () => {
             invalidateKeys(queryClient, [...SKIP_INVALIDATIONS, ...extra]);
             setMenu(null);
             setSkipConfirmOpen(false);
-            setSkipPendingRegex(null);
+            setSkipPendingRegexes([]);
             showToast("Added to skipped apps", "success");
         },
         onError: (e: unknown) => {
@@ -134,13 +137,14 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
 
     const handleAddToSkippedApps = async () => {
         if (!menu) return;
-        if (menu.appNames.length !== 1) return;
-        const regexPattern = exactAppRegexPattern(menu.appNames[0]);
+        const appNames = Array.from(new Set(menu.appNames));
+        const regexPatterns = appNames.map((appName) => exactAppRegexPattern(appName));
         setIsCountingSkipLogs(true);
         try {
-            const count = await count_matching_logs(regexPattern);
+            const counts = await Promise.all(regexPatterns.map((regex) => count_matching_logs(regex)));
+            const count = counts.reduce((sum, n) => sum + n, 0);
             setSkipMatchingLogCount(count);
-            setSkipPendingRegex(regexPattern);
+            setSkipPendingRegexes(regexPatterns);
             setSkipConfirmOpen(true);
         } catch (e: unknown) {
             console.error("Failed to count matching logs for skip:", e);
@@ -204,23 +208,21 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
                             {cat.name}
                         </button>
                     ))}
-                    {!isBatchMenu && (
-                        <>
-                            <div className="border-t border-gray-700 my-1" />
-                            <button
-                                type="button"
-                                disabled={isCountingSkipLogs || addSkipPatternMutation.isPending}
-                                className="w-full px-3 py-2 text-left text-sm text-red-300 hover:bg-gray-800 disabled:opacity-50"
-                                onClick={handleAddToSkippedApps}
-                            >
-                                {isCountingSkipLogs ? "Checking..." : "Add to skipped apps"}
-                            </button>
-                        </>
-                    )}
+                    <div className="border-t border-gray-700 my-1" />
+                    <button
+                        type="button"
+                        disabled={isCountingSkipLogs || addSkipPatternMutation.isPending}
+                        className="w-full px-3 py-2 text-left text-sm text-red-300 hover:bg-gray-800 disabled:opacity-50"
+                        onClick={handleAddToSkippedApps}
+                    >
+                        {isCountingSkipLogs
+                            ? "Checking..."
+                            : (isBatchMenu ? `Add ${menu.appNames.length} apps to skipped apps` : "Add to skipped apps")}
+                    </button>
                 </div>
             )}
 
-            {skipConfirmOpen && skipPendingRegex && (
+            {skipConfirmOpen && skipPendingRegexes.length > 0 && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[250]">
                     <div className="bg-gray-900 p-6 rounded-lg max-w-md w-full mx-4 border border-gray-700">
                         <h3 className="text-xl font-bold mb-4 text-white">Confirm Skip</h3>
@@ -241,7 +243,7 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
                                 type="button"
                                 onClick={() => {
                                     setSkipConfirmOpen(false);
-                                    setSkipPendingRegex(null);
+                                    setSkipPendingRegexes([]);
                                 }}
                                 disabled={addSkipPatternMutation.isPending}
                                 className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white disabled:opacity-50"
@@ -250,7 +252,7 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
                             </button>
                             <button
                                 type="button"
-                                onClick={() => addSkipPatternMutation.mutate(skipPendingRegex)}
+                                onClick={() => addSkipPatternMutation.mutate(skipPendingRegexes)}
                                 disabled={addSkipPatternMutation.isPending}
                                 className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-white disabled:opacity-50"
                             >
