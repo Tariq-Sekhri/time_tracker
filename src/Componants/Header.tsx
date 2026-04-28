@@ -77,10 +77,11 @@ export default function Header({ currentView, setCurrentView }: {
         setUpdateStatus("idle");
     };
     return (
-        <div className="flex border-b border-gray-700 items-center">
+        <div className="flex border-b border-gray-700 items-center min-w-0">
+            <div className="flex min-w-0 overflow-x-auto nice-scrollbar">
             <button
                 onClick={() => setCurrentView("calendar")}
-                className={`px-6 py-3 font-medium transition-colors ${currentView === "calendar"
+                className={`shrink-0 px-6 py-3 font-medium transition-colors ${currentView === "calendar"
                     ? "bg-gray-800 text-white border-b-2 border-blue-500"
                     : "text-gray-400 hover:text-white hover:bg-gray-900"
                     }`}
@@ -88,8 +89,17 @@ export default function Header({ currentView, setCurrentView }: {
                 Calendar
             </button>
             <button
+                onClick={() => setCurrentView("detailed")}
+                className={`shrink-0 px-6 py-3 font-medium transition-colors ${currentView === "detailed"
+                    ? "bg-gray-800 text-white border-b-2 border-blue-500"
+                    : "text-gray-400 hover:text-white hover:bg-gray-900"
+                    }`}
+            >
+                Detailed
+            </button>
+            <button
                 onClick={() => setCurrentView("categories")}
-                className={`px-6 py-3 font-medium transition-colors ${currentView === "categories"
+                className={`shrink-0 px-6 py-3 font-medium transition-colors ${currentView === "categories"
                     ? "bg-gray-800 text-white border-b-2 border-blue-500"
                     : "text-gray-400 hover:text-white hover:bg-gray-900"
                     }`}
@@ -98,7 +108,7 @@ export default function Header({ currentView, setCurrentView }: {
             </button>
             <button
                 onClick={() => setCurrentView("regex")}
-                className={`px-6 py-3 font-medium transition-colors ${currentView === "regex"
+                className={`shrink-0 px-6 py-3 font-medium transition-colors ${currentView === "regex"
                     ? "bg-gray-800 text-white border-b-2 border-blue-500"
                     : "text-gray-400 hover:text-white hover:bg-gray-900"
                     }`}
@@ -107,7 +117,7 @@ export default function Header({ currentView, setCurrentView }: {
             </button>
             <button
                 onClick={() => setCurrentView("settings")}
-                className={`px-6 py-3 font-medium transition-colors ${currentView === "settings"
+                className={`shrink-0 px-6 py-3 font-medium transition-colors ${currentView === "settings"
                     ? "bg-gray-800 text-white border-b-2 border-blue-500"
                     : "text-gray-400 hover:text-white hover:bg-gray-900"
                     }`}
@@ -116,7 +126,7 @@ export default function Header({ currentView, setCurrentView }: {
             </button>
             <button
                 onClick={() => setCurrentView("skipped")}
-                className={`px-6 py-3 font-medium transition-colors ${currentView === "skipped"
+                className={`shrink-0 px-6 py-3 font-medium transition-colors ${currentView === "skipped"
                     ? "bg-gray-800 text-white border-b-2 border-blue-500"
                     : "text-gray-400 hover:text-white hover:bg-gray-900"
                     }`}
@@ -125,15 +135,16 @@ export default function Header({ currentView, setCurrentView }: {
             </button>
             <button
                 onClick={() => setCurrentView("googleCalendars")}
-                className={`px-6 py-3 font-medium transition-colors ${currentView === "googleCalendars"
+                className={`shrink-0 px-6 py-3 font-medium transition-colors ${currentView === "googleCalendars"
                     ? "bg-gray-800 text-white border-b-2 border-blue-500"
                     : "text-gray-400 hover:text-white hover:bg-gray-900"
                     }`}
             >
                 Google Calendars
             </button>
+            </div>
             <div className="flex-1" />
-            <div className="px-4 flex items-center gap-3">
+            <div className="px-4 flex items-center gap-3 shrink-0">
                 {appVersion && (
                     <div className="flex items-center gap-2">
                         <span className="text-xs text-gray-500">v{appVersion}</span>
