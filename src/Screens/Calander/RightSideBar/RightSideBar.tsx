@@ -97,7 +97,6 @@ export function RightSideBar({
                     {view === "Week" && <StatisticsSidebar
                         weekDate={date}
                         onMoreInfo={() => setCurrentView("detailed")}
-                        onAppsList={() => setCurrentView("apps")}
                         onCategoryClick={(category) => {
                             setSelectedCategory(category);
                             setView("CategoryFilter");

@@ -9,7 +9,6 @@ import CategoriesView from "./Componants/CategoriesView.tsx";
 import CategoryRegexView from "./Screens/CategoryRegexView.tsx";
 import SkippedAppsView from "./Screens/SkippedAppsView.tsx";
 import DetailedStatistics from "./Screens/DetailedStatistics.tsx";
-import AppsList from "./Screens/AppsList.tsx";
 import Header from "./Componants/Header.tsx";
 import GoogleCalendarsView from "./Screens/GoogleCalendarsView.tsx";
 import Settings from "./Screens/Settings.tsx";
@@ -23,7 +22,6 @@ export type View =
     | "regex"
     | "skipped"
     | "detailed"
-    | "apps"
     | "googleCalendars"
     | "settings";
 
@@ -236,11 +234,6 @@ function AppInner() {
                 {currentView === "detailed" && (<DetailedStatistics
                     onBack={() => setCurrentView("calendar")}
                 />
-                )}
-                {currentView === "apps" && (
-                    <AppsList
-                        onBack={() => setCurrentView("calendar")}
-                    />
                 )}
                 {currentView === "settings" && <Settings />}
                 {currentView === "googleCalendars" && <GoogleCalendarsView />}

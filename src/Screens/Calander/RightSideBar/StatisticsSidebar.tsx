@@ -56,7 +56,6 @@ function filterGoogleEventsForStats(
 interface StatisticsSidebarProps {
     weekDate: Date;
     onMoreInfo: () => void;
-    onAppsList?: () => void;
     onCategoryClick?: (category: string) => void;
     includeGoogleInStats: boolean;
     calendarsInStats: Set<number>;
@@ -67,7 +66,6 @@ interface StatisticsSidebarProps {
 export default function StatisticsSidebar({
     weekDate,
     onMoreInfo,
-    onAppsList,
     onCategoryClick,
     includeGoogleInStats,
     calendarsInStats,
@@ -520,14 +518,6 @@ export default function StatisticsSidebar({
             <div className="mb-6">
                 <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-semibold text-gray-300">Top Apps</h3>
-                    {onAppsList && (
-                        <button
-                            onClick={onAppsList}
-                            className="text-xs text-blue-400 hover:text-blue-300"
-                        >
-                            More Info
-                        </button>
-                    )}
                 </div>
                 <div className="space-y-2 max-h-72 overflow-y-auto nice-scrollbar pr-1">
                     {displayedApps.map((app, idx) => (
