@@ -1,5 +1,6 @@
 import "./App.css";
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useRef } from "react";
@@ -14,6 +15,7 @@ import GoogleCalendarsView from "./Screens/GoogleCalendarsView.tsx";
 import Settings from "./Screens/Settings.tsx";
 import { ToastProvider, useToast } from "./Componants/Toast.tsx";
 import CalendarAppFilterIndicator from "./Componants/CalendarAppFilterIndicator.tsx";
+import { get_total_statistics } from "./api/statistics.ts";
 import { toErrorString } from "./types/common.ts";
 
 export type View =
@@ -26,6 +28,7 @@ export type View =
     | "settings";
 
 function AppInner() {
+    const queryClient = useQueryClient();
     const { showToast, updateToast, removeToast } = useToast();
     const [currentView, setCurrentView] = useState<View>("calendar");
     const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -161,6 +164,14 @@ function AppInner() {
     }, []);
 
     useEffect(() => {
+        void queryClient.prefetchQuery({
+            queryKey: ["total_statistics"],
+            queryFn: get_total_statistics,
+            staleTime: Infinity,
+        });
+    }, [queryClient]);
+
+    useEffect(() => {
         const onError = (e: Event) => {
             const anyE = e as any;
             const msg = anyE?.error ? toErrorString(anyE.error) : anyE?.message ? String(anyE.message) : "Unknown error";
@@ -191,9 +202,20 @@ function AppInner() {
         }
     };
 
+    const handleSetCurrentView = (newView: View) => {
+        if (newView === "detailed") {
+            void queryClient.fetchQuery({
+                queryKey: ["total_statistics"],
+                queryFn: get_total_statistics,
+                staleTime: 0,
+            });
+        }
+        setCurrentView(newView);
+    };
+
     return (
         <main className="bg-black text-white h-screen flex flex-col">
-            <Header currentView={currentView} setCurrentView={setCurrentView} />
+            <Header currentView={currentView} setCurrentView={handleSetCurrentView} />
 
             {updateAvailable && (
                 <div className="border-b border-gray-700 bg-gray-900 px-4 py-3 flex items-center gap-3">

@@ -85,6 +85,19 @@ fn derive_category(app: &str, regexes: &[CachedCategoryRegex]) -> String {
         .unwrap_or_else(|| "Miscellaneous".to_string())
 }
 
+fn derive_category_cached(
+    app: &str,
+    regexes: &[CachedCategoryRegex],
+    cache: &mut HashMap<String, String>,
+) -> String {
+    if let Some(category) = cache.get(app) {
+        return category.clone();
+    }
+    let category = derive_category(app, regexes);
+    cache.insert(app.to_string(), category.clone());
+    category
+}
+
 fn build_regex_table(
     categories: &[Category],
     cat_regex: &[CategoryRegex],
@@ -439,9 +452,10 @@ pub async fn get_total_statistics() -> Result<WeekStatistics, Error> {
     let mut hourly_durations: HashMap<i32, i64> = HashMap::new();
     let mut day_category_durations: HashMap<(i32, String), i64> = HashMap::new();
     let mut day_totals: HashMap<i64, i64> = HashMap::new();
+    let mut app_category_cache: HashMap<String, String> = HashMap::new();
 
     for log in &logs {
-        let category = derive_category(&log.app, &regex);
+        let category = derive_category_cached(&log.app, &regex, &mut app_category_cache);
         *category_durations.entry(category.clone()).or_insert(0) += log.duration;
         *app_durations.entry(log.app.clone()).or_insert(0) += log.duration;
 

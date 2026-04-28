@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { get_total_statistics, WeekStatistics } from "../api/statistics.ts";
 import { get_logs_by_category, MergedLog } from "../api/Log.ts";
 import { useSettingsStore } from "../stores/settingsStore.ts";
@@ -28,102 +28,94 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
     const [activeTab, setActiveTab] = useState<Tab>("dailyAvg");
     const [displayMode, setDisplayMode] = useState<"percentage" | "time" | "count">("time");
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-    const [categoryAppLogs, setCategoryAppLogs] = useState<{ app: string; totalDuration: number }[]>([]);
-    const [isLoadingCategory, setIsLoadingCategory] = useState(false);
     const { openFromContextMenu, categorizeLayers } = useAppCategorizeMenu({
         extraInvalidateQueryKeys: [["total_statistics"]],
     });
     const calendarAppFilterActive = useCalendarAppFilterActive();
 
-    const { uiMinAppDuration, timeBlockSettings } = useSettingsStore();
+    const uiMinAppDuration = useSettingsStore((state) => state.uiMinAppDuration);
+    const minLogDuration = useSettingsStore((state) => state.timeBlockSettings.minLogDuration);
 
     const sidebarRef = useRef<HTMLDivElement | null>(null);
     const categoriesRef = useRef<HTMLDivElement | null>(null);
 
     const { data: totalStats, isLoading: isTotalLoading } = useQuery({
         queryKey: ["total_statistics"],
-        queryFn: async () => await get_total_statistics(),
+        queryFn: get_total_statistics,
+        staleTime: Infinity,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
     });
 
-    const dailyAvgStats: WeekStatistics | null = totalStats ? {
-        ...totalStats,
-        total_time: totalStats.number_of_active_days > 0
-            ? Math.floor(totalStats.total_time / totalStats.number_of_active_days)
-            : 0,
-        categories: totalStats.categories.map(cat => ({
-            ...cat,
-            total_duration: totalStats.number_of_active_days > 0
-                ? Math.floor(cat.total_duration / totalStats.number_of_active_days)
+    const dailyAvgStats: WeekStatistics | null = useMemo(() => {
+        if (!totalStats) return null;
+        return {
+            ...totalStats,
+            total_time: totalStats.number_of_active_days > 0
+                ? Math.floor(totalStats.total_time / totalStats.number_of_active_days)
                 : 0,
-        })),
-        top_apps: totalStats.top_apps.map(app => ({
-            ...app,
-            total_duration: totalStats.number_of_active_days > 0
-                ? Math.floor(app.total_duration / totalStats.number_of_active_days)
-                : 0,
-        })),
-        all_apps: totalStats.all_apps.map(app => ({
-            ...app,
-            total_duration: totalStats.number_of_active_days > 0
-                ? Math.floor(app.total_duration / totalStats.number_of_active_days)
-                : 0,
-        })),
-        hourly_distribution: totalStats.number_of_active_days > 0
-            ? totalStats.hourly_distribution.map(h => ({
-                ...h,
-                total_duration: Math.floor(h.total_duration / totalStats.number_of_active_days),
-            }))
-            : totalStats.hourly_distribution.map(h => ({
-                ...h,
-                total_duration: 0,
+            categories: totalStats.categories.map(cat => ({
+                ...cat,
+                total_duration: totalStats.number_of_active_days > 0
+                    ? Math.floor(cat.total_duration / totalStats.number_of_active_days)
+                    : 0,
             })),
-    } : null;
+            top_apps: totalStats.top_apps.map(app => ({
+                ...app,
+                total_duration: totalStats.number_of_active_days > 0
+                    ? Math.floor(app.total_duration / totalStats.number_of_active_days)
+                    : 0,
+            })),
+            all_apps: totalStats.all_apps.map(app => ({
+                ...app,
+                total_duration: totalStats.number_of_active_days > 0
+                    ? Math.floor(app.total_duration / totalStats.number_of_active_days)
+                    : 0,
+            })),
+            hourly_distribution: totalStats.number_of_active_days > 0
+                ? totalStats.hourly_distribution.map(h => ({
+                    ...h,
+                    total_duration: Math.floor(h.total_duration / totalStats.number_of_active_days),
+                }))
+                : totalStats.hourly_distribution.map(h => ({
+                    ...h,
+                    total_duration: 0,
+                })),
+        };
+    }, [totalStats]);
 
     const stats: WeekStatistics | null = activeTab === "dailyAvg" ? dailyAvgStats : (totalStats ?? null);
 
-    useEffect(() => {
-        const run = async () => {
-            if (!selectedCategory || !totalStats) {
-                setCategoryAppLogs([]);
-                setIsLoadingCategory(false);
-                return;
-            }
-
-            setIsLoadingCategory(true);
-            try {
-                const startTime = totalStats.first_active_day ? totalStats.first_active_day : 0;
-                const endTime = Math.floor(Date.now() / 1000);
-
-                const result: MergedLog[] = await get_logs_by_category({
-                    category: selectedCategory,
-                    start_time: startTime,
-                    end_time: endTime,
-                    min_log_duration: timeBlockSettings.minLogDuration,
-                });
-
-                const logMap = new Map<string, { app: string; totalDuration: number }>();
-                result.forEach((log) => {
-                    const existing = logMap.get(log.app);
-                    if (existing) {
-                        existing.totalDuration += log.duration;
-                    } else {
-                        logMap.set(log.app, { app: log.app, totalDuration: log.duration });
-                    }
-                });
-
-                setCategoryAppLogs(
-                    Array.from(logMap.values()).sort((a, b) => b.totalDuration - a.totalDuration)
-                );
-            } catch (e) {
-                console.error("Error fetching app contributions:", e);
-                setCategoryAppLogs([]);
-            } finally {
-                setIsLoadingCategory(false);
-            }
-        };
-
-        run();
-    }, [selectedCategory, totalStats, timeBlockSettings.minLogDuration]);
+    const categoryStartTime = totalStats?.first_active_day ?? 0;
+    const categoryQueryKey = selectedCategory
+        ? ["category_app_logs", selectedCategory, categoryStartTime, minLogDuration]
+        : ["category_app_logs", "none"];
+    const { data: categoryAppLogs = [], isLoading: isLoadingCategory } = useQuery({
+        queryKey: categoryQueryKey,
+        enabled: !!selectedCategory,
+        queryFn: async () => {
+            if (!selectedCategory) return [];
+            const result: MergedLog[] = await get_logs_by_category({
+                category: selectedCategory,
+                start_time: categoryStartTime,
+                end_time: Math.floor(Date.now() / 1000),
+                min_log_duration: minLogDuration,
+            });
+            const logMap = new Map<string, { app: string; totalDuration: number }>();
+            result.forEach((log) => {
+                const existing = logMap.get(log.app);
+                if (existing) {
+                    existing.totalDuration += log.duration;
+                } else {
+                    logMap.set(log.app, { app: log.app, totalDuration: log.duration });
+                }
+            });
+            return Array.from(logMap.values()).sort((a, b) => b.totalDuration - a.totalDuration);
+        },
+        staleTime: Infinity,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+    });
 
     useEffect(() => {
         if (!selectedCategory) return;
@@ -166,32 +158,73 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
         return Math.floor(seconds / numberOfActiveDays);
     };
 
-    const scaledCategoryAppList = categoryAppLogs
-        .map((a) => ({
-            ...a,
-            totalDuration: scaledDuration(a.totalDuration),
-        }))
-        .sort((a, b) => b.totalDuration - a.totalDuration);
+    const scaledCategoryAppList = useMemo(
+        () =>
+            categoryAppLogs
+                .map((a) => ({
+                    ...a,
+                    totalDuration: scaledDuration(a.totalDuration),
+                }))
+                .sort((a, b) => b.totalDuration - a.totalDuration),
+        [categoryAppLogs, activeTab, numberOfActiveDays]
+    );
 
     const selectedCategoryTotalDuration = selectedCategoryStat?.total_duration ?? 0;
     type DisplayApp = { app: string; totalDuration: number };
 
-    const filteredScaledCategoryAppList = scaledCategoryAppList.filter((a) => a.totalDuration >= uiMinAppDuration);
+    const filteredScaledCategoryAppList = useMemo(
+        () => scaledCategoryAppList.filter((a) => a.totalDuration >= uiMinAppDuration),
+        [scaledCategoryAppList, uiMinAppDuration]
+    );
 
-    const sidebarApps: DisplayApp[] = selectedCategory
-        ? filteredScaledCategoryAppList
-        : stats.all_apps
-            .filter((app) => app.total_duration >= uiMinAppDuration)
-            .map((app) => ({
-                app: app.app,
-                totalDuration: app.total_duration,
-            }));
+    const sidebarApps: DisplayApp[] = useMemo(
+        () =>
+            selectedCategory
+                ? filteredScaledCategoryAppList
+                : stats.all_apps
+                    .filter((app) => app.total_duration >= uiMinAppDuration)
+                    .map((app) => ({
+                        app: app.app,
+                        totalDuration: app.total_duration,
+                    })),
+        [selectedCategory, filteredScaledCategoryAppList, stats.all_apps, uiMinAppDuration]
+    );
 
     const sidebarAppsFiltered = sidebarApps;
     const sidebarMaxDuration = Math.max(...sidebarAppsFiltered.map((a) => a.totalDuration), 1);
     const sidebarPercentDenom = selectedCategory
         ? selectedCategoryTotalDuration
         : stats.total_time;
+    const hourlyPoints = useMemo(
+        () => stats.hourly_distribution.filter((h) => h.hour >= 0 && h.hour <= 24),
+        [stats.hourly_distribution]
+    );
+    const maxHourlyMinutes = useMemo(
+        () => Math.max(...hourlyPoints.map((h) => h.total_duration / 60), 1),
+        [hourlyPoints]
+    );
+    const hourlyLinePath = useMemo(
+        () =>
+            hourlyPoints
+                .map((h, idx) => {
+                    const x = (h.hour / 24) * 700 + 50;
+                    const y = 190 - ((h.total_duration / 60) / maxHourlyMinutes) * 160;
+                    return `${idx === 0 ? "M" : "L"} ${x} ${y}`;
+                })
+                .join(" "),
+        [hourlyPoints, maxHourlyMinutes]
+    );
+    const hourlyFillPath = useMemo(
+        () =>
+            `M 50 190 ${hourlyPoints
+                .map((h) => {
+                    const x = (h.hour / 24) * 700 + 50;
+                    const y = 190 - ((h.total_duration / 60) / maxHourlyMinutes) * 160;
+                    return `L ${x} ${y}`;
+                })
+                .join(" ")} L ${((24) / 24) * 700 + 50} 190 Z`,
+        [hourlyPoints, maxHourlyMinutes]
+    );
 
     return (
         <div className="flex h-full overflow-hidden">
@@ -382,29 +415,13 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                                         );
                                     })}
                                     <path
-                                        d={`M ${stats.hourly_distribution
-                                            .filter(h => h.hour >= 0 && h.hour <= 24)
-                                            .map((h, idx) => {
-                                                const x = (h.hour / 24) * 700 + 50;
-                                                const maxMinutes = Math.max(...stats.hourly_distribution.map(h => h.total_duration / 60), 1);
-                                                const y = 190 - ((h.total_duration / 60) / maxMinutes) * 160;
-                                                return `${idx === 0 ? 'M' : 'L'} ${x} ${y}`;
-                                            })
-                                            .join(' ')}`}
+                                        d={hourlyLinePath}
                                         fill="none"
                                         stroke="#f97316"
                                         strokeWidth="2"
                                     />
                                     <path
-                                        d={`M 50 190 ${stats.hourly_distribution
-                                            .filter(h => h.hour >= 0 && h.hour <= 24)
-                                            .map((h) => {
-                                                const x = (h.hour / 24) * 700 + 50;
-                                                const maxMinutes = Math.max(...stats.hourly_distribution.map(h => h.total_duration / 60), 1);
-                                                const y = 190 - ((h.total_duration / 60) / maxMinutes) * 160;
-                                                return `L ${x} ${y}`;
-                                            })
-                                            .join(' ')} L ${((24) / 24) * 700 + 50} 190 Z`}
+                                        d={hourlyFillPath}
                                         fill="url(#hourlyGradient)"
                                     />
                                 </svg>
