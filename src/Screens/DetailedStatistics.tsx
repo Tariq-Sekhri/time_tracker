@@ -136,18 +136,8 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
         };
     }, [selectedCategory]);
 
-    if (!stats) {
-        const loadingTab = activeTab === "dailyAvg" ? "Daily Avg" : "Total";
-        const isLoading = isTotalLoading;
-        return (
-            <div className="p-6">
-                <div className="text-gray-500">{isLoading ? `Loading ${loadingTab} statistics...` : "No statistics available"}</div>
-            </div>
-        );
-    }
-
     const selectedCategoryStat = selectedCategory
-        ? stats.categories.find((c) => c.category === selectedCategory)
+        ? stats?.categories.find((c) => c.category === selectedCategory)
         : null;
 
     const numberOfActiveDays = totalStats?.number_of_active_days ?? 0;
@@ -181,23 +171,23 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
         () =>
             selectedCategory
                 ? filteredScaledCategoryAppList
-                : stats.all_apps
+                : (stats?.all_apps ?? [])
                     .filter((app) => app.total_duration >= uiMinAppDuration)
                     .map((app) => ({
                         app: app.app,
                         totalDuration: app.total_duration,
                     })),
-        [selectedCategory, filteredScaledCategoryAppList, stats.all_apps, uiMinAppDuration]
+        [selectedCategory, filteredScaledCategoryAppList, stats?.all_apps, uiMinAppDuration]
     );
 
     const sidebarAppsFiltered = sidebarApps;
     const sidebarMaxDuration = Math.max(...sidebarAppsFiltered.map((a) => a.totalDuration), 1);
     const sidebarPercentDenom = selectedCategory
         ? selectedCategoryTotalDuration
-        : stats.total_time;
+        : (stats?.total_time ?? 0);
     const hourlyPoints = useMemo(
-        () => stats.hourly_distribution.filter((h) => h.hour >= 0 && h.hour <= 24),
-        [stats.hourly_distribution]
+        () => (stats?.hourly_distribution ?? []).filter((h) => h.hour >= 0 && h.hour <= 24),
+        [stats?.hourly_distribution]
     );
     const maxHourlyMinutes = useMemo(
         () => Math.max(...hourlyPoints.map((h) => h.total_duration / 60), 1),
@@ -225,6 +215,15 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                 .join(" ")} L ${((24) / 24) * 700 + 50} 190 Z`,
         [hourlyPoints, maxHourlyMinutes]
     );
+
+    if (!stats) {
+        const loadingTab = activeTab === "dailyAvg" ? "Daily Avg" : "Total";
+        return (
+            <div className="p-6">
+                <div className="text-gray-500">{isTotalLoading ? `Loading ${loadingTab} statistics...` : "No statistics available"}</div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex h-full overflow-hidden">

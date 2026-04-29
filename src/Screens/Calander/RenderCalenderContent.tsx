@@ -64,7 +64,6 @@ interface RenderCalendarContentProps {
     toggleCalendarInStats: (calendarId: number) => void;
     includeGoogleInStats: boolean;
     setIncludeGoogleInStats: (v: boolean) => void;
-    onTimeBlockContextMenu?: (e: globalThis.MouseEvent, appNames: string[]) => void;
 }
 
 export default function RenderCalendarContent({
@@ -86,7 +85,6 @@ export default function RenderCalendarContent({
     toggleCalendarInStats,
     includeGoogleInStats,
     setIncludeGoogleInStats,
-    onTimeBlockContextMenu,
 }: RenderCalendarContentProps) {
     const queryClient = useQueryClient();
     const { showToast, updateToast, removeToast } = useToast();
@@ -780,25 +778,6 @@ export default function RenderCalendarContent({
                         initialDate={formatLocalDateYMD(weekStart)}
                         events={events}
                         eventClick={handleEventClick}
-                        eventDidMount={(info) => {
-                            const eventType = info.event.extendedProps?.type as string | undefined;
-                            if (eventType !== "timeblock") return;
-                            const handler = (e: globalThis.MouseEvent) => {
-                                const apps = (info.event.extendedProps?.apps ?? []) as { app: string; totalDuration: number }[];
-                                const appNames = Array.from(new Set(apps.map((a) => a.app)));
-                                if (appNames.length === 0) return;
-                                onTimeBlockContextMenu?.(e, appNames);
-                            };
-                            info.el.addEventListener("contextmenu", handler);
-                            (info.el as HTMLElement & { __ttContextMenuHandler?: (e: globalThis.MouseEvent) => void }).__ttContextMenuHandler = handler;
-                        }}
-                        eventWillUnmount={(info) => {
-                            const el = info.el as HTMLElement & { __ttContextMenuHandler?: (e: globalThis.MouseEvent) => void };
-                            const handler = el.__ttContextMenuHandler;
-                            if (!handler) return;
-                            info.el.removeEventListener("contextmenu", handler);
-                            delete el.__ttContextMenuHandler;
-                        }}
                         allDaySlot={false}
                         nowIndicator={true}
                         headerToolbar={false}

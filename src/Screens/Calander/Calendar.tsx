@@ -1,7 +1,7 @@
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 import {get_categories} from "../../api/Category.ts";
 import {get_logs_for_time_block, get_logs_by_category, get_log_by_id} from "../../api/Log.ts";
-import {get_week} from "../../api/week.ts";
+import {get_week, get_week_for_app_filter} from "../../api/week.ts";
 import { adjustInstantToCalendarDayBoundary, getCalendarDayRangeUnix, getWeekRange } from "../../utils.ts";
 import {useState, useMemo, useEffect, useRef} from "react";
 import {EventClickArg, DatesSetArg} from "@fullcalendar/core";
@@ -16,6 +16,7 @@ import {get_google_calendars, GoogleCalendar} from "../../api/GoogleCalendar.ts"
 import {getCachedCalendars, setCachedCalendars} from "../../stores/googleCalendarCache.ts";
 import {getCurrentWindow} from "@tauri-apps/api/window";
 import { useSettingsStore } from "../../stores/settingsStore.ts";
+import { useCalendarAppFilterActive } from "../../stores/calendarAppFilterStore.ts";
 import {
     loadCalendarViewPrefs,
     saveCalendarViewPrefs,
@@ -29,6 +30,10 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const {date, setDate} = useDateStore();
     const { timeBlockSettings, calendarStartHour } = useSettingsStore();
     const [includeGoogleInStats, setIncludeGoogleInStats] = useState(false);
+    const calendarAppFilterActive = useCalendarAppFilterActive();
+    const [appFilterPrevWeek, setAppFilterPrevWeek] = useState<Date | null>(null);
+    const [appFilterNextWeek, setAppFilterNextWeek] = useState<Date | null>(null);
+    const [isResolvingAppFilterWeeks, setIsResolvingAppFilterWeeks] = useState(false);
 
     const { data: viewPrefs } = useQuery({
         queryKey: ["calendarViewPrefs"],
@@ -817,6 +822,102 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         setSelectedCategory(null);
     };
 
+    const jumpToPrevAppWeek = () => {
+        if (!calendarAppFilterActive || !appFilterPrevWeek) {
+            return;
+        }
+        setDate(appFilterPrevWeek);
+        setSelectedEvent(null);
+        setSelectedEventLogs([]);
+        setSelectedDate(null);
+        setSelectedCategory(null);
+    };
+
+    const jumpToNextAppWeek = () => {
+        if (!calendarAppFilterActive || !appFilterNextWeek) {
+            return;
+        }
+        setDate(appFilterNextWeek);
+        setSelectedEvent(null);
+        setSelectedEventLogs([]);
+        setSelectedDate(null);
+        setSelectedCategory(null);
+    };
+
+    useEffect(() => {
+        if (!calendarAppFilterActive) {
+            setAppFilterPrevWeek(null);
+            setAppFilterNextWeek(null);
+            setIsResolvingAppFilterWeeks(false);
+            return;
+        }
+
+        let cancelled = false;
+        const findWeeks = async () => {
+            setIsResolvingAppFilterWeeks(true);
+            const baseWeek = getWeekStart(date, calendarStartHour);
+            const nowWeek = getWeekStart(adjustInstantToCalendarDayBoundary(new Date(), calendarStartHour), calendarStartHour);
+            const minBoundary = new Date(2000, 0, 1);
+            const maxSteps = 520;
+
+            const hasAppInWeek = async (targetWeek: Date): Promise<boolean> => {
+                const rows = await get_week_for_app_filter(targetWeek, calendarAppFilterActive, timeBlockSettings, calendarStartHour);
+                return rows.length > 0;
+            };
+
+            const findPrev = async (): Promise<Date | null> => {
+                const cursor = new Date(baseWeek);
+                cursor.setDate(cursor.getDate() - 7);
+                for (let i = 0; i < maxSteps; i += 1) {
+                    if (cursor.getTime() < minBoundary.getTime()) {
+                        return null;
+                    }
+                    if (await hasAppInWeek(cursor)) {
+                        return new Date(cursor);
+                    }
+                    cursor.setDate(cursor.getDate() - 7);
+                }
+                return null;
+            };
+
+            const findNext = async (): Promise<Date | null> => {
+                const cursor = new Date(baseWeek);
+                cursor.setDate(cursor.getDate() + 7);
+                for (let i = 0; i < maxSteps; i += 1) {
+                    if (cursor.getTime() > nowWeek.getTime()) {
+                        return null;
+                    }
+                    if (await hasAppInWeek(cursor)) {
+                        return new Date(cursor);
+                    }
+                    cursor.setDate(cursor.getDate() + 7);
+                }
+                return null;
+            };
+
+            try {
+                const [prevWeek, nextWeek] = await Promise.all([findPrev(), findNext()]);
+                if (cancelled) {
+                    return;
+                }
+                setAppFilterPrevWeek(prevWeek);
+                setAppFilterNextWeek(nextWeek);
+            } finally {
+                if (!cancelled) {
+                    setIsResolvingAppFilterWeeks(false);
+                }
+            }
+        };
+
+        void findWeeks();
+        return () => {
+            cancelled = true;
+        };
+    }, [calendarAppFilterActive, date, calendarStartHour, timeBlockSettings]);
+
+    const appJumpNextDisabled = !calendarAppFilterActive || isResolvingAppFilterWeeks || !appFilterNextWeek;
+    const appJumpPrevDisabled = !calendarAppFilterActive || isResolvingAppFilterWeeks || !appFilterPrevWeek;
+
     const headerWeekStart = getWeekStart(date, calendarStartHour);
     const weekEnd = new Date(headerWeekStart);
     weekEnd.setDate(weekEnd.getDate() + 6);
@@ -829,7 +930,9 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     return (
         <div className="flex flex-col flex-1 min-h-0 w-full">
             <CalenderHeader headerTitle={headerTitle} onClick={goToPrevWeek} d={date} onClick1={goToNextWeek}
-                            onClick2={goToToday} calendarStartHour={calendarStartHour}/>
+                            onClick2={goToToday} calendarStartHour={calendarStartHour}
+                            appJumpPrev={jumpToPrevAppWeek} appJumpNext={jumpToNextAppWeek}
+                            appJumpPrevDisabled={appJumpPrevDisabled} appJumpNextDisabled={appJumpNextDisabled}/>
 
             <div className="flex flex-1 overflow-hidden min-h-0">
                 <div className="flex-1 overflow-hidden min-h-0">
