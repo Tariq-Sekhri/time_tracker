@@ -23,6 +23,33 @@ function formatDate(timestamp: number): string {
     return new Date(timestamp * 1000).toLocaleDateString("en-US", {month: "short", day: "numeric", year: "numeric"});
 }
 
+function formatCalendarSpanSinceFirstActiveDay(firstActiveDayUnix: number): string {
+    const start = new Date(firstActiveDayUnix * 1000);
+    const end = new Date();
+    let years = end.getFullYear() - start.getFullYear();
+    let months = end.getMonth() - start.getMonth();
+    let days = end.getDate() - start.getDate();
+    if (days < 0) {
+        months -= 1;
+        days += new Date(end.getFullYear(), end.getMonth(), 0).getDate();
+    }
+    if (months < 0) {
+        years -= 1;
+        months += 12;
+    }
+    const parts: string[] = [];
+    if (years > 0) {
+        parts.push(`${years} year${years === 1 ? "" : "s"}`);
+    }
+    if (months > 0) {
+        parts.push(`${months} month${months === 1 ? "" : "s"}`);
+    }
+    if (days > 0 || parts.length === 0) {
+        parts.push(`${days} day${days === 1 ? "" : "s"}`);
+    }
+    return parts.join(" ");
+}
+
 
 export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
     const [activeTab, setActiveTab] = useState<Tab>("dailyAvg");
@@ -263,7 +290,9 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                         <div className="bg-gray-900 p-4 rounded">
                             <div className="text-sm text-gray-400 mb-1">First Active Day</div>
                             <div className="text-lg font-semibold">
-                                {totalStats!.first_active_day ? formatDate(totalStats!.first_active_day) : "N/A"}
+                                {totalStats!.first_active_day
+                                    ? `${formatDate(totalStats!.first_active_day)} (${formatCalendarSpanSinceFirstActiveDay(totalStats!.first_active_day)})`
+                                    : "N/A"}
                             </div>
                         </div>
                     </div>
