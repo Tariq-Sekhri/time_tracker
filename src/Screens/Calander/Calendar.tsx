@@ -18,6 +18,7 @@ import {getCurrentWindow} from "@tauri-apps/api/window";
 import { useSettingsStore } from "../../stores/settingsStore.ts";
 import { useCalendarAppFilterActive } from "../../stores/calendarAppFilterStore.ts";
 import {
+    LEGACY_INCLUDE_GOOGLE_STATS_KEY,
     loadCalendarViewPrefs,
     saveCalendarViewPrefs,
     type CalendarViewPrefsV1,
@@ -30,6 +31,12 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const {date, setDate} = useDateStore();
     const { timeBlockSettings, calendarStartHour } = useSettingsStore();
     const [includeGoogleInStats, setIncludeGoogleInStats] = useState(false);
+    const updateIncludeGoogleInStats = (v: boolean) => {
+        try {
+            localStorage.setItem(LEGACY_INCLUDE_GOOGLE_STATS_KEY, v ? "1" : "0");
+        } catch {}
+        setIncludeGoogleInStats(v);
+    };
     const calendarAppFilterActive = useCalendarAppFilterActive();
     const [appFilterPrevWeek, setAppFilterPrevWeek] = useState<Date | null>(null);
     const [appFilterNextWeek, setAppFilterNextWeek] = useState<Date | null>(null);
@@ -64,9 +71,19 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const prevDisplayCalendarsLenRef = useRef<number | null>(null);
 
     useEffect(() => {
-        if (viewPrefs) {
-            setIncludeGoogleInStats(viewPrefs.includeGoogleInStats);
-        }
+        if (!viewPrefs) return;
+        try {
+            const raw = localStorage.getItem(LEGACY_INCLUDE_GOOGLE_STATS_KEY);
+            if (raw === "1") {
+                setIncludeGoogleInStats(true);
+                return;
+            }
+            if (raw === "0") {
+                setIncludeGoogleInStats(false);
+                return;
+            }
+        } catch {}
+        setIncludeGoogleInStats(viewPrefs.includeGoogleInStats);
     }, [viewPrefs]);
 
     useEffect(() => {
@@ -955,7 +972,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             calendarsInStats={calendarsInStats}
                             toggleCalendarInStats={toggleCalendarInStats}
                             includeGoogleInStats={includeGoogleInStats}
-                            setIncludeGoogleInStats={setIncludeGoogleInStats}
+                            setIncludeGoogleInStats={updateIncludeGoogleInStats}
                         />
                     </div>
                 </div>
