@@ -523,6 +523,7 @@ export default function StatisticsSidebar({
                     {displayedApps.map((app, idx) => (
                         <div
                             key={`${app.app}-${idx}`}
+                            data-tt-app-context
                             onClick={(e) => logRowLeftClickCalendarFilter(e, app.app)}
                             onContextMenu={(e) => openFromContextMenu(e, app.app)}
                             className={`flex items-center justify-between rounded px-2 cursor-pointer select-text ${calendarAppFilterActive === app.app

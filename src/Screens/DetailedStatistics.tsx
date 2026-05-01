@@ -498,6 +498,7 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                             return (
                                             <div
                                                 key={app.app}
+                                                data-tt-app-context
                                                 onClick={(e) => logRowLeftClickCalendarFilter(e, app.app)}
                                                 onContextMenu={(e) => openFromContextMenu(e, app.app)}
                                                 className={`rounded px-2 py-1 cursor-pointer select-text ${calendarAppFilterActive === app.app

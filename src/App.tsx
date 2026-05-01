@@ -46,6 +46,18 @@ function AppInner() {
     }, [showToast, updateToast, removeToast]);
 
     useEffect(() => {
+        const onCtx = (e: MouseEvent) => {
+            const t = e.target;
+            if (!(t instanceof Element)) return;
+            if (t.closest("[data-tt-app-context]")) {
+                e.preventDefault();
+            }
+        };
+        document.addEventListener("contextmenu", onCtx, true);
+        return () => document.removeEventListener("contextmenu", onCtx, true);
+    }, []);
+
+    useEffect(() => {
         let unlistenFn: (() => void) | null = null;
         let unlistenErr: (() => void) | null = null;
         let unlistenDownloading: (() => void) | null = null;

@@ -187,7 +187,6 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
         e.preventDefault();
         e.stopPropagation();
         const pad = 8;
-        const cursorGap = 4;
         const estimated = lastMenuSizeRef.current ?? { width: 288, height: 256 };
         const viewportW = window.innerWidth;
         const viewportH = window.innerHeight;
@@ -200,11 +199,14 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
         if (x < pad) {
             x = pad;
         }
-        if (y + estimated.height + pad > viewportH) {
-            y = Math.max(pad, e.clientY - estimated.height - cursorGap);
-        }
-        if (y < pad) {
-            y = pad;
+        const swapPointY = viewportH * 0.45;
+        const aboveY = e.clientY - estimated.height - pad;
+        const belowY = e.clientY + pad;
+        const maxY = viewportH - estimated.height - pad;
+        if (e.clientY <= swapPointY) {
+            y = Math.max(pad, Math.min(belowY, maxY));
+        } else {
+            y = Math.max(pad, Math.min(aboveY, maxY));
         }
 
         setMenu({ x, y, appNames });
@@ -222,16 +224,16 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
             {menu && (
                 <div
                     ref={menuRef}
-                    className="fixed z-[200] min-w-[12rem] max-h-64 overflow-y-auto nice-scrollbar rounded-lg border border-gray-600 bg-gray-900 py-1 shadow-xl"
+                    className="fixed z-[200] min-w-[12rem] w-max max-w-[min(22rem,calc(100vw-2rem))] max-h-64 overflow-y-auto nice-scrollbar rounded-lg border border-gray-600 bg-gray-900 py-1 shadow-xl"
                     style={{ left: menu.x, top: menu.y }}
                     role="menu"
                 >
                     <div
-                        className="px-3 py-2 text-xs border-b border-gray-700 space-y-1 max-w-[min(24rem,calc(100vw-2rem))]"
+                        className="px-3 py-2 text-xs border-b border-gray-700 space-y-1 min-w-0"
                         title={isBatchMenu ? `${menu.appNames.length} apps` : menu.appNames[0]}
                     >
-                        <div className="flex items-center justify-between gap-2">
-                            <div className="text-gray-300 font-mono break-all leading-snug">
+                        <div className="flex items-center justify-between gap-2 min-w-0">
+                            <div className="text-gray-300 font-mono truncate min-w-0 flex-1 leading-snug">
                                 {isBatchMenu ? `${menu.appNames.length} apps selected` : `Regex: ${menu.appNames[0]}`}
                             </div>
                             <button
@@ -251,7 +253,7 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
                                 </svg>
                             </button>
                         </div>
-                        <div className="text-gray-400 break-words leading-snug">
+                        <div className="text-gray-400 break-words leading-snug min-w-0">
                             category: {isBatchMenu ? "Assign all selected apps" : (menuRuleInfo?.categoryName ?? "—")}
                         </div>
                     </div>
@@ -260,7 +262,7 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
                             key={cat.id}
                             type="button"
                             disabled={assignAppCategoryMutation.isPending}
-                            className="w-full px-3 py-2 text-left text-sm text-gray-200 hover:bg-gray-800 disabled:opacity-50"
+                            className="w-full min-w-0 px-3 py-2 text-left text-sm text-gray-200 hover:bg-gray-800 disabled:opacity-50 break-words whitespace-normal"
                             onClick={() =>
                                 assignAppCategoryMutation.mutate({
                                     catId: cat.id,
@@ -275,7 +277,7 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
                     <button
                         type="button"
                         disabled={isCountingSkipLogs || addSkipPatternMutation.isPending}
-                        className="w-full px-3 py-2 text-left text-sm text-red-300 hover:bg-gray-800 disabled:opacity-50"
+                        className="w-full min-w-0 px-3 py-2 text-left text-sm text-red-300 hover:bg-gray-800 disabled:opacity-50 break-words whitespace-normal"
                         onClick={handleAddToSkippedApps}
                     >
                         {isCountingSkipLogs

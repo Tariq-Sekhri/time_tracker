@@ -203,7 +203,10 @@ export default function AppsInTimeBlock({
     };
 
     return (
-        <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
+        <div
+            className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0"
+            data-tt-app-context
+        >
             <div
                 className={`flex-shrink-0 ${isCategoryFilter ? 'mb-4' : 'mb-6'}`}
                 onContextMenu={(e) => {

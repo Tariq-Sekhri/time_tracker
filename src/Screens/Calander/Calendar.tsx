@@ -61,7 +61,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const [visibleCategories, setVisibleCategories] = useState<Set<string>>(new Set());
     const [visibleCalendars, setVisibleCalendars] = useState<Set<number>>(new Set());
     const [calendarsInStats, setCalendarsInStats] = useState<Set<number>>(new Set());
-    const { categorizeLayers } = useAppCategorizeMenu({
+    const { openFromContextMenuMany, categorizeLayers } = useAppCategorizeMenu({
         extraInvalidateQueryKeys: [["logsForAppCalendar"]],
     });
     const queryClient = useQueryClient();
@@ -973,6 +973,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             toggleCalendarInStats={toggleCalendarInStats}
                             includeGoogleInStats={includeGoogleInStats}
                             setIncludeGoogleInStats={updateIncludeGoogleInStats}
+                            onTimeBlockContextMenu={openFromContextMenuMany}
                         />
                     </div>
                 </div>
