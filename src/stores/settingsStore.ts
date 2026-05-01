@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { storageKey } from "../storageKey.ts";
+import { getAppMetadata, setAppMetadata } from "../api/appMetadata.ts";
 
 export type TimeBlockSettings = {
     minLogDuration: number;
@@ -43,7 +43,7 @@ export type SettingsState = PersistedSettings & {
     resetSettings: () => void;
 };
 
-const STORAGE_KEY = storageKey("time-tracker:settings");
+const STORAGE_KEY = "time-tracker:settings";
 
 export const RIGHT_SIDEBAR_WIDTH_MIN = 280;
 export const RIGHT_SIDEBAR_WIDTH_MAX = 800;
@@ -96,10 +96,8 @@ function normalizeFieldLocks(raw: unknown): FieldLocks {
     return out;
 }
 
-function loadStoredSettings(): PersistedSettings {
+function parseStoredSettings(raw: string): PersistedSettings | null {
     try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return DEFAULT_SETTINGS;
         const parsed = JSON.parse(raw) as any;
 
         const calendarStartHour = isFiniteNumber(parsed?.calendarStartHour)
@@ -157,22 +155,21 @@ function loadStoredSettings(): PersistedSettings {
             fieldLocks,
         };
     } catch {
-        return DEFAULT_SETTINGS;
+        return null;
     }
+}
+
+async function loadSettingsFromDb(): Promise<PersistedSettings | null> {
+    const raw = await getAppMetadata(STORAGE_KEY);
+    if (!raw) return null;
+    return parseStoredSettings(raw);
 }
 
 function persistSettings(settings: PersistedSettings): void {
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-    } catch (e) {
-        console.error(
-            "[settingsStore] Failed to persist settings to localStorage (quota or access denied):",
-            e
-        );
-    }
+    setAppMetadata(STORAGE_KEY, JSON.stringify(settings)).catch(() => {});
 }
 
-const initial = loadStoredSettings();
+const initial = DEFAULT_SETTINGS;
 
 function persistedSlice(state: SettingsState): PersistedSettings {
     return {
@@ -338,3 +335,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
         },
     };
 });
+
+export async function hydrateSettingsStore(): Promise<void> {
+    const stored = await loadSettingsFromDb().catch(() => null);
+    if (!stored) return;
+    useSettingsStore.setState(stored);
+}

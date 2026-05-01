@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { get_day_statistics } from "../../../api/statistics.ts";
 import { getCalendarDayRangeUnix } from "../../../utils.ts";
 import { useSettingsStore } from "../../../stores/settingsStore.ts";
@@ -59,19 +59,12 @@ export default function DayStatisticsSidebar({
         isLoading,
         error,
         isError,
-        isFetching,
-        failureCount,
     } = useQuery({
         queryKey: ["day_statistics", dayStart, dayEnd],
         queryFn: async () => {
             if (!dayStart || !dayEnd) return null;
-            console.log("[DayStats] queryFn start", { dayStart, dayEnd });
             try {
                 const stats = await get_day_statistics(dayStart, dayEnd);
-                console.log("[DayStats] queryFn ok", {
-                    categories: stats.categories?.length,
-                    total_time: stats.total_time,
-                });
                 return stats;
             } catch (e) {
                 console.error("[DayStats] queryFn threw:", e);
@@ -81,18 +74,6 @@ export default function DayStatisticsSidebar({
         },
         enabled: dayStatsEnabled,
     });
-
-    useEffect(() => {
-        console.log("[DayStats] query state", {
-            enabled: dayStatsEnabled,
-            isLoading,
-            isFetching,
-            isError,
-            failureCount,
-            hasData: !!dayStats,
-            errorText: error ? toErrorString(error) : null,
-        });
-    }, [dayStatsEnabled, isLoading, isFetching, isError, failureCount, dayStats, error]);
 
     const {
         data: googleEvents,

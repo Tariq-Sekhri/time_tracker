@@ -14,3 +14,26 @@ pub async fn set_calendar_view_prefs(json: String) -> Result<(), Error> {
     app_metadata_kv::metadata_set(&pool, META_CALENDAR_VIEW_PREFS, &json).await?;
     Ok(())
 }
+
+#[tauri::command]
+pub async fn get_app_metadata(key: String) -> Result<Option<String>, Error> {
+    let pool = get_pool().await?;
+    Ok(app_metadata_kv::metadata_get(&pool, &key).await?)
+}
+
+#[tauri::command]
+pub async fn set_app_metadata(key: String, value: String) -> Result<(), Error> {
+    let pool = get_pool().await?;
+    app_metadata_kv::metadata_set(&pool, &key, &value).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_app_metadata(key: String) -> Result<(), Error> {
+    let pool = get_pool().await?;
+    sqlx::query("DELETE FROM app_metadata WHERE key = ?1")
+        .bind(&key)
+        .execute(&pool)
+        .await?;
+    Ok(())
+}

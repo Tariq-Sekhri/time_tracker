@@ -20,10 +20,10 @@ import {
 import { getWeekRange } from "../../utils.ts";
 import { getCachedEvents, setCachedEvents } from "../../stores/googleCalendarCache.ts";
 import { useToast } from "../../Componants/Toast.tsx";
-import { storageKey } from "../../storageKey.ts";
+import { getAppMetadata, setAppMetadata } from "../../api/appMetadata.ts";
 import { useCalendarAppFilterActive } from "../../stores/calendarAppFilterStore.ts";
 
-const LEFT_SIDEBAR_COLLAPSED_KEY = storageKey("time-tracker:left-sidebar-collapsed");
+const LEFT_SIDEBAR_COLLAPSED_KEY = "time-tracker:left-sidebar-collapsed";
 
 function IconWeekGrid({ className }: { className?: string }) {
     return (
@@ -93,13 +93,7 @@ export default function RenderCalendarContent({
     const lastGoogleEventsErrorToastRef = useRef<string | null>(null);
     const calendarHostRef = useRef<HTMLDivElement>(null);
     const [isRelogging, setIsRelogging] = useState(false);
-    const [isLeftCollapsed, setIsLeftCollapsed] = useState(() => {
-        try {
-            return localStorage.getItem(LEFT_SIDEBAR_COLLAPSED_KEY) === "1";
-        } catch {
-            return false;
-        }
-    });
+    const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
 
     const { calendarStartHour, calendarHeight, timeBlockSettings } = useSettingsStore();
     const calendarAppFilter = useCalendarAppFilterActive();
@@ -141,7 +135,7 @@ export default function RenderCalendarContent({
     const slotMaxTime = `${String(calendarStartHour + 24).padStart(2, "0")}:00:00`;
     const scrollTime = slotMinTime;
     const weekQueryEnabled = !!weekStart && !isNaN(weekStart.getTime());
-    const { data, isLoading, error, isError, isFetching, failureCount, failureReason } = useQuery({
+    const { data, isLoading, error } = useQuery({
         queryKey: [
             "week",
             formatLocalDateYMD(weekStart),
@@ -152,14 +146,8 @@ export default function RenderCalendarContent({
             timeBlockSettings.minDuration,
         ],
         queryFn: async () => {
-            console.log("[Week] queryFn start", {
-                weekStartYmd: formatLocalDateYMD(weekStart),
-                calendarStartHour,
-                timeBlockSettings,
-            });
             try {
                 const rows = await get_week(weekStart, timeBlockSettings, calendarStartHour);
-                console.log("[Week] queryFn ok", { blockCount: rows.length });
                 return rows;
             } catch (e) {
                 console.error("[Week] queryFn threw:", e);
@@ -202,19 +190,6 @@ export default function RenderCalendarContent({
         refetchOnWindowFocus: true,
     });
 
-    useEffect(() => {
-        console.log("[Week] query state", {
-            enabled: weekQueryEnabled,
-            isLoading,
-            isFetching,
-            isError,
-            failureCount,
-            failureReason,
-            dataLen: data?.length,
-            errorText: error ? toErrorString(error) : null,
-        });
-    }, [weekQueryEnabled, isLoading, isFetching, isError, failureCount, failureReason, data?.length, error]);
-
     const weekRange = useMemo(
         () => getWeekRange(date, calendarStartHour),
         [date, calendarStartHour]
@@ -223,15 +198,6 @@ export default function RenderCalendarContent({
     const calendarIds = useMemo(() => googleCalendars.map(cal => cal.id).sort().join(','), [googleCalendars]);
     
     const queryEnabled = !!weekStart && !isNaN(weekStart.getTime()) && googleCalendars.length > 0;
-    console.log("[GCal Render] query setup:", {
-        weekStart: weekRange.week_start,
-        weekEnd: weekRange.week_end,
-        calendarIds,
-        googleCalendarsCount: googleCalendars.length,
-        visibleCalendarsCount: visibleCalendars.size,
-        visibleCalendarIds: [...visibleCalendars],
-        queryEnabled,
-    });
 
     const {
         data: googleCalendarEvents,
@@ -247,12 +213,8 @@ export default function RenderCalendarContent({
             calendarStartHour,
             calendarIds,
         ],
-        queryFn: async () => {
-            console.log("[GCal Render] queryFn executing: fetching events for range", weekRange.week_start, "-", weekRange.week_end);
-            const data = await get_all_google_calendar_events(weekRange.week_start, weekRange.week_end);
-            console.log("[GCal Render] queryFn result:", data.length, "events");
-            return data;
-        },
+        queryFn: () =>
+            get_all_google_calendar_events(weekRange.week_start, weekRange.week_end),
         enabled: queryEnabled,
         refetchOnWindowFocus: true,
     });
@@ -312,21 +274,13 @@ export default function RenderCalendarContent({
     }, [googleEventsError, isAuthExpired, isShowingCachedEvents, showToast]);
 
     useEffect(() => {
-        console.log("[GCal Render] state update:", {
-            googleCalendarEvents: googleCalendarEvents?.length ?? "null",
-            isLoadingGoogleEvents,
-            isGoogleEventsError,
-            displayGoogleEventsCount: displayGoogleEvents.length,
-            isShowingCachedEvents,
-            cachedEventsCount: cachedEvents?.length ?? "null",
-        });
-    }, [googleCalendarEvents, isLoadingGoogleEvents, isGoogleEventsError, displayGoogleEvents, isShowingCachedEvents, cachedEvents]);
+        getAppMetadata(LEFT_SIDEBAR_COLLAPSED_KEY)
+            .then((raw) => setIsLeftCollapsed(raw === "1"))
+            .catch(() => {});
+    }, []);
 
     useEffect(() => {
-        try {
-            localStorage.setItem(LEFT_SIDEBAR_COLLAPSED_KEY, isLeftCollapsed ? "1" : "0");
-        } catch {
-        }
+        setAppMetadata(LEFT_SIDEBAR_COLLAPSED_KEY, isLeftCollapsed ? "1" : "0").catch(() => {});
     }, [isLeftCollapsed]);
 
     const displayedTimeBlocks = calendarAppFilter ? (filteredData ?? []) : (data ?? []);

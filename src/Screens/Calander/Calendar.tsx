@@ -18,7 +18,6 @@ import {getCurrentWindow} from "@tauri-apps/api/window";
 import { useSettingsStore } from "../../stores/settingsStore.ts";
 import { useCalendarAppFilterActive } from "../../stores/calendarAppFilterStore.ts";
 import {
-    LEGACY_INCLUDE_GOOGLE_STATS_KEY,
     loadCalendarViewPrefs,
     saveCalendarViewPrefs,
     type CalendarViewPrefsV1,
@@ -31,12 +30,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const {date, setDate} = useDateStore();
     const { timeBlockSettings, calendarStartHour } = useSettingsStore();
     const [includeGoogleInStats, setIncludeGoogleInStats] = useState(false);
-    const updateIncludeGoogleInStats = (v: boolean) => {
-        try {
-            localStorage.setItem(LEGACY_INCLUDE_GOOGLE_STATS_KEY, v ? "1" : "0");
-        } catch {}
-        setIncludeGoogleInStats(v);
-    };
+    const updateIncludeGoogleInStats = (v: boolean) => setIncludeGoogleInStats(v);
     const calendarAppFilterActive = useCalendarAppFilterActive();
     const [appFilterPrevWeek, setAppFilterPrevWeek] = useState<Date | null>(null);
     const [appFilterNextWeek, setAppFilterNextWeek] = useState<Date | null>(null);
@@ -72,17 +66,6 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
 
     useEffect(() => {
         if (!viewPrefs) return;
-        try {
-            const raw = localStorage.getItem(LEGACY_INCLUDE_GOOGLE_STATS_KEY);
-            if (raw === "1") {
-                setIncludeGoogleInStats(true);
-                return;
-            }
-            if (raw === "0") {
-                setIncludeGoogleInStats(false);
-                return;
-            }
-        } catch {}
         setIncludeGoogleInStats(viewPrefs.includeGoogleInStats);
     }, [viewPrefs]);
 
@@ -119,12 +102,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
 
     const {data: googleCalendars, isError: isGoogleCalendarsError, error: googleCalendarsError} = useQuery({
         queryKey: ["googleCalendars"],
-        queryFn: async () => {
-            console.log("[GCal Calendar] fetching google calendars from DB");
-            const data = await get_google_calendars();
-            console.log("[GCal Calendar] got", data.length, "calendars from DB:", data.map(c => ({ id: c.id, name: c.name, google_calendar_id: c.google_calendar_id })));
-            return data;
-        },
+        queryFn: () => get_google_calendars(),
     });
 
     if (googleCalendarsError) {
@@ -132,7 +110,6 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     }
 
     const displayCalendars = googleCalendars ?? (isGoogleCalendarsError ? (getCachedCalendars() ?? []) : []);
-    console.log("[GCal Calendar] displayCalendars:", displayCalendars.length, "calendars, isError:", isGoogleCalendarsError, "raw data:", googleCalendars?.length ?? "null");
 
     useEffect(() => {
         if (googleCalendars && googleCalendars.length >= 0) {
@@ -368,14 +345,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const weekStart = getWeekStart(date, calendarStartHour);
     const weekDataQueryEnabled =
         !!weekStart && !isNaN(weekStart.getTime()) && !!selectedEvent;
-    const {
-        data: weekData,
-        error: weekDataError,
-        isError: isWeekDataError,
-        isLoading: isWeekDataLoading,
-        isFetching: isWeekDataFetching,
-        failureCount: weekDataFailureCount,
-    } = useQuery({
+    const { data: weekData } = useQuery({
         queryKey: [
             "week",
             formatLocalDateYMD(weekStart),
@@ -386,14 +356,8 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
             timeBlockSettings.minDuration,
         ],
         queryFn: async () => {
-            console.log("[Week Calendar.tsx] queryFn start", {
-                weekStartYmd: formatLocalDateYMD(weekStart),
-                selectedEvent: !!selectedEvent,
-                timeBlockSettings,
-            });
             try {
                 const rows = await get_week(weekStart, timeBlockSettings, calendarStartHour);
-                console.log("[Week Calendar.tsx] queryFn ok", { blockCount: rows.length });
                 return rows;
             } catch (e) {
                 console.error("[Week Calendar.tsx] queryFn threw:", e);
@@ -403,26 +367,6 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         },
         enabled: weekDataQueryEnabled,
     });
-
-    useEffect(() => {
-        console.log("[Week Calendar.tsx] query state", {
-            enabled: weekDataQueryEnabled,
-            isLoading: isWeekDataLoading,
-            isFetching: isWeekDataFetching,
-            isError: isWeekDataError,
-            failureCount: weekDataFailureCount,
-            dataLen: weekData?.length,
-            errorText: weekDataError ? toErrorString(weekDataError) : null,
-        });
-    }, [
-        weekDataQueryEnabled,
-        isWeekDataLoading,
-        isWeekDataFetching,
-        isWeekDataError,
-        weekDataFailureCount,
-        weekData?.length,
-        weekDataError,
-    ]);
 
     useEffect(() => {
         if (rightSideBarView === "CategoryFilter") {
@@ -473,15 +417,12 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                 }
 
                 try {
-                    console.log("Fetching category logs:", {category: selectedCategory, startTime, endTime});
                     const result = await get_logs_by_category({
                         category: selectedCategory,
                         start_time: startTime,
                         end_time: endTime,
                         min_log_duration: timeBlockSettings.minLogDuration,
                     });
-
-                    console.log("Category logs result:", result);
 
                     const logMap = new Map<string, {
                         ids: number[],
@@ -510,12 +451,6 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                     });
 
                     const logs = Array.from(logMap.values()).sort((a, b) => b.duration - a.duration);
-                    console.log("Processed logs:", logs.length, "apps for category", selectedCategory);
-                    console.log("Logs grouped by app:", logs.map(l => ({
-                        app: l.app,
-                        duration: l.duration,
-                        ids: l.ids.length
-                    })));
                     setSelectedEventLogs(logs);
 
                     const categoryEvent: CalendarEvent = {
@@ -527,7 +462,6 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             totalDuration: log.duration,
                         })),
                     };
-                    console.log("Created category event:", categoryEvent);
                     setSelectedEvent(categoryEvent);
                 } catch (error) {
                     console.error("Error fetching category logs:", error);

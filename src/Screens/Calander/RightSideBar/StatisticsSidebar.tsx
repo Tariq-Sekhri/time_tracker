@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { get_week_statistics, CategoryStat } from "../../../api/statistics.ts";
 import { getWeekRange } from "../../../utils.ts";
 import { formatDuration, formatPercentage } from "../utils.ts";
@@ -91,19 +91,11 @@ export default function StatisticsSidebar({
         isLoading,
         error,
         isError,
-        isFetching,
-        failureCount,
-        failureReason,
     } = useQuery({
         queryKey: ["week_statistics", week_start, week_end, calendarStartHour],
         queryFn: async () => {
-            console.log("[WeekStats] queryFn start", { week_start, week_end, calendarStartHour });
             try {
                 const stats = await get_week_statistics(week_start, week_end);
-                console.log("[WeekStats] queryFn ok", {
-                    categories: stats.categories?.length,
-                    total_time: stats.total_time,
-                });
                 return stats;
             } catch (e) {
                 console.error("[WeekStats] queryFn threw:", e);
@@ -113,18 +105,6 @@ export default function StatisticsSidebar({
             }
         },
     });
-
-    useEffect(() => {
-        console.log("[WeekStats] query state", {
-            isLoading,
-            isFetching,
-            isError,
-            failureCount,
-            failureReason,
-            hasData: !!weekStats,
-            errorText: error ? toErrorString(error) : null,
-        });
-    }, [isLoading, isFetching, isError, failureCount, failureReason, weekStats, error]);
 
     const {
         data: googleEvents,

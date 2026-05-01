@@ -9,9 +9,9 @@ import GoogleCalendarEventView from "./GoogleCalendarEventView.tsx";
 import { GoogleCalendar } from "../../../api/GoogleCalendar.ts";
 import { useEffect, useState } from "react";
 import { useSettingsStore } from "../../../stores/settingsStore.ts";
-import { storageKey } from "../../../storageKey.ts";
+import { getAppMetadata, setAppMetadata } from "../../../api/appMetadata.ts";
 
-const RIGHT_SIDEBAR_COLLAPSED_KEY = storageKey("time-tracker:right-sidebar-collapsed");
+const RIGHT_SIDEBAR_COLLAPSED_KEY = "time-tracker:right-sidebar-collapsed";
 
 export type SideBarView = "Week" | "Day" | "Event" | "CategoryFilter"
 
@@ -50,19 +50,16 @@ export function RightSideBar({
 }) {
     const { date } = useDateStore();
     const { rightSidebarWidth } = useSettingsStore();
-    const [isCollapsed, setIsCollapsed] = useState(() => {
-        try {
-            return localStorage.getItem(RIGHT_SIDEBAR_COLLAPSED_KEY) === "1";
-        } catch {
-            return false;
-        }
-    });
+    const [isCollapsed, setIsCollapsed] = useState(false);
 
     useEffect(() => {
-        try {
-            localStorage.setItem(RIGHT_SIDEBAR_COLLAPSED_KEY, isCollapsed ? "1" : "0");
-        } catch {
-        }
+        getAppMetadata(RIGHT_SIDEBAR_COLLAPSED_KEY)
+            .then((raw) => setIsCollapsed(raw === "1"))
+            .catch(() => {});
+    }, []);
+
+    useEffect(() => {
+        setAppMetadata(RIGHT_SIDEBAR_COLLAPSED_KEY, isCollapsed ? "1" : "0").catch(() => {});
     }, [isCollapsed]);
 
     const collapseSidebarButton = (

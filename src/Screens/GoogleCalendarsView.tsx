@@ -42,14 +42,6 @@ export default function GoogleCalendarsView() {
         console.error("[GCal Settings] FAILED to fetch available calendars:", availableCalendarsError);
     }
 
-    console.log("[GCal Settings] render state:", {
-        authLoggedIn: authStatus?.logged_in,
-        authEmail: authStatus?.email,
-        savedCalendarsCount: calendars.length,
-        availableCalendarsCount: availableCalendars.length,
-        hasCredentials: hasGoogleOAuthCredentials(),
-    });
-
     const handleLogin = async () => {
         if (!hasGoogleOAuthCredentials()) {
             showToast("OAuth credentials not configured. Please contact the app developer.", "error");

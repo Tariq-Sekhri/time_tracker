@@ -10,13 +10,13 @@ import {
     NewCategoryRegex
 } from "../api/CategoryRegex.ts";
 import { useToast } from "../Componants/Toast.tsx";
-import { storageKey } from "../storageKey.ts";
+import { getAppMetadata, setAppMetadata } from "../api/appMetadata.ts";
 
-const REGEX_VISIBLE_CATEGORY_IDS_KEY = storageKey("regex_visibleCategoryIds");
-const REGEX_KNOWN_CATEGORY_IDS_KEY = storageKey("regex_knownCategoryIds");
-const REGEX_SORT_ORDER_KEY = storageKey("regex_sortOrder");
-const REGEX_GROUP_BY_CATEGORY_KEY = storageKey("regex_groupByCategory");
-const REGEX_COLLAPSED_CATEGORY_IDS_KEY = storageKey("regex_collapsedCategoryIds");
+const REGEX_VISIBLE_CATEGORY_IDS_KEY = "time-tracker:cat-regex:visible-category-ids";
+const REGEX_KNOWN_CATEGORY_IDS_KEY = "time-tracker:cat-regex:known-category-ids";
+const REGEX_SORT_ORDER_KEY = "time-tracker:cat-regex:sort-order";
+const REGEX_GROUP_BY_CATEGORY_KEY = "time-tracker:cat-regex:group-by-category";
+const REGEX_COLLAPSED_CATEGORY_IDS_KEY = "time-tracker:cat-regex:collapsed-category-ids";
 
 function validateRegex(pattern: string): string | null {
     if (!pattern.trim()) {
@@ -83,41 +83,40 @@ export default function CategoryRegexView() {
             return;
         }
 
-        try {
-            const savedVisibleRaw = localStorage.getItem(REGEX_VISIBLE_CATEGORY_IDS_KEY);
-            const savedKnownRaw = localStorage.getItem(REGEX_KNOWN_CATEGORY_IDS_KEY);
-            const allIds = categories.map((c) => c.id);
+        const allIds = categories.map((c) => c.id);
+        Promise.all([
+            getAppMetadata(REGEX_VISIBLE_CATEGORY_IDS_KEY),
+            getAppMetadata(REGEX_KNOWN_CATEGORY_IDS_KEY),
+        ])
+            .then(([savedVisibleRaw, savedKnownRaw]) => {
+                if (savedVisibleRaw) {
+                    const savedVisible = new Set<number>(JSON.parse(savedVisibleRaw) as number[]);
+                    const savedKnown = savedKnownRaw ? new Set<number>(JSON.parse(savedKnownRaw) as number[]) : null;
 
-            if (savedVisibleRaw) {
-                const savedVisible = new Set<number>(JSON.parse(savedVisibleRaw) as number[]);
-                const savedKnown = savedKnownRaw ? new Set<number>(JSON.parse(savedKnownRaw) as number[]) : null;
-
-                const merged = new Set<number>();
-                for (const id of allIds) {
-                    if (savedVisible.has(id)) {
+                    const merged = new Set<number>();
+                    for (const id of allIds) {
+                        if (savedVisible.has(id)) {
+                            merged.add(id);
+                            continue;
+                        }
+                        if (savedKnown && savedKnown.has(id)) {
+                            continue;
+                        }
                         merged.add(id);
-                        continue;
                     }
 
-                    if (savedKnown && savedKnown.has(id)) {
-                        continue;
-                    }
-
-                    merged.add(id);
+                    setVisibleCategoryIds(merged);
+                    setAppMetadata(REGEX_KNOWN_CATEGORY_IDS_KEY, JSON.stringify(allIds)).catch(() => {});
+                } else {
+                    const allVisible = new Set<number>(allIds);
+                    setVisibleCategoryIds(allVisible);
+                    setAppMetadata(REGEX_VISIBLE_CATEGORY_IDS_KEY, JSON.stringify([...allVisible])).catch(() => {});
+                    setAppMetadata(REGEX_KNOWN_CATEGORY_IDS_KEY, JSON.stringify(allIds)).catch(() => {});
                 }
-
-                setVisibleCategoryIds(merged);
-                localStorage.setItem(REGEX_KNOWN_CATEGORY_IDS_KEY, JSON.stringify(allIds));
-            } else {
-                const allVisible = new Set<number>(allIds);
-                setVisibleCategoryIds(allVisible);
-                localStorage.setItem(REGEX_VISIBLE_CATEGORY_IDS_KEY, JSON.stringify([...allVisible]));
-                localStorage.setItem(REGEX_KNOWN_CATEGORY_IDS_KEY, JSON.stringify(allIds));
-            }
-        } catch {
-            const allIds = categories.map((c) => c.id);
-            setVisibleCategoryIds(new Set<number>(allIds));
-        }
+            })
+            .catch(() => {
+                setVisibleCategoryIds(new Set<number>(allIds));
+            });
 
         hasInitializedVisibleCategories.current = true;
     }, [categories]);
@@ -127,24 +126,24 @@ export default function CategoryRegexView() {
             return;
         }
 
-        try {
-            const rawSortOrder = localStorage.getItem(REGEX_SORT_ORDER_KEY);
-            if (rawSortOrder === "oldest" || rawSortOrder === "newest") {
-                setSortOrder(rawSortOrder);
-            }
-
-            const rawGroup = localStorage.getItem(REGEX_GROUP_BY_CATEGORY_KEY);
-            if (rawGroup != null) {
-                setGroupByCategory(rawGroup === "true");
-            }
-
-            const rawCollapsed = localStorage.getItem(REGEX_COLLAPSED_CATEGORY_IDS_KEY);
-            if (rawCollapsed) {
-                const ids = JSON.parse(rawCollapsed) as number[];
-                setCollapsedCategoryIds(new Set<number>(ids));
-            }
-        } catch {
-        }
+        Promise.all([
+            getAppMetadata(REGEX_SORT_ORDER_KEY),
+            getAppMetadata(REGEX_GROUP_BY_CATEGORY_KEY),
+            getAppMetadata(REGEX_COLLAPSED_CATEGORY_IDS_KEY),
+        ])
+            .then(([rawSortOrder, rawGroup, rawCollapsed]) => {
+                if (rawSortOrder === "oldest" || rawSortOrder === "newest") {
+                    setSortOrder(rawSortOrder);
+                }
+                if (rawGroup != null) {
+                    setGroupByCategory(rawGroup === "true");
+                }
+                if (rawCollapsed) {
+                    const ids = JSON.parse(rawCollapsed) as number[];
+                    setCollapsedCategoryIds(new Set<number>(ids));
+                }
+            })
+            .catch(() => {});
 
         hasInitializedUiPrefs.current = true;
     }, []);
@@ -189,41 +188,29 @@ export default function CategoryRegexView() {
         if (!hasInitializedVisibleCategories.current || categories.length === 0) {
             return;
         }
-        try {
-            localStorage.setItem(REGEX_VISIBLE_CATEGORY_IDS_KEY, JSON.stringify([...visibleCategoryIds]));
-            localStorage.setItem(REGEX_KNOWN_CATEGORY_IDS_KEY, JSON.stringify(categories.map((c) => c.id)));
-        } catch {
-        }
+        setAppMetadata(REGEX_VISIBLE_CATEGORY_IDS_KEY, JSON.stringify([...visibleCategoryIds])).catch(() => {});
+        setAppMetadata(REGEX_KNOWN_CATEGORY_IDS_KEY, JSON.stringify(categories.map((c) => c.id))).catch(() => {});
     }, [visibleCategoryIds, categories]);
 
     useEffect(() => {
         if (!hasInitializedUiPrefs.current) {
             return;
         }
-        try {
-            localStorage.setItem(REGEX_SORT_ORDER_KEY, sortOrder);
-        } catch {
-        }
+        setAppMetadata(REGEX_SORT_ORDER_KEY, sortOrder).catch(() => {});
     }, [sortOrder]);
 
     useEffect(() => {
         if (!hasInitializedUiPrefs.current) {
             return;
         }
-        try {
-            localStorage.setItem(REGEX_GROUP_BY_CATEGORY_KEY, groupByCategory ? "true" : "false");
-        } catch {
-        }
+        setAppMetadata(REGEX_GROUP_BY_CATEGORY_KEY, groupByCategory ? "true" : "false").catch(() => {});
     }, [groupByCategory]);
 
     useEffect(() => {
         if (!hasInitializedUiPrefs.current) {
             return;
         }
-        try {
-            localStorage.setItem(REGEX_COLLAPSED_CATEGORY_IDS_KEY, JSON.stringify([...collapsedCategoryIds]));
-        } catch {
-        }
+        setAppMetadata(REGEX_COLLAPSED_CATEGORY_IDS_KEY, JSON.stringify([...collapsedCategoryIds])).catch(() => {});
     }, [collapsedCategoryIds]);
 
     const filteredAndSortedRegexes = useMemo(() => {

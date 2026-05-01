@@ -38,7 +38,10 @@ use google_oauth::{
     get_google_auth_status, get_google_oauth_app_credentials, google_oauth_login,
     google_oauth_logout, set_google_oauth_app_credentials,
 };
-use app_prefs::{get_calendar_view_prefs, set_calendar_view_prefs};
+use app_prefs::{
+    delete_app_metadata, get_app_metadata, get_calendar_view_prefs, set_app_metadata,
+    set_calendar_view_prefs,
+};
 use db::{
     get_all_db_data, get_db_path_cmd, reset_database, wipe_all_data,
     list_backups, create_manual_backup, restore_backup, get_backup_dir,
@@ -52,6 +55,96 @@ pub struct UpdateState {
     pub update: Mutex<Option<tauri_plugin_updater::Update>>,
     pub window_visible: AtomicBool,
     pub notified: AtomicBool,
+}
+
+#[cfg(debug_assertions)]
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let entry_path = entry.path();
+        let target_path = dst.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir_recursive(&entry_path, &target_path)?;
+        } else {
+            if let Some(parent) = target_path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::copy(&entry_path, &target_path)?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(debug_assertions)]
+fn webview_default_profile_dir(app_data_root: &std::path::Path) -> std::path::PathBuf {
+    app_data_root.join("EBWebView").join("Default")
+}
+
+#[cfg(debug_assertions)]
+fn local_storage_leveldb_has_data(default_dir: &std::path::Path) -> bool {
+    let leveldb = default_dir.join("Local Storage").join("leveldb");
+    if !leveldb.is_dir() {
+        return false;
+    }
+    if leveldb.join("CURRENT").exists() {
+        return true;
+    }
+    let Ok(read) = std::fs::read_dir(&leveldb) else {
+        return false;
+    };
+    for entry in read.flatten() {
+        if entry.path().extension().and_then(|e| e.to_str()) == Some("ldb") {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(debug_assertions)]
+fn seed_dev_webview_storage_from_main_if_needed(app: &tauri::App) -> std::io::Result<()> {
+    let dev_root = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+    let Some(dev_leaf) = dev_root.file_name().and_then(|n| n.to_str()) else {
+        return Ok(());
+    };
+    let Some(prod_leaf) = dev_leaf.strip_suffix(".dev") else {
+        return Ok(());
+    };
+    let Some(parent) = dev_root.parent() else {
+        return Ok(());
+    };
+    let prod_root = parent.join(prod_leaf);
+    let dev_default = webview_default_profile_dir(&dev_root);
+    let prod_default = webview_default_profile_dir(&prod_root);
+    if !prod_default.is_dir() {
+        return Ok(());
+    }
+    if local_storage_leveldb_has_data(&dev_default) {
+        return Ok(());
+    }
+    let storage_dirs = ["Local Storage", "IndexedDB"];
+    let prod_has_any = storage_dirs
+        .iter()
+        .any(|name| prod_default.join(name).is_dir());
+    if !prod_has_any {
+        return Ok(());
+    }
+    std::fs::create_dir_all(&dev_default)?;
+    for dir_name in storage_dirs {
+        let src = prod_default.join(dir_name);
+        if !src.is_dir() {
+            continue;
+        }
+        let dst = dev_default.join(dir_name);
+        if dst.exists() {
+            std::fs::remove_dir_all(&dst)?;
+        }
+        copy_dir_recursive(&src, &dst)?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -77,6 +170,11 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .setup(|app| {
+            #[cfg(debug_assertions)]
+            if let Err(err) = seed_dev_webview_storage_from_main_if_needed(app) {
+                eprintln!("Could not seed dev webview storage from main app: {err}");
+            }
+
             app.manage(UpdateState {
                 update: Mutex::new(None),
                 window_visible: AtomicBool::new(false),
@@ -226,6 +324,9 @@ pub fn run() {
             set_google_oauth_app_credentials,
             get_calendar_view_prefs,
             set_calendar_view_prefs,
+            get_app_metadata,
+            set_app_metadata,
+            delete_app_metadata,
             list_backups,
             create_manual_backup,
             restore_backup,
