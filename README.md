@@ -2,6 +2,8 @@
 
 Private, automatic desktop time tracking for Windows and Linux. 100% local. No cloud. No telemetry.
 
+**Product demo video:** [YouTube](https://www.youtube.com/watch?v=4JMSmt3tppc)
+
 Linux is supported and tested on **Ubuntu 24.04.4 Desktop amd64** ([`ubuntu-24.04.4-desktop-amd64.iso`](https://releases.ubuntu.com/24.04.4/)).
 
 ## Demo
