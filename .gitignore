@@ -29,7 +29,6 @@ dist-ssr
 .env.local
 .env.*.local
 
-# .env.example is a template and SHOULD be committed
 !.env.example
 
 exmaple_end

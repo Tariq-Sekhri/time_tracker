@@ -4,11 +4,9 @@
   "version": "1.9.7",
   "type": "module",
   "scripts": {
-    "start": "tauri dev",
-    "dev": "vite",
+    "start": "tauri vite",
     "build": "tsc && vite build",
-    "preview": "vite preview",
-    "tauri": "tauri"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.20",
