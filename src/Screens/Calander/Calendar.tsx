@@ -3,7 +3,7 @@ import {get_categories} from "../../api/Category.ts";
 import {get_logs_for_time_block, get_logs_by_category, get_log_by_id} from "../../api/Log.ts";
 import {get_week, get_week_for_app_filter} from "../../api/week.ts";
 import { adjustInstantToCalendarDayBoundary, getCalendarDayRangeUnix, getWeekRange } from "../../utils.ts";
-import {useState, useMemo, useEffect, useRef} from "react";
+import {useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback} from "react";
 import {EventClickArg, DatesSetArg} from "@fullcalendar/core";
 import RenderCalendarContent from "./RenderCalenderContent.tsx";
 import {formatLocalDateYMD, getWeekStart} from "./utils.ts";
@@ -30,7 +30,8 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const {date, setDate} = useDateStore();
     const { timeBlockSettings, calendarStartHour } = useSettingsStore();
     const [includeGoogleInStats, setIncludeGoogleInStats] = useState(false);
-    const updateIncludeGoogleInStats = (v: boolean) => setIncludeGoogleInStats(v);
+    const skipNextIncludeGoogleApplyFromQueryRef = useRef(false);
+    const prefsSaveChainRef = useRef(Promise.resolve());
     const calendarAppFilterActive = useCalendarAppFilterActive();
     const [appFilterPrevWeek, setAppFilterPrevWeek] = useState<Date | null>(null);
     const [appFilterNextWeek, setAppFilterNextWeek] = useState<Date | null>(null);
@@ -41,6 +42,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         queryFn: loadCalendarViewPrefs,
         staleTime: Infinity,
     });
+    const calendarViewPrefsQueryReady = viewPrefs != null;
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [selectedEvent, setSelectedEvent] = useState<CalendarEvent>(null);
     const [selectedEventLogs, setSelectedEventLogs] = useState<EventLogs>([]);
@@ -59,13 +61,31 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         extraInvalidateQueryKeys: [["logsForAppCalendar"]],
     });
     const queryClient = useQueryClient();
+    const updateIncludeGoogleInStats = useCallback(
+        (v: boolean) => {
+            setIncludeGoogleInStats(v);
+            const cur = queryClient.getQueryData<CalendarViewPrefsV1>(["calendarViewPrefs"]);
+            if (!cur) return;
+            skipNextIncludeGoogleApplyFromQueryRef.current = true;
+            queryClient.setQueryData(["calendarViewPrefs"], {
+                ...cur,
+                includeGoogleInStats: v,
+            });
+        },
+        [queryClient]
+    );
     const savePrefsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastCalendarPrefsPayloadRef = useRef<CalendarViewPrefsV1 | null>(null);
     const hasInitializedCalendars = useRef(false);
     const hasInitializedStatsCalendars = useRef(false);
     const prevDisplayCalendarsLenRef = useRef<number | null>(null);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (!viewPrefs) return;
+        if (skipNextIncludeGoogleApplyFromQueryRef.current) {
+            skipNextIncludeGoogleApplyFromQueryRef.current = false;
+            return;
+        }
         setIncludeGoogleInStats(viewPrefs.includeGoogleInStats);
     }, [viewPrefs]);
 
@@ -260,7 +280,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     }, [displayCalendars, viewPrefs]);
 
     useEffect(() => {
-        if (!viewPrefs) return;
+        if (!calendarViewPrefsQueryReady) return;
         if (
             !hasInitialized.current ||
             !hasInitializedCalendars.current ||
@@ -268,30 +288,49 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         ) {
             return;
         }
+        const payload: CalendarViewPrefsV1 = {
+            includeGoogleInStats,
+            visibleCategories: [...visibleCategories],
+            knownCategories: categories.map((c) => c.name),
+            visibleCalendars: [...visibleCalendars],
+            knownCalendars: displayCalendars.map((c) => c.id),
+            googleCalendarsInStats: [...calendarsInStats],
+            knownGoogleCalendarsInStats: displayCalendars.map((c) => c.id),
+        };
+        lastCalendarPrefsPayloadRef.current = payload;
         if (savePrefsDebounceRef.current) {
             clearTimeout(savePrefsDebounceRef.current);
         }
         savePrefsDebounceRef.current = setTimeout(() => {
-            const payload: CalendarViewPrefsV1 = {
-                includeGoogleInStats,
-                visibleCategories: [...visibleCategories],
-                knownCategories: categories.map((c) => c.name),
-                visibleCalendars: [...visibleCalendars],
-                knownCalendars: displayCalendars.map((c) => c.id),
-                googleCalendarsInStats: [...calendarsInStats],
-                knownGoogleCalendarsInStats: displayCalendars.map((c) => c.id),
-            };
-            saveCalendarViewPrefs(payload).catch((e) => {
-                console.error("[Calendar] Failed to save calendar view prefs:", e);
-            });
+            savePrefsDebounceRef.current = null;
+            const snap = lastCalendarPrefsPayloadRef.current;
+            if (!snap) return;
+            prefsSaveChainRef.current = prefsSaveChainRef.current
+                .then(() => saveCalendarViewPrefs(snap))
+                .then(() => {
+                    const latest = lastCalendarPrefsPayloadRef.current;
+                    if (
+                        !latest ||
+                        JSON.stringify(latest) !== JSON.stringify(snap)
+                    ) {
+                        return;
+                    }
+                    skipNextIncludeGoogleApplyFromQueryRef.current = true;
+                    queryClient.setQueryData(["calendarViewPrefs"], snap);
+                })
+                .catch((e) => {
+                    console.error("[Calendar] Failed to save calendar view prefs:", e);
+                });
         }, 250);
         return () => {
             if (savePrefsDebounceRef.current) {
                 clearTimeout(savePrefsDebounceRef.current);
+                savePrefsDebounceRef.current = null;
             }
         };
     }, [
-        viewPrefs,
+        queryClient,
+        calendarViewPrefsQueryReady,
         includeGoogleInStats,
         visibleCategories,
         visibleCalendars,

@@ -1,6 +1,6 @@
 [package]
 name = "time-tracker"
-version = "1.9.6"
+version = "1.9.7"
 description = "A Windows Auto Time Tracking App"
 authors = ["Tariq Sekhri"]
 edition = "2021"
@@ -50,9 +50,6 @@ windows = { version = "0.62.2", features = [
     "Win32_Security",
     "Win32_System_WindowsProgramming"
 ] }
-
-[target.'cfg(target_os = "macos")'.dependencies]
-objc = "0.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 atspi = { version = "0.29", features = ["connection", "proxies", "zbus"] }
