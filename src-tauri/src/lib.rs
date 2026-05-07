@@ -1,14 +1,17 @@
-mod core;
-mod db;
-mod tray;
-mod google_oauth;
 mod app_prefs;
 mod commands;
+mod core;
+mod db;
+mod google_oauth;
+mod tray;
 
 use std::sync::{atomic::AtomicBool, Mutex};
 
 use core::{get_tracking_status, set_tracking_status, supervisor};
-use db::queries::{get_day_statistics, get_total_statistics, get_week, get_week_for_app_filter, get_week_statistics};
+use db::queries::{
+    get_day_statistics, get_total_statistics, get_week, get_week_for_app_filter,
+    get_week_statistics,
+};
 use db::tables::cat_regex::{
     delete_cat_regex_by_id, get_cat_regex, get_cat_regex_by_id, insert_cat_regex,
     update_cat_regex_by_id,
@@ -17,37 +20,37 @@ use db::tables::category::{
     delete_category_by_id, get_categories, get_category_by_id, insert_category,
     update_category_by_id,
 };
+use db::tables::google_calendar::{
+    delete_google_calendar, get_google_calendar_by_id, get_google_calendars,
+    insert_google_calendar, update_google_calendar,
+};
 use db::tables::log::{
-    count_logs_for_time_block, delete_log_by_id, delete_logs_by_ids, delete_logs_for_time_block, get_log_by_id,
-    get_logs, get_logs_by_category, get_logs_for_app_in_time_range, get_logs_for_time_block,
+    count_logs_for_time_block, delete_log_by_id, delete_logs_by_ids, delete_logs_for_time_block,
+    get_log_by_id, get_logs, get_logs_by_category, get_logs_for_app_in_time_range,
+    get_logs_for_time_block,
 };
 use db::tables::skipped_app::{
     count_matching_logs, delete_skipped_app_by_id, get_skipped_apps,
     insert_skipped_app_and_delete_logs, restore_default_skipped_apps, update_skipped_app_by_id,
 };
-use db::tables::google_calendar::{
-    delete_google_calendar, get_google_calendar_by_id, get_google_calendars,
-    insert_google_calendar, update_google_calendar,
-};
 
+use app_prefs::{
+    delete_app_metadata, get_app_metadata, get_calendar_view_prefs, set_app_metadata,
+    set_calendar_view_prefs,
+};
+use db::get_db_schema_version;
 use db::tables::google_calendar_sync::{
     create_google_calendar_event, delete_google_calendar_event, get_all_google_calendar_events,
     get_google_calendar_events, list_available_google_calendars, update_google_calendar_event,
+};
+use db::{
+    create_manual_backup, create_safety_backup, export_data_to_json, get_all_db_data,
+    get_backup_dir, get_db_path_cmd, list_backups, reset_database, restore_backup, wipe_all_data,
 };
 use google_oauth::{
     get_google_auth_status, get_google_oauth_app_credentials, google_oauth_login,
     google_oauth_logout, set_google_oauth_app_credentials,
 };
-use app_prefs::{
-    delete_app_metadata, get_app_metadata, get_calendar_view_prefs, set_app_metadata,
-    set_calendar_view_prefs,
-};
-use db::{
-    get_all_db_data, get_db_path_cmd, reset_database, wipe_all_data,
-    list_backups, create_manual_backup, restore_backup, get_backup_dir,
-    create_safety_backup, export_data_to_json,
-};
-use db::get_db_schema_version;
 use tauri::{Emitter, Manager};
 use tray::refresh_tray_menu;
 
@@ -101,52 +104,6 @@ fn local_storage_leveldb_has_data(default_dir: &std::path::Path) -> bool {
     false
 }
 
-#[cfg(debug_assertions)]
-fn seed_dev_webview_storage_from_main_if_needed(app: &tauri::App) -> std::io::Result<()> {
-    let dev_root = app
-        .path()
-        .app_local_data_dir()
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-    let Some(dev_leaf) = dev_root.file_name().and_then(|n| n.to_str()) else {
-        return Ok(());
-    };
-    let Some(prod_leaf) = dev_leaf.strip_suffix(".dev") else {
-        return Ok(());
-    };
-    let Some(parent) = dev_root.parent() else {
-        return Ok(());
-    };
-    let prod_root = parent.join(prod_leaf);
-    let dev_default = webview_default_profile_dir(&dev_root);
-    let prod_default = webview_default_profile_dir(&prod_root);
-    if !prod_default.is_dir() {
-        return Ok(());
-    }
-    if local_storage_leveldb_has_data(&dev_default) {
-        return Ok(());
-    }
-    let storage_dirs = ["Local Storage", "IndexedDB"];
-    let prod_has_any = storage_dirs
-        .iter()
-        .any(|name| prod_default.join(name).is_dir());
-    if !prod_has_any {
-        return Ok(());
-    }
-    std::fs::create_dir_all(&dev_default)?;
-    for dir_name in storage_dirs {
-        let src = prod_default.join(dir_name);
-        if !src.is_dir() {
-            continue;
-        }
-        let dst = dev_default.join(dir_name);
-        if dst.exists() {
-            std::fs::remove_dir_all(&dst)?;
-        }
-        copy_dir_recursive(&src, &dst)?;
-    }
-    Ok(())
-}
-
 #[tauri::command]
 fn get_app_version(app: tauri::AppHandle) -> String {
     app.package_info().version.to_string()
@@ -170,11 +127,6 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .setup(|app| {
-            #[cfg(debug_assertions)]
-            if let Err(err) = seed_dev_webview_storage_from_main_if_needed(app) {
-                eprintln!("Could not seed dev webview storage from main app: {err}");
-            }
-
             app.manage(UpdateState {
                 update: Mutex::new(None),
                 window_visible: AtomicBool::new(false),
@@ -190,12 +142,6 @@ pub fn run() {
             }
 
             tray::setup_tray(app.handle())?;
-
-            #[cfg(all(target_os = "macos", not(debug_assertions)))]
-            {
-                use tauri_plugin_autostart::ManagerExt;
-                let _ = app.handle().autolaunch().enable();
-            }
 
             tauri::async_runtime::spawn(supervisor(app.handle().clone()));
 
