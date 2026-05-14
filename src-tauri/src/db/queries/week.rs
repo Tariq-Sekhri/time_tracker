@@ -5,6 +5,7 @@ use crate::db::tables::category::{get_categories, Category};
 use crate::db::tables::log::{delete_log_by_id, get_logs, Log};
 use crate::db::tables::skipped_app::get_skipped_apps;
 
+use chrono::Duration;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -456,7 +457,7 @@ fn transform_time_blocks(
     let result: Vec<TimeBlock> = result
         .into_iter()
         .filter(|block| {
-            let duration = block.end_time - block.start_time;
+            let duration: i64 = block.apps.iter().map(|log| log.total_duration).sum();
             duration >= min_duration
         })
         .collect();

@@ -289,8 +289,8 @@ export default function AppsInTimeBlock({
                                 onClick={(e) => logRowLeftClickCalendarFilter(e, log.app)}
                                 onContextMenu={(e) => openFromContextMenu(e, log.app)}
                                 className={`h-15 rounded-lg p-3 transition-colors select-text cursor-pointer ${calendarAppFilterActive === log.app
-                                        ? "bg-gray-800 ring-2 ring-blue-500 ring-offset-2 ring-offset-black"
-                                        : "bg-gray-900 hover:bg-gray-800"
+                                    ? "bg-gray-800 ring-2 ring-blue-500 ring-offset-2 ring-offset-black"
+                                    : "bg-gray-900 hover:bg-gray-800"
                                     }`}
                             >
                                 <div className="flex items-center justify-between mb-1">

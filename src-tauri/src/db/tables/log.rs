@@ -84,9 +84,13 @@ pub async fn get_logs() -> Result<Vec<Log>, Error> {
 #[tauri::command]
 pub async fn get_log_by_id(id: i64) -> Result<Log, Error> {
     let pool = db::get_pool().await?;
-    let log = sqlx::query_as!(Log, "SELECT id, app, timestamp, duration FROM logs WHERE id = ?1", id)
-        .fetch_one(&pool)
-        .await?;
+    let log = sqlx::query_as!(
+        Log,
+        "SELECT id, app, timestamp, duration FROM logs WHERE id = ?1",
+        id
+    )
+    .fetch_one(&pool)
+    .await?;
     Ok(log)
 }
 
@@ -161,7 +165,9 @@ pub async fn count_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resul
 }
 
 #[tauri::command]
-pub async fn get_logs_for_time_block(request: GetLogsForTimeBlockRequest) -> Result<Vec<MergedLog>, Error> {
+pub async fn get_logs_for_time_block(
+    request: GetLogsForTimeBlockRequest,
+) -> Result<Vec<MergedLog>, Error> {
     let pool = db::get_pool().await?;
 
     let min_d = request.min_log_duration.max(1);
@@ -192,12 +198,15 @@ fn merge_logs_in_time_block(logs: Vec<Log>) -> Vec<MergedLog> {
                 existing.timestamp = log.timestamp;
             }
         } else {
-            app_map.insert(log.app.clone(), MergedLog {
-                ids: vec![log.id],
-                app: log.app,
-                timestamp: log.timestamp,
-                duration: log.duration,
-            });
+            app_map.insert(
+                log.app.clone(),
+                MergedLog {
+                    ids: vec![log.id],
+                    app: log.app,
+                    timestamp: log.timestamp,
+                    duration: log.duration,
+                },
+            );
         }
     }
     app_map.into_values().collect()
@@ -212,12 +221,14 @@ pub struct GetLogsByCategoryRequest {
 }
 
 #[tauri::command]
-pub async fn get_logs_by_category(request: GetLogsByCategoryRequest) -> Result<Vec<MergedLog>, Error> {
+pub async fn get_logs_by_category(
+    request: GetLogsByCategoryRequest,
+) -> Result<Vec<MergedLog>, Error> {
     use crate::db::tables::{cat_regex, category, skipped_app};
     use cat_regex::get_cat_regex;
     use category::get_categories;
-    use skipped_app::get_skipped_apps;
     use regex::Regex;
+    use skipped_app::get_skipped_apps;
     use std::collections::HashMap;
 
     let pool = db::get_pool().await?;
@@ -272,7 +283,7 @@ pub async fn get_logs_by_category(request: GetLogsByCategoryRequest) -> Result<V
                 .find(|(regex, _)| regex.is_match(&log.app))
                 .map(|(_, cat_name)| cat_name.clone())
                 .unwrap_or_else(|| "Miscellaneous".to_string());
-            
+
             matched_category == request.category
         })
         .collect();
@@ -315,7 +326,10 @@ pub async fn get_logs_for_app_in_time_range(
     .fetch_all(&pool)
     .await?;
 
-    let logs: Vec<Log> = logs.into_iter().filter(|log| !is_skipped(&log.app)).collect();
+    let logs: Vec<Log> = logs
+        .into_iter()
+        .filter(|log| !is_skipped(&log.app))
+        .collect();
 
     Ok(logs)
 }
