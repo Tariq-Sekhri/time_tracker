@@ -78,6 +78,29 @@ export function getCalendarDayRangeUnix(
     };
 }
 
+export function getWeekStartDate(date: Date, calendarStartHour: number): Date {
+    const { week_start } = getWeekRange(date, calendarStartHour);
+    return new Date(week_start * 1000);
+}
 
-
+export function enumerateWeekRangesInSpan(
+    rangeStart: Date,
+    rangeEnd: Date,
+    calendarStartHour: number,
+    maxWeeks = 24
+): { week_start: number; week_end: number }[] {
+    let cursor = getWeekStartDate(rangeStart, calendarStartHour);
+    const endCursor = getWeekStartDate(rangeEnd, calendarStartHour);
+    const out: { week_start: number; week_end: number }[] = [];
+    while (cursor.getTime() <= endCursor.getTime()) {
+        out.push(getWeekRange(cursor, calendarStartHour));
+        const next = new Date(cursor);
+        next.setDate(next.getDate() + 7);
+        cursor = getWeekStartDate(next, calendarStartHour);
+    }
+    if (out.length > maxWeeks) {
+        return out.slice(out.length - maxWeeks);
+    }
+    return out;
+}
 

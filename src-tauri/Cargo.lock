@@ -5575,7 +5575,7 @@ dependencies = [
 
 [[package]]
 name = "time-tracker"
-version = "1.9.9"
+version = "1.10.0"
 dependencies = [
  "anyhow",
  "atspi",

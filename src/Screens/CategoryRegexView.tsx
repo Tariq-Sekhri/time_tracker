@@ -11,9 +11,9 @@ import {
 } from "../api/CategoryRegex.ts";
 import { useToast } from "../Componants/Toast.tsx";
 import { getAppMetadata, setAppMetadata } from "../api/appMetadata.ts";
+import CategoryVisibilityFilter from "../Componants/CategoryVisibilityFilter.tsx";
+import { useVisibleCategoryFilter } from "../hooks/useVisibleCategoryFilter.ts";
 
-const REGEX_VISIBLE_CATEGORY_IDS_KEY = "time-tracker:cat-regex:visible-category-ids";
-const REGEX_KNOWN_CATEGORY_IDS_KEY = "time-tracker:cat-regex:known-category-ids";
 const REGEX_SORT_ORDER_KEY = "time-tracker:cat-regex:sort-order";
 const REGEX_GROUP_BY_CATEGORY_KEY = "time-tracker:cat-regex:group-by-category";
 const REGEX_COLLAPSED_CATEGORY_IDS_KEY = "time-tracker:cat-regex:collapsed-category-ids";
@@ -41,9 +41,6 @@ export default function CategoryRegexView() {
     const [sortOrder, setSortOrder] = useState<"oldest" | "newest">("newest");
     const [groupByCategory, setGroupByCategory] = useState(false);
     const [collapsedCategoryIds, setCollapsedCategoryIds] = useState<Set<number>>(new Set());
-    const [visibleCategoryIds, setVisibleCategoryIds] = useState<Set<number>>(new Set());
-    const [isCategoryFilterOpen, setIsCategoryFilterOpen] = useState(false);
-    const categoryFilterRef = useRef<HTMLDivElement | null>(null);
     const newRegexCatMenuRef = useRef<HTMLDivElement | null>(null);
     const sortMenuRef = useRef<HTMLDivElement | null>(null);
     const editCatMenuRef = useRef<HTMLDivElement | null>(null);
@@ -51,7 +48,6 @@ export default function CategoryRegexView() {
     const [sortMenuOpen, setSortMenuOpen] = useState(false);
     const [editCatMenuOpen, setEditCatMenuOpen] = useState(false);
 
-    const hasInitializedVisibleCategories = useRef(false);
     const hasInitializedUiPrefs = useRef(false);
 
     const toggleCategoryCollapsed = (catId: number) => {
@@ -73,53 +69,17 @@ export default function CategoryRegexView() {
         queryFn: get_cat_regex,
     });
 
-    const categoriesByPriority = useMemo(
-        () => [...categories].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0)),
-        [categories]
-    );
-
-    useEffect(() => {
-        if (categories.length === 0 || hasInitializedVisibleCategories.current) {
-            return;
-        }
-
-        const allIds = categories.map((c) => c.id);
-        Promise.all([
-            getAppMetadata(REGEX_VISIBLE_CATEGORY_IDS_KEY),
-            getAppMetadata(REGEX_KNOWN_CATEGORY_IDS_KEY),
-        ])
-            .then(([savedVisibleRaw, savedKnownRaw]) => {
-                if (savedVisibleRaw) {
-                    const savedVisible = new Set<number>(JSON.parse(savedVisibleRaw) as number[]);
-                    const savedKnown = savedKnownRaw ? new Set<number>(JSON.parse(savedKnownRaw) as number[]) : null;
-
-                    const merged = new Set<number>();
-                    for (const id of allIds) {
-                        if (savedVisible.has(id)) {
-                            merged.add(id);
-                            continue;
-                        }
-                        if (savedKnown && savedKnown.has(id)) {
-                            continue;
-                        }
-                        merged.add(id);
-                    }
-
-                    setVisibleCategoryIds(merged);
-                    setAppMetadata(REGEX_KNOWN_CATEGORY_IDS_KEY, JSON.stringify(allIds)).catch(() => {});
-                } else {
-                    const allVisible = new Set<number>(allIds);
-                    setVisibleCategoryIds(allVisible);
-                    setAppMetadata(REGEX_VISIBLE_CATEGORY_IDS_KEY, JSON.stringify([...allVisible])).catch(() => {});
-                    setAppMetadata(REGEX_KNOWN_CATEGORY_IDS_KEY, JSON.stringify(allIds)).catch(() => {});
-                }
-            })
-            .catch(() => {
-                setVisibleCategoryIds(new Set<number>(allIds));
-            });
-
-        hasInitializedVisibleCategories.current = true;
-    }, [categories]);
+    const {
+        visibleCategoryIds,
+        categoriesByPriority,
+        isCategoryFilterOpen,
+        setIsCategoryFilterOpen,
+        categoryFilterRef,
+        categoryFilterPanelRef,
+        toggleVisibleCategory,
+        checkAllCategories,
+        uncheckAllCategories,
+    } = useVisibleCategoryFilter(categories);
 
     useEffect(() => {
         if (hasInitializedUiPrefs.current) {
@@ -149,22 +109,6 @@ export default function CategoryRegexView() {
     }, []);
 
     useEffect(() => {
-        if (!isCategoryFilterOpen) return;
-
-        const onPointerDown = (e: PointerEvent) => {
-            const target = e.target as Node | null;
-            if (!target) return;
-            const container = categoryFilterRef.current;
-            if (container && !container.contains(target)) {
-                setIsCategoryFilterOpen(false);
-            }
-        };
-
-        window.addEventListener("pointerdown", onPointerDown);
-        return () => window.removeEventListener("pointerdown", onPointerDown);
-    }, [isCategoryFilterOpen]);
-
-    useEffect(() => {
         if (!newRegexCatMenuOpen && !sortMenuOpen && !editCatMenuOpen) return;
 
         const onPointerDown = (e: PointerEvent) => {
@@ -183,14 +127,6 @@ export default function CategoryRegexView() {
         window.addEventListener("pointerdown", onPointerDown);
         return () => window.removeEventListener("pointerdown", onPointerDown);
     }, [newRegexCatMenuOpen, sortMenuOpen, editCatMenuOpen]);
-
-    useEffect(() => {
-        if (!hasInitializedVisibleCategories.current || categories.length === 0) {
-            return;
-        }
-        setAppMetadata(REGEX_VISIBLE_CATEGORY_IDS_KEY, JSON.stringify([...visibleCategoryIds])).catch(() => {});
-        setAppMetadata(REGEX_KNOWN_CATEGORY_IDS_KEY, JSON.stringify(categories.map((c) => c.id))).catch(() => {});
-    }, [visibleCategoryIds, categories]);
 
     useEffect(() => {
         if (!hasInitializedUiPrefs.current) {
@@ -229,23 +165,6 @@ export default function CategoryRegexView() {
         }
         return map;
     }, [filteredAndSortedRegexes]);
-
-    const toggleVisibleCategory = (catId: number) => {
-        setVisibleCategoryIds((prev) => {
-            const next = new Set(prev);
-            if (next.has(catId)) next.delete(catId);
-            else next.add(catId);
-            return next;
-        });
-    };
-
-    const checkAllCategories = () => {
-        setVisibleCategoryIds(new Set(categories.map((c) => c.id)));
-    };
-
-    const uncheckAllCategories = () => {
-        setVisibleCategoryIds(new Set<number>());
-    };
 
     const createRegexMutation = useMutation({
         mutationFn: async (newRegex: NewCategoryRegex) => {
@@ -572,80 +491,23 @@ export default function CategoryRegexView() {
             </div>
 
             <div className="mb-4 flex flex-wrap items-center gap-3">
-                <div className="relative" ref={categoryFilterRef}>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setNewRegexCatMenuOpen(false);
-                            setSortMenuOpen(false);
-                            setEditCatMenuOpen(false);
-                            setIsCategoryFilterOpen((v) => !v);
-                        }}
-                        className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white hover:bg-gray-700 flex items-center gap-2"
-                    >
-                        <span>
-                            Filter categories ({visibleCategoryIds.size}/{categories.length || 0})
-                        </span>
-                        <svg
-                            className={`w-4 h-4 text-gray-400 transition-transform ${isCategoryFilterOpen ? "rotate-180" : ""}`}
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                    </button>
-
-                    {isCategoryFilterOpen && (
-                        <div className="absolute z-50 mt-2 w-[min(700px,calc(100vw-3rem))] max-w-[700px] bg-gray-900 border border-gray-700 rounded-lg shadow-lg p-3">
-                            <div className="flex items-center justify-between gap-3 mb-3">
-                                <div className="text-sm font-medium text-gray-200">Categories</div>
-                                <div className="flex gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={checkAllCategories}
-                                        className="px-3 py-1 bg-gray-800 hover:bg-gray-700 rounded text-sm"
-                                    >
-                                        All
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={uncheckAllCategories}
-                                        className="px-3 py-1 bg-gray-800 hover:bg-gray-700 rounded text-sm"
-                                    >
-                                        None
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[50vh] overflow-auto nice-scrollbar pr-1">
-                                {categoriesByPriority.map((cat) => {
-                                    const checked = visibleCategoryIds.has(cat.id);
-                                    return (
-                                        <label
-                                            key={cat.id}
-                                            className="flex items-center gap-3 p-2 rounded hover:bg-gray-800 cursor-pointer"
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                checked={checked}
-                                                onChange={() => toggleVisibleCategory(cat.id)}
-                                                className="w-4 h-4 rounded cursor-pointer"
-                                            />
-                                            {cat.color && (
-                                                <div
-                                                    className="w-4 h-4 rounded border border-gray-600 shrink-0"
-                                                    style={{ backgroundColor: cat.color }}
-                                                />
-                                            )}
-                                            <span className="text-sm text-gray-200 flex-1">{cat.name}</span>
-                                        </label>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-                </div>
+                <CategoryVisibilityFilter
+                    categories={categories}
+                    categoriesByPriority={categoriesByPriority}
+                    visibleCategoryIds={visibleCategoryIds}
+                    isOpen={isCategoryFilterOpen}
+                    onOpenChange={setIsCategoryFilterOpen}
+                    filterRef={categoryFilterRef}
+                    panelRef={categoryFilterPanelRef}
+                    onToggle={toggleVisibleCategory}
+                    onCheckAll={checkAllCategories}
+                    onUncheckAll={uncheckAllCategories}
+                    onCloseOtherMenus={() => {
+                        setNewRegexCatMenuOpen(false);
+                        setSortMenuOpen(false);
+                        setEditCatMenuOpen(false);
+                    }}
+                />
 
                 <label className="text-gray-400 text-sm ml-2">Sort:</label>
                 <div className="relative" ref={sortMenuRef}>

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { get_total_statistics, get_week_statistics, WeekStatistics } from "../api/statistics.ts";
 import { get_logs_by_category, MergedLog } from "../api/Log.ts";
@@ -7,9 +7,18 @@ import { useAppCategorizeMenu } from "../hooks/useAppCategorizeMenu.tsx";
 import { logRowLeftClickCalendarFilter } from "../utils/calendarAppFilterRowClick.ts";
 import { useCalendarAppFilterActive } from "../stores/calendarAppFilterStore.ts";
 import StatisticsDateRangePicker, { calendarDateFromUnix } from "../components/StatisticsDateRangePicker.tsx";
-import { adjustInstantToCalendarDayBoundary, getCalendarDayRangeUnix } from "../utils.ts";
+import CategoryWeekTrendChart from "../components/CategoryWeekTrendChart.tsx";
+import CategoryVisibilityFilter from "../Componants/CategoryVisibilityFilter.tsx";
+import { get_categories } from "../api/Category.ts";
+import { useVisibleCategoryFilter } from "../hooks/useVisibleCategoryFilter.ts";
+import {
+    adjustInstantToCalendarDayBoundary,
+    enumerateWeekRangesInSpan,
+    getCalendarDayRangeUnix,
+    getWeekStartDate,
+} from "../utils.ts";
 
-type Tab = "dailyAvg" | "total";
+type Tab = "dailyAvg" | "total" | "trend";
 
 function formatDuration(seconds: number): string {
     const hours = Math.floor(seconds / 3600);
@@ -76,6 +85,27 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
         refetchOnReconnect: false,
     });
 
+    const { data: categories = [] } = useQuery({
+        queryKey: ["categories"],
+        queryFn: get_categories,
+        staleTime: Infinity,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+    });
+
+    const {
+        visibleCategoryIds,
+        visibleCategoryNames,
+        categoriesByPriority,
+        isCategoryFilterOpen,
+        setIsCategoryFilterOpen,
+        categoryFilterRef,
+        categoryFilterPanelRef,
+        toggleVisibleCategory,
+        checkAllCategories,
+        uncheckAllCategories,
+    } = useVisibleCategoryFilter(categories);
+
     const maxSelectableDate = useMemo(
         () => adjustInstantToCalendarDayBoundary(new Date(), calendarStartHour),
         [calendarStartHour]
@@ -88,12 +118,45 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
 
     const [rangeStartDate, setRangeStartDate] = useState<Date | null>(null);
     const [rangeEndDate, setRangeEndDate] = useState<Date | null>(null);
+    const [trendStartDate, setTrendStartDate] = useState<Date | null>(null);
+    const [trendEndDate, setTrendEndDate] = useState<Date | null>(null);
 
     useEffect(() => {
         if (!minSelectableDate || rangeStartDate || rangeEndDate) return;
         setRangeStartDate(minSelectableDate);
         setRangeEndDate(maxSelectableDate);
     }, [minSelectableDate, maxSelectableDate, rangeStartDate, rangeEndDate]);
+
+    useEffect(() => {
+        if (!minSelectableDate || trendStartDate || trendEndDate) return;
+        const end = maxSelectableDate;
+        const start = new Date(end);
+        start.setDate(start.getDate() - 7 * 11);
+        const clampedStart =
+            start.getTime() < minSelectableDate.getTime() ? minSelectableDate : start;
+        setTrendStartDate(getWeekStartDate(clampedStart, calendarStartHour));
+        setTrendEndDate(end);
+    }, [minSelectableDate, maxSelectableDate, calendarStartHour, trendStartDate, trendEndDate]);
+
+    const trendWeeks = useMemo(() => {
+        if (!trendStartDate || !trendEndDate) return [];
+        return enumerateWeekRangesInSpan(trendStartDate, trendEndDate, calendarStartHour);
+    }, [trendStartDate, trendEndDate, calendarStartHour]);
+
+    const trendWeekQueries = useQueries({
+        queries: trendWeeks.map((w) => ({
+            queryKey: ["week_statistics", w.week_start, w.week_end, calendarStartHour],
+            queryFn: () => get_week_statistics(w.week_start, w.week_end),
+            enabled: activeTab === "trend",
+            staleTime: Infinity,
+            refetchOnWindowFocus: false,
+            refetchOnReconnect: false,
+        })),
+    });
+
+    const trendWeekStats = trendWeekQueries.map((q) => q.data);
+    const isTrendLoading =
+        trendWeekQueries.length > 0 && trendWeekQueries.some((q) => q.isLoading || q.isFetching);
 
     const rangeUnix = useMemo(() => {
         if (!rangeStartDate || !rangeEndDate) return null;
@@ -148,7 +211,8 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
         };
     }, [rangeStats]);
 
-    const stats: WeekStatistics | null = activeTab === "dailyAvg" ? dailyAvgStats : (rangeStats ?? null);
+    const stats: WeekStatistics | null =
+        activeTab === "dailyAvg" ? dailyAvgStats : activeTab === "total" ? (rangeStats ?? null) : null;
 
     const categoryStartTime = rangeUnix?.start ?? 0;
     const categoryEndTime = rangeUnix?.end ?? Math.floor(Date.now() / 1000);
@@ -214,6 +278,25 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
             rangeEndDate.getTime() === maxSelectableDate.getTime()
         );
     }, [minSelectableDate, maxSelectableDate, rangeStartDate, rangeEndDate]);
+
+    const defaultTrendStartDate = useMemo(() => {
+        if (!minSelectableDate) return null;
+        const end = maxSelectableDate;
+        const start = new Date(end);
+        start.setDate(start.getDate() - 7 * 11);
+        return getWeekStartDate(
+            start.getTime() < minSelectableDate.getTime() ? minSelectableDate : start,
+            calendarStartHour
+        );
+    }, [minSelectableDate, maxSelectableDate, calendarStartHour]);
+
+    const isDefaultTrendRange = useMemo(() => {
+        if (!defaultTrendStartDate || !trendStartDate || !trendEndDate) return true;
+        return (
+            trendStartDate.getTime() === defaultTrendStartDate.getTime() &&
+            trendEndDate.getTime() === maxSelectableDate.getTime()
+        );
+    }, [defaultTrendStartDate, maxSelectableDate, trendStartDate, trendEndDate]);
 
     const scaledDuration = (seconds: number) => {
         if (activeTab !== "dailyAvg") return Math.floor(seconds);
@@ -289,11 +372,23 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
         [hourlyPoints, maxHourlyMinutes]
     );
 
-    if (!stats) {
-        const loadingTab = activeTab === "dailyAvg" ? "Daily Avg" : "Total";
+    const tabLoadingLabel =
+        activeTab === "dailyAvg" ? "Daily Avg" : activeTab === "total" ? "Total" : "Trend";
+
+    if (activeTab === "trend") {
+        if (isBoundsLoading || !trendStartDate || !trendEndDate) {
+            return (
+                <div className="p-6">
+                    <div className="text-gray-500">Loading {tabLoadingLabel} statistics...</div>
+                </div>
+            );
+        }
+    } else if (!stats) {
         return (
             <div className="p-6">
-                <div className="text-gray-500">{isStatsLoading ? `Loading ${loadingTab} statistics...` : "No statistics available"}</div>
+                <div className="text-gray-500">
+                    {isStatsLoading ? `Loading ${tabLoadingLabel} statistics...` : "No statistics available"}
+                </div>
             </div>
         );
     }
@@ -326,28 +421,47 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                         >
                             Total
                         </button>
+                        <button
+                            onClick={() => setActiveTab("trend")}
+                            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === "trend" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"}`}
+                        >
+                            Trend
+                        </button>
                     </div>
-                    {minSelectableDate && rangeStartDate && rangeEndDate ? (
+                    {minSelectableDate &&
+                    ((activeTab === "trend" && trendStartDate && trendEndDate) ||
+                        (activeTab !== "trend" && rangeStartDate && rangeEndDate)) ? (
                         <div className="ml-auto shrink-0 flex items-center gap-2">
                             <button
                                 type="button"
                                 onClick={() => {
-                                    setRangeStartDate(minSelectableDate);
-                                    setRangeEndDate(maxSelectableDate);
+                                    if (activeTab === "trend") {
+                                        if (!defaultTrendStartDate) return;
+                                        setTrendStartDate(defaultTrendStartDate);
+                                        setTrendEndDate(maxSelectableDate);
+                                    } else {
+                                        setRangeStartDate(minSelectableDate);
+                                        setRangeEndDate(maxSelectableDate);
+                                    }
                                 }}
-                                disabled={isDefaultDateRange}
+                                disabled={activeTab === "trend" ? isDefaultTrendRange : isDefaultDateRange}
                                 className="px-2.5 py-1.5 text-sm text-gray-400 hover:text-white bg-gray-800/80 border border-gray-700 rounded-lg transition-colors disabled:opacity-40 disabled:pointer-events-none shrink-0"
                             >
                                 Reset
                             </button>
                             <StatisticsDateRangePicker
-                                startDate={rangeStartDate}
-                                endDate={rangeEndDate}
+                                startDate={activeTab === "trend" ? trendStartDate! : rangeStartDate!}
+                                endDate={activeTab === "trend" ? trendEndDate! : rangeEndDate!}
                                 minDate={minSelectableDate}
                                 maxDate={maxSelectableDate}
                                 onRangeChange={(start, end) => {
-                                    setRangeStartDate(start);
-                                    setRangeEndDate(end);
+                                    if (activeTab === "trend") {
+                                        setTrendStartDate(start);
+                                        setTrendEndDate(end);
+                                    } else {
+                                        setRangeStartDate(start);
+                                        setRangeEndDate(end);
+                                    }
                                 }}
                             />
                         </div>
@@ -355,6 +469,32 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                         <div className="text-sm text-gray-500 ml-auto">No tracking data yet</div>
                     )}
                 </div>
+
+                {activeTab === "trend" && (
+                    <div className="mb-6">
+                        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                            <h2 className="text-xl font-bold">Category trends</h2>
+                            <CategoryVisibilityFilter
+                                categories={categories}
+                                categoriesByPriority={categoriesByPriority}
+                                visibleCategoryIds={visibleCategoryIds}
+                                isOpen={isCategoryFilterOpen}
+                                onOpenChange={setIsCategoryFilterOpen}
+                                filterRef={categoryFilterRef}
+                                panelRef={categoryFilterPanelRef}
+                                onToggle={toggleVisibleCategory}
+                                onCheckAll={checkAllCategories}
+                                onUncheckAll={uncheckAllCategories}
+                            />
+                        </div>
+                        <CategoryWeekTrendChart
+                            weeks={trendWeeks}
+                            weekStats={trendWeekStats}
+                            isLoading={isTrendLoading}
+                            visibleCategoryNames={visibleCategoryNames}
+                        />
+                    </div>
+                )}
 
                 {activeTab === "total" && boundsStats && (
                     <div className="grid grid-cols-2 gap-4 mb-6">
@@ -400,6 +540,7 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                     </div>
                 )}
 
+                {activeTab !== "trend" && stats && (
                 <div className="mb-6">
                     <div className="flex justify-between items-center mb-4">
                         <h2 className="text-xl font-bold">Categories</h2>
@@ -464,6 +605,7 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                         ))}
                     </div>
                 </div>
+                )}
 
                 {activeTab === "dailyAvg" && (
                     <div className="mb-6">
@@ -534,6 +676,7 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                 )}
             </div>
 
+            {activeTab !== "trend" && stats && (
             <div ref={sidebarRef} className="w-96 border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col">
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
@@ -596,6 +739,7 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                     )}
                 </div>
             </div>
+            )}
             {categorizeLayers}
         </div>
     );
