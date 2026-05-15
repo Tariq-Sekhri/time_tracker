@@ -1,11 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { get_total_statistics, WeekStatistics } from "../api/statistics.ts";
+import { get_total_statistics, get_week_statistics, WeekStatistics } from "../api/statistics.ts";
 import { get_logs_by_category, MergedLog } from "../api/Log.ts";
 import { useSettingsStore } from "../stores/settingsStore.ts";
 import { useAppCategorizeMenu } from "../hooks/useAppCategorizeMenu.tsx";
 import { logRowLeftClickCalendarFilter } from "../utils/calendarAppFilterRowClick.ts";
 import { useCalendarAppFilterActive } from "../stores/calendarAppFilterStore.ts";
+import StatisticsDateRangePicker, { calendarDateFromUnix } from "../components/StatisticsDateRangePicker.tsx";
+import { adjustInstantToCalendarDayBoundary, getCalendarDayRangeUnix } from "../utils.ts";
 
 type Tab = "dailyAvg" | "total";
 
@@ -50,23 +52,23 @@ function formatCalendarSpanSinceFirstActiveDay(firstActiveDayUnix: number): stri
     return parts.join(" ");
 }
 
-
 export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
     const [activeTab, setActiveTab] = useState<Tab>("dailyAvg");
     const [displayMode, setDisplayMode] = useState<"percentage" | "time" | "count">("time");
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const { openFromContextMenu, categorizeLayers } = useAppCategorizeMenu({
-        extraInvalidateQueryKeys: [["total_statistics"]],
+        extraInvalidateQueryKeys: [["total_statistics"], ["range_statistics"]],
     });
     const calendarAppFilterActive = useCalendarAppFilterActive();
 
     const uiMinAppDuration = useSettingsStore((state) => state.uiMinAppDuration);
     const minLogDuration = useSettingsStore((state) => state.timeBlockSettings.minLogDuration);
+    const calendarStartHour = useSettingsStore((state) => state.calendarStartHour);
 
     const sidebarRef = useRef<HTMLDivElement | null>(null);
     const categoriesRef = useRef<HTMLDivElement | null>(null);
 
-    const { data: totalStats, isLoading: isTotalLoading } = useQuery({
+    const { data: boundsStats, isLoading: isBoundsLoading } = useQuery({
         queryKey: ["total_statistics"],
         queryFn: get_total_statistics,
         staleTime: Infinity,
@@ -74,48 +76,84 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
         refetchOnReconnect: false,
     });
 
+    const maxSelectableDate = useMemo(
+        () => adjustInstantToCalendarDayBoundary(new Date(), calendarStartHour),
+        [calendarStartHour]
+    );
+
+    const minSelectableDate = useMemo(() => {
+        if (!boundsStats?.first_active_day) return null;
+        return calendarDateFromUnix(boundsStats.first_active_day);
+    }, [boundsStats?.first_active_day]);
+
+    const [rangeStartDate, setRangeStartDate] = useState<Date | null>(null);
+    const [rangeEndDate, setRangeEndDate] = useState<Date | null>(null);
+
+    useEffect(() => {
+        if (!minSelectableDate || rangeStartDate || rangeEndDate) return;
+        setRangeStartDate(minSelectableDate);
+        setRangeEndDate(maxSelectableDate);
+    }, [minSelectableDate, maxSelectableDate, rangeStartDate, rangeEndDate]);
+
+    const rangeUnix = useMemo(() => {
+        if (!rangeStartDate || !rangeEndDate) return null;
+        const { day_start } = getCalendarDayRangeUnix(rangeStartDate, calendarStartHour);
+        const { day_end } = getCalendarDayRangeUnix(rangeEndDate, calendarStartHour);
+        return { start: day_start, end: day_end };
+    }, [rangeStartDate, rangeEndDate, calendarStartHour]);
+
+    const { data: rangeStats, isLoading: isRangeLoading } = useQuery({
+        queryKey: ["range_statistics", rangeUnix?.start, rangeUnix?.end, calendarStartHour],
+        queryFn: () => get_week_statistics(rangeUnix!.start, rangeUnix!.end),
+        enabled: !!rangeUnix,
+        staleTime: Infinity,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+    });
+
     const dailyAvgStats: WeekStatistics | null = useMemo(() => {
-        if (!totalStats) return null;
+        if (!rangeStats) return null;
         return {
-            ...totalStats,
-            total_time: totalStats.number_of_active_days > 0
-                ? Math.floor(totalStats.total_time / totalStats.number_of_active_days)
+            ...rangeStats,
+            total_time: rangeStats.number_of_active_days > 0
+                ? Math.floor(rangeStats.total_time / rangeStats.number_of_active_days)
                 : 0,
-            categories: totalStats.categories.map(cat => ({
+            categories: rangeStats.categories.map(cat => ({
                 ...cat,
-                total_duration: totalStats.number_of_active_days > 0
-                    ? Math.floor(cat.total_duration / totalStats.number_of_active_days)
+                total_duration: rangeStats.number_of_active_days > 0
+                    ? Math.floor(cat.total_duration / rangeStats.number_of_active_days)
                     : 0,
             })),
-            top_apps: totalStats.top_apps.map(app => ({
+            top_apps: rangeStats.top_apps.map(app => ({
                 ...app,
-                total_duration: totalStats.number_of_active_days > 0
-                    ? Math.floor(app.total_duration / totalStats.number_of_active_days)
+                total_duration: rangeStats.number_of_active_days > 0
+                    ? Math.floor(app.total_duration / rangeStats.number_of_active_days)
                     : 0,
             })),
-            all_apps: totalStats.all_apps.map(app => ({
+            all_apps: rangeStats.all_apps.map(app => ({
                 ...app,
-                total_duration: totalStats.number_of_active_days > 0
-                    ? Math.floor(app.total_duration / totalStats.number_of_active_days)
+                total_duration: rangeStats.number_of_active_days > 0
+                    ? Math.floor(app.total_duration / rangeStats.number_of_active_days)
                     : 0,
             })),
-            hourly_distribution: totalStats.number_of_active_days > 0
-                ? totalStats.hourly_distribution.map(h => ({
+            hourly_distribution: rangeStats.number_of_active_days > 0
+                ? rangeStats.hourly_distribution.map(h => ({
                     ...h,
-                    total_duration: Math.floor(h.total_duration / totalStats.number_of_active_days),
+                    total_duration: Math.floor(h.total_duration / rangeStats.number_of_active_days),
                 }))
-                : totalStats.hourly_distribution.map(h => ({
+                : rangeStats.hourly_distribution.map(h => ({
                     ...h,
                     total_duration: 0,
                 })),
         };
-    }, [totalStats]);
+    }, [rangeStats]);
 
-    const stats: WeekStatistics | null = activeTab === "dailyAvg" ? dailyAvgStats : (totalStats ?? null);
+    const stats: WeekStatistics | null = activeTab === "dailyAvg" ? dailyAvgStats : (rangeStats ?? null);
 
-    const categoryStartTime = totalStats?.first_active_day ?? 0;
+    const categoryStartTime = rangeUnix?.start ?? 0;
+    const categoryEndTime = rangeUnix?.end ?? Math.floor(Date.now() / 1000);
     const categoryQueryKey = selectedCategory
-        ? ["category_app_logs", selectedCategory, categoryStartTime, minLogDuration]
+        ? ["category_app_logs", selectedCategory, categoryStartTime, categoryEndTime, minLogDuration]
         : ["category_app_logs", "none"];
     const { data: categoryAppLogs = [], isLoading: isLoadingCategory } = useQuery({
         queryKey: categoryQueryKey,
@@ -125,7 +163,7 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
             const result: MergedLog[] = await get_logs_by_category({
                 category: selectedCategory,
                 start_time: categoryStartTime,
-                end_time: Math.floor(Date.now() / 1000),
+                end_time: categoryEndTime,
                 min_log_duration: minLogDuration,
             });
             const logMap = new Map<string, { app: string; totalDuration: number }>();
@@ -167,7 +205,15 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
         ? stats?.categories.find((c) => c.category === selectedCategory)
         : null;
 
-    const numberOfActiveDays = totalStats?.number_of_active_days ?? 0;
+    const numberOfActiveDays = rangeStats?.number_of_active_days ?? 0;
+    const isStatsLoading = isBoundsLoading || isRangeLoading || !rangeStartDate || !rangeEndDate;
+    const isDefaultDateRange = useMemo(() => {
+        if (!minSelectableDate || !rangeStartDate || !rangeEndDate) return true;
+        return (
+            rangeStartDate.getTime() === minSelectableDate.getTime() &&
+            rangeEndDate.getTime() === maxSelectableDate.getTime()
+        );
+    }, [minSelectableDate, maxSelectableDate, rangeStartDate, rangeEndDate]);
 
     const scaledDuration = (seconds: number) => {
         if (activeTab !== "dailyAvg") return Math.floor(seconds);
@@ -247,7 +293,7 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
         const loadingTab = activeTab === "dailyAvg" ? "Daily Avg" : "Total";
         return (
             <div className="p-6">
-                <div className="text-gray-500">{isTotalLoading ? `Loading ${loadingTab} statistics...` : "No statistics available"}</div>
+                <div className="text-gray-500">{isStatsLoading ? `Loading ${loadingTab} statistics...` : "No statistics available"}</div>
             </div>
         );
     }
@@ -266,32 +312,61 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                     <div className="w-20"></div>
                 </div>
 
-                <div className="flex gap-2 mb-6 border-b border-gray-700">
-                    <button
-                        onClick={() => setActiveTab("dailyAvg")}
-                        className={`px-4 py-2 font-medium ${activeTab === "dailyAvg" ? "border-b-2 border-blue-500 text-white" : "text-gray-400"}`}
-                    >
-                        Daily Avg
-                    </button>
-                    <button
-                        onClick={() => setActiveTab("total")}
-                        className={`px-4 py-2 font-medium ${activeTab === "total" ? "border-b-2 border-blue-500 text-white" : "text-gray-400"}`}
-                    >
-                        Total
-                    </button>
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+                    <div className="flex gap-1 bg-gray-800 rounded-lg p-1 shrink-0">
+                        <button
+                            onClick={() => setActiveTab("dailyAvg")}
+                            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === "dailyAvg" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"}`}
+                        >
+                            Daily Avg
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("total")}
+                            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === "total" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"}`}
+                        >
+                            Total
+                        </button>
+                    </div>
+                    {minSelectableDate && rangeStartDate && rangeEndDate ? (
+                        <div className="ml-auto shrink-0 flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setRangeStartDate(minSelectableDate);
+                                    setRangeEndDate(maxSelectableDate);
+                                }}
+                                disabled={isDefaultDateRange}
+                                className="px-2.5 py-1.5 text-sm text-gray-400 hover:text-white bg-gray-800/80 border border-gray-700 rounded-lg transition-colors disabled:opacity-40 disabled:pointer-events-none shrink-0"
+                            >
+                                Reset
+                            </button>
+                            <StatisticsDateRangePicker
+                                startDate={rangeStartDate}
+                                endDate={rangeEndDate}
+                                minDate={minSelectableDate}
+                                maxDate={maxSelectableDate}
+                                onRangeChange={(start, end) => {
+                                    setRangeStartDate(start);
+                                    setRangeEndDate(end);
+                                }}
+                            />
+                        </div>
+                    ) : (
+                        <div className="text-sm text-gray-500 ml-auto">No tracking data yet</div>
+                    )}
                 </div>
 
-                {activeTab === "total" && (
+                {activeTab === "total" && boundsStats && (
                     <div className="grid grid-cols-2 gap-4 mb-6">
                         <div className="bg-gray-900 p-4 rounded">
                             <div className="text-sm text-gray-400 mb-1">Total Time</div>
-                            <div className="text-lg font-semibold">{formatDuration(totalStats!.total_time_all_time)}</div>
+                            <div className="text-lg font-semibold">{formatDuration(boundsStats.total_time_all_time)}</div>
                         </div>
                         <div className="bg-gray-900 p-4 rounded">
                             <div className="text-sm text-gray-400 mb-1">First Active Day</div>
                             <div className="text-lg font-semibold">
-                                {totalStats!.first_active_day
-                                    ? `${formatDate(totalStats!.first_active_day)} (${formatCalendarSpanSinceFirstActiveDay(totalStats!.first_active_day)})`
+                                {boundsStats.first_active_day
+                                    ? `${formatDate(boundsStats.first_active_day)} (${formatCalendarSpanSinceFirstActiveDay(boundsStats.first_active_day)})`
                                     : "N/A"}
                             </div>
                         </div>
@@ -302,24 +377,24 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                     <div className="grid grid-cols-3 gap-4 mb-6">
                         <div className="bg-gray-900 p-4 rounded">
                             <div className="text-sm text-gray-400 mb-1">Avg Time (Active Days)</div>
-                            <div className="text-lg font-semibold">{formatDuration(totalStats!.average_time_active_days)}</div>
+                            <div className="text-lg font-semibold">{formatDuration(Math.floor(rangeStats!.average_time_active_days))}</div>
                         </div>
                         <div className="bg-gray-900 p-4 rounded">
                             <div className="text-sm text-gray-400 mb-1">Most Active Day</div>
                             <div className="text-lg font-semibold">
-                                {totalStats!.most_active_day ? formatDate(totalStats!.most_active_day[0]) : "N/A"}
+                                {rangeStats!.most_active_day ? formatDate(rangeStats!.most_active_day[0]) : "N/A"}
                             </div>
                             <div className="text-sm text-gray-400 mt-1">
-                                {totalStats!.most_active_day ? `(${formatDuration(totalStats!.most_active_day[1])})` : ""}
+                                {rangeStats!.most_active_day ? `(${formatDuration(rangeStats!.most_active_day[1])})` : ""}
                             </div>
                         </div>
                         <div className="bg-gray-900 p-4 rounded">
                             <div className="text-sm text-gray-400 mb-1">Most Inactive Day</div>
                             <div className="text-lg font-semibold">
-                                {totalStats!.most_inactive_day ? formatDate(totalStats!.most_inactive_day[0]) : "N/A"}
+                                {rangeStats!.most_inactive_day ? formatDate(rangeStats!.most_inactive_day[0]) : "N/A"}
                             </div>
                             <div className="text-sm text-gray-400 mt-1">
-                                {totalStats!.most_inactive_day ? `(${formatDuration(totalStats!.most_inactive_day[1])})` : ""}
+                                {rangeStats!.most_inactive_day ? `(${formatDuration(rangeStats!.most_inactive_day[1])})` : ""}
                             </div>
                         </div>
                     </div>
