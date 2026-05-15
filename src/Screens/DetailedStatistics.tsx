@@ -414,7 +414,7 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
     return (
         <div className="flex h-full overflow-hidden">
             <div
-                className={`flex-1 p-6 text-white h-full min-h-0 ${
+                className={`flex-1 min-w-0 p-6 text-white h-full min-h-0 ${
                     activeTab === "trend" ? "flex flex-col overflow-hidden" : "overflow-y-auto nice-scrollbar"
                 }`}
             >
@@ -493,7 +493,7 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                 </div>
 
                 {activeTab === "trend" && (
-                    <div className="flex-1 flex flex-col min-h-0">
+                    <div className="flex-1 flex flex-col min-h-0 min-w-0">
                         <div className="flex flex-wrap items-center justify-between gap-3 mb-4 shrink-0">
                             <h2 className="text-xl font-bold">Category trends</h2>
                             <CategoryVisibilityFilter
@@ -514,6 +514,7 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                             weekStats={trendWeekStats}
                             isLoading={isTrendLoading}
                             visibleCategoryNames={visibleCategoryNames}
+                            calendarStartHour={calendarStartHour}
                         />
                     </div>
                 )}

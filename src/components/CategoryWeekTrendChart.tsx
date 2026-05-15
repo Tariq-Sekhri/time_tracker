@@ -1,6 +1,16 @@
 import { useMemo } from "react";
+import {
+    CartesianGrid,
+    Line,
+    LineChart,
+    ResponsiveContainer,
+    Tooltip,
+    XAxis,
+    YAxis,
+} from "recharts";
 import { WeekStatistics } from "../api/statistics.ts";
 import { formatDuration } from "../Screens/Calander/utils.ts";
+import { adjustInstantToCalendarDayBoundary } from "../utils.ts";
 
 export type WeekTrendColumn = {
     week_start: number;
@@ -13,15 +23,36 @@ export type CategoryWeekSeries = {
     dailyAvgSeconds: number[];
 };
 
-const VIEW_WIDTH = 1200;
-const VIEW_HEIGHT = 520;
-const PLOT_LEFT = 64;
-const PLOT_RIGHT = VIEW_WIDTH - 32;
-const PLOT_TOP = 28;
-const PLOT_BOTTOM = VIEW_HEIGHT - 44;
-const PLOT_W = PLOT_RIGHT - PLOT_LEFT;
-const PLOT_H = PLOT_BOTTOM - PLOT_TOP;
-const X_LABEL_Y = VIEW_HEIGHT - 22;
+const PX_PER_WEEK = 52;
+
+function countDaysInTrackedWeekPeriod(
+    weekStartUnix: number,
+    weekEndUnix: number,
+    calendarStartHour: number
+): number {
+    const nowUnix = Math.floor(Date.now() / 1000);
+    const cappedEnd = Math.min(weekEndUnix, nowUnix);
+    if (cappedEnd < weekStartUnix) return 1;
+    const startCal = adjustInstantToCalendarDayBoundary(new Date(weekStartUnix * 1000), calendarStartHour);
+    const endCal = adjustInstantToCalendarDayBoundary(new Date(cappedEnd * 1000), calendarStartHour);
+    const startMid = new Date(
+        startCal.getFullYear(),
+        startCal.getMonth(),
+        startCal.getDate(),
+        12,
+        0,
+        0,
+        0
+    );
+    const endMid = new Date(endCal.getFullYear(), endCal.getMonth(), endCal.getDate(), 12, 0, 0, 0);
+    let n = 0;
+    const cur = new Date(startMid);
+    while (cur.getTime() <= endMid.getTime()) {
+        n++;
+        cur.setDate(cur.getDate() + 1);
+    }
+    return Math.max(1, n);
+}
 
 function formatWeekLabel(weekStartUnix: number): string {
     return new Date(weekStartUnix * 1000).toLocaleDateString("en-US", {
@@ -32,7 +63,8 @@ function formatWeekLabel(weekStartUnix: number): string {
 
 function buildSeries(
     weeks: { week_start: number; week_end: number }[],
-    weekStats: (WeekStatistics | undefined)[]
+    weekStats: (WeekStatistics | undefined)[],
+    calendarStartHour: number
 ): { columns: WeekTrendColumn[]; series: CategoryWeekSeries[] } {
     const columns: WeekTrendColumn[] = weeks.map((w) => ({
         week_start: w.week_start,
@@ -41,14 +73,18 @@ function buildSeries(
 
     const categoryMeta = new Map<string, { color: string; values: number[] }>();
 
-    weeks.forEach((_, weekIdx) => {
+    weeks.forEach((weekRange, weekIdx) => {
         const stats = weekStats[weekIdx];
-        const activeDays = Math.max(1, stats?.number_of_active_days ?? 0);
+        const dayCount = countDaysInTrackedWeekPeriod(
+            weekRange.week_start,
+            weekRange.week_end,
+            calendarStartHour
+        );
         const seen = new Set<string>();
 
         for (const cat of stats?.categories ?? []) {
             seen.add(cat.category);
-            const dailyAvg = Math.floor(cat.total_duration / activeDays);
+            const dailyAvg = Math.floor(cat.total_duration / dayCount);
             const existing = categoryMeta.get(cat.category);
             if (existing) {
                 existing.values[weekIdx] = dailyAvg;
@@ -86,21 +122,14 @@ function buildSeries(
     return { columns, series };
 }
 
-function yForValue(minutes: number, maxMinutes: number): number {
-    if (maxMinutes <= 0) return PLOT_BOTTOM;
-    return PLOT_BOTTOM - (minutes / maxMinutes) * PLOT_H;
-}
-
-function xForWeekIndex(index: number, count: number): number {
-    if (count <= 1) return PLOT_LEFT + PLOT_W / 2;
-    return PLOT_LEFT + ((index + 0.5) / count) * PLOT_W;
-}
+type ChartRow = { label: string; week_start: number } & Record<string, number | string>;
 
 type CategoryWeekTrendChartProps = {
     weeks: { week_start: number; week_end: number }[];
     weekStats: (WeekStatistics | undefined)[];
     isLoading: boolean;
     visibleCategoryNames: Set<string>;
+    calendarStartHour: number;
 };
 
 export default function CategoryWeekTrendChart({
@@ -108,10 +137,11 @@ export default function CategoryWeekTrendChart({
     weekStats,
     isLoading,
     visibleCategoryNames,
+    calendarStartHour,
 }: CategoryWeekTrendChartProps) {
     const { columns, series: allSeries } = useMemo(
-        () => buildSeries(weeks, weekStats),
-        [weeks, weekStats]
+        () => buildSeries(weeks, weekStats, calendarStartHour),
+        [weeks, weekStats, calendarStartHour]
     );
 
     const series = useMemo(
@@ -119,31 +149,15 @@ export default function CategoryWeekTrendChart({
         [allSeries, visibleCategoryNames]
     );
 
-    const maxMinutes = useMemo(() => {
-        let max = 1;
-        for (const s of series) {
-            for (const sec of s.dailyAvgSeconds) {
-                max = Math.max(max, sec / 60);
+    const chartData: ChartRow[] = useMemo(() => {
+        return columns.map((col, i) => {
+            const row: ChartRow = { label: col.label, week_start: col.week_start };
+            for (const s of series) {
+                row[s.category] = s.dailyAvgSeconds[i] ?? 0;
             }
-        }
-        return max;
-    }, [series]);
-
-    const yTicks = useMemo(() => {
-        const step = maxMinutes / 4;
-        return [0, 1, 2, 3, 4].map((i) => Math.round(step * i));
-    }, [maxMinutes]);
-
-    const linePaths = useMemo(() => {
-        return series.map((s) => {
-            const points = s.dailyAvgSeconds.map((sec, i) => {
-                const x = xForWeekIndex(i, columns.length);
-                const y = yForValue(sec / 60, maxMinutes);
-                return `${i === 0 ? "M" : "L"} ${x} ${y}`;
-            });
-            return { category: s.category, color: s.color, d: points.join(" ") };
+            return row;
         });
-    }, [series, columns.length, maxMinutes]);
+    }, [columns, series]);
 
     if (isLoading) {
         return (
@@ -172,9 +186,9 @@ export default function CategoryWeekTrendChart({
     }
 
     return (
-        <div className="flex-1 flex flex-col min-h-0 bg-gray-900 rounded p-4">
+        <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-gray-900 rounded p-4">
             <p className="text-sm text-gray-400 shrink-0 mb-3">
-                Daily average per category, by week (active days in each week)
+                Daily average per category, by week (total in week ÷ calendar days in period)
             </p>
             <div className="flex flex-wrap gap-x-4 gap-y-2 mb-4 pb-4 border-b border-gray-800 shrink-0 max-h-28 overflow-y-auto nice-scrollbar">
                 {series.map((s) => (
@@ -184,81 +198,68 @@ export default function CategoryWeekTrendChart({
                     </div>
                 ))}
             </div>
-            <div className="relative flex-1 min-h-[min(520px,calc(100vh-18rem))] w-full">
-                <svg
-                    width="100%"
-                    height="100%"
-                    viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
-                    preserveAspectRatio="xMidYMid meet"
-                    className="overflow-visible block"
+            <div className="flex-1 min-h-[280px] min-w-0 overflow-x-auto overflow-y-hidden nice-scrollbar rounded">
+                <div
+                    className="h-[min(520px,calc(100vh-22rem))] min-h-[260px]"
+                    style={{ width: `max(100%, ${columns.length * PX_PER_WEEK}px)` }}
                 >
-                    {yTicks.map((tick) => {
-                        const y = yForValue(tick, maxMinutes);
-                        return (
-                            <g key={tick}>
-                                <line
-                                    x1={PLOT_LEFT}
-                                    y1={y}
-                                    x2={PLOT_RIGHT}
-                                    y2={y}
-                                    stroke="#374151"
-                                    strokeWidth="1"
-                                    strokeDasharray="2,2"
+                    <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                            data={chartData}
+                            margin={{ top: 10, right: 16, bottom: 8, left: 8 }}
+                            style={{ outline: "none" }}
+                        >
+                            <CartesianGrid stroke="#374151" strokeDasharray="6 6" vertical={false} />
+                            <XAxis
+                                dataKey="label"
+                                tick={{ fill: "#9ca3af", fontSize: 11 }}
+                                tickLine={false}
+                                axisLine={{ stroke: "#4b5563" }}
+                            />
+                            <YAxis
+                                tick={{ fill: "#9ca3af", fontSize: 11 }}
+                                tickFormatter={(sec) =>
+                                    typeof sec === "number" ? formatDuration(sec) : String(sec)
+                                }
+                                tickLine={false}
+                                axisLine={{ stroke: "#4b5563" }}
+                                width={68}
+                                domain={[0, "auto"]}
+                            />
+                            <Tooltip
+                                cursor={{ stroke: "#6b7280", strokeWidth: 1, strokeDasharray: "4 4" }}
+                                contentStyle={{
+                                    backgroundColor: "#111827",
+                                    border: "1px solid #374151",
+                                    borderRadius: "8px",
+                                    color: "#e5e7eb",
+                                    fontSize: "12px",
+                                }}
+                                formatter={(value) =>
+                                    typeof value === "number" ? formatDuration(Math.round(value)) : String(value ?? "")
+                                }
+                                labelFormatter={(label) => (label != null ? String(label) : "")}
+                                itemSorter={(a) =>
+                                    -(typeof a?.value === "number" ? a.value : Number(a?.value ?? 0))
+                                }
+                            />
+                            {series.map((s) => (
+                                <Line
+                                    key={s.category}
+                                    type="monotone"
+                                    dataKey={s.category}
+                                    name={s.category}
+                                    stroke={s.color}
+                                    strokeWidth={2}
+                                    dot={false}
+                                    activeDot={{ r: 5 }}
+                                    connectNulls
+                                    isAnimationActive={false}
                                 />
-                                <text
-                                    x={PLOT_LEFT - 8}
-                                    y={y + 4}
-                                    fill="#9ca3af"
-                                    fontSize="11"
-                                    textAnchor="end"
-                                >
-                                    {tick === 0 ? "0" : formatDuration(tick * 60)}
-                                </text>
-                            </g>
-                        );
-                    })}
-                    {columns.map((col, i) => {
-                        const x = xForWeekIndex(i, columns.length);
-                        return (
-                            <text
-                                key={col.week_start}
-                                x={x}
-                                y={X_LABEL_Y}
-                                fill="#9ca3af"
-                                fontSize="10"
-                                textAnchor="middle"
-                            >
-                                {col.label}
-                            </text>
-                        );
-                    })}
-                    {linePaths.map((line) => (
-                        <path
-                            key={line.category}
-                            d={line.d}
-                            fill="none"
-                            stroke={line.color}
-                            strokeWidth="2.5"
-                            strokeLinejoin="round"
-                            strokeLinecap="round"
-                        />
-                    ))}
-                    {series.map((s) =>
-                        s.dailyAvgSeconds.map((sec, i) => {
-                            const x = xForWeekIndex(i, columns.length);
-                            const y = yForValue(sec / 60, maxMinutes);
-                            return (
-                                <circle
-                                    key={`${s.category}-${columns[i]?.week_start}`}
-                                    cx={x}
-                                    cy={y}
-                                    r="4"
-                                    fill={s.color}
-                                />
-                            );
-                        })
-                    )}
-                </svg>
+                            ))}
+                        </LineChart>
+                    </ResponsiveContainer>
+                </div>
             </div>
         </div>
     );
