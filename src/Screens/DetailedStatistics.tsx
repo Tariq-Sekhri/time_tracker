@@ -341,10 +341,28 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
     const sidebarPercentDenom = selectedCategory
         ? selectedCategoryTotalDuration
         : (stats?.total_time ?? 0);
-    const hourlyPoints = useMemo(
-        () => (stats?.hourly_distribution ?? []).filter((h) => h.hour >= 0 && h.hour <= 24),
-        [stats?.hourly_distribution]
-    );
+    const hourlyByClockHour = useMemo(() => {
+        const map = new Map<number, number>();
+        for (const h of stats?.hourly_distribution ?? []) {
+            if (h.hour >= 0 && h.hour <= 23) {
+                map.set(h.hour, (map.get(h.hour) ?? 0) + h.total_duration);
+            }
+        }
+        return map;
+    }, [stats?.hourly_distribution]);
+
+    const hourlyPoints = useMemo(() => {
+        const start = Math.min(23, Math.max(0, Math.floor(calendarStartHour)));
+        return Array.from({ length: 25 }, (_, slot) => {
+            const clockHour = slot < 24 ? (start + slot) % 24 : start;
+            return {
+                slot,
+                clockHour,
+                total_duration: slot < 24 ? (hourlyByClockHour.get(clockHour) ?? 0) : 0,
+            };
+        });
+    }, [hourlyByClockHour, calendarStartHour]);
+
     const maxHourlyMinutes = useMemo(
         () => Math.max(...hourlyPoints.map((h) => h.total_duration / 60), 1),
         [hourlyPoints]
@@ -353,7 +371,7 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
         () =>
             hourlyPoints
                 .map((h, idx) => {
-                    const x = (h.hour / 24) * 700 + 50;
+                    const x = (h.slot / 24) * 700 + 50;
                     const y = 190 - ((h.total_duration / 60) / maxHourlyMinutes) * 160;
                     return `${idx === 0 ? "M" : "L"} ${x} ${y}`;
                 })
@@ -364,11 +382,11 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
         () =>
             `M 50 190 ${hourlyPoints
                 .map((h) => {
-                    const x = (h.hour / 24) * 700 + 50;
+                    const x = (h.slot / 24) * 700 + 50;
                     const y = 190 - ((h.total_duration / 60) / maxHourlyMinutes) * 160;
                     return `L ${x} ${y}`;
                 })
-                .join(" ")} L ${((24) / 24) * 700 + 50} 190 Z`,
+                .join(" ")} L ${(24 / 24) * 700 + 50} 190 Z`,
         [hourlyPoints, maxHourlyMinutes]
     );
 
@@ -395,8 +413,12 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
 
     return (
         <div className="flex h-full overflow-hidden">
-            <div className="flex-1 p-6 text-white h-full overflow-y-auto nice-scrollbar">
-                <div className="flex items-center justify-between mb-6">
+            <div
+                className={`flex-1 p-6 text-white h-full min-h-0 ${
+                    activeTab === "trend" ? "flex flex-col overflow-hidden" : "overflow-y-auto nice-scrollbar"
+                }`}
+            >
+                <div className={`flex items-center justify-between ${activeTab === "trend" ? "mb-4 shrink-0" : "mb-6"}`}>
                     <button
                         onClick={onBack}
                         className="text-gray-400 hover:text-white"
@@ -407,7 +429,7 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                     <div className="w-20"></div>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+                <div className={`flex flex-wrap items-center justify-between gap-3 ${activeTab === "trend" ? "mb-4 shrink-0" : "mb-6"}`}>
                     <div className="flex gap-1 bg-gray-800 rounded-lg p-1 shrink-0">
                         <button
                             onClick={() => setActiveTab("dailyAvg")}
@@ -471,8 +493,8 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                 </div>
 
                 {activeTab === "trend" && (
-                    <div className="mb-6">
-                        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                    <div className="flex-1 flex flex-col min-h-0">
+                        <div className="flex flex-wrap items-center justify-between gap-3 mb-4 shrink-0">
                             <h2 className="text-xl font-bold">Category trends</h2>
                             <CategoryVisibilityFilter
                                 categories={categories}
@@ -619,12 +641,12 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                                             <stop offset="100%" stopColor="#f97316" stopOpacity="0.2"/>
                                         </linearGradient>
                                     </defs>
-                                    {Array.from({length: 25}, (_, i) => i).map(hour => (
+                                    {hourlyPoints.map((h) => (
                                         <line
-                                            key={hour}
-                                            x1={(hour / 24) * 700 + 50}
+                                            key={h.slot}
+                                            x1={(h.slot / 24) * 700 + 50}
                                             y1="10"
-                                            x2={(hour / 24) * 700 + 50}
+                                            x2={(h.slot / 24) * 700 + 50}
                                             y2="190"
                                             stroke="#374151"
                                             strokeWidth="1"
@@ -643,11 +665,11 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                                             {val}h
                                         </text>
                                     ))}
-                                    {Array.from({length: 25}, (_, i) => i).map(hour => {
-                                        const x = (hour / 24) * 700 + 50;
+                                    {hourlyPoints.map((h) => {
+                                        const x = (h.slot / 24) * 700 + 50;
                                         return (
                                             <text
-                                                key={hour}
+                                                key={h.slot}
                                                 x={x}
                                                 y="200"
                                                 fill="#9ca3af"
@@ -655,7 +677,7 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                                                 textAnchor="end"
                                                 transform={`rotate(-45 ${x} 200)`}
                                             >
-                                                {hour}:00
+                                                {h.clockHour}:00
                                             </text>
                                         );
                                     })}

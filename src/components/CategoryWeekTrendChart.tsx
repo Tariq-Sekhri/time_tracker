@@ -13,6 +13,16 @@ export type CategoryWeekSeries = {
     dailyAvgSeconds: number[];
 };
 
+const VIEW_WIDTH = 1200;
+const VIEW_HEIGHT = 520;
+const PLOT_LEFT = 64;
+const PLOT_RIGHT = VIEW_WIDTH - 32;
+const PLOT_TOP = 28;
+const PLOT_BOTTOM = VIEW_HEIGHT - 44;
+const PLOT_W = PLOT_RIGHT - PLOT_LEFT;
+const PLOT_H = PLOT_BOTTOM - PLOT_TOP;
+const X_LABEL_Y = VIEW_HEIGHT - 22;
+
 function formatWeekLabel(weekStartUnix: number): string {
     return new Date(weekStartUnix * 1000).toLocaleDateString("en-US", {
         month: "short",
@@ -76,13 +86,6 @@ function buildSeries(
     return { columns, series };
 }
 
-const PLOT_LEFT = 56;
-const PLOT_RIGHT = 780;
-const PLOT_TOP = 16;
-const PLOT_BOTTOM = 220;
-const PLOT_W = PLOT_RIGHT - PLOT_LEFT;
-const PLOT_H = PLOT_BOTTOM - PLOT_TOP;
-
 function yForValue(minutes: number, maxMinutes: number): number {
     if (maxMinutes <= 0) return PLOT_BOTTOM;
     return PLOT_BOTTOM - (minutes / maxMinutes) * PLOT_H;
@@ -143,16 +146,24 @@ export default function CategoryWeekTrendChart({
     }, [series, columns.length, maxMinutes]);
 
     if (isLoading) {
-        return <div className="text-gray-500 text-sm py-12 text-center">Loading week trends...</div>;
+        return (
+            <div className="flex-1 flex items-center justify-center min-h-[320px] text-gray-500 text-sm">
+                Loading week trends...
+            </div>
+        );
     }
 
     if (weeks.length === 0) {
-        return <div className="text-gray-500 text-sm py-12 text-center">Select a date range that includes at least one week.</div>;
+        return (
+            <div className="flex-1 flex items-center justify-center min-h-[320px] text-gray-500 text-sm text-center px-4">
+                Select a date range that includes at least one week.
+            </div>
+        );
     }
 
     if (series.length === 0) {
         return (
-            <div className="text-gray-500 text-sm py-12 text-center">
+            <div className="flex-1 flex items-center justify-center min-h-[320px] text-gray-500 text-sm text-center px-4">
                 {visibleCategoryNames.size === 0
                     ? "Select at least one category in the filter."
                     : "No category data for the selected weeks."}
@@ -161,10 +172,26 @@ export default function CategoryWeekTrendChart({
     }
 
     return (
-        <div className="bg-gray-900 p-4 rounded">
-            <p className="text-sm text-gray-400 mb-4">Daily average per category, by week (active days in each week)</p>
-            <div className="relative h-64 md:h-72">
-                <svg width="100%" height="100%" viewBox="0 0 800 280" className="overflow-visible">
+        <div className="flex-1 flex flex-col min-h-0 bg-gray-900 rounded p-4">
+            <p className="text-sm text-gray-400 shrink-0 mb-3">
+                Daily average per category, by week (active days in each week)
+            </p>
+            <div className="flex flex-wrap gap-x-4 gap-y-2 mb-4 pb-4 border-b border-gray-800 shrink-0 max-h-28 overflow-y-auto nice-scrollbar">
+                {series.map((s) => (
+                    <div key={s.category} className="flex items-center gap-2 min-w-0">
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                        <span className="text-xs text-gray-300 truncate">{s.category}</span>
+                    </div>
+                ))}
+            </div>
+            <div className="relative flex-1 min-h-[min(520px,calc(100vh-18rem))] w-full">
+                <svg
+                    width="100%"
+                    height="100%"
+                    viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
+                    preserveAspectRatio="xMidYMid meet"
+                    className="overflow-visible block"
+                >
                     {yTicks.map((tick) => {
                         const y = yForValue(tick, maxMinutes);
                         return (
@@ -178,7 +205,13 @@ export default function CategoryWeekTrendChart({
                                     strokeWidth="1"
                                     strokeDasharray="2,2"
                                 />
-                                <text x={PLOT_LEFT - 6} y={y + 3} fill="#9ca3af" fontSize="10" textAnchor="end">
+                                <text
+                                    x={PLOT_LEFT - 8}
+                                    y={y + 4}
+                                    fill="#9ca3af"
+                                    fontSize="11"
+                                    textAnchor="end"
+                                >
                                     {tick === 0 ? "0" : formatDuration(tick * 60)}
                                 </text>
                             </g>
@@ -190,9 +223,9 @@ export default function CategoryWeekTrendChart({
                             <text
                                 key={col.week_start}
                                 x={x}
-                                y="258"
+                                y={X_LABEL_Y}
                                 fill="#9ca3af"
-                                fontSize="9"
+                                fontSize="10"
                                 textAnchor="middle"
                             >
                                 {col.label}
@@ -205,7 +238,7 @@ export default function CategoryWeekTrendChart({
                             d={line.d}
                             fill="none"
                             stroke={line.color}
-                            strokeWidth="2"
+                            strokeWidth="2.5"
                             strokeLinejoin="round"
                             strokeLinecap="round"
                         />
@@ -219,21 +252,13 @@ export default function CategoryWeekTrendChart({
                                     key={`${s.category}-${columns[i]?.week_start}`}
                                     cx={x}
                                     cy={y}
-                                    r="3"
+                                    r="4"
                                     fill={s.color}
                                 />
                             );
                         })
                     )}
                 </svg>
-            </div>
-            <div className="flex flex-wrap gap-x-4 gap-y-2 mt-4 pt-4 border-t border-gray-800">
-                {series.map((s) => (
-                    <div key={s.category} className="flex items-center gap-2 min-w-0">
-                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
-                        <span className="text-xs text-gray-300 truncate">{s.category}</span>
-                    </div>
-                ))}
             </div>
         </div>
     );
