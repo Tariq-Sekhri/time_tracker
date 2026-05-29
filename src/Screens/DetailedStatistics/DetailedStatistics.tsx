@@ -565,9 +565,9 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                 {/* TREND TAB ONLY: chart fills remaining height; no category list / hourly / sidebar */}
                 {activeTab === "trend" && (
                     <div className="flex-1 flex flex-col min-h-0 min-w-0">
-                        <div className="flex flex-wrap items-center justify-between gap-3 mb-4 shrink-0">
+                        <div className="flex flex-wrap items-center gap-3 mb-4 shrink-0">
                             <h2 className="text-xl font-bold">Category trends</h2>
-                            {/* Which category lines appear on the multi-week stacked/line chart */}
+                            <div className="ml-auto shrink-0">
                             <CategoryVisibilityFilter
                                 categories={categories}
                                 categoriesByPriority={categoriesByPriority}
@@ -580,6 +580,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                                 onCheckAll={checkAllCategories}
                                 onUncheckAll={uncheckAllCategories}
                             />
+                            </div>
                         </div>
                         {/* weeks = x-axis labels; weekStats[i] matches trendWeekQueries[i].data */}
                         <CategoryWeekTrendChart
