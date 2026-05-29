@@ -1,22 +1,22 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { get_total_statistics, get_week_statistics, WeekStatistics } from "../api/statistics.ts";
-import { get_logs_by_category, MergedLog } from "../api/Log.ts";
-import { useSettingsStore } from "../stores/settingsStore.ts";
-import { useAppCategorizeMenu } from "../hooks/useAppCategorizeMenu.tsx";
-import { logRowLeftClickCalendarFilter } from "../utils/calendarAppFilterRowClick.ts";
-import { useCalendarAppFilterActive } from "../stores/calendarAppFilterStore.ts";
-import StatisticsDateRangePicker, { calendarDateFromUnix } from "../components/StatisticsDateRangePicker.tsx";
-import CategoryWeekTrendChart from "../components/CategoryWeekTrendChart.tsx";
-import CategoryVisibilityFilter from "../Componants/CategoryVisibilityFilter.tsx";
-import { get_categories } from "../api/Category.ts";
-import { useVisibleCategoryFilter } from "../hooks/useVisibleCategoryFilter.ts";
+import {useQueries, useQuery} from "@tanstack/react-query";
+import {useEffect, useMemo, useRef, useState} from "react";
+import {get_total_statistics, get_week_statistics, WeekStatistics} from "../../api/statistics.ts";
+import {get_logs_by_category, MergedLog} from "../../api/Log.ts";
+import {useSettingsStore} from "../../stores/settingsStore.ts";
+import {useAppCategorizeMenu} from "../../hooks/useAppCategorizeMenu.tsx";
+import {logRowLeftClickCalendarFilter} from "../../utils/calendarAppFilterRowClick.ts";
+import {useCalendarAppFilterActive} from "../../stores/calendarAppFilterStore.ts";
+import StatisticsDateRangePicker, {calendarDateFromUnix} from "./StatisticsDateRangePicker.tsx";
+import CategoryWeekTrendChart from "./CategoryWeekTrendChart.tsx";
+import CategoryVisibilityFilter from "../../Componants/CategoryVisibilityFilter.tsx";
+import {get_categories} from "../../api/Category.ts";
+import {useVisibleCategoryFilter} from "../../hooks/useVisibleCategoryFilter.ts";
 import {
     adjustInstantToCalendarDayBoundary,
     enumerateWeekRangesInSpan,
     getCalendarDayRangeUnix,
     getWeekStartDate,
-} from "../utils.ts";
+} from "../../utils.ts";
 
 type Tab = "dailyAvg" | "total" | "trend";
 
@@ -61,11 +61,11 @@ function formatCalendarSpanSinceFirstActiveDay(firstActiveDayUnix: number): stri
     return parts.join(" ");
 }
 
-export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
+export default function DetailedStatistics({onBack}: { onBack: () => void }) {
     const [activeTab, setActiveTab] = useState<Tab>("dailyAvg");
     const [displayMode, setDisplayMode] = useState<"percentage" | "time" | "count">("time");
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-    const { openFromContextMenu, categorizeLayers } = useAppCategorizeMenu({
+    const {openFromContextMenu, categorizeLayers} = useAppCategorizeMenu({
         extraInvalidateQueryKeys: [["total_statistics"], ["range_statistics"]],
     });
     const calendarAppFilterActive = useCalendarAppFilterActive();
@@ -77,7 +77,7 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
     const sidebarRef = useRef<HTMLDivElement | null>(null);
     const categoriesRef = useRef<HTMLDivElement | null>(null);
 
-    const { data: boundsStats, isLoading: isBoundsLoading } = useQuery({
+    const {data: boundsStats, isLoading: isBoundsLoading} = useQuery({
         queryKey: ["total_statistics"],
         queryFn: get_total_statistics,
         staleTime: Infinity,
@@ -85,7 +85,7 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
         refetchOnReconnect: false,
     });
 
-    const { data: categories = [] } = useQuery({
+    const {data: categories = []} = useQuery({
         queryKey: ["categories"],
         queryFn: get_categories,
         staleTime: Infinity,
@@ -160,12 +160,12 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
 
     const rangeUnix = useMemo(() => {
         if (!rangeStartDate || !rangeEndDate) return null;
-        const { day_start } = getCalendarDayRangeUnix(rangeStartDate, calendarStartHour);
-        const { day_end } = getCalendarDayRangeUnix(rangeEndDate, calendarStartHour);
-        return { start: day_start, end: day_end };
+        const {day_start} = getCalendarDayRangeUnix(rangeStartDate, calendarStartHour);
+        const {day_end} = getCalendarDayRangeUnix(rangeEndDate, calendarStartHour);
+        return {start: day_start, end: day_end};
     }, [rangeStartDate, rangeEndDate, calendarStartHour]);
 
-    const { data: rangeStats, isLoading: isRangeLoading } = useQuery({
+    const {data: rangeStats, isLoading: isRangeLoading} = useQuery({
         queryKey: ["range_statistics", rangeUnix?.start, rangeUnix?.end, calendarStartHour],
         queryFn: () => get_week_statistics(rangeUnix!.start, rangeUnix!.end),
         enabled: !!rangeUnix,
@@ -219,7 +219,7 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
     const categoryQueryKey = selectedCategory
         ? ["category_app_logs", selectedCategory, categoryStartTime, categoryEndTime, minLogDuration]
         : ["category_app_logs", "none"];
-    const { data: categoryAppLogs = [], isLoading: isLoadingCategory } = useQuery({
+    const {data: categoryAppLogs = [], isLoading: isLoadingCategory} = useQuery({
         queryKey: categoryQueryKey,
         enabled: !!selectedCategory,
         queryFn: async () => {
@@ -236,7 +236,7 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                 if (existing) {
                     existing.totalDuration += log.duration;
                 } else {
-                    logMap.set(log.app, { app: log.app, totalDuration: log.duration });
+                    logMap.set(log.app, {app: log.app, totalDuration: log.duration});
                 }
             });
             return Array.from(logMap.values()).sort((a, b) => b.totalDuration - a.totalDuration);
@@ -353,7 +353,7 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
 
     const hourlyPoints = useMemo(() => {
         const start = Math.min(23, Math.max(0, Math.floor(calendarStartHour)));
-        return Array.from({ length: 25 }, (_, slot) => {
+        return Array.from({length: 25}, (_, slot) => {
             const clockHour = slot < 24 ? (start + slot) % 24 : start;
             return {
                 slot,
@@ -418,7 +418,8 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                     activeTab === "trend" ? "flex flex-col overflow-hidden" : "overflow-y-auto nice-scrollbar"
                 }`}
             >
-                <div className={`flex items-center justify-between ${activeTab === "trend" ? "mb-4 shrink-0" : "mb-6"}`}>
+                <div
+                    className={`flex items-center justify-between ${activeTab === "trend" ? "mb-4 shrink-0" : "mb-6"}`}>
                     <button
                         onClick={onBack}
                         className="text-gray-400 hover:text-white"
@@ -429,7 +430,8 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                     <div className="w-20"></div>
                 </div>
 
-                <div className={`flex flex-wrap items-center justify-between gap-3 ${activeTab === "trend" ? "mb-4 shrink-0" : "mb-6"}`}>
+                <div
+                    className={`flex flex-wrap items-center justify-between gap-3 ${activeTab === "trend" ? "mb-4 shrink-0" : "mb-6"}`}>
                     <div className="flex gap-1 bg-gray-800 rounded-lg p-1 shrink-0">
                         <button
                             onClick={() => setActiveTab("dailyAvg")}
@@ -523,7 +525,8 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                     <div className="grid grid-cols-2 gap-4 mb-6">
                         <div className="bg-gray-900 p-4 rounded">
                             <div className="text-sm text-gray-400 mb-1">Total Time</div>
-                            <div className="text-lg font-semibold">{formatDuration(boundsStats.total_time_all_time)}</div>
+                            <div
+                                className="text-lg font-semibold">{formatDuration(boundsStats.total_time_all_time)}</div>
                         </div>
                         <div className="bg-gray-900 p-4 rounded">
                             <div className="text-sm text-gray-400 mb-1">First Active Day</div>
@@ -540,7 +543,8 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                     <div className="grid grid-cols-3 gap-4 mb-6">
                         <div className="bg-gray-900 p-4 rounded">
                             <div className="text-sm text-gray-400 mb-1">Avg Time (Active Days)</div>
-                            <div className="text-lg font-semibold">{formatDuration(Math.floor(rangeStats!.average_time_active_days))}</div>
+                            <div
+                                className="text-lg font-semibold">{formatDuration(Math.floor(rangeStats!.average_time_active_days))}</div>
                         </div>
                         <div className="bg-gray-900 p-4 rounded">
                             <div className="text-sm text-gray-400 mb-1">Most Active Day</div>
@@ -564,70 +568,70 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
                 )}
 
                 {activeTab !== "trend" && stats && (
-                <div className="mb-6">
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-bold">Categories</h2>
-                        <div className="flex gap-1 bg-gray-800 rounded p-1">
-                            <button
-                                onClick={() => setDisplayMode("percentage")}
-                                className={`px-2 py-1 text-xs rounded ${displayMode === "percentage" ? "bg-gray-700 text-white" : "text-gray-400"}`}
-                            >
-                                %
-                            </button>
-                            <button
-                                onClick={() => setDisplayMode("time")}
-                                className={`px-2 py-1 text-xs rounded ${displayMode === "time" ? "bg-gray-700 text-white" : "text-gray-400"}`}
-                            >
-                                Time
-                            </button>
+                    <div className="mb-6">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold">Categories</h2>
+                            <div className="flex gap-1 bg-gray-800 rounded p-1">
+                                <button
+                                    onClick={() => setDisplayMode("percentage")}
+                                    className={`px-2 py-1 text-xs rounded ${displayMode === "percentage" ? "bg-gray-700 text-white" : "text-gray-400"}`}
+                                >
+                                    %
+                                </button>
+                                <button
+                                    onClick={() => setDisplayMode("time")}
+                                    className={`px-2 py-1 text-xs rounded ${displayMode === "time" ? "bg-gray-700 text-white" : "text-gray-400"}`}
+                                >
+                                    Time
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                    <div ref={categoriesRef} className="space-y-2">
-                        {stats.categories.map((cat) => (
-                            <div
-                                key={cat.category}
-                                className={`space-y-1 rounded p-2 cursor-pointer transition-colors focus:outline-none ${selectedCategory === cat.category ? "bg-gray-800" : "hover:bg-gray-800/50"}`}
-                                role="button"
-                                tabIndex={0}
-                                onClick={() => {
-                                    setSelectedCategory((prev) => (prev === cat.category ? null : cat.category));
-                                }}
-                                onKeyDown={(e) => {
-                                    if (e.key === "Enter" || e.key === " ") {
-                                        e.preventDefault();
+                        <div ref={categoriesRef} className="space-y-2">
+                            {stats.categories.map((cat) => (
+                                <div
+                                    key={cat.category}
+                                    className={`space-y-1 rounded p-2 cursor-pointer transition-colors focus:outline-none ${selectedCategory === cat.category ? "bg-gray-800" : "hover:bg-gray-800/50"}`}
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => {
                                         setSelectedCategory((prev) => (prev === cat.category ? null : cat.category));
-                                    }
-                                }}
-                            >
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <div
-                                            className="w-3 h-3 rounded-full"
-                                            style={{backgroundColor: cat.color || "#6b7280"}}
-                                        />
-                                        <span className="text-sm text-gray-200">{cat.category}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                            e.preventDefault();
+                                            setSelectedCategory((prev) => (prev === cat.category ? null : cat.category));
+                                        }
+                                    }}
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <div
+                                                className="w-3 h-3 rounded-full"
+                                                style={{backgroundColor: cat.color || "#6b7280"}}
+                                            />
+                                            <span className="text-sm text-gray-200">{cat.category}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
                                         <span className="text-sm text-gray-400">
                                             {displayMode === "percentage"
                                                 ? `${cat.percentage.toFixed(1)}%`
                                                 : formatDuration(cat.total_duration)}
                                         </span>
+                                        </div>
+                                    </div>
+                                    <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full"
+                                            style={{
+                                                width: `${cat.percentage}%`,
+                                                backgroundColor: cat.color || "#6b7280",
+                                            }}
+                                        />
                                     </div>
                                 </div>
-                                <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
-                                    <div
-                                        className="h-full"
-                                        style={{
-                                            width: `${cat.percentage}%`,
-                                            backgroundColor: cat.color || "#6b7280",
-                                        }}
-                                    />
-                                </div>
-                            </div>
-                        ))}
+                            ))}
+                        </div>
                     </div>
-                </div>
                 )}
 
                 {activeTab === "dailyAvg" && (
@@ -700,68 +704,70 @@ export default function DetailedStatistics({ onBack }: { onBack: () => void }) {
             </div>
 
             {activeTab !== "trend" && stats && (
-            <div ref={sidebarRef} className="w-96 border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col">
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                        <div
-                            className="w-3 h-3 rounded-full"
-                            style={{backgroundColor: selectedCategoryStat?.color || "#6b7280"}}
-                        />
-                        <h2 className="text-xl font-bold">
-                            {selectedCategory ? `Apps in ${selectedCategory}` : "Top Apps"}
-                        </h2>
+                <div ref={sidebarRef}
+                     className="w-96 border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                            <div
+                                className="w-3 h-3 rounded-full"
+                                style={{backgroundColor: selectedCategoryStat?.color || "#6b7280"}}
+                            />
+                            <h2 className="text-xl font-bold">
+                                {selectedCategory ? `Apps in ${selectedCategory}` : "Top Apps"}
+                            </h2>
+                        </div>
+                        {selectedCategory && (
+                            <button
+                                onClick={() => setSelectedCategory(null)}
+                                className="text-gray-400 hover:text-white transition-colors"
+                            >
+                                Close
+                            </button>
+                        )}
                     </div>
-                    {selectedCategory && (
-                        <button
-                            onClick={() => setSelectedCategory(null)}
-                            className="text-gray-400 hover:text-white transition-colors"
-                        >
-                            Close
-                        </button>
-                    )}
-                </div>
 
-                <div className="space-y-2 flex-1">
-                    {selectedCategory && isLoadingCategory ? (
-                        <div className="text-gray-500 text-sm">Loading app contributions...</div>
-                    ) : sidebarAppsFiltered.length === 0 ? (
-                        selectedCategory ? (
+                    <div className="space-y-2 flex-1">
+                        {selectedCategory && isLoadingCategory ? (
+                            <div className="text-gray-500 text-sm">Loading app contributions...</div>
+                        ) : sidebarAppsFiltered.length === 0 ? (
+                            selectedCategory ? (
                                 <div className="text-gray-500 text-sm">
                                     No apps recorded for this category (at least {formatDuration(uiMinAppDuration)}).
                                 </div>
+                            ) : (
+                                <div className="text-gray-500 text-sm">No apps recorded.</div>
+                            )
                         ) : (
-                            <div className="text-gray-500 text-sm">No apps recorded.</div>
-                        )
-                    ) : (
-                                    sidebarAppsFiltered.map((app) => {
-                                        const barPct = (app.totalDuration / sidebarMaxDuration) * 100;
-                                        const pct = sidebarPercentDenom > 0 ? (app.totalDuration / sidebarPercentDenom) * 100 : 0;
-                            return (
-                                            <div
-                                                key={app.app}
-                                                data-tt-app-context
-                                                onClick={(e) => logRowLeftClickCalendarFilter(e, app.app)}
-                                                onContextMenu={(e) => openFromContextMenu(e, app.app)}
-                                                className={`rounded px-2 py-1 cursor-pointer select-text ${calendarAppFilterActive === app.app
-                                                    ? "bg-gray-800 ring-1 ring-blue-500 ring-inset"
-                                                    : "hover:bg-gray-900/80"
-                                                    }`}
-                                            >
-                                    <div className="flex items-center justify-between mb-1 gap-3">
-                                        <span className="text-sm text-gray-200 truncate flex-1">{app.app}</span>
-                                        <span className="text-sm text-gray-400 flex-shrink-0">
+                            sidebarAppsFiltered.map((app) => {
+                                const barPct = (app.totalDuration / sidebarMaxDuration) * 100;
+                                const pct = sidebarPercentDenom > 0 ? (app.totalDuration / sidebarPercentDenom) * 100 : 0;
+                                return (
+                                    <div
+                                        key={app.app}
+                                        data-tt-app-context
+                                        onClick={(e) => logRowLeftClickCalendarFilter(e, app.app)}
+                                        onContextMenu={(e) => openFromContextMenu(e, app.app)}
+                                        className={`rounded px-2 py-1 cursor-pointer select-text ${calendarAppFilterActive === app.app
+                                            ? "bg-gray-800 ring-1 ring-blue-500 ring-inset"
+                                            : "hover:bg-gray-900/80"
+                                        }`}
+                                    >
+                                        <div className="flex items-center justify-between mb-1 gap-3">
+                                            <span className="text-sm text-gray-200 truncate flex-1">{app.app}</span>
+                                            <span className="text-sm text-gray-400 flex-shrink-0">
                                             {displayMode === "percentage" ? `${pct.toFixed(1)}%` : formatDuration(app.totalDuration)}
                                         </span>
+                                        </div>
+                                        <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
+                                            <div className="h-full bg-blue-600"
+                                                 style={{width: `${Math.max(0, Math.min(100, barPct))}%`}}/>
+                                        </div>
                                     </div>
-                                    <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
-                                        <div className="h-full bg-blue-600" style={{ width: `${Math.max(0, Math.min(100, barPct))}%` }} />
-                                    </div>
-                                </div>
-                            );
-                        })
-                    )}
+                                );
+                            })
+                        )}
+                    </div>
                 </div>
-            </div>
             )}
             {categorizeLayers}
         </div>

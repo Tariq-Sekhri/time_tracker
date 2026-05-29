@@ -1,9 +1,13 @@
-- todo
-speed up
- - detailed /trending
- - calendar 
- - regex
+- bug
+    - trend should default to earilyies date
+    - filter category sometimes goes to 0 (regex and trend )
+    - change default to my settings
+    - when adding regex default number should be 50 or 100 bigger then one below
+- speed up
+    - detailed /trending
+    - calendar
+    - regex
 - not planned
-  - afk detection
-  - macos
+    - afk detection
+    - macos
 

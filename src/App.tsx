@@ -1,21 +1,21 @@
 import "./App.css";
-import { useState, useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
-import { useRef } from "react";
+import {useState, useEffect} from "react";
+import {useQueryClient} from "@tanstack/react-query";
+import {listen} from "@tauri-apps/api/event";
+import {invoke} from "@tauri-apps/api/core";
+import {useRef} from "react";
 
 import Calendar from "./Screens/Calander/Calendar.tsx";
 import CategoriesView from "./Componants/CategoriesView.tsx";
 import CategoryRegexView from "./Screens/CategoryRegexView.tsx";
 import SkippedAppsView from "./Screens/SkippedAppsView.tsx";
-import DetailedStatistics from "./Screens/DetailedStatistics.tsx";
+import DetailedStatistics from "./Screens/DetailedStatistics/DetailedStatistics.tsx";
 import Header from "./Componants/Header.tsx";
 import GoogleCalendarsView from "./Screens/GoogleCalendarsView.tsx";
 import Settings from "./Screens/Settings.tsx";
-import { ToastProvider, useToast } from "./Componants/Toast.tsx";
-import { get_total_statistics } from "./api/statistics.ts";
-import { toErrorString } from "./types/common.ts";
+import {ToastProvider, useToast} from "./Componants/Toast.tsx";
+import {get_total_statistics} from "./api/statistics.ts";
+import {toErrorString} from "./types/common.ts";
 
 export type View =
     | "calendar"
@@ -28,7 +28,7 @@ export type View =
 
 function AppInner() {
     const queryClient = useQueryClient();
-    const { showToast, updateToast, removeToast } = useToast();
+    const {showToast, updateToast, removeToast} = useToast();
     const [currentView, setCurrentView] = useState<View>("calendar");
     const [updateAvailable, setUpdateAvailable] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
@@ -226,7 +226,7 @@ function AppInner() {
 
     return (
         <main className="bg-black text-white h-screen flex flex-col">
-            <Header currentView={currentView} setCurrentView={handleSetCurrentView} />
+            <Header currentView={currentView} setCurrentView={handleSetCurrentView}/>
 
             {updateAvailable && (
                 <div className="border-b border-gray-700 bg-gray-900 px-4 py-3 flex items-center gap-3">
@@ -260,16 +260,16 @@ function AppInner() {
                         : "flex-1 min-h-0 overflow-auto nice-scrollbar"
                 }
             >
-                {currentView === "calendar" && <Calendar setCurrentView={setCurrentView} />}
-                {currentView === "categories" && <CategoriesView />}
-                {currentView === "regex" && <CategoryRegexView />}
-                {currentView === "skipped" && <SkippedAppsView />}
+                {currentView === "calendar" && <Calendar setCurrentView={setCurrentView}/>}
+                {currentView === "categories" && <CategoriesView/>}
+                {currentView === "regex" && <CategoryRegexView/>}
+                {currentView === "skipped" && <SkippedAppsView/>}
                 {currentView === "detailed" && (<DetailedStatistics
-                    onBack={() => setCurrentView("calendar")}
-                />
+                        onBack={() => setCurrentView("calendar")}
+                    />
                 )}
-                {currentView === "settings" && <Settings />}
-                {currentView === "googleCalendars" && <GoogleCalendarsView />}
+                {currentView === "settings" && <Settings/>}
+                {currentView === "googleCalendars" && <GoogleCalendarsView/>}
             </div>
         </main>
     );
@@ -278,7 +278,7 @@ function AppInner() {
 export default function App() {
     return (
         <ToastProvider>
-            <AppInner />
+            <AppInner/>
         </ToastProvider>
     );
 }
