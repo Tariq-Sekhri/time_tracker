@@ -532,15 +532,17 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                         </button>
                     </div>
                     {minSelectableDate &&
-                    ((activeTab == "trend" && rangeStartDate && rangeEndDate)) ? (
+                    ((rangeStartDate && rangeEndDate)) ? (
                         <div className="ml-auto shrink-0 flex items-center gap-2">
                             <button
+
                                 type="button"
                                 onClick={() => {
                                     setRangeStartDate(minSelectableDate);
                                     setRangeEndDate(maxSelectableDate);
                                 }}
-                                className="px-2.5 py-1.5 text-sm text-gray-400 hover:text-white bg-gray-800/80 border border-gray-700 rounded-lg transition-colors disabled:opacity-40 disabled:pointer-events-none shrink-0"
+                                disabled={!(rangeStartDate != minSelectableDate || rangeEndDate != maxSelectableDate)}
+                                className="px-2.5 py-1.5 text-sm text-white-400 hover:text-gray-500 bg-gray-800/80 border border-gray-700 rounded-lg transition-colors disabled:opacity-40 disabled:pointer-events-none shrink-0"
                             >
                                 Reset
                             </button>

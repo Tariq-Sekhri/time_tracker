@@ -1,5 +1,5 @@
 - bug
-    - trend should default to earilyies date
+    - trening calnder picker goes off screen
     - filter category sometimes goes to 0 (regex and trend )
     - change default to my settings
     - when adding regex default number should be 50 or 100 bigger then one below
@@ -14,3 +14,4 @@
     - afk detection
     - macos
 
+reset should be enabled if 
