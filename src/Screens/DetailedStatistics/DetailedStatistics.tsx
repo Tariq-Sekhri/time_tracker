@@ -156,7 +156,6 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
         refetchOnReconnect: false,
     });
 
-    // --- QUERY: all categories (names, colors, priority) for trend filter + consistency ---
     const {data: categories = []} = useQuery({
         queryKey: ["categories"],
         queryFn: get_categories,
@@ -179,34 +178,25 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
         uncheckAllCategories,
     } = useVisibleCategoryFilter(categories);
 
-    // Latest selectable end date = "today" per calendar rules (not always midnight)
     const maxSelectableDate = useMemo(
         () => adjustInstantToCalendarDayBoundary(new Date(), calendarStartHour),
         [calendarStartHour] // recompute if user changes when their day starts
     );
 
-    // Earliest selectable start = first day we have any tracking data
     const minSelectableDate = useMemo(() => {
         if (!boundsStats?.first_active_day) return null; // still loading or no data ever
         return calendarDateFromUnix(boundsStats.first_active_day);
     }, [boundsStats?.first_active_day]);
 
-    // --- DATE STATE: shared by Daily Avg + Total tabs ---
-    const [rangeStartDate, setRangeStartDate] = useState<Date | null>(null); // null until initialized
+    const [rangeStartDate, setRangeStartDate] = useState<Date | null>(null);
     const [rangeEndDate, setRangeEndDate] = useState<Date | null>(null);
 
-    // --- DATE STATE: Trend tab only ---
-    // EFFECT: first time minSelectableDate is known, set range to [first day … today]
     useEffect(() => {
         if (!minSelectableDate || rangeStartDate || rangeEndDate) return; // wait or already set
         setRangeStartDate(minSelectableDate);
         setRangeEndDate(maxSelectableDate);
     }, [minSelectableDate, maxSelectableDate, rangeStartDate, rangeEndDate]);
 
-    //
-
-    //
-    //
     // MEMO: list of week objects for trend chart x-axis and per-week API calls
     const trendWeeks = useMemo(() => {
         if (!rangeStartDate || !rangeEndDate) return []; // not ready yet
@@ -467,6 +457,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
 
     // --- LOADING / EMPTY STATES (early return before main layout) ---
     // Trend does not need `stats` (dailyAvgStats/rangeStats) — only bounds + trend dates + week queries
+
     if (activeTab === "trend") {
         if (isBoundsLoading || !rangeStartDate || !rangeEndDate) {
             return (
@@ -568,18 +559,18 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                         <div className="flex flex-wrap items-center gap-3 mb-4 shrink-0">
                             <h2 className="text-xl font-bold">Category trends</h2>
                             <div className="ml-auto shrink-0">
-                            <CategoryVisibilityFilter
-                                categories={categories}
-                                categoriesByPriority={categoriesByPriority}
-                                visibleCategoryIds={visibleCategoryIds}
-                                isOpen={isCategoryFilterOpen}
-                                onOpenChange={setIsCategoryFilterOpen}
-                                filterRef={categoryFilterRef}
-                                panelRef={categoryFilterPanelRef}
-                                onToggle={toggleVisibleCategory}
-                                onCheckAll={checkAllCategories}
-                                onUncheckAll={uncheckAllCategories}
-                            />
+                                <CategoryVisibilityFilter
+                                    categories={categories}
+                                    categoriesByPriority={categoriesByPriority}
+                                    visibleCategoryIds={visibleCategoryIds}
+                                    isOpen={isCategoryFilterOpen}
+                                    onOpenChange={setIsCategoryFilterOpen}
+                                    filterRef={categoryFilterRef}
+                                    panelRef={categoryFilterPanelRef}
+                                    onToggle={toggleVisibleCategory}
+                                    onCheckAll={checkAllCategories}
+                                    onUncheckAll={uncheckAllCategories}
+                                />
                             </div>
                         </div>
                         {/* weeks = x-axis labels; weekStats[i] matches trendWeekQueries[i].data */}
