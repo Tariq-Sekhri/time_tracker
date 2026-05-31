@@ -44,9 +44,8 @@ import StatisticsDateRangePicker, {calendarDateFromUnix} from "./StatisticsDateR
 // Trend tab chart component (this file passes it weeks + fetched stats)
 import CategoryWeekTrendChart from "./CategoryWeekTrendChart.tsx";
 // Checkbox dropdown to show/hide category lines on trend chart
-import CategoryVisibilityFilter from "../../Componants/CategoryVisibilityFilter.tsx";
+import FilterCategories from "../../Componants/FilterCategories.tsx";
 import {get_categories} from "../../api/Category.ts";
-import {useVisibleCategoryFilter} from "../../hooks/useVisibleCategoryFilter.ts";
 import {
     adjustInstantToCalendarDayBoundary, // snap "now" to which calendar day we're in
     enumerateWeekRangesInSpan,          // trend range → [{week_start, week_end}, ...]
@@ -164,19 +163,6 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
         refetchOnReconnect: false,
     });
 
-    // Hook encapsulates visible/hidden category checkboxes for Trend chart
-    const {
-        visibleCategoryIds,       // Set or array of ids — which categories to plot
-        visibleCategoryNames,     // names passed to CategoryWeekTrendChart
-        categoriesByPriority,     // sorted for filter dropdown order
-        isCategoryFilterOpen,     // dropdown open state
-        setIsCategoryFilterOpen,
-        categoryFilterRef,        // anchor for click-outside on filter button
-        categoryFilterPanelRef,   // panel element ref
-        toggleVisibleCategory,    // toggle one checkbox
-        checkAllCategories,
-        uncheckAllCategories,
-    } = useVisibleCategoryFilter(categories);
 
     const maxSelectableDate = useMemo(
         () => adjustInstantToCalendarDayBoundary(new Date(), calendarStartHour),
@@ -559,7 +545,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                         <div className="flex flex-wrap items-center gap-3 mb-4 shrink-0">
                             <h2 className="text-xl font-bold">Category trends</h2>
                             <div className="ml-auto shrink-0">
-                                <CategoryVisibilityFilter
+                                <FilterCategories
                                     categories={categories}
                                     categoriesByPriority={categoriesByPriority}
                                     visibleCategoryIds={visibleCategoryIds}

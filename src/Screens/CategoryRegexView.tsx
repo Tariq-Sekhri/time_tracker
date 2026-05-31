@@ -1,6 +1,6 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { get_categories, Category } from "../api/Category.ts";
+import {useQuery, useMutation, useQueryClient} from "@tanstack/react-query";
+import {useEffect, useRef, useState} from "react";
+import {get_categories, Category} from "../api/Category.ts";
 import {
     get_cat_regex,
     insert_cat_regex,
@@ -9,10 +9,9 @@ import {
     CategoryRegex,
     NewCategoryRegex
 } from "../api/CategoryRegex.ts";
-import { useToast } from "../Componants/Toast.tsx";
-import { getAppMetadata, setAppMetadata } from "../api/appMetadata.ts";
-import CategoryVisibilityFilter from "../Componants/CategoryVisibilityFilter.tsx";
-import { useVisibleCategoryFilter } from "../hooks/useVisibleCategoryFilter.ts";
+import {useToast} from "../Componants/Toast.tsx";
+import {getAppMetadata, setAppMetadata} from "../api/appMetadata.ts";
+import FilterCategories from "../Componants/FilterCategories.tsx";
 
 const REGEX_SORT_ORDER_KEY = "time-tracker:cat-regex:sort-order";
 const REGEX_GROUP_BY_CATEGORY_KEY = "time-tracker:cat-regex:group-by-category";
@@ -32,7 +31,7 @@ function validateRegex(pattern: string): string | null {
 
 export default function CategoryRegexView() {
     const queryClient = useQueryClient();
-    const { showToast } = useToast();
+    const {showToast} = useToast();
     const [editingRegex, setEditingRegex] = useState<CategoryRegex | null>(null);
     const [newRegexCatId, setNewRegexCatId] = useState<number | "">("");
     const [newRegexPattern, setNewRegexPattern] = useState("");
@@ -47,7 +46,7 @@ export default function CategoryRegexView() {
     const [newRegexCatMenuOpen, setNewRegexCatMenuOpen] = useState(false);
     const [sortMenuOpen, setSortMenuOpen] = useState(false);
     const [editCatMenuOpen, setEditCatMenuOpen] = useState(false);
-
+    const [FilterOpen, setFilterOpen] = useState(false);
     const hasInitializedUiPrefs = useRef(false);
 
     const toggleCategoryCollapsed = (catId: number) => {
@@ -59,27 +58,16 @@ export default function CategoryRegexView() {
         });
     };
 
-    const { data: categories = [] } = useQuery({
+    const {data: categories = []} = useQuery({
         queryKey: ["categories"],
         queryFn: get_categories,
     });
 
-    const { data: regexes = [] } = useQuery({
+    const {data: regexes = []} = useQuery({
         queryKey: ["cat_regex"],
         queryFn: get_cat_regex,
     });
 
-    const {
-        visibleCategoryIds,
-        categoriesByPriority,
-        isCategoryFilterOpen,
-        setIsCategoryFilterOpen,
-        categoryFilterRef,
-        categoryFilterPanelRef,
-        toggleVisibleCategory,
-        checkAllCategories,
-        uncheckAllCategories,
-    } = useVisibleCategoryFilter(categories);
 
     useEffect(() => {
         if (hasInitializedUiPrefs.current) {
@@ -103,7 +91,8 @@ export default function CategoryRegexView() {
                     setCollapsedCategoryIds(new Set<number>(ids));
                 }
             })
-            .catch(() => {});
+            .catch(() => {
+            });
 
         hasInitializedUiPrefs.current = true;
     }, []);
@@ -132,46 +121,33 @@ export default function CategoryRegexView() {
         if (!hasInitializedUiPrefs.current) {
             return;
         }
-        setAppMetadata(REGEX_SORT_ORDER_KEY, sortOrder).catch(() => {});
+        setAppMetadata(REGEX_SORT_ORDER_KEY, sortOrder).catch(() => {
+        });
     }, [sortOrder]);
 
     useEffect(() => {
         if (!hasInitializedUiPrefs.current) {
             return;
         }
-        setAppMetadata(REGEX_GROUP_BY_CATEGORY_KEY, groupByCategory ? "true" : "false").catch(() => {});
+        setAppMetadata(REGEX_GROUP_BY_CATEGORY_KEY, groupByCategory ? "true" : "false").catch(() => {
+        });
     }, [groupByCategory]);
 
     useEffect(() => {
         if (!hasInitializedUiPrefs.current) {
             return;
         }
-        setAppMetadata(REGEX_COLLAPSED_CATEGORY_IDS_KEY, JSON.stringify([...collapsedCategoryIds])).catch(() => {});
+        setAppMetadata(REGEX_COLLAPSED_CATEGORY_IDS_KEY, JSON.stringify([...collapsedCategoryIds])).catch(() => {
+        });
     }, [collapsedCategoryIds]);
 
-    const filteredAndSortedRegexes = useMemo(() => {
-        const visible = visibleCategoryIds;
-        return [...regexes]
-            .filter((r) => visible.has(r.cat_id))
-            .sort((a, b) => (sortOrder === "oldest" ? a.id - b.id : b.id - a.id));
-    }, [regexes, visibleCategoryIds, sortOrder]);
-
-    const regexesByCategory = useMemo(() => {
-        const map = new Map<number, typeof filteredAndSortedRegexes>();
-        for (const r of filteredAndSortedRegexes) {
-            const arr = map.get(r.cat_id) ?? [];
-            arr.push(r);
-            map.set(r.cat_id, arr);
-        }
-        return map;
-    }, [filteredAndSortedRegexes]);
 
     const createRegexMutation = useMutation({
         mutationFn: async (newRegex: NewCategoryRegex) => {
             return await insert_cat_regex(newRegex);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
+            queryClient.invalidateQueries({queryKey: ["cat_regex"]});
             setNewRegexCatId("");
             setNewRegexPattern("");
             setRegexError(null);
@@ -190,7 +166,7 @@ export default function CategoryRegexView() {
             return await update_cat_regex_by_id(regex);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
+            queryClient.invalidateQueries({queryKey: ["cat_regex"]});
             setEditingRegex(null);
             setEditRegexError(null);
             setEditCatMenuOpen(false);
@@ -208,7 +184,7 @@ export default function CategoryRegexView() {
             return await delete_cat_regex_by_id(id);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
+            queryClient.invalidateQueries({queryKey: ["cat_regex"]});
             showToast("Regex pattern deleted successfully", "success");
         },
         onError: (error: any) => {
@@ -246,7 +222,7 @@ export default function CategoryRegexView() {
             showToast("Invalid regex data", "error");
             return;
         }
-        
+
         const error = validateRegex(regex.regex);
         if (error) {
             setEditRegexError(error);
@@ -263,8 +239,8 @@ export default function CategoryRegexView() {
     };
 
     const handleRefresh = () => {
-        queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
-        queryClient.invalidateQueries({ queryKey: ["categories"] });
+        queryClient.invalidateQueries({queryKey: ["cat_regex"]});
+        queryClient.invalidateQueries({queryKey: ["categories"]});
     };
 
     function renderRegexRow(regex: CategoryRegex, category: Category | undefined) {
@@ -280,7 +256,7 @@ export default function CategoryRegexView() {
                                     setEditCatMenuOpen((v) => !v);
                                     setNewRegexCatMenuOpen(false);
                                     setSortMenuOpen(false);
-                                    setIsCategoryFilterOpen(false);
+                                    setFilterOpen(false);
                                 }}
                                 className="min-h-9 w-full min-w-[10rem] px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white hover:bg-gray-700 flex items-center justify-between gap-2 text-left"
                             >
@@ -293,17 +269,19 @@ export default function CategoryRegexView() {
                                     stroke="currentColor"
                                     viewBox="0 0 24 24"
                                 >
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                          d="M19 9l-7 7-7-7"/>
                                 </svg>
                             </button>
                             {editCatMenuOpen && (
-                                <div className="absolute z-50 mt-2 left-0 w-64 max-h-[40vh] overflow-y-auto nice-scrollbar bg-gray-900 border border-gray-700 rounded-lg shadow-lg p-2">
+                                <div
+                                    className="absolute z-50 mt-2 left-0 w-64 max-h-[40vh] overflow-y-auto nice-scrollbar bg-gray-900 border border-gray-700 rounded-lg shadow-lg p-2">
                                     {categories.map((cat) => (
                                         <button
                                             key={cat.id}
                                             type="button"
                                             onClick={() => {
-                                                setEditingRegex({ ...editingRegex, cat_id: cat.id });
+                                                setEditingRegex({...editingRegex, cat_id: cat.id});
                                                 setEditCatMenuOpen(false);
                                             }}
                                             className={`flex items-center gap-3 w-full p-2 rounded text-left hover:bg-gray-800 ${
@@ -313,7 +291,7 @@ export default function CategoryRegexView() {
                                             {cat.color && (
                                                 <div
                                                     className="w-4 h-4 rounded border border-gray-600 shrink-0"
-                                                    style={{ backgroundColor: cat.color }}
+                                                    style={{backgroundColor: cat.color}}
                                                 />
                                             )}
                                             <span className="text-sm text-gray-200 flex-1 truncate">{cat.name}</span>
@@ -327,7 +305,7 @@ export default function CategoryRegexView() {
                                 type="text"
                                 value={editingRegex.regex}
                                 onChange={(e) => {
-                                    setEditingRegex({ ...editingRegex, regex: e.target.value });
+                                    setEditingRegex({...editingRegex, regex: e.target.value});
                                     setEditRegexError(null);
                                 }}
                                 className={`px-3 py-2 bg-gray-800 border rounded text-white ${editRegexError ? "border-red-500" : "border-gray-700"}`}
@@ -361,14 +339,15 @@ export default function CategoryRegexView() {
                             {category?.color && (
                                 <div
                                     className="w-6 h-6 rounded border border-gray-600"
-                                    style={{ backgroundColor: category.color }}
+                                    style={{backgroundColor: category.color}}
                                 />
                             )}
                             <div>
                                 <span className="font-medium">{category?.name ?? `Category ${regex.cat_id}`}</span>
                                 <span className="text-gray-400 ml-3 font-mono text-sm">{regex.regex}</span>
                                 {isCatchAll && (
-                                    <span className="ml-2 text-xs text-gray-500">(catch-all, cannot edit or delete)</span>
+                                    <span
+                                        className="ml-2 text-xs text-gray-500">(catch-all, cannot edit or delete)</span>
                                 )}
                             </div>
                         </div>
@@ -406,7 +385,8 @@ export default function CategoryRegexView() {
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded flex items-center gap-2"
                 >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                     </svg>
                     Refresh
                 </button>
@@ -422,7 +402,7 @@ export default function CategoryRegexView() {
                                 setNewRegexCatMenuOpen((v) => !v);
                                 setSortMenuOpen(false);
                                 setEditCatMenuOpen(false);
-                                setIsCategoryFilterOpen(false);
+                                setFilterOpen(false);
                             }}
                             className="min-h-9 w-full min-w-[10rem] max-w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white hover:bg-gray-700 flex items-center justify-between gap-2 text-left"
                         >
@@ -439,11 +419,12 @@ export default function CategoryRegexView() {
                                 stroke="currentColor"
                                 viewBox="0 0 24 24"
                             >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
                             </svg>
                         </button>
                         {newRegexCatMenuOpen && (
-                            <div className="absolute z-50 mt-2 left-0 w-64 max-h-[40vh] overflow-y-auto nice-scrollbar bg-gray-900 border border-gray-700 rounded-lg shadow-lg p-2">
+                            <div
+                                className="absolute z-50 mt-2 left-0 w-64 max-h-[40vh] overflow-y-auto nice-scrollbar bg-gray-900 border border-gray-700 rounded-lg shadow-lg p-2">
                                 {categories.map((cat) => (
                                     <button
                                         key={cat.id}
@@ -459,7 +440,7 @@ export default function CategoryRegexView() {
                                         {cat.color && (
                                             <div
                                                 className="w-4 h-4 rounded border border-gray-600 shrink-0"
-                                                style={{ backgroundColor: cat.color }}
+                                                style={{backgroundColor: cat.color}}
                                             />
                                         )}
                                         <span className="text-sm text-gray-200 flex-1 truncate">{cat.name}</span>
@@ -491,23 +472,10 @@ export default function CategoryRegexView() {
             </div>
 
             <div className="mb-4 flex flex-wrap items-center gap-3">
-                <CategoryVisibilityFilter
-                    categories={categories}
-                    categoriesByPriority={categoriesByPriority}
-                    visibleCategoryIds={visibleCategoryIds}
-                    isOpen={isCategoryFilterOpen}
-                    onOpenChange={setIsCategoryFilterOpen}
-                    filterRef={categoryFilterRef}
-                    panelRef={categoryFilterPanelRef}
-                    onToggle={toggleVisibleCategory}
-                    onCheckAll={checkAllCategories}
-                    onUncheckAll={uncheckAllCategories}
-                    onCloseOtherMenus={() => {
-                        setNewRegexCatMenuOpen(false);
-                        setSortMenuOpen(false);
-                        setEditCatMenuOpen(false);
-                    }}
-                />
+
+
+                <FilterCategories isOpen={FilterOpen} setIsOpen={setFilterOpen}/>
+
 
                 <label className="text-gray-400 text-sm ml-2">Sort:</label>
                 <div className="relative" ref={sortMenuRef}>
@@ -517,7 +485,7 @@ export default function CategoryRegexView() {
                             setSortMenuOpen((v) => !v);
                             setNewRegexCatMenuOpen(false);
                             setEditCatMenuOpen(false);
-                            setIsCategoryFilterOpen(false);
+                            setFilterOpen(false);
                         }}
                         className="min-h-9 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white hover:bg-gray-700 flex items-center gap-2"
                     >
@@ -528,11 +496,12 @@ export default function CategoryRegexView() {
                             stroke="currentColor"
                             viewBox="0 0 24 24"
                         >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
                         </svg>
                     </button>
                     {sortMenuOpen && (
-                        <div className="absolute z-50 mt-2 left-0 min-w-full w-max bg-gray-900 border border-gray-700 rounded-lg shadow-lg p-2">
+                        <div
+                            className="absolute z-50 mt-2 left-0 min-w-full w-max bg-gray-900 border border-gray-700 rounded-lg shadow-lg p-2">
                             <button
                                 type="button"
                                 onClick={() => {
@@ -573,7 +542,7 @@ export default function CategoryRegexView() {
 
             <div className="space-y-2">
                 {groupByCategory ? (
-                    categoriesByPriority.map((cat) => {
+                    categories.map((cat) => {
                         const groupRegexes = regexesByCategory.get(cat.id) ?? [];
                         if (groupRegexes.length === 0) return null;
                         const isCollapsed = collapsedCategoryIds.has(cat.id);
@@ -590,12 +559,13 @@ export default function CategoryRegexView() {
                                         stroke="currentColor"
                                         viewBox="0 0 24 24"
                                     >
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                              d="M9 5l7 7-7 7"/>
                                     </svg>
                                     {cat.color && (
                                         <div
                                             className="w-4 h-4 rounded border border-gray-600 shrink-0"
-                                            style={{ backgroundColor: cat.color }}
+                                            style={{backgroundColor: cat.color}}
                                         />
                                     )}
                                     <span>{cat.name}</span>

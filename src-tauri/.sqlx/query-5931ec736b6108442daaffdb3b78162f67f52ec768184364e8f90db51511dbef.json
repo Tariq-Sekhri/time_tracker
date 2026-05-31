@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id as \"id!: i32\", name, COALESCE(priority, 0) as \"priority!: i32\", color FROM category WHERE id = ?1",
+  "query": "SELECT * FROM category WHERE id = ?1",
   "describe": {
     "columns": [
       {
-        "name": "id!: i32",
+        "name": "id",
         "ordinal": 0,
         "type_info": "Integer"
       },
@@ -14,7 +14,7 @@
         "type_info": "Text"
       },
       {
-        "name": "priority!: i32",
+        "name": "priority",
         "ordinal": 2,
         "type_info": "Integer"
       },
@@ -22,6 +22,16 @@
         "name": "color",
         "ordinal": 3,
         "type_info": "Text"
+      },
+      {
+        "name": "regex_enabled",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "calendar_enabled",
+        "ordinal": 5,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
@@ -30,9 +40,11 @@
     "nullable": [
       false,
       false,
+      true,
+      true,
       false,
-      true
+      false
     ]
   },
-  "hash": "f8e62455772c9bc8c03b7c83f2954df6b2748ab7cb461d6fd10a86858fb37a45"
+  "hash": "5931ec736b6108442daaffdb3b78162f67f52ec768184364e8f90db51511dbef"
 }
