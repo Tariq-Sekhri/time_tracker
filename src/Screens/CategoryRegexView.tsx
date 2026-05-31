@@ -1,5 +1,5 @@
 import {useQuery, useMutation, useQueryClient} from "@tanstack/react-query";
-import {useEffect, useRef, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
 import {get_categories, Category} from "../api/Category.ts";
 import {
     get_cat_regex,
@@ -11,7 +11,7 @@ import {
 } from "../api/CategoryRegex.ts";
 import {useToast} from "../Componants/Toast.tsx";
 import {getAppMetadata, setAppMetadata} from "../api/appMetadata.ts";
-import FilterCategories from "../Componants/FilterCategories.tsx";
+import FilterCategories, {useFilterCategories} from "../Componants/FilterCategories.tsx";
 
 const REGEX_SORT_ORDER_KEY = "time-tracker:cat-regex:sort-order";
 const REGEX_GROUP_BY_CATEGORY_KEY = "time-tracker:cat-regex:group-by-category";
@@ -68,6 +68,30 @@ export default function CategoryRegexView() {
         queryFn: get_cat_regex,
     });
 
+    const {
+        visibleCategoryIds,
+        categoriesByPriority,
+        toggleVisibleCategory,
+        checkAllCategories,
+        uncheckAllCategories,
+    } = useFilterCategories(categories, "regex_enabled");
+
+    const filteredAndSortedRegexes = useMemo(() => {
+        const visible = visibleCategoryIds;
+        return [...regexes]
+            .filter((r) => visible.has(r.cat_id))
+            .sort((a, b) => (sortOrder === "oldest" ? a.id - b.id : b.id - a.id));
+    }, [regexes, visibleCategoryIds, sortOrder]);
+
+    const regexesByCategory = useMemo(() => {
+        const map = new Map<number, typeof filteredAndSortedRegexes>();
+        for (const r of filteredAndSortedRegexes) {
+            const arr = map.get(r.cat_id) ?? [];
+            arr.push(r);
+            map.set(r.cat_id, arr);
+        }
+        return map;
+    }, [filteredAndSortedRegexes]);
 
     useEffect(() => {
         if (hasInitializedUiPrefs.current) {
@@ -474,7 +498,21 @@ export default function CategoryRegexView() {
             <div className="mb-4 flex flex-wrap items-center gap-3">
 
 
-                <FilterCategories isOpen={FilterOpen} setIsOpen={setFilterOpen}/>
+                <FilterCategories
+                    enabledField="regex_enabled"
+                    categories={categories}
+                    categoriesByPriority={categoriesByPriority}
+                    isOpen={FilterOpen}
+                    setIsOpen={setFilterOpen}
+                    onToggle={toggleVisibleCategory}
+                    onCheckAll={checkAllCategories}
+                    onUncheckAll={uncheckAllCategories}
+                    onCloseOtherMenus={() => {
+                        setNewRegexCatMenuOpen(false);
+                        setSortMenuOpen(false);
+                        setEditCatMenuOpen(false);
+                    }}
+                />
 
 
                 <label className="text-gray-400 text-sm ml-2">Sort:</label>

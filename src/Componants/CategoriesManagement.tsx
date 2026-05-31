@@ -210,6 +210,8 @@ export default function CategoriesManagement() {
             name: newCategoryName.trim(),
             priority: newCategoryPriority,
             color: newCategoryColor || null,
+            regex_enabled: true,
+            calendar_enabled: true,
         });
     };
 

@@ -44,7 +44,7 @@ import StatisticsDateRangePicker, {calendarDateFromUnix} from "./StatisticsDateR
 // Trend tab chart component (this file passes it weeks + fetched stats)
 import CategoryWeekTrendChart from "./CategoryWeekTrendChart.tsx";
 // Checkbox dropdown to show/hide category lines on trend chart
-import FilterCategories from "../../Componants/FilterCategories.tsx";
+import FilterCategories, {useFilterCategories} from "../../Componants/FilterCategories.tsx";
 import {get_categories} from "../../api/Category.ts";
 import {
     adjustInstantToCalendarDayBoundary, // snap "now" to which calendar day we're in
@@ -163,6 +163,14 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
         refetchOnReconnect: false,
     });
 
+    const [isCategoryFilterOpen, setIsCategoryFilterOpen] = useState(false);
+    const {
+        visibleCategoryNames,
+        categoriesByPriority,
+        toggleVisibleCategory,
+        checkAllCategories,
+        uncheckAllCategories,
+    } = useFilterCategories(categories, "regex_enabled");
 
     const maxSelectableDate = useMemo(
         () => adjustInstantToCalendarDayBoundary(new Date(), calendarStartHour),
@@ -546,13 +554,11 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                             <h2 className="text-xl font-bold">Category trends</h2>
                             <div className="ml-auto shrink-0">
                                 <FilterCategories
+                                    enabledField="regex_enabled"
                                     categories={categories}
                                     categoriesByPriority={categoriesByPriority}
-                                    visibleCategoryIds={visibleCategoryIds}
                                     isOpen={isCategoryFilterOpen}
                                     onOpenChange={setIsCategoryFilterOpen}
-                                    filterRef={categoryFilterRef}
-                                    panelRef={categoryFilterPanelRef}
                                     onToggle={toggleVisibleCategory}
                                     onCheckAll={checkAllCategories}
                                     onUncheckAll={uncheckAllCategories}

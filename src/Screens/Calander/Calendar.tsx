@@ -24,6 +24,7 @@ import {
 } from "../../api/calendarViewPrefs.ts";
 import { toErrorString } from "../../types/common.ts";
 import { useAppCategorizeMenu } from "../../hooks/useAppCategorizeMenu.tsx";
+import { useFilterCategories } from "../../Componants/FilterCategories.tsx";
 
 export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View) => void }) {
     const [rightSideBarView, setRightSideBarView] = useState<SideBarView>("Week")
@@ -48,13 +49,11 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const [selectedEventLogs, setSelectedEventLogs] = useState<EventLogs>([]);
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [isLoadingCategory, setIsLoadingCategory] = useState(false);
-    const hasInitialized = useRef(false);
     const calenderRef = useRef<any>(null);
     const isUpdatingFromStore = useRef(false);
     const didAlignInitialWeekToBoundary = useRef(false);
 
 
-    const [visibleCategories, setVisibleCategories] = useState<Set<string>>(new Set());
     const [visibleCalendars, setVisibleCalendars] = useState<Set<number>>(new Set());
     const [calendarsInStats, setCalendarsInStats] = useState<Set<number>>(new Set());
     const { openFromContextMenuMany, categorizeLayers } = useAppCategorizeMenu({
@@ -79,6 +78,18 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const hasInitializedCalendars = useRef(false);
     const hasInitializedStatsCalendars = useRef(false);
     const prevDisplayCalendarsLenRef = useRef<number | null>(null);
+
+    const {data: categories = []} = useQuery({
+        queryKey: ["categories"],
+        queryFn: get_categories,
+    });
+
+    const {
+        visibleCategoryNames,
+        toggleVisibleCategory,
+        checkAllCategories,
+        uncheckAllCategories,
+    } = useFilterCategories(categories, "calendar_enabled");
 
     useLayoutEffect(() => {
         if (!viewPrefs) return;
@@ -105,20 +116,15 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         host.querySelectorAll(".fc-event-selected").forEach((el) => {
             el.classList.remove("fc-event-selected");
         });
-    }, [visibleCategories]);
+    }, [visibleCategoryNames]);
 
     useEffect(() => {
         if (!selectedEvent?.category || selectedEvent.googleCalendarEventId != null) return;
-        if (visibleCategories.has(selectedEvent.category)) return;
+        if (visibleCategoryNames.has(selectedEvent.category)) return;
         setSelectedEvent(null);
         setSelectedEventLogs([]);
         setRightSideBarView((v) => (v === "Event" ? "Week" : v));
-    }, [visibleCategories, selectedEvent]);
-
-    const {data: categories = []} = useQuery({
-        queryKey: ["categories"],
-        queryFn: get_categories,
-    });
+    }, [visibleCategoryNames, selectedEvent]);
 
     const {data: googleCalendars, isError: isGoogleCalendarsError, error: googleCalendarsError} = useQuery({
         queryKey: ["googleCalendars"],
@@ -152,42 +158,6 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         }
         prevDisplayCalendarsLenRef.current = n;
     }, [displayCalendars.length]);
-
-    useEffect(() => {
-        if (categories.length === 0 || !viewPrefs || hasInitialized.current) return;
-        try {
-            const savedArray = viewPrefs.visibleCategories;
-            const allCategoryNames = categories.map((cat) => cat.name);
-            const hasSavedState =
-                savedArray.length > 0 || viewPrefs.knownCategories.length > 0;
-
-            if (hasSavedState) {
-                const savedSet = new Set<string>(savedArray);
-                const knownSet = new Set<string>(viewPrefs.knownCategories);
-                const mergedSet = new Set<string>();
-                allCategoryNames.forEach((name) => {
-                    if (savedSet.has(name)) {
-                        mergedSet.add(name);
-                    } else if (viewPrefs.knownCategories.length > 0) {
-                        if (!knownSet.has(name)) {
-                            mergedSet.add(name);
-                        }
-                    } else {
-                        mergedSet.add(name);
-                    }
-                });
-                setVisibleCategories(mergedSet);
-            } else {
-                const allVisible = new Set(allCategoryNames);
-                setVisibleCategories(allVisible);
-            }
-        } catch (e) {
-            console.error("Failed to initialize visible categories:", e);
-            const allCategoryNames = categories.map((cat) => cat.name);
-            setVisibleCategories(new Set(allCategoryNames));
-        }
-        hasInitialized.current = true;
-    }, [categories, viewPrefs]);
 
     useEffect(() => {
         if (!viewPrefs) return;
@@ -281,17 +251,11 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
 
     useEffect(() => {
         if (!calendarViewPrefsQueryReady) return;
-        if (
-            !hasInitialized.current ||
-            !hasInitializedCalendars.current ||
-            !hasInitializedStatsCalendars.current
-        ) {
+        if (!hasInitializedCalendars.current || !hasInitializedStatsCalendars.current) {
             return;
         }
         const payload: CalendarViewPrefsV1 = {
             includeGoogleInStats,
-            visibleCategories: [...visibleCategories],
-            knownCategories: categories.map((c) => c.name),
             visibleCalendars: [...visibleCalendars],
             knownCalendars: displayCalendars.map((c) => c.id),
             googleCalendarsInStats: [...calendarsInStats],
@@ -332,10 +296,8 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         queryClient,
         calendarViewPrefsQueryReady,
         includeGoogleInStats,
-        visibleCategories,
         visibleCalendars,
         calendarsInStats,
-        categories,
         displayCalendars,
     ]);
 
@@ -626,15 +588,10 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
 
 
     const toggleCategory = (categoryName: string) => {
-        setVisibleCategories(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(categoryName)) {
-                newSet.delete(categoryName);
-            } else {
-                newSet.add(categoryName);
-            }
-            return newSet;
-        });
+        const cat = categories.find((c) => c.name === categoryName);
+        if (cat) {
+            toggleVisibleCategory(cat.id);
+        }
     };
 
     const toggleCalendar = (calendarId: number) => {
@@ -661,14 +618,6 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         });
     };
 
-    const checkAllCategories = () => {
-        const allCategoryNames = categories.map(cat => cat.name);
-        setVisibleCategories(new Set(allCategoryNames));
-    };
-
-    const uncheckAllCategories = () => {
-        setVisibleCategories(new Set<string>());
-    };
 
 
     useEffect(() => {
@@ -931,7 +880,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             ref={calenderRef}
                             date={date}
                             categoryColorMap={categoryColorMap}
-                            visibleCategories={visibleCategories}
+                            visibleCategories={visibleCategoryNames}
                             categories={categories}
                             toggleCategory={toggleCategory}
                             checkAllCategories={checkAllCategories}

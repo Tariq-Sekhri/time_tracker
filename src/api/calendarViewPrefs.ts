@@ -3,8 +3,6 @@ import { storageKey } from "../storageKey.ts";
 
 export type CalendarViewPrefsV1 = {
     includeGoogleInStats: boolean;
-    visibleCategories: string[];
-    knownCategories: string[];
     visibleCalendars: number[];
     knownCalendars: number[];
     googleCalendarsInStats: number[];
@@ -26,8 +24,6 @@ const LEGACY_KEYS = [
 function defaultCalendarViewPrefs(): CalendarViewPrefsV1 {
     return {
         includeGoogleInStats: false,
-        visibleCategories: [],
-        knownCategories: [],
         visibleCalendars: [],
         knownCalendars: [],
         googleCalendarsInStats: [],
@@ -48,16 +44,12 @@ function readLegacyCalendarViewPrefs(): CalendarViewPrefsV1 | null {
             if (!raw) return [];
             return JSON.parse(raw) as unknown;
         };
-        const asStringArr = (v: unknown): string[] =>
-            Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
         const asNumArr = (v: unknown): number[] =>
             Array.isArray(v)
                 ? v.filter((x): x is number => typeof x === "number" && Number.isFinite(x))
                 : [];
         return {
             includeGoogleInStats,
-            visibleCategories: asStringArr(parseArr("visibleCategories")),
-            knownCategories: asStringArr(parseArr("knownCategories")),
             visibleCalendars: asNumArr(parseArr("visibleCalendars")),
             knownCalendars: asNumArr(parseArr("knownCalendars")),
             googleCalendarsInStats: asNumArr(parseArr("googleCalendarsInStats")),
@@ -80,16 +72,13 @@ function clearLegacyCalendarViewPrefs(): void {
 
 function parseStoredPrefs(raw: string): CalendarViewPrefsV1 | null {
     try {
-        const p = JSON.parse(raw) as Partial<CalendarViewPrefsV1>;
+        const p = JSON.parse(raw) as Partial<CalendarViewPrefsV1 & {
+            visibleCategories?: unknown;
+            knownCategories?: unknown;
+        }>;
         if (!p || typeof p !== "object") return null;
         return {
             includeGoogleInStats: !!p.includeGoogleInStats,
-            visibleCategories: Array.isArray(p.visibleCategories)
-                ? p.visibleCategories.filter((x) => typeof x === "string")
-                : [],
-            knownCategories: Array.isArray(p.knownCategories)
-                ? p.knownCategories.filter((x) => typeof x === "string")
-                : [],
             visibleCalendars: Array.isArray(p.visibleCalendars)
                 ? p.visibleCalendars.filter(
                       (x): x is number => typeof x === "number" && Number.isFinite(x)
