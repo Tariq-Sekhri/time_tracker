@@ -123,7 +123,7 @@ pub async fn delete_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resu
 
     let logs = sqlx::query_as!(
         Log,
-        "SELECT id, app, timestamp, duration FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2",
+        r#"SELECT id as "id!: i64", app, timestamp as "timestamp!: i64", duration as "duration!: i64" FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2"#,
         request.start_time,
         request.end_time
     )
@@ -149,7 +149,7 @@ pub async fn count_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resul
 
     let logs = sqlx::query_as!(
         Log,
-        "SELECT id, app, timestamp, duration FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2",
+        r#"SELECT id as "id!: i64", app, timestamp as "timestamp!: i64", duration as "duration!: i64" FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2"#,
         request.start_time,
         request.end_time
     )

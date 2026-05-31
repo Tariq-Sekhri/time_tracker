@@ -30,7 +30,7 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             name TEXT NOT NULL UNIQUE,
             priority integer,
             color TEXT,
-            regex_enabled INTEGER NOT NULL DEFAULT 1
+            regex_enabled INTEGER NOT NULL DEFAULT 1,
             calendar_enabled INTEGER NOT NULL DEFAULT 1
         );",
     )
@@ -54,7 +54,7 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         ];
         for (name, priority, color, regex_enabled, calendar_enabled) in defaults {
             sqlx::query!(
-                "INSERT OR IGNORE INTO category (name, priority, color, is_enabled) VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT OR IGNORE INTO category (name, priority, color, regex_enabled, calendar_enabled) VALUES (?1, ?2, ?3, ?4, ?5)",
                 name,
                 priority,
                 color,
@@ -71,10 +71,12 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 pub async fn insert_category(new_category: NewCategory) -> Result<i64, Error> {
     let pool = db::get_pool().await?;
     let result = sqlx::query!(
-        "INSERT INTO category (name, priority, color) VALUES (?1, ?2, ?3)",
+        "INSERT INTO category (name, priority, color, regex_enabled, calendar_enabled) VALUES (?1, ?2, ?3, ?4, ?5)",
         new_category.name,
         new_category.priority,
-        new_category.color
+        new_category.color,
+        new_category.regex_enabled,
+        new_category.calendar_enabled
     )
     .execute(&pool)
     .await?;
@@ -83,7 +85,11 @@ pub async fn insert_category(new_category: NewCategory) -> Result<i64, Error> {
 #[tauri::command]
 pub async fn get_category_by_id(id: i32) -> Result<Category, Error> {
     let pool = db::get_pool().await?;
-    let cat = sqlx::query_as!(Category, r#"SELECT * FROM category WHERE id = ?1"#, id)
+    let cat = sqlx::query_as!(
+        Category,
+        r#"SELECT id as "id!: i32", name, priority as "priority!: i32", color, regex_enabled as "regex_enabled!: bool", calendar_enabled as "calendar_enabled!: bool" FROM category WHERE id = ?1"#,
+        id
+    )
         .fetch_one(&pool)
         .await?;
     Ok(cat)
@@ -92,7 +98,10 @@ pub async fn get_category_by_id(id: i32) -> Result<Category, Error> {
 #[tauri::command]
 pub async fn get_categories() -> Result<Vec<Category>, Error> {
     let pool = db::get_pool().await?;
-    let cats = sqlx::query_as!(Category, r#"SELECT * FROM category ORDER BY priority DESC"#)
+    let cats = sqlx::query_as!(
+        Category,
+        r#"SELECT id as "id!: i32", name, priority as "priority!: i32", color, regex_enabled as "regex_enabled!: bool", calendar_enabled as "calendar_enabled!: bool" FROM category ORDER BY priority DESC"#
+    )
         .fetch_all(&pool)
         .await?;
     Ok(cats)
@@ -100,12 +109,16 @@ pub async fn get_categories() -> Result<Vec<Category>, Error> {
 #[tauri::command]
 pub async fn update_category_by_id(cat: Category) -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    let current = sqlx::query_as!(Category, r#"SELECT * FROM category WHERE id = ?1"#, cat.id)
+    let current = sqlx::query_as!(
+        Category,
+        r#"SELECT id as "id!: i32", name, priority as "priority!: i32", color, regex_enabled as "regex_enabled!: bool", calendar_enabled as "calendar_enabled!: bool" FROM category WHERE id = ?1"#,
+        cat.id
+    )
         .fetch_optional(&pool)
         .await?;
     if let Some(ref c) = current {
         if c.name == "Miscellaneous" {
-            sqlx::query("UPDATE category SET name = ?1, priority = 0, color = ?2, regex_enabled = ?3,calendar_enabled = ?4, WHERE id = ?5")
+            sqlx::query("UPDATE category SET name = ?1, priority = 0, color = ?2, regex_enabled = ?3, calendar_enabled = ?4 WHERE id = ?5")
                 .bind(&cat.name)
                 .bind(&cat.color)
                 .bind(&cat.regex_enabled)
@@ -117,10 +130,12 @@ pub async fn update_category_by_id(cat: Category) -> Result<(), Error> {
         }
     }
     sqlx::query!(
-        "UPDATE category SET name = ?1, priority = ?2, color = ?3 WHERE id = ?4",
+        "UPDATE category SET name = ?1, priority = ?2, color = ?3, regex_enabled = ?4, calendar_enabled = ?5 WHERE id = ?6",
         cat.name,
         cat.priority,
         cat.color,
+        cat.regex_enabled,
+        cat.calendar_enabled,
         cat.id
     )
     .execute(&pool)
@@ -130,7 +145,11 @@ pub async fn update_category_by_id(cat: Category) -> Result<(), Error> {
 #[tauri::command]
 pub async fn delete_category_by_id(id: i32, cascade: bool) -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    let current = sqlx::query_as!(Category, r#"SELECT * FROM category WHERE id = ?1"#, id)
+    let current = sqlx::query_as!(
+        Category,
+        r#"SELECT id as "id!: i32", name, priority as "priority!: i32", color, regex_enabled as "regex_enabled!: bool", calendar_enabled as "calendar_enabled!: bool" FROM category WHERE id = ?1"#,
+        id
+    )
         .fetch_optional(&pool)
         .await?;
     if let Some(ref c) = current {

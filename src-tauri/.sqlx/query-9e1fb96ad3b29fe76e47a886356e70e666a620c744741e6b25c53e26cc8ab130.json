@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO category (name, priority, color, regex_enabled, calendar_enabled) VALUES (?1, ?2, ?3, ?4, ?5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "9e1fb96ad3b29fe76e47a886356e70e666a620c744741e6b25c53e26cc8ab130"
+}

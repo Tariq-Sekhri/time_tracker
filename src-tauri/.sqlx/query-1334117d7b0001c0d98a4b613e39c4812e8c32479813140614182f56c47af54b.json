@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, app, timestamp, duration FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2",
+  "query": "SELECT id as \"id!: i64\", app, timestamp as \"timestamp!: i64\", duration as \"duration!: i64\" FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2",
   "describe": {
     "columns": [
       {
-        "name": "id",
+        "name": "id!: i64",
         "ordinal": 0,
         "type_info": "Integer"
       },
@@ -14,12 +14,12 @@
         "type_info": "Text"
       },
       {
-        "name": "timestamp",
+        "name": "timestamp!: i64",
         "ordinal": 2,
         "type_info": "Integer"
       },
       {
-        "name": "duration",
+        "name": "duration!: i64",
         "ordinal": 3,
         "type_info": "Integer"
       }
@@ -34,5 +34,5 @@
       false
     ]
   },
-  "hash": "b4e6a8c144f143242e92aff188bb11ceee976a1be9007f48942418799f9f2304"
+  "hash": "1334117d7b0001c0d98a4b613e39c4812e8c32479813140614182f56c47af54b"
 }
