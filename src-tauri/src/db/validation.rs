@@ -90,6 +90,15 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
                 ExpectedColumn { name: "value", sql_type: "TEXT", not_null: true, default_value: None },
             ],
         },
+        ExpectedTable {
+            name: "settings",
+            columns: vec![
+                ExpectedColumn { name: "key", sql_type: "TEXT", not_null: true, default_value: None },
+                ExpectedColumn { name: "val", sql_type: "INTEGER", not_null: true, default_value: None },
+                ExpectedColumn { name: "is_locked", sql_type: "INTEGER", not_null: true, default_value: Some("0") },
+                ExpectedColumn { name: "default_val", sql_type: "INTEGER", not_null: true, default_value: None },
+            ],
+        },
     ]
 }
 
@@ -203,6 +212,7 @@ async fn create_table_safe(pool: &SqlitePool, table: &ExpectedTable) -> Result<(
             .execute(pool)
             .await?;
         }
+        "settings" => tables::settings::create_table(pool).await?,
         _ => {
             return Err(anyhow::anyhow!("Unknown table: {}", table.name).into());
         }

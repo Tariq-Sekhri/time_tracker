@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO settings (key, val, is_locked, default_val) VALUES (?1, ?2, ?3, ?4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "328ee63737ccff8062ed1c43896d4ac0ec9b3579973b79248437dfe954c1fe60"
+}

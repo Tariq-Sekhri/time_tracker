@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE settings SET val = ?2 WHERE key = ?1 AND is_locked = 0",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "eab15983463293dd0693bf5726f4de6127a82878ea4a9a6bd76ce23336546a2f"
+}

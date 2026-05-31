@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE settings SET is_locked = CASE WHEN is_locked = 1 THEN 0 ELSE 1 END WHERE key = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "d88872ed40b6434f739eee84a68c6bbc8e7401ea942095c2fb4da5886b8e5575"
+}

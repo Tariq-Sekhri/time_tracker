@@ -7,6 +7,7 @@ mod tray;
 
 use std::sync::{atomic::AtomicBool, Mutex};
 
+use commands::{apply_update_cmd, check_update_cmd};
 use core::{get_tracking_status, set_tracking_status, supervisor};
 use db::queries::{
     get_day_statistics, get_total_statistics, get_week, get_week_for_app_filter,
@@ -29,6 +30,9 @@ use db::tables::log::{
     get_log_by_id, get_logs, get_logs_by_category, get_logs_for_app_in_time_range,
     get_logs_for_time_block,
 };
+use db::tables::settings::{
+    flip_lock_by_key, get_settings, reset_val_by_key, update_val_by_key,
+};
 use db::tables::skipped_app::{
     count_matching_logs, delete_skipped_app_by_id, get_skipped_apps,
     insert_skipped_app_and_delete_logs, restore_default_skipped_apps, update_skipped_app_by_id,
@@ -44,8 +48,8 @@ use db::tables::google_calendar_sync::{
     get_google_calendar_events, list_available_google_calendars, update_google_calendar_event,
 };
 use db::{
-    create_manual_backup, create_safety_backup, export_data_to_json, get_all_db_data,
-    get_backup_dir, get_db_path_cmd, list_backups, reset_database, restore_backup, wipe_all_data,
+    create_manual_backup, create_safety_backup, get_backup_dir, get_db_path_cmd, list_backups,
+    restore_backup,
 };
 use google_oauth::{
     get_google_auth_status, get_google_oauth_app_credentials, google_oauth_login,
@@ -246,9 +250,6 @@ pub fn run() {
             count_matching_logs,
             restore_default_skipped_apps,
             get_db_path_cmd,
-            get_all_db_data,
-            wipe_all_data,
-            reset_database,
             get_tracking_status,
             set_tracking_status,
             refresh_tray_menu,
@@ -273,15 +274,18 @@ pub fn run() {
             get_app_metadata,
             set_app_metadata,
             delete_app_metadata,
+            get_settings,
+            flip_lock_by_key,
+            reset_val_by_key,
+            update_val_by_key,
             list_backups,
             create_manual_backup,
             restore_backup,
             get_backup_dir,
             create_safety_backup,
-            export_data_to_json,
             get_db_schema_version,
-            commands::apply_update_cmd,
-            commands::check_update_cmd,
+            apply_update_cmd,
+            check_update_cmd,
             get_app_version,
         ])
         .run(tauri::generate_context!())

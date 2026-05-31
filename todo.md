@@ -1,5 +1,5 @@
 - High Priority
-  
+
 - bug
     - change default to my settings
         - Min log duration (sec): 1
@@ -20,3 +20,6 @@
     - afk detection
     - macos
 
+setting table
+name val is_locked default_val
+calendarStartHour 8 true 5

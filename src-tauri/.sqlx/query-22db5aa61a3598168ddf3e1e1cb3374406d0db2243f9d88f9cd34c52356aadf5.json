@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT\n            key as \"key!: String\",\n            val as \"val!: i32\",\n            is_locked as \"is_locked!: bool\",\n            default_val as \"default_val!: i32\"\n        FROM settings\n        ORDER BY key\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "key!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "val!: i32",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "is_locked!: bool",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "default_val!: i32",
+        "ordinal": 3,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "22db5aa61a3598168ddf3e1e1cb3374406d0db2243f9d88f9cd34c52356aadf5"
+}

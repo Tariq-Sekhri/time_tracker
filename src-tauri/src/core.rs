@@ -1,8 +1,7 @@
 use crate::db::tables::log::{self, increase_duration, NewLog};
 use crate::db::tables::skipped_app;
 use crate::db::Error;
-#[cfg(target_os = "macos")]
-use anyhow::Context;
+
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
@@ -27,26 +26,6 @@ pub fn set_tracking_status(is_tracking: bool) {
     #[cfg(not(debug_assertions))]
     IS_SUSPENDED.store(!is_tracking, Ordering::Relaxed);
 }
-
-/// Platform-specific implementation for getting the foreground/active application.
-///
-/// **WARNINGS & LIMITATIONS:**
-///
-/// 1. **Cross-compilation**: This approach uses Rust's conditional compilation (`#[cfg]`).
-///    - You can only compile for the platform you're currently on (unless using cross-compilation tools)
-///    - To build for macOS/Linux from Windows, you'll need to use cross-compilation or CI/CD
-///
-/// 2. **Linux**:
-///    - GNOME-like sessions prefer `gdbus` (Focused Window extension), then Hyprland, Sway, KDE, AT-SPI, `xdotool`
-///    - AT-SPI needs a session D-Bus and accessibility enabled where applicable
-///
-/// 3. **macOS Limitations**:
-///    - Requires proper entitlements in `Info.plist` for accessibility permissions
-///    - Users may need to grant accessibility permissions in System Settings
-///    - The app name returned is the localized name (may vary by language)
-///
-/// 4. **Windows**: Should work reliably, but window titles may not always match executable names
-
 fn sanitize_app_name(name: &str) -> String {
     name.chars()
         .filter(|c| {
