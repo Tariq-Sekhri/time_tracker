@@ -8,7 +8,6 @@ const KEYS = [
     "time-tracker:cat-regex:known-category-ids",
     "time-tracker:cat-regex:sort-order",
     "time-tracker:cat-regex:group-by-category",
-    "time-tracker:cat-regex:collapsed-category-ids",
 ] as const;
 
 export async function migrateLocalStorageToDb(): Promise<void> {

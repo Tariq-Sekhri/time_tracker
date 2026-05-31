@@ -38,7 +38,6 @@ export default function CategoryRegexView() {
     const [editRegexError, setEditRegexError] = useState<string | null>(null);
     const [sortOrder, setSortOrder] = useState<"oldest" | "newest">("newest");
     const [groupByCategory, setGroupByCategory] = useState(false);
-    const [collapsedCategoryIds, setCollapsedCategoryIds] = useState<Set<number>>(new Set());
     const newRegexCatMenuRef = useRef<HTMLDivElement | null>(null);
     const sortMenuRef = useRef<HTMLDivElement | null>(null);
     const editCatMenuRef = useRef<HTMLDivElement | null>(null);
@@ -47,15 +46,6 @@ export default function CategoryRegexView() {
     const [editCatMenuOpen, setEditCatMenuOpen] = useState(false);
     const [FilterOpen, setFilterOpen] = useState(false);
     const hasInitializedUiPrefs = useRef(false);
-
-    const toggleCategoryCollapsed = (catId: number) => {
-        setCollapsedCategoryIds((prev) => {
-            const next = new Set(prev);
-            if (next.has(catId)) next.delete(catId);
-            else next.add(catId);
-            return next;
-        });
-    };
 
     const {data: categories = []} = useQuery({
         queryKey: ["categories"],
@@ -151,14 +141,28 @@ export default function CategoryRegexView() {
         });
     }, [groupByCategory]);
 
-    useEffect(() => {
-        if (!hasInitializedUiPrefs.current) {
-            return;
-        }
-        update_category_by_id(c)
-        });
-    }, [collapsedCategoryIds]);
+    const updateCategoryCollapseMutation = useMutation({
+        mutationFn: async (cat: Category) => {
+            return await update_category_by_id(cat);
+        },
+        onMutate: async (cat) => {
+            await queryClient.cancelQueries({queryKey: ["categories"]});
+            const previous = queryClient.getQueryData<Category[]>(["categories"]);
+            queryClient.setQueryData<Category[]>(["categories"], (old) =>
+                old?.map((c) => (c.id === cat.id ? cat : c)) ?? []
+            );
+            return {previous};
+        },
+        onError: (_error, _cat, context) => {
+            if (context?.previous) {
+                queryClient.setQueryData(["categories"], context.previous);
+            }
+        },
+    });
 
+    const toggleCategoryCollapsed = (cat: Category) => {
+        updateCategoryCollapseMutation.mutate({...cat, is_collapsed: !cat.is_collapsed});
+    };
 
     const createRegexMutation = useMutation({
         mutationFn: async (newRegex: NewCategoryRegex) => {
@@ -577,12 +581,12 @@ export default function CategoryRegexView() {
                     categories.map((cat) => {
                         const groupRegexes = regexesByCategory.get(cat.id) ?? [];
                         if (groupRegexes.length === 0) return null;
-                        const isCollapsed = collapsedCategoryIds.has(cat.id);
+                        const isCollapsed = cat.is_collapsed;
                         return (
                             <div key={cat.id} className="space-y-2">
                                 <button
                                     type="button"
-                                    onClick={() => toggleCategoryCollapsed(cat.id)}
+                                    onClick={() => toggleCategoryCollapsed(cat)}
                                     className="flex items-center gap-2 w-full text-left py-2 px-3 rounded bg-gray-800/80 hover:bg-gray-800 text-sm font-medium transition-colors"
                                 >
                                     <svg

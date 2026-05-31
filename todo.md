@@ -1,5 +1,5 @@
 - High Priority
-    - add is_collapsed to category
+  
 - bug
     - change default to my settings
         - Min log duration (sec): 1
