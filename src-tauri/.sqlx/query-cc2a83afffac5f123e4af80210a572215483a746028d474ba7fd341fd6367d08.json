@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id as \"id!: i32\", name, priority as \"priority!: i32\", color, regex_enabled as \"regex_enabled!: bool\", calendar_enabled as \"calendar_enabled!: bool\" FROM category ORDER BY priority DESC",
+  "query": "\n        SELECT\n            id as \"id!: i32\",\n            name,\n            priority as \"priority!: i32\",\n            color,\n            regex_enabled as \"regex_enabled!: bool\",\n            calendar_enabled as \"calendar_enabled!: bool\",\n            is_collapsed as \"is_collapsed!: bool\"\n        FROM category\n        ORDER BY priority DESC\n        ",
   "describe": {
     "columns": [
       {
@@ -32,6 +32,11 @@
         "name": "calendar_enabled!: bool",
         "ordinal": 5,
         "type_info": "Integer"
+      },
+      {
+        "name": "is_collapsed!: bool",
+        "ordinal": 6,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
@@ -43,8 +48,9 @@
       true,
       true,
       false,
+      false,
       false
     ]
   },
-  "hash": "37753a09982d5748e0dfb0074f5b07626f5b69f5184bda604ed38dc366a8c297"
+  "hash": "cc2a83afffac5f123e4af80210a572215483a746028d474ba7fd341fd6367d08"
 }

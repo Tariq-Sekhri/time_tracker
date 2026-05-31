@@ -7,6 +7,7 @@ export type Category = {
     color?: string | null;
     regex_enabled: boolean;
     calendar_enabled: boolean;
+    is_collapsed: boolean;
 };
 
 export type NewCategory = {
@@ -15,6 +16,7 @@ export type NewCategory = {
     color?: string | null;
     regex_enabled: boolean;
     calendar_enabled: boolean;
+    is_collapsed: boolean;
 };
 
 export async function get_categories(): Promise<Category[]> {

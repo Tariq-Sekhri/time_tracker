@@ -1,6 +1,6 @@
 import {useQuery, useMutation, useQueryClient} from "@tanstack/react-query";
 import {useEffect, useMemo, useRef, useState} from "react";
-import {get_categories, Category} from "../api/Category.ts";
+import {get_categories, Category, update_category_by_id} from "../api/Category.ts";
 import {
     get_cat_regex,
     insert_cat_regex,
@@ -15,7 +15,6 @@ import FilterCategories, {useFilterCategories} from "../Componants/FilterCategor
 
 const REGEX_SORT_ORDER_KEY = "time-tracker:cat-regex:sort-order";
 const REGEX_GROUP_BY_CATEGORY_KEY = "time-tracker:cat-regex:group-by-category";
-const REGEX_COLLAPSED_CATEGORY_IDS_KEY = "time-tracker:cat-regex:collapsed-category-ids";
 
 function validateRegex(pattern: string): string | null {
     if (!pattern.trim()) {
@@ -101,18 +100,13 @@ export default function CategoryRegexView() {
         Promise.all([
             getAppMetadata(REGEX_SORT_ORDER_KEY),
             getAppMetadata(REGEX_GROUP_BY_CATEGORY_KEY),
-            getAppMetadata(REGEX_COLLAPSED_CATEGORY_IDS_KEY),
         ])
-            .then(([rawSortOrder, rawGroup, rawCollapsed]) => {
+            .then(([rawSortOrder, rawGroup]) => {
                 if (rawSortOrder === "oldest" || rawSortOrder === "newest") {
                     setSortOrder(rawSortOrder);
                 }
                 if (rawGroup != null) {
                     setGroupByCategory(rawGroup === "true");
-                }
-                if (rawCollapsed) {
-                    const ids = JSON.parse(rawCollapsed) as number[];
-                    setCollapsedCategoryIds(new Set<number>(ids));
                 }
             })
             .catch(() => {
@@ -161,7 +155,7 @@ export default function CategoryRegexView() {
         if (!hasInitializedUiPrefs.current) {
             return;
         }
-        setAppMetadata(REGEX_COLLAPSED_CATEGORY_IDS_KEY, JSON.stringify([...collapsedCategoryIds])).catch(() => {
+        update_category_by_id(c)
         });
     }, [collapsedCategoryIds]);
 
