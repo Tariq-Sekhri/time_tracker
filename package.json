@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "dev": "vite",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "bump": "node scripts/bump.mjs"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.20",
