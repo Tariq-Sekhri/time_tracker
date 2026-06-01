@@ -32,9 +32,9 @@ import {get_total_statistics, get_week_statistics, WeekStatistics} from "../../a
 // MergedLog = one log segment; get_logs_by_category returns many for sidebar drill-down
 import {get_logs_by_category, MergedLog} from "../../api/Log.ts";
 // Global settings: min duration to show apps, calendar day boundary hour, etc.
-import {useSettingsStore} from "../../stores/settingsStore.ts";
 // Context menu to recategorize apps from sidebar; categorizeLayers = portal UI to render
 import {useAppCategorizeMenu} from "../../hooks/useAppCategorizeMenu.tsx";
+import {useBackendSettings} from "../../hooks/useBackendSettings.ts";
 // Click app row → filter main calendar to that app (shared with calendar screen)
 import {logRowLeftClickCalendarFilter} from "../../utils/calendarAppFilterRowClick.ts";
 // Which app name is currently highlighted as "calendar filter active"
@@ -135,11 +135,8 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
     const calendarAppFilterActive = useCalendarAppFilterActive();
 
     // Hide apps below this duration in sidebar lists (UI preference, not DB filter for range stats)
-    const uiMinAppDuration = useSettingsStore((state) => state.uiMinAppDuration);
-    // Minimum log length when fetching category_app_logs from API
-    const minLogDuration = useSettingsStore((state) => state.timeBlockSettings.minLogDuration);
-    // Hour (0–23) when "calendar day" starts — affects date picker max, unix ranges, hourly chart order
-    const calendarStartHour = useSettingsStore((state) => state.calendarStartHour);
+    const { calendarStartHour, uiMinAppDuration, timeBlockSettings } = useBackendSettings();
+    const minLogDuration = timeBlockSettings.minLogDuration;
 
     // DOM node for right sidebar — used in click-outside handler
     const sidebarRef = useRef<HTMLDivElement | null>(null);

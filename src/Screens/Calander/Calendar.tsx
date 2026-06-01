@@ -15,7 +15,6 @@ import {RightSideBar, SideBarView} from "./RightSideBar/RightSideBar.tsx";
 import {get_google_calendars, GoogleCalendar} from "../../api/GoogleCalendar.ts";
 import {getCachedCalendars, setCachedCalendars} from "../../stores/googleCalendarCache.ts";
 import {getCurrentWindow} from "@tauri-apps/api/window";
-import { useSettingsStore } from "../../stores/settingsStore.ts";
 import { useCalendarAppFilterActive } from "../../stores/calendarAppFilterStore.ts";
 import {
     loadCalendarViewPrefs,
@@ -25,11 +24,12 @@ import {
 import { toErrorString } from "../../types/common.ts";
 import { useAppCategorizeMenu } from "../../hooks/useAppCategorizeMenu.tsx";
 import { useFilterCategories } from "../../Componants/FilterCategories.tsx";
+import { useBackendSettings } from "../../hooks/useBackendSettings.ts";
 
 export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View) => void }) {
     const [rightSideBarView, setRightSideBarView] = useState<SideBarView>("Week")
     const {date, setDate} = useDateStore();
-    const { timeBlockSettings, calendarStartHour } = useSettingsStore();
+    const { calendarStartHour, timeBlockSettings } = useBackendSettings();
     const [includeGoogleInStats, setIncludeGoogleInStats] = useState(false);
     const skipNextIncludeGoogleApplyFromQueryRef = useRef(false);
     const prefsSaveChainRef = useRef(Promise.resolve());
@@ -358,7 +358,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         ],
         queryFn: async () => {
             try {
-                const rows = await get_week(weekStart, timeBlockSettings, calendarStartHour);
+                const rows = await get_week(weekStart);
                 return rows;
             } catch (e) {
                 console.error("[Week Calendar.tsx] queryFn threw:", e);
@@ -800,7 +800,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
             const maxSteps = 520;
 
             const hasAppInWeek = async (targetWeek: Date): Promise<boolean> => {
-                const rows = await get_week_for_app_filter(targetWeek, calendarAppFilterActive, timeBlockSettings, calendarStartHour);
+                const rows = await get_week_for_app_filter(targetWeek, calendarAppFilterActive);
                 return rows.length > 0;
             };
 

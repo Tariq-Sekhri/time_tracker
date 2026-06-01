@@ -4,8 +4,9 @@ use crate::db::tables::cat_regex::{get_cat_regex, CategoryRegex};
 use crate::db::tables::category::{get_categories, Category};
 use crate::db::tables::log::{delete_log_by_id, get_logs, Log};
 use crate::db::tables::skipped_app::get_skipped_apps;
+use crate::db::tables::settings::get_settings;
 
-use chrono::Duration;
+use chrono::{Datelike, Duration, TimeZone, Timelike, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -251,12 +252,42 @@ fn get_time_blocks(
     Ok(time_blocks)
 }
 
+fn setting_val(rows: &HashMap<String, i32>, key: &str, default: i32) -> i64 {
+    rows.get(key).copied().unwrap_or(default) as i64
+}
+
+async fn load_runtime_settings() -> Result<(i64, TimeBlockSettings), Error> {
+    let settings = get_settings().await?;
+    let rows: HashMap<String, i32> = settings.into_iter().map(|s| (s.key, s.val)).collect();
+    let calendar_start_hour = setting_val(&rows, "calendarStartHour", 8).clamp(0, 23);
+    let time_block_settings = TimeBlockSettings {
+        min_log_duration: setting_val(&rows, "minLogDuration", 1).max(1),
+        max_attach_distance: setting_val(&rows, "maxAttachDistance", 400).max(0),
+        lookahead_window: setting_val(&rows, "lookaheadWindow", 500).max(0),
+        min_duration: setting_val(&rows, "minDuration", 300).max(1),
+    };
+    Ok((calendar_start_hour, time_block_settings))
+}
+
+fn week_bounds_from_anchor(anchor_unix: i64, calendar_start_hour: i64) -> (i64, i64) {
+    let dt = Utc.timestamp_opt(anchor_unix, 0).single().unwrap_or_else(|| Utc::now());
+    let start_of_day = if dt.hour() as i64 >= calendar_start_hour {
+        dt.date_naive().and_hms_opt(calendar_start_hour as u32, 0, 0).unwrap()
+    } else {
+        (dt.date_naive() - Duration::days(1)).and_hms_opt(calendar_start_hour as u32, 0, 0).unwrap()
+    };
+    let weekday = start_of_day.weekday().num_days_from_monday() as i64;
+    let week_start = start_of_day - Duration::days(weekday);
+    let week_end = week_start + Duration::days(7) - Duration::seconds(1);
+    (week_start.and_utc().timestamp(), week_end.and_utc().timestamp())
+}
+
 #[tauri::command]
 pub async fn get_week(
-    week_start: i64,
-    week_end: i64,
-    time_block_settings: TimeBlockSettings,
+    week_anchor: i64,
 ) -> Result<Vec<TimeBlock>, Error> {
+    let (calendar_start_hour, time_block_settings) = load_runtime_settings().await?;
+    let (week_start, week_end) = week_bounds_from_anchor(week_anchor, calendar_start_hour);
     let mut logs = get_logs().await?;
     let skipped_apps = get_skipped_apps().await?;
 
@@ -301,11 +332,11 @@ pub async fn get_week(
 
 #[tauri::command]
 pub async fn get_week_for_app_filter(
-    week_start: i64,
-    week_end: i64,
+    week_anchor: i64,
     app_name: String,
-    time_block_settings: TimeBlockSettings,
 ) -> Result<Vec<TimeBlock>, Error> {
+    let (calendar_start_hour, time_block_settings) = load_runtime_settings().await?;
+    let (week_start, week_end) = week_bounds_from_anchor(week_anchor, calendar_start_hour);
     let mut logs = get_logs().await?;
     let skipped_apps = get_skipped_apps().await?;
 

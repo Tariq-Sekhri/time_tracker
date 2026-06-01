@@ -9,7 +9,6 @@ import { getCategoryColor, getWeekStart, formatDuration, formatLocalDateYMD } fr
 import { Category } from "../../api/Category.ts";
 import { EventClickArg, DatesSetArg } from "@fullcalendar/core";
 import interactionPlugin from '@fullcalendar/interaction';
-import { useSettingsStore } from "../../stores/settingsStore.ts";
 import {
     get_all_google_calendar_events,
     google_oauth_login,
@@ -22,6 +21,7 @@ import { getCachedEvents, setCachedEvents } from "../../stores/googleCalendarCac
 import { useToast } from "../../Componants/Toast.tsx";
 import { getAppMetadata, setAppMetadata } from "../../api/appMetadata.ts";
 import { useCalendarAppFilterActive } from "../../stores/calendarAppFilterStore.ts";
+import { useBackendSettings } from "../../hooks/useBackendSettings.ts";
 
 const LEFT_SIDEBAR_COLLAPSED_KEY = "time-tracker:left-sidebar-collapsed";
 
@@ -95,7 +95,7 @@ export default function RenderCalendarContent({
     const [isRelogging, setIsRelogging] = useState(false);
     const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
 
-    const { calendarStartHour, calendarHeight, timeBlockSettings } = useSettingsStore();
+    const { calendarStartHour, calendarHeight, timeBlockSettings } = useBackendSettings();
     const calendarAppFilter = useCalendarAppFilterActive();
     const slotMinHeightPx = Math.max(12, Math.round((calendarHeight / 100) * 24));
 
@@ -147,7 +147,7 @@ export default function RenderCalendarContent({
         ],
         queryFn: async () => {
             try {
-                const rows = await get_week(weekStart, timeBlockSettings, calendarStartHour);
+                const rows = await get_week(weekStart);
                 return rows;
             } catch (e) {
                 console.error("[Week] queryFn threw:", e);
@@ -179,12 +179,7 @@ export default function RenderCalendarContent({
             if (!calendarAppFilter) {
                 return [];
             }
-            return get_week_for_app_filter(
-                weekStart,
-                calendarAppFilter,
-                timeBlockSettings,
-                calendarStartHour,
-            );
+            return get_week_for_app_filter(weekStart, calendarAppFilter);
         },
         enabled: weekQueryEnabled && Boolean(calendarAppFilter),
         refetchOnWindowFocus: true,

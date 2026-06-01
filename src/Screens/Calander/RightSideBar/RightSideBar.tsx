@@ -8,8 +8,8 @@ import DayStatisticsSidebar from "./DayStatisticsSidebar.tsx";
 import GoogleCalendarEventView from "./GoogleCalendarEventView.tsx";
 import { GoogleCalendar } from "../../../api/GoogleCalendar.ts";
 import { useEffect, useState } from "react";
-import { useSettingsStore } from "../../../stores/settingsStore.ts";
 import { getAppMetadata, setAppMetadata } from "../../../api/appMetadata.ts";
+import { useBackendSettings } from "../../../hooks/useBackendSettings.ts";
 
 const RIGHT_SIDEBAR_COLLAPSED_KEY = "time-tracker:right-sidebar-collapsed";
 
@@ -49,7 +49,7 @@ export function RightSideBar({
     googleCalendars: GoogleCalendar[],
 }) {
     const { date } = useDateStore();
-    const { rightSidebarWidth } = useSettingsStore();
+    const { rightSidebarWidth } = useBackendSettings();
     const [isCollapsed, setIsCollapsed] = useState(false);
 
     useEffect(() => {

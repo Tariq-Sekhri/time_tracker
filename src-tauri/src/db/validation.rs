@@ -97,6 +97,8 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
                 ExpectedColumn { name: "val", sql_type: "INTEGER", not_null: true, default_value: None },
                 ExpectedColumn { name: "is_locked", sql_type: "INTEGER", not_null: true, default_value: Some("0") },
                 ExpectedColumn { name: "default_val", sql_type: "INTEGER", not_null: true, default_value: None },
+                ExpectedColumn { name: "min_val", sql_type: "INTEGER", not_null: false, default_value: None },
+                ExpectedColumn { name: "max_val", sql_type: "INTEGER", not_null: false, default_value: None },
             ],
         },
     ]
@@ -252,6 +254,7 @@ async fn add_column_safe(pool: &SqlitePool, table_name: &str, column: &ExpectedC
 
 async fn ensure_default_data(pool: &SqlitePool) -> Result<(), Error> {
     crate::db::tables::cat_regex::ensure_default_regexes(pool).await?;
+    crate::db::tables::settings::seed_defaults(pool).await?;
     Ok(())
 }
 

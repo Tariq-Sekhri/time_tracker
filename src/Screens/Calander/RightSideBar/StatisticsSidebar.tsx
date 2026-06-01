@@ -10,11 +10,11 @@ import {
     GoogleCalendar,
     GoogleCalendarEvent,
 } from "../../../api/GoogleCalendar.ts";
-import { useSettingsStore } from "../../../stores/settingsStore.ts";
 import { toErrorString } from "../../../types/common.ts";
 import { useAppCategorizeMenu } from "../../../hooks/useAppCategorizeMenu.tsx";
 import { logRowLeftClickCalendarFilter } from "../../../utils/calendarAppFilterRowClick.ts";
 import { useCalendarAppFilterActive } from "../../../stores/calendarAppFilterStore.ts";
+import { useBackendSettings } from "../../../hooks/useBackendSettings.ts";
 
 type DisplayMode = "percentage" | "time";
 
@@ -74,7 +74,7 @@ export default function StatisticsSidebar({
 }: StatisticsSidebarProps) {
     const [displayMode, setDisplayMode] = useState<DisplayMode>("percentage");
     const [showAllApps, setShowAllApps] = useState(false);
-    const { categorySidebarCount, calendarStartHour, uiMinAppDuration } = useSettingsStore();
+    const { categorySidebarCount, calendarStartHour, uiMinAppDuration } = useBackendSettings();
     const { openFromContextMenu, categorizeLayers } = useAppCategorizeMenu();
     const calendarAppFilterActive = useCalendarAppFilterActive();
 

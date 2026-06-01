@@ -212,6 +212,7 @@ export default function CategoriesManagement() {
             color: newCategoryColor || null,
             regex_enabled: true,
             calendar_enabled: true,
+            is_collapsed: false,
         });
     };
 

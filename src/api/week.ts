@@ -1,5 +1,4 @@
-import { invokeOrThrow, getWeekRange } from "../utils.ts";
-import type { TimeBlockSettings } from "../stores/settingsStore.ts";
+import { invokeOrThrow } from "../utils.ts";
 
 type TimeBlockBackend = {
     id: number;
@@ -31,31 +30,23 @@ function transformTimeBlock(block: TimeBlockBackend): TimeBlock {
 }
 
 export async function get_week(
-    date: Date,
-    timeBlockSettings: TimeBlockSettings,
-    calendarStartHour: number
+    date: Date
 ): Promise<TimeBlock[]> {
-    const {week_start, week_end} = getWeekRange(date, calendarStartHour);
+    const weekAnchor = Math.floor(date.getTime() / 1000);
     const result = await invokeOrThrow<TimeBlockBackend[]>("get_week", {
-        weekStart: week_start,
-        weekEnd: week_end,
-        timeBlockSettings,
+        weekAnchor,
     });
     return result.map(transformTimeBlock);
 }
 
 export async function get_week_for_app_filter(
     date: Date,
-    appName: string,
-    timeBlockSettings: TimeBlockSettings,
-    calendarStartHour: number
+    appName: string
 ): Promise<TimeBlock[]> {
-    const {week_start, week_end} = getWeekRange(date, calendarStartHour);
+    const weekAnchor = Math.floor(date.getTime() / 1000);
     const result = await invokeOrThrow<TimeBlockBackend[]>("get_week_for_app_filter", {
-        weekStart: week_start,
-        weekEnd: week_end,
+        weekAnchor,
         appName,
-        timeBlockSettings,
     });
     return result.map(transformTimeBlock);
 }

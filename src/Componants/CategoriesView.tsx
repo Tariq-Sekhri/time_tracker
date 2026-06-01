@@ -114,6 +114,7 @@ export default function CategoriesView() {
             color: newCategoryColor || null,
             regex_enabled: true,
             calendar_enabled: true,
+            is_collapsed: false,
         });
     };
 

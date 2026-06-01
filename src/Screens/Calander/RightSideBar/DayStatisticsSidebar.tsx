@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, type ReactNode } from "react";
 import { get_day_statistics } from "../../../api/statistics.ts";
 import { getCalendarDayRangeUnix } from "../../../utils.ts";
-import { useSettingsStore } from "../../../stores/settingsStore.ts";
 import { formatDuration } from "../utils.ts";
 import { DonutChart } from "../DonutChart.tsx";
 import {
@@ -15,6 +14,7 @@ import { toErrorString } from "../../../types/common.ts";
 import { useAppCategorizeMenu } from "../../../hooks/useAppCategorizeMenu.tsx";
 import { logRowLeftClickCalendarFilter } from "../../../utils/calendarAppFilterRowClick.ts";
 import { useCalendarAppFilterActive } from "../../../stores/calendarAppFilterStore.ts";
+import { useBackendSettings } from "../../../hooks/useBackendSettings.ts";
 
 interface DayStatisticsSidebarProps {
     selectedDate: Date;
@@ -44,7 +44,7 @@ export default function DayStatisticsSidebar({
     googleCalendars,
     trailingToolbar,
 }: DayStatisticsSidebarProps) {
-    const { calendarStartHour, categorySidebarCount } = useSettingsStore();
+    const { calendarStartHour, categorySidebarCount } = useBackendSettings();
     const { openFromContextMenu, categorizeLayers } = useAppCategorizeMenu();
     const calendarAppFilterActive = useCalendarAppFilterActive();
 

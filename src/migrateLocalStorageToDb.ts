@@ -1,7 +1,6 @@
 import { getAppMetadata, setAppMetadata } from "./api/appMetadata.ts";
 
 const KEYS = [
-    "time-tracker:settings",
     "time-tracker:right-sidebar-collapsed",
     "time-tracker:left-sidebar-collapsed",
     "time-tracker:cat-regex:visible-category-ids",
@@ -35,4 +34,3 @@ export async function migrateLocalStorageToDb(): Promise<void> {
         }
     }
 }
-
