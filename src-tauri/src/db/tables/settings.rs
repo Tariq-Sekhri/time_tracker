@@ -34,7 +34,7 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 
 pub async fn seed_defaults(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     let default_settings: &[(&str, i32, bool, i32, Option<i32>, Option<i32>)] = &[
-        ("calendarStartHour", 8, true, 5, Some(0), Some(23)),
+        ("calendarStartHour", 5, false, 5, Some(0), Some(23)),
         ("calendarHeight", 100, false, 100, Some(50), Some(200)),
         ("rightSidebarWidth", 480, false, 480, Some(280), Some(800)),
         ("minLogDuration", 1, false, 1, Some(1), None),
