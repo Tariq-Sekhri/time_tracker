@@ -40,22 +40,6 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    let has_is_collapsed: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM pragma_table_info('category')
-         WHERE name = 'is_collapsed'",
-    )
-    .fetch_one(pool)
-    .await?;
-
-    if has_is_collapsed == 0 {
-        sqlx::query(
-            "ALTER TABLE category
-             ADD COLUMN is_collapsed INTEGER NOT NULL DEFAULT 1",
-        )
-        .execute(pool)
-        .await?;
-    }
-
     let row = sqlx::query!("SELECT COUNT(*) as count FROM category")
         .fetch_one(pool)
         .await?;
