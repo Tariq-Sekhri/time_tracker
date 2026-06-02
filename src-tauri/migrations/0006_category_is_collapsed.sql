@@ -1,0 +1,2 @@
+ALTER TABLE category
+    ADD COLUMN is_collapsed INTEGER NOT NULL DEFAULT 1;
