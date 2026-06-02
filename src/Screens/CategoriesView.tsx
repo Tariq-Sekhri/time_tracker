@@ -1,5 +1,5 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import {useQuery, useMutation, useQueryClient} from "@tanstack/react-query";
+import {useEffect, useState} from "react";
 import {
     get_categories,
     insert_category,
@@ -8,12 +8,12 @@ import {
     Category,
     NewCategory
 } from "../api/Category.ts";
-import { get_cat_regex } from "../api/CategoryRegex.ts";
-import { useToast } from "./Toast.tsx";
+import {get_cat_regex} from "../api/CategoryRegex.ts";
+import {useToast} from "../Componants/Toast.tsx";
 
 export default function CategoriesView() {
     const queryClient = useQueryClient();
-    const { showToast } = useToast();
+    const {showToast} = useToast();
     const [editingCategory, setEditingCategory] = useState<Category | null>(null);
     const [newCategoryName, setNewCategoryName] = useState("");
     const [newCategoryPriority, setNewCategoryPriority] = useState(0);
@@ -23,12 +23,18 @@ export default function CategoriesView() {
     const [cascadeDelete, setCascadeDelete] = useState(true);
     const [regexCount, setRegexCount] = useState(0);
 
-    const { data: categories = [] } = useQuery({
+    const {data: categories = []} = useQuery({
         queryKey: ["categories"],
         queryFn: get_categories,
+
     });
 
-    const { data: regexes = [] } = useQuery({
+    useEffect(() => {
+        // getting 0 is fine because of Miscellaneous exists which can't be deleted
+        setNewCategoryPriority(categories[0].priority + 100);
+    }, [categories]);
+
+    const {data: regexes = []} = useQuery({
         queryKey: ["cat_regex"],
         queryFn: get_cat_regex,
     });
@@ -38,7 +44,7 @@ export default function CategoriesView() {
             return await insert_category(newCat);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["categories"] });
+            queryClient.invalidateQueries({queryKey: ["categories"]});
             setNewCategoryName("");
             setNewCategoryPriority(0);
             setNewCategoryColor("#000000");
@@ -56,7 +62,7 @@ export default function CategoriesView() {
             return await update_category_by_id(cat);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["categories"] });
+            queryClient.invalidateQueries({queryKey: ["categories"]});
             setEditingCategory(null);
             showToast("Category updated successfully", "success");
         },
@@ -68,12 +74,12 @@ export default function CategoriesView() {
     });
 
     const deleteCategoryMutation = useMutation({
-        mutationFn: async ({ id, cascade }: { id: number; cascade: boolean }) => {
+        mutationFn: async ({id, cascade}: { id: number; cascade: boolean }) => {
             return await delete_category_by_id(id, cascade);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["categories"] });
-            queryClient.invalidateQueries({ queryKey: ["cat_regex"] });
+            queryClient.invalidateQueries({queryKey: ["categories"]});
+            queryClient.invalidateQueries({queryKey: ["cat_regex"]});
             setShowCascadeDeleteConfirm(false);
             setCategoryToDelete(null);
             setCascadeDelete(true);
@@ -98,7 +104,7 @@ export default function CategoriesView() {
 
     const handleConfirmDeleteCategory = (cascade: boolean) => {
         if (categoryToDelete !== null) {
-            deleteCategoryMutation.mutate({ id: categoryToDelete, cascade });
+            deleteCategoryMutation.mutate({id: categoryToDelete, cascade});
         }
     };
 
@@ -123,7 +129,7 @@ export default function CategoriesView() {
     };
 
     const handleRefresh = () => {
-        queryClient.invalidateQueries({ queryKey: ["categories"] });
+        queryClient.invalidateQueries({queryKey: ["categories"]});
     };
 
 
@@ -138,7 +144,7 @@ export default function CategoriesView() {
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                         </svg>
                         Refresh
                     </button>
@@ -187,7 +193,7 @@ export default function CategoriesView() {
                                     <input
                                         type="text"
                                         value={editingCategory.name}
-                                        onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
+                                        onChange={(e) => setEditingCategory({...editingCategory, name: e.target.value})}
                                         className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
                                     />
                                     {!isMiscellaneous && (
@@ -204,11 +210,17 @@ export default function CategoriesView() {
                                     <input
                                         type="color"
                                         value={editingCategory.color || "#000000"}
-                                        onChange={(e) => setEditingCategory({ ...editingCategory, color: e.target.value })}
+                                        onChange={(e) => setEditingCategory({
+                                            ...editingCategory,
+                                            color: e.target.value
+                                        })}
                                         className="w-16 h-10 bg-gray-800 border border-gray-700 rounded cursor-pointer"
                                     />
                                     <button
-                                        onClick={() => handleUpdateCategory(isMiscellaneous ? { ...editingCategory, priority: 0 } : editingCategory)}
+                                        onClick={() => handleUpdateCategory(isMiscellaneous ? {
+                                            ...editingCategory,
+                                            priority: 0
+                                        } : editingCategory)}
                                         className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded"
                                     >
                                         Save
@@ -225,7 +237,7 @@ export default function CategoriesView() {
                                     <div className="flex items-center gap-3">
                                         <div
                                             className="w-6 h-6 rounded border border-gray-600"
-                                            style={{ backgroundColor: cat.color || "#000000" }}
+                                            style={{backgroundColor: cat.color || "#000000"}}
                                         />
                                         <div>
                                             <span className="font-medium">{cat.name}</span>
@@ -266,11 +278,14 @@ export default function CategoriesView() {
                             return (
                                 <>
                                     <p className="text-gray-300 mb-2">
-                                        You are about to delete <span className="font-semibold text-white">{category?.name || "this category"}</span>.
+                                        You are about to delete <span
+                                        className="font-semibold text-white">{category?.name || "this category"}</span>.
                                     </p>
                                     {regexCount > 0 ? (
                                         <p className="text-yellow-400 mb-4 text-sm">
-                                            This category has <span className="font-semibold">{regexCount} regex pattern{regexCount !== 1 ? 's' : ''}</span> associated with it.
+                                            This category has <span
+                                            className="font-semibold">{regexCount} regex pattern{regexCount !== 1 ? 's' : ''}</span> associated
+                                            with it.
                                         </p>
                                     ) : (
                                         <p className="text-gray-400 mb-4 text-sm">
@@ -297,7 +312,8 @@ export default function CategoriesView() {
                                     <div>
                                         <div className="font-medium text-white">Cascade Delete</div>
                                         <div className="text-sm text-gray-400">
-                                            Delete the category{regexCount > 0 && ` and all ${regexCount} associated regex pattern${regexCount !== 1 ? 's' : ''}`}
+                                            Delete the
+                                            category{regexCount > 0 && ` and all ${regexCount} associated regex pattern${regexCount !== 1 ? 's' : ''}`}
                                         </div>
                                     </div>
                                 </label>
@@ -315,7 +331,8 @@ export default function CategoriesView() {
                                     <div>
                                         <div className="font-medium text-white">Simple Delete</div>
                                         <div className="text-sm text-gray-400">
-                                            Delete only the category{regexCount > 0 && ` (${regexCount} regex pattern${regexCount !== 1 ? 's will' : ' will'} remain orphaned)`}
+                                            Delete only the
+                                            category{regexCount > 0 && ` (${regexCount} regex pattern${regexCount !== 1 ? 's will' : ' will'} remain orphaned)`}
                                         </div>
                                     </div>
                                 </label>

@@ -1,8 +1,9 @@
 - High Priority
-
+- cross device sync
+- enable dev console
 - bug
-    - when adding regex default number should be 50 or 100 bigger then one below
-    - dev mode tracking enabled
+    - when adding category default number should be 50 or 100 bigger then one below
+    - right click app regex give u the regex that sorted it
 - ui
     - remove pie chart from calander rightsidebar (add a settings for on or off, default off)
     - add total time trend line
@@ -14,3 +15,8 @@
     - afk detection
     - macos
 
+i like the coding explisitness of the validatation thing
+
+migrations are good for point a to b changed that are determanistic
+
+so no matter then input 

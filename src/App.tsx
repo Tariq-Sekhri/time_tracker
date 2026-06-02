@@ -6,7 +6,7 @@ import {invoke} from "@tauri-apps/api/core";
 import {useRef} from "react";
 
 import Calendar from "./Screens/Calander/Calendar.tsx";
-import CategoriesView from "./Componants/CategoriesView.tsx";
+import CategoriesView from "./Screens/CategoriesView.tsx";
 import CategoryRegexView from "./Screens/CategoryRegexView.tsx";
 import SkippedAppsView from "./Screens/SkippedAppsView.tsx";
 import DetailedStatistics from "./Screens/DetailedStatistics/DetailedStatistics.tsx";

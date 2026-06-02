@@ -30,11 +30,6 @@ fn refresh_dev_database_from_production(dev_path: &PathBuf) -> std::io::Result<(
     Ok(())
 }
 
-pub fn drop_all() -> std::io::Result<()> {
-    std::fs::remove_file(get_db_path())?;
-    Ok(())
-}
-
 pub fn get_db_path() -> PathBuf {
     let db_filename = if cfg!(debug_assertions) {
         "apptest.db"
@@ -92,7 +87,11 @@ async fn create_pool() -> Result<SqlitePool, sqlx::Error> {
     }
     ensure_db_path(&db_path)?;
 
-    if db_path.exists() && std::fs::metadata(&db_path).map(|m| m.len() > 0).unwrap_or(false) {
+    if db_path.exists()
+        && std::fs::metadata(&db_path)
+            .map(|m| m.len() > 0)
+            .unwrap_or(false)
+    {
         backup::create_daily_backup().map_err(sqlx::Error::Io)?;
     }
 
@@ -102,13 +101,12 @@ async fn create_pool() -> Result<SqlitePool, sqlx::Error> {
         .connect(&connection_string)
         .await?;
 
-    // Run before migrate so a retried migration 5/6 never hits "duplicate column".
     run_schema_repair(&pool).await?;
 
     run_migrations(&pool).await?;
 
     run_schema_repair(&pool).await?;
-    
+
     Ok(pool)
 }
 
@@ -116,7 +114,12 @@ async fn run_schema_repair(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     validation::validate_and_repair_database(pool)
         .await
         .map(|_| ())
-        .map_err(|e| sqlx::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))
+        .map_err(|e| {
+            sqlx::Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                e.to_string(),
+            ))
+        })
 }
 
 async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
