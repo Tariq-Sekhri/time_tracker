@@ -45,6 +45,7 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
                 ExpectedColumn { name: "color", sql_type: "TEXT", not_null: false, default_value: None },
                 ExpectedColumn { name: "regex_enabled", sql_type: "INTEGER", not_null: true, default_value: Some("1") },
                 ExpectedColumn { name: "calendar_enabled", sql_type: "INTEGER", not_null: true, default_value: Some("1") },
+                ExpectedColumn { name: "is_collapsed", sql_type: "INTEGER", not_null: true, default_value: Some("1") },
             ],
         },
         ExpectedTable {
