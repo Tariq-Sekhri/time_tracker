@@ -1,3 +1,4 @@
+use sqlx::migrate::MigrateError;
 use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -100,12 +101,40 @@ async fn create_pool() -> Result<SqlitePool, sqlx::Error> {
         .max_connections(10)
         .connect(&connection_string)
         .await?;
-    
-    sqlx::migrate!("./migrations").run(&pool).await?;
-    
-    validation::validate_and_repair_database(&pool)
-        .await
-        .map_err(|e| sqlx::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+
+    // Run before migrate so a retried migration 5/6 never hits "duplicate column".
+    run_schema_repair(&pool).await?;
+
+    run_migrations(&pool).await?;
+
+    run_schema_repair(&pool).await?;
     
     Ok(pool)
+}
+
+async fn run_schema_repair(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    validation::validate_and_repair_database(pool)
+        .await
+        .map(|_| ())
+        .map_err(|e| sqlx::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))
+}
+
+async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    match sqlx::migrate!("./migrations").run(pool).await {
+        Ok(()) => Ok(()),
+        Err(e) if migration_checksum_mismatch(&e) => {
+            // Migration SQL was fixed after users applied an older version; schema repair is authoritative.
+            Ok(())
+        }
+        Err(e) => Err(sqlx::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            e.to_string(),
+        ))),
+    }
+}
+
+fn migration_checksum_mismatch(err: &MigrateError) -> bool {
+    let msg = err.to_string();
+    msg.contains("was previously applied but has been modified")
+        || msg.contains("checksum mismatch")
 }

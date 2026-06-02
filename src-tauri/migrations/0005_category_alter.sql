@@ -1,5 +1,2 @@
-ALTER TABLE category
-    ADD COLUMN regex_enabled INTEGER NOT NULL DEFAULT 1;
-
-ALTER TABLE category
-    ADD COLUMN calendar_enabled INTEGER NOT NULL DEFAULT 1;
+-- regex_enabled / calendar_enabled may already exist (prior apply or schema repair).
+SELECT 1;

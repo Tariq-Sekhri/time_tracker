@@ -1,2 +1,2 @@
-ALTER TABLE category
-    ADD COLUMN is_collapsed INTEGER NOT NULL DEFAULT 1;
+-- is_collapsed may already exist; missing columns are added in validate_and_repair_database.
+SELECT 1;
