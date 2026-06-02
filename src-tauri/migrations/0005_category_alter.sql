@@ -1,0 +1,9 @@
+ALTER TABLE category
+    ADD COLUMN is_collapsed INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE category
+    ADD COLUMN regex_enabled INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE category
+    ADD COLUMN calendar_enabled INTEGER NOT NULL DEFAULT 1;
+
+
+

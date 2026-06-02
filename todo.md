@@ -1,12 +1,6 @@
 - High Priority
 
 - bug
-    - change default to my settings
-        - Min log duration (sec): 1
-        - Max attach distance (sec): 400
-        - Lookahead window (sec): 500
-        - Min timeblock duration (sec): 300
-        - Min app duration (sec): 30
     - when adding regex default number should be 50 or 100 bigger then one below
     - dev mode tracking enabled
 - ui
@@ -20,6 +14,3 @@
     - afk detection
     - macos
 
-setting table
-name val is_locked default_val
-calendarStartHour 8 true 5
