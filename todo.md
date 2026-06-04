@@ -2,7 +2,6 @@
 - cross device sync
 - enable dev console
 - bug
-    - when adding category default number should be 50 or 100 bigger then one below
     - right click app regex give u the regex that sorted it
 - ui
     - remove pie chart from calander rightsidebar (add a settings for on or off, default off)
