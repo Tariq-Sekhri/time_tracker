@@ -43,6 +43,9 @@ import {useCalendarAppFilterActive} from "../../stores/calendarAppFilterStore.ts
 import StatisticsDateRangePicker, {calendarDateFromUnix} from "./StatisticsDateRangePicker.tsx";
 // Trend tab chart component (this file passes it weeks + fetched stats)
 import CategoryWeekTrendChart, {type TrendValueMode} from "./CategoryWeekTrendChart.tsx";
+import TrendChartOptionsBar, {STATS_TOOLBAR_CONTROL_HEIGHT} from "./TrendChartOptionsBar.tsx";
+
+const STATS_TOOLBAR_BUTTON = `${STATS_TOOLBAR_CONTROL_HEIGHT} px-3 bg-gray-800 border border-gray-700 rounded text-sm text-white gap-2`;
 // Checkbox dropdown to show/hide category lines on trend chart
 import FilterCategories, {useFilterCategories} from "../../Componants/FilterCategories.tsx";
 import {getAppMetadata, setAppMetadata} from "../../api/appMetadata.ts";
@@ -218,6 +221,12 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
         };
         setAppMetadata(TREND_CHART_PREFS_KEY, JSON.stringify(prefs)).catch(() => {});
     }, [trendValueMode, trendShowTotalLine]);
+
+    useEffect(() => {
+        if (activeTab !== "trend") {
+            setIsCategoryFilterOpen(false);
+        }
+    }, [activeTab]);
 
     const maxSelectableDate = useMemo(
         () => adjustInstantToCalendarDayBoundary(new Date(), calendarStartHour),
@@ -518,6 +527,31 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
         );
     }
 
+    const trendToolbar =
+        activeTab === "trend" ? (
+            <>
+                <TrendChartOptionsBar
+                    valueMode={trendValueMode}
+                    onValueModeChange={setTrendValueMode}
+                    showTotalLine={trendShowTotalLine}
+                    onShowTotalLineChange={setTrendShowTotalLine}
+                />
+                <FilterCategories
+                    enabledField="regex_enabled"
+                    categories={categories}
+                    categoriesByPriority={categoriesByPriority}
+                    isOpen={isCategoryFilterOpen}
+                    onOpenChange={setIsCategoryFilterOpen}
+                    onToggle={toggleVisibleCategory}
+                    onCheckAll={checkAllCategories}
+                    onUncheckAll={uncheckAllCategories}
+                    triggerClassName={`${STATS_TOOLBAR_BUTTON} hover:bg-gray-700`}
+                />
+            </>
+        ) : null;
+
+    const hasDateRange = !!(minSelectableDate && rangeStartDate && rangeEndDate);
+
     // --- MAIN RENDER (stats is non-null for dailyAvg/total; trend has dates set) ---
     return (
         <div className="flex h-full overflow-hidden">
@@ -542,118 +576,69 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
 
                 {/* Tab buttons + date range picker row */}
                 <div
-                    className={`flex flex-wrap items-center justify-between gap-3 ${activeTab === "trend" ? "mb-4 shrink-0" : "mb-6"}`}>
-                    <div className="flex flex-wrap items-center gap-2 shrink-0">
-                        <div className="flex gap-1 bg-gray-800 rounded-lg p-1 shrink-0">
-                            <button
-                                onClick={() => setActiveTab("dailyAvg")}
-                                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === "dailyAvg" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"}`}
-                            >
-                                Daily Avg
-                            </button>
-                            <button
-                                onClick={() => setActiveTab("total")}
-                                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === "total" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"}`}
-                            >
-                                Total
-                            </button>
-                            <button
-                                onClick={() => setActiveTab("trend")}
-                                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === "trend" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"}`}
-                            >
-                                Trend
-                            </button>
-                        </div>
-                        {activeTab === "trend" && (
-                            <div className="flex gap-1 bg-gray-800 rounded-lg p-1 shrink-0">
+                    className={`flex flex-wrap items-center gap-3 ${activeTab === "trend" ? "mb-4 shrink-0" : "mb-6"}`}>
+                    <div className="flex gap-1 bg-gray-800 rounded-lg p-1 shrink-0">
+                        <button
+                            onClick={() => setActiveTab("dailyAvg")}
+                            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === "dailyAvg" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"}`}
+                        >
+                            Daily Avg
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("total")}
+                            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === "total" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"}`}
+                        >
+                            Total
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("trend")}
+                            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === "trend" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"}`}
+                        >
+                            Trend
+                        </button>
+                    </div>
+                    <div className="ml-auto flex flex-wrap items-center justify-end gap-2 shrink-0">
+                        {trendToolbar}
+                        {hasDateRange ? (
+                            <>
                                 <button
                                     type="button"
-                                    onClick={() => setTrendValueMode("avg")}
-                                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${trendValueMode === "avg" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"}`}
+                                    onClick={() => {
+                                        setRangeStartDate(minSelectableDate!);
+                                        setRangeEndDate(maxSelectableDate);
+                                    }}
+                                    disabled={
+                                        !(
+                                            rangeStartDate != minSelectableDate ||
+                                            rangeEndDate != maxSelectableDate
+                                        )
+                                    }
+                                    className={`${STATS_TOOLBAR_BUTTON} text-gray-300 hover:text-white hover:bg-gray-700/80 transition-colors disabled:opacity-40 disabled:pointer-events-none`}
                                 >
-                                    Avg
+                                    Reset
                                 </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setTrendValueMode("total")}
-                                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${trendValueMode === "total" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"}`}
-                                >
-                                    Total
-                                </button>
-                            </div>
-                        )}
-                        {activeTab === "trend" && (
-                            <div className="flex items-center gap-2 shrink-0">
-                                <span className="text-sm text-gray-400">Total line</span>
-                                <div className="flex gap-1 bg-gray-800 rounded-lg p-1 shrink-0">
-                                    <button
-                                        type="button"
-                                        onClick={() => setTrendShowTotalLine(true)}
-                                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${trendShowTotalLine ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"}`}
-                                    >
-                                        On
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setTrendShowTotalLine(false)}
-                                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${!trendShowTotalLine ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"}`}
-                                    >
-                                        Off
-                                    </button>
-                                </div>
-                            </div>
+                                <StatisticsDateRangePicker
+                                    startDate={rangeStartDate!}
+                                    endDate={rangeEndDate!}
+                                    minDate={minSelectableDate!}
+                                    maxDate={maxSelectableDate}
+                                    onRangeChange={(start, end) => {
+                                        setRangeStartDate(start);
+                                        setRangeEndDate(end);
+                                    }}
+                                />
+                            </>
+                        ) : (
+                            <span className={`${STATS_TOOLBAR_CONTROL_HEIGHT} text-sm text-gray-500 px-1`}>
+                                No tracking data yet
+                            </span>
                         )}
                     </div>
-                    {minSelectableDate &&
-                    ((rangeStartDate && rangeEndDate)) ? (
-                        <div className="ml-auto shrink-0 flex items-center gap-2">
-                            <button
-
-                                type="button"
-                                onClick={() => {
-                                    setRangeStartDate(minSelectableDate);
-                                    setRangeEndDate(maxSelectableDate);
-                                }}
-                                disabled={!(rangeStartDate != minSelectableDate || rangeEndDate != maxSelectableDate)}
-                                className="px-2.5 py-1.5 text-sm text-white-400 hover:text-gray-500 bg-gray-800/80 border border-gray-700 rounded-lg transition-colors disabled:opacity-40 disabled:pointer-events-none shrink-0"
-                            >
-                                Reset
-                            </button>
-                            <StatisticsDateRangePicker
-                                startDate={rangeStartDate}
-                                endDate={rangeEndDate}
-                                minDate={minSelectableDate}
-                                maxDate={maxSelectableDate}
-                                onRangeChange={(start, end) => {
-                                    setRangeStartDate(start);
-                                    setRangeEndDate(end);
-                                }}
-                            />
-                        </div>
-                    ) : (
-                        <div className="text-sm text-gray-500 ml-auto">No tracking data yet</div>
-                    )}
                 </div>
 
                 {/* TREND TAB ONLY: chart fills remaining height; no category list / hourly / sidebar */}
                 {activeTab === "trend" && (
                     <div className="flex-1 flex flex-col min-h-0 min-w-0">
-                        <div className="flex flex-wrap items-center gap-3 mb-4 shrink-0">
-                            <h2 className="text-xl font-bold">Category trends</h2>
-                            <div className="ml-auto shrink-0">
-                                <FilterCategories
-                                    enabledField="regex_enabled"
-                                    categories={categories}
-                                    categoriesByPriority={categoriesByPriority}
-                                    isOpen={isCategoryFilterOpen}
-                                    onOpenChange={setIsCategoryFilterOpen}
-                                    onToggle={toggleVisibleCategory}
-                                    onCheckAll={checkAllCategories}
-                                    onUncheckAll={uncheckAllCategories}
-                                />
-                            </div>
-                        </div>
-                        {/* weeks = x-axis labels; weekStats[i] matches trendWeekQueries[i].data */}
                         <CategoryWeekTrendChart
                             weeks={trendWeeks}
                             weekStats={trendWeekStats}

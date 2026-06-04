@@ -196,11 +196,11 @@ export default function CategoryWeekTrendChart({
     const modeDescription =
         valueMode === "avg"
             ? showTotalLine
-                ? "Daily average per week (week total ÷ calendar days in period). The Total line is your overall daily average for the week."
-                : "Daily average per week (week total ÷ calendar days in period)."
+                ? "Per-day average each week. Total line = overall daily average."
+                : "Per-day average each week."
             : showTotalLine
-              ? "Sum of all tracked time in each week. The Total line is all categories combined for the week."
-              : "Sum of all tracked time in each week.";
+              ? "Full week totals. Total line = all categories combined."
+              : "Full week totals.";
 
     if (isLoading) {
         return (

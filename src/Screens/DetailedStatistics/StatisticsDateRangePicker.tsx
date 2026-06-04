@@ -307,7 +307,7 @@ export default function StatisticsDateRangePicker({
     return (
         <div
             ref={containerRef}
-            className={`flex items-center gap-1.5 bg-gray-800/80 border border-gray-700 rounded-lg px-2 py-1.5 min-w-0 ${disabled ? "opacity-50" : ""}`}
+            className={`flex h-10 min-h-10 items-center gap-1.5 bg-gray-800/80 border border-gray-700 rounded-lg px-2 min-w-0 shrink-0 ${disabled ? "opacity-50" : ""}`}
         >
             <button
                 ref={startTriggerRef}

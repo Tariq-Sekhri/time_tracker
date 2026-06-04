@@ -153,6 +153,7 @@ type FilterCategoriesPanelProps = {
     onCheckAll: () => void;
     onUncheckAll: () => void;
     onCloseOtherMenus?: () => void;
+    triggerClassName?: string;
 };
 
 function FilterCategoriesPanel({
@@ -168,6 +169,7 @@ function FilterCategoriesPanel({
     onCheckAll,
     onUncheckAll,
     onCloseOtherMenus,
+    triggerClassName,
 }: FilterCategoriesPanelProps) {
     const internalFilterRef = useRef<HTMLDivElement | null>(null);
     const internalPanelRef = useRef<HTMLDivElement | null>(null);
@@ -293,7 +295,10 @@ function FilterCategoriesPanel({
                     onCloseOtherMenus?.();
                     setOpen(!isOpen);
                 }}
-                className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white hover:bg-gray-700 flex items-center gap-2"
+                className={
+                    triggerClassName ??
+                    "px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white hover:bg-gray-700 flex items-center gap-2 text-sm"
+                }
             >
                 <span>
                     Filter categories ({enabledCount}/{categories.length || 0})
@@ -325,6 +330,7 @@ type FilterCategoriesProps = {
     onCheckAll?: () => void;
     onUncheckAll?: () => void;
     onCloseOtherMenus?: () => void;
+    triggerClassName?: string;
 };
 
 function FilterCategoriesWithState({
@@ -333,7 +339,11 @@ function FilterCategoriesWithState({
     setIsOpen,
     onOpenChange,
     onCloseOtherMenus,
-}: Pick<FilterCategoriesProps, "enabledField" | "isOpen" | "setIsOpen" | "onOpenChange" | "onCloseOtherMenus">) {
+    triggerClassName,
+}: Pick<
+    FilterCategoriesProps,
+    "enabledField" | "isOpen" | "setIsOpen" | "onOpenChange" | "onCloseOtherMenus" | "triggerClassName"
+>) {
     const {data: categories = []} = useQuery({
         queryKey: ["categories"],
         queryFn: get_categories,
@@ -355,6 +365,7 @@ function FilterCategoriesWithState({
             onCheckAll={filter.checkAllCategories}
             onUncheckAll={filter.uncheckAllCategories}
             onCloseOtherMenus={onCloseOtherMenus}
+            triggerClassName={triggerClassName}
         />
     );
 }
@@ -372,6 +383,7 @@ export default function FilterCategories({
     onCheckAll,
     onUncheckAll,
     onCloseOtherMenus,
+    triggerClassName,
 }: FilterCategoriesProps) {
     if (onToggle === undefined) {
         return (
@@ -381,6 +393,7 @@ export default function FilterCategories({
                 setIsOpen={setIsOpen}
                 onOpenChange={onOpenChange}
                 onCloseOtherMenus={onCloseOtherMenus}
+                triggerClassName={triggerClassName}
             />
         );
     }
@@ -399,6 +412,7 @@ export default function FilterCategories({
             onCheckAll={onCheckAll!}
             onUncheckAll={onUncheckAll!}
             onCloseOtherMenus={onCloseOtherMenus}
+            triggerClassName={triggerClassName}
         />
     );
 }

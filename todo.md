@@ -1,6 +1,7 @@
 - High Priority
-- cross device sync
-- enable dev console
+    - cross device sync
+    - enable dev console
+    - settings will hold all app matadata
 - bug
     - right click app regex give u the regex that sorted it
 - ui
