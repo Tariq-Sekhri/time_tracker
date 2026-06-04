@@ -20,13 +20,15 @@ export type WeekTrendColumn = {
 export type CategoryWeekSeries = {
     category: string;
     color: string;
-    dailyAvgSeconds: number[];
+    values: number[];
 };
+
+export type TrendValueMode = "avg" | "total";
 
 const PX_PER_WEEK = 52;
 const TOTAL_WEEK_DATA_KEY = "__week_total__";
 const TOTAL_LINE_COLOR = "#f3f4f6";
-const TOTAL_LINE_NAME = "Total (week)";
+const TOTAL_LINE_NAME = "Total";
 
 function countDaysInTrackedWeekPeriod(
     weekStartUnix: number,
@@ -67,8 +69,9 @@ function formatWeekLabel(weekStartUnix: number): string {
 function buildSeries(
     weeks: { week_start: number; week_end: number }[],
     weekStats: (WeekStatistics | undefined)[],
+    mode: TrendValueMode,
     calendarStartHour: number
-): { columns: WeekTrendColumn[]; series: CategoryWeekSeries[]; totalWeeklySeconds: number[] } {
+): { columns: WeekTrendColumn[]; series: CategoryWeekSeries[]; totalLineValues: number[] } {
     const columns: WeekTrendColumn[] = weeks.map((w) => ({
         week_start: w.week_start,
         label: formatWeekLabel(w.week_start),
@@ -78,23 +81,29 @@ function buildSeries(
 
     weeks.forEach((weekRange, weekIdx) => {
         const stats = weekStats[weekIdx];
-        const dayCount = countDaysInTrackedWeekPeriod(
-            weekRange.week_start,
-            weekRange.week_end,
-            calendarStartHour
-        );
+        const dayCount =
+            mode === "avg"
+                ? countDaysInTrackedWeekPeriod(
+                      weekRange.week_start,
+                      weekRange.week_end,
+                      calendarStartHour
+                  )
+                : 1;
         const seen = new Set<string>();
 
         for (const cat of stats?.categories ?? []) {
             seen.add(cat.category);
-            const dailyAvg = Math.floor(cat.total_duration / dayCount);
+            const value =
+                mode === "avg"
+                    ? Math.floor(cat.total_duration / dayCount)
+                    : cat.total_duration;
             const existing = categoryMeta.get(cat.category);
             if (existing) {
-                existing.values[weekIdx] = dailyAvg;
+                existing.values[weekIdx] = value;
                 if (cat.color) existing.color = cat.color;
             } else {
                 const values = new Array(weeks.length).fill(0);
-                values[weekIdx] = dailyAvg;
+                values[weekIdx] = value;
                 categoryMeta.set(cat.category, {
                     color: cat.color || "#6b7280",
                     values,
@@ -113,18 +122,27 @@ function buildSeries(
         .map(([category, {color, values}]) => ({
             category,
             color,
-            dailyAvgSeconds: values,
+            values,
         }))
-        .filter((s) => s.dailyAvgSeconds.some((v) => v > 0))
+        .filter((s) => s.values.some((v) => v > 0))
         .sort((a, b) => {
-            const sumA = a.dailyAvgSeconds.reduce((x, y) => x + y, 0);
-            const sumB = b.dailyAvgSeconds.reduce((x, y) => x + y, 0);
+            const sumA = a.values.reduce((x, y) => x + y, 0);
+            const sumB = b.values.reduce((x, y) => x + y, 0);
             return sumB - sumA;
         });
 
-    const totalWeeklySeconds = weeks.map((_, weekIdx) => weekStats[weekIdx]?.total_time ?? 0);
+    const totalLineValues = weeks.map((weekRange, weekIdx) => {
+        const weekTotal = weekStats[weekIdx]?.total_time ?? 0;
+        if (mode === "total") return weekTotal;
+        const dayCount = countDaysInTrackedWeekPeriod(
+            weekRange.week_start,
+            weekRange.week_end,
+            calendarStartHour
+        );
+        return Math.floor(weekTotal / dayCount);
+    });
 
-    return {columns, series, totalWeeklySeconds};
+    return {columns, series, totalLineValues};
 }
 
 type ChartRow = { label: string; week_start: number } & Record<string, number | string>;
@@ -135,6 +153,8 @@ type CategoryWeekTrendChartProps = {
     isLoading: boolean;
     visibleCategoryNames: Set<string>;
     calendarStartHour: number;
+    valueMode: TrendValueMode;
+    showTotalLine: boolean;
 };
 
 export default function CategoryWeekTrendChart({
@@ -143,10 +163,12 @@ export default function CategoryWeekTrendChart({
                                                    isLoading,
                                                    visibleCategoryNames,
                                                    calendarStartHour,
+                                                   valueMode,
+                                                   showTotalLine,
                                                }: CategoryWeekTrendChartProps) {
-    const {columns, series: allSeries, totalWeeklySeconds} = useMemo(
-        () => buildSeries(weeks, weekStats, calendarStartHour),
-        [weeks, weekStats, calendarStartHour]
+    const {columns, series: allSeries, totalLineValues} = useMemo(
+        () => buildSeries(weeks, weekStats, valueMode, calendarStartHour),
+        [weeks, weekStats, valueMode, calendarStartHour]
     );
 
     const series = useMemo(
@@ -154,18 +176,31 @@ export default function CategoryWeekTrendChart({
         [allSeries, visibleCategoryNames]
     );
 
-    const hasTotalWeekData = totalWeeklySeconds.some((v) => v > 0);
+    const hasTotalLineData = totalLineValues.some((v) => v > 0);
 
     const chartData: ChartRow[] = useMemo(() => {
         return columns.map((col, i) => {
             const row: ChartRow = {label: col.label, week_start: col.week_start};
-            row[TOTAL_WEEK_DATA_KEY] = totalWeeklySeconds[i] ?? 0;
+            if (showTotalLine) {
+                row[TOTAL_WEEK_DATA_KEY] = totalLineValues[i] ?? 0;
+            }
             for (const s of series) {
-                row[s.category] = s.dailyAvgSeconds[i] ?? 0;
+                row[s.category] = s.values[i] ?? 0;
             }
             return row;
         });
-    }, [columns, series, totalWeeklySeconds]);
+    }, [columns, series, totalLineValues, showTotalLine]);
+
+    const showTotalLineOnChart = showTotalLine && hasTotalLineData;
+
+    const modeDescription =
+        valueMode === "avg"
+            ? showTotalLine
+                ? "Daily average per week (week total ÷ calendar days in period). The Total line is your overall daily average for the week."
+                : "Daily average per week (week total ÷ calendar days in period)."
+            : showTotalLine
+              ? "Sum of all tracked time in each week. The Total line is all categories combined for the week."
+              : "Sum of all tracked time in each week.";
 
     if (isLoading) {
         return (
@@ -184,7 +219,7 @@ export default function CategoryWeekTrendChart({
         );
     }
 
-    if (series.length === 0 && !hasTotalWeekData) {
+    if (series.length === 0 && !showTotalLineOnChart) {
         return (
             <div
                 className="flex-1 flex items-center justify-center min-h-[320px] text-gray-500 text-sm text-center px-4">
@@ -197,19 +232,18 @@ export default function CategoryWeekTrendChart({
 
     return (
         <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-gray-900 rounded p-4">
-            <p className="text-sm text-gray-400 shrink-0 mb-3">
-                Category lines: daily average per week. {TOTAL_LINE_NAME} line (right axis): total
-                tracked time for the week.
-            </p>
+            <p className="text-sm text-gray-400 shrink-0 mb-3">{modeDescription}</p>
             <div
                 className="flex flex-wrap gap-x-4 gap-y-2 mb-4 pb-4 border-b border-gray-800 shrink-0 max-h-28 overflow-y-auto nice-scrollbar">
-                <div className="flex items-center gap-2 min-w-0">
-                    <div
-                        className="w-2.5 h-2.5 rounded-full shrink-0 border border-gray-500"
-                        style={{backgroundColor: TOTAL_LINE_COLOR}}
-                    />
-                    <span className="text-xs text-gray-200 font-medium truncate">{TOTAL_LINE_NAME}</span>
-                </div>
+                {showTotalLineOnChart && (
+                    <div className="flex items-center gap-2 min-w-0">
+                        <div
+                            className="w-2.5 h-2.5 rounded-full shrink-0 border border-gray-500"
+                            style={{backgroundColor: TOTAL_LINE_COLOR}}
+                        />
+                        <span className="text-xs text-gray-200 font-medium truncate">{TOTAL_LINE_NAME}</span>
+                    </div>
+                )}
                 {series.map((s) => (
                     <div key={s.category} className="flex items-center gap-2 min-w-0">
                         <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{backgroundColor: s.color}}/>
@@ -236,25 +270,12 @@ export default function CategoryWeekTrendChart({
                                 axisLine={{stroke: "#4b5563"}}
                             />
                             <YAxis
-                                yAxisId="dailyAvg"
                                 tick={{fill: "#9ca3af", fontSize: 11}}
                                 tickFormatter={(sec) =>
                                     typeof sec === "number" ? formatDuration(sec) : String(sec)
                                 }
                                 tickLine={false}
                                 axisLine={{stroke: "#4b5563"}}
-                                width={68}
-                                domain={[0, "auto"]}
-                            />
-                            <YAxis
-                                yAxisId="weekTotal"
-                                orientation="right"
-                                tick={{fill: "#d1d5db", fontSize: 11}}
-                                tickFormatter={(sec) =>
-                                    typeof sec === "number" ? formatDuration(sec) : String(sec)
-                                }
-                                tickLine={false}
-                                axisLine={{stroke: "#6b7280"}}
                                 width={72}
                                 domain={[0, "auto"]}
                             />
@@ -281,14 +302,13 @@ export default function CategoryWeekTrendChart({
                                 labelFormatter={(label) => (label != null ? String(label) : "")}
                                 itemSorter={(a) => {
                                     if (a?.dataKey === TOTAL_WEEK_DATA_KEY || a?.name === TOTAL_LINE_NAME) {
-                                        return Number.MAX_SAFE_INTEGER;
+                                        return Number.MIN_SAFE_INTEGER;
                                     }
                                     return -(typeof a?.value === "number" ? a.value : Number(a?.value ?? 0));
                                 }}
                             />
-                            {hasTotalWeekData && (
+                            {showTotalLineOnChart && (
                                 <Line
-                                    yAxisId="weekTotal"
                                     type="monotone"
                                     dataKey={TOTAL_WEEK_DATA_KEY}
                                     name={TOTAL_LINE_NAME}
@@ -304,7 +324,6 @@ export default function CategoryWeekTrendChart({
                             {series.map((s) => (
                                 <Line
                                     key={s.category}
-                                    yAxisId="dailyAvg"
                                     type="monotone"
                                     dataKey={s.category}
                                     name={s.category}
