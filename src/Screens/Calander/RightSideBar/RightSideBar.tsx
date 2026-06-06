@@ -28,6 +28,7 @@ export function RightSideBar({
     selectedCategory,
     setSelectedCategory,
     isLoadingCategory,
+    includeGoogleInStats,
     googleCalendars,
 }: {
     view: SideBarView,
@@ -42,6 +43,7 @@ export function RightSideBar({
     selectedCategory: string | null,
     setSelectedCategory: (category: string | null) => void,
     isLoadingCategory: boolean,
+    includeGoogleInStats: boolean,
     googleCalendars: GoogleCalendar[],
 }) {
     const { date } = useDateStore();
@@ -94,6 +96,7 @@ export function RightSideBar({
                             setSelectedCategory(category);
                             setView("CategoryFilter");
                         }}
+                        includeGoogleInStats={includeGoogleInStats}
                         googleCalendars={googleCalendars}
                         trailingToolbar={collapseSidebarButton}
                     />}
@@ -108,6 +111,7 @@ export function RightSideBar({
                             setSelectedCategory(category);
                             setView("CategoryFilter");
                         }}
+                        includeGoogleInStats={includeGoogleInStats}
                         googleCalendars={googleCalendars}
                         trailingToolbar={collapseSidebarButton}
                     />}

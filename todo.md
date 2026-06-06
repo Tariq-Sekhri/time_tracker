@@ -2,7 +2,6 @@
     - manual time trai
     - trend expla
     - cross device sync
-    - settings will hold all app matadata
     - google calander
 - bug
     - right click app regex give u the regex that sorted it
@@ -16,9 +15,4 @@
 - not planned
     - afk detection
     - macos
-
-category regex
-
-is visible
-is collaposed
 

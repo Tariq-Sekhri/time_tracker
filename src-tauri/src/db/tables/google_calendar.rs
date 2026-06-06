@@ -218,10 +218,10 @@ pub async fn update_google_calendar(update: UpdateGoogleCalendar) -> Result<(), 
         updates.push(format!("color = '{}'", color.replace("'", "''")));
     }
     if let Some(is_visible) = update.is_visible {
-        updates.push(format!("is_visible = '{}'", is_visible));
+        updates.push(format!("is_visible = {}", i32::from(is_visible)));
     }
     if let Some(in_stats) = update.in_stats {
-        updates.push(format!("in_stats = '{}'", in_stats));
+        updates.push(format!("in_stats = {}", i32::from(in_stats)));
     }
 
     if updates.is_empty() {

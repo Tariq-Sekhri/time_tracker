@@ -60,6 +60,8 @@ interface RenderCalendarContentProps {
     googleCalendars: GoogleCalendar[];
     toggleCalendarVisible: (calendarId: number) => void;
     toggleCalendarInStats: (calendarId: number) => void;
+    includeGoogleInStats: boolean;
+    setIncludeGoogleInStats: (v: boolean) => void;
     onTimeBlockContextMenu?: (e: globalThis.MouseEvent, appNames: string[]) => void;
 }
 
@@ -78,6 +80,8 @@ export default function RenderCalendarContent({
     googleCalendars,
     toggleCalendarVisible,
     toggleCalendarInStats,
+    includeGoogleInStats,
+    setIncludeGoogleInStats,
     onTimeBlockContextMenu,
 }: RenderCalendarContentProps) {
     const queryClient = useQueryClient();
@@ -598,8 +602,21 @@ export default function RenderCalendarContent({
                             </h3>
                         </div>
                         <p className={`text-xs text-gray-500 mb-3 ${isLeftCollapsed ? "hidden" : ""}`}>
-                            Toggle week overlay and statistics per calendar.
+                            Overlay on the week view; optionally merge into the stats panel.
                         </p>
+                        <label
+                            className={`flex items-center gap-3 p-2 rounded-lg hover:bg-gray-900/80 cursor-pointer border border-transparent hover:border-gray-800 ${isLeftCollapsed ? "hidden" : ""}`}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={includeGoogleInStats}
+                                onChange={(e) => setIncludeGoogleInStats(e.target.checked)}
+                                className="w-4 h-4 rounded cursor-pointer accent-blue-600"
+                            />
+                            <span className="text-sm text-gray-200 flex-1 leading-snug">
+                                Merge Google events into week statistics
+                            </span>
+                        </label>
 
                         <div className={`space-y-1 ${isLeftCollapsed ? "space-y-0" : ""}`}>
                             {googleCalendars.map((calendar) => {

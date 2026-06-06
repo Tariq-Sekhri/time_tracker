@@ -20,12 +20,17 @@ import {toErrorString} from "../../types/common.ts";
 import {useAppCategorizeMenu} from "../../hooks/useAppCategorizeMenu.tsx";
 import {useFilterCategories} from "../../Componants/FilterCategories.tsx";
 import {useBackendSettings} from "../../hooks/useBackendSettings.ts";
+import {getAppMetadata, setAppMetadata} from "../../api/appMetadata.ts";
+
+const INCLUDE_GOOGLE_IN_STATS_KEY = "time-tracker:include-google-in-stats";
 
 export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View) => void }) {
     const [rightSideBarView, setRightSideBarView] = useState<SideBarView>("Week")
     const {date, setDate} = useDateStore();
     const {calendarStartHour, timeBlockSettings} = useBackendSettings();
     const calendarAppFilterActive = useCalendarAppFilterActive();
+    const [includeGoogleInStats, setIncludeGoogleInStats] = useState(false);
+    const includeGoogleInStatsLoadedRef = useRef(false);
     const [appFilterPrevWeek, setAppFilterPrevWeek] = useState<Date | null>(null);
     const [appFilterNextWeek, setAppFilterNextWeek] = useState<Date | null>(null);
     const [isResolvingAppFilterWeeks, setIsResolvingAppFilterWeeks] = useState(false);
@@ -56,6 +61,22 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         checkAllCategories,
         uncheckAllCategories,
     } = useFilterCategories(categories, "calendar_enabled");
+
+    useEffect(() => {
+        getAppMetadata(INCLUDE_GOOGLE_IN_STATS_KEY)
+            .then((raw) => {
+                if (raw === "1") setIncludeGoogleInStats(true);
+            })
+            .catch(() => {})
+            .finally(() => {
+                includeGoogleInStatsLoadedRef.current = true;
+            });
+    }, []);
+
+    useEffect(() => {
+        if (!includeGoogleInStatsLoadedRef.current) return;
+        setAppMetadata(INCLUDE_GOOGLE_IN_STATS_KEY, includeGoogleInStats ? "1" : "0").catch(() => {});
+    }, [includeGoogleInStats]);
 
     useEffect(() => {
         if (didAlignInitialWeekToBoundary.current) return;
@@ -720,6 +741,8 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             googleCalendars={displayCalendars}
                             toggleCalendarVisible={toggleCalendarVisible}
                             toggleCalendarInStats={toggleCalendarInStats}
+                            includeGoogleInStats={includeGoogleInStats}
+                            setIncludeGoogleInStats={setIncludeGoogleInStats}
                             onTimeBlockContextMenu={openFromContextMenuMany}
                         />
                     </div>
@@ -730,6 +753,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                               setSelectedDate={setSelectedDate} setCurrentView={setCurrentView}
                               selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory}
                               isLoadingCategory={isLoadingCategory}
+                              includeGoogleInStats={includeGoogleInStats}
                               googleCalendars={displayCalendars}
                 />
             </div>

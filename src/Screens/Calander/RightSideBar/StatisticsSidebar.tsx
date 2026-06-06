@@ -57,6 +57,7 @@ interface StatisticsSidebarProps {
     weekDate: Date;
     onMoreInfo: () => void;
     onCategoryClick?: (category: string) => void;
+    includeGoogleInStats: boolean;
     googleCalendars: GoogleCalendar[];
     trailingToolbar?: ReactNode;
 }
@@ -65,6 +66,7 @@ export default function StatisticsSidebar({
     weekDate,
     onMoreInfo,
     onCategoryClick,
+    includeGoogleInStats,
     googleCalendars,
     trailingToolbar,
 }: StatisticsSidebarProps) {
@@ -72,7 +74,6 @@ export default function StatisticsSidebar({
         () => new Set(googleCalendars.filter((c) => c.in_stats).map((c) => c.id)),
         [googleCalendars]
     );
-    const includeGoogleInStats = statsCalendarIds.size > 0;
     const [displayMode, setDisplayMode] = useState<DisplayMode>("percentage");
     const [showAllApps, setShowAllApps] = useState(false);
     const { categorySidebarCount, calendarStartHour, uiMinAppDuration } = useBackendSettings();
@@ -114,7 +115,7 @@ export default function StatisticsSidebar({
     } = useQuery({
         queryKey: ["google_calendar_events", week_start, week_end, calendarStartHour],
         queryFn: async () => await get_all_google_calendar_events(week_start, week_end),
-        enabled: includeGoogleInStats,
+        enabled: includeGoogleInStats && statsCalendarIds.size > 0,
     });
 
     const {
@@ -124,7 +125,7 @@ export default function StatisticsSidebar({
     } = useQuery({
         queryKey: ["google_calendar_events", prevWeekStart, prevWeekEnd, calendarStartHour],
         queryFn: async () => await get_all_google_calendar_events(prevWeekStart, prevWeekEnd),
-        enabled: includeGoogleInStats,
+        enabled: includeGoogleInStats && statsCalendarIds.size > 0,
     });
 
     const calendarMap = useMemo(() => {

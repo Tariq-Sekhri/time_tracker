@@ -21,6 +21,7 @@ interface DayStatisticsSidebarProps {
     onMoreInfo: () => void;
     onClose: () => void;
     onCategoryClick?: (category: string) => void;
+    includeGoogleInStats: boolean;
     googleCalendars: GoogleCalendar[];
     trailingToolbar?: ReactNode;
 }
@@ -37,6 +38,7 @@ export default function DayStatisticsSidebar({
     onMoreInfo,
     onClose,
     onCategoryClick,
+    includeGoogleInStats,
     googleCalendars,
     trailingToolbar,
 }: DayStatisticsSidebarProps) {
@@ -44,7 +46,6 @@ export default function DayStatisticsSidebar({
         () => new Set(googleCalendars.filter((c) => c.in_stats).map((c) => c.id)),
         [googleCalendars]
     );
-    const includeGoogleInStats = statsCalendarIds.size > 0;
     const { calendarStartHour, categorySidebarCount } = useBackendSettings();
     const { openFromContextMenu, categorizeLayers } = useAppCategorizeMenu();
     const calendarAppFilterActive = useCalendarAppFilterActive();
@@ -83,7 +84,7 @@ export default function DayStatisticsSidebar({
     } = useQuery({
         queryKey: ["google_calendar_events", dayStart, dayEnd],
         queryFn: async () => await get_all_google_calendar_events(dayStart, dayEnd),
-        enabled: includeGoogleInStats,
+        enabled: includeGoogleInStats && statsCalendarIds.size > 0,
     });
 
     const calendarMap = useMemo(() => {
