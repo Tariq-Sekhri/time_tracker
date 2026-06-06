@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id as \"id!: i32\", google_calendar_id, name, color, account_email FROM google_calendar_v2 ORDER BY name",
+  "query": "SELECT id as \"id!: i32\", google_calendar_id, name, color, account_email, is_visible as \"is_visible!: bool\", in_stats  as \"in_stats!: bool\" FROM google_calendar_v2 WHERE google_calendar_id = ?1",
   "describe": {
     "columns": [
       {
@@ -27,12 +27,24 @@
         "name": "account_email",
         "ordinal": 4,
         "type_info": "Text"
+      },
+      {
+        "name": "is_visible!: bool",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "in_stats!: bool",
+        "ordinal": 6,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
-      "Right": 0
+      "Right": 1
     },
     "nullable": [
+      false,
+      false,
       false,
       false,
       false,
@@ -40,5 +52,5 @@
       false
     ]
   },
-  "hash": "930ebece18b7468d7b1d4f81075f21d0f948a71cabea6ad60318e5117e5e6b66"
+  "hash": "51e13835695d78388ce27eff58e270ed599cee3a365d09c343fdb6dae99b394d"
 }

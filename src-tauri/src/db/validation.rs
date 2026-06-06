@@ -1,7 +1,7 @@
-use sqlx::{SqlitePool, Row};
-use crate::db::Error;
 use crate::db::backup;
+use crate::db::Error;
 use anyhow::Context;
+use sqlx::{Row, SqlitePool};
 
 #[derive(Debug, Clone)]
 struct ExpectedColumn {
@@ -30,94 +30,285 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
         ExpectedTable {
             name: "logs",
             columns: vec![
-                ExpectedColumn { name: "id", sql_type: "INTEGER", not_null: true, default_value: None },
-                ExpectedColumn { name: "app", sql_type: "TEXT", not_null: true, default_value: None },
-                ExpectedColumn { name: "timestamp", sql_type: "INTEGER", not_null: true, default_value: None },
-                ExpectedColumn { name: "duration", sql_type: "INTEGER", not_null: true, default_value: Some("0") },
+                ExpectedColumn {
+                    name: "id",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "app",
+                    sql_type: "TEXT",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "timestamp",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "duration",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: Some("0"),
+                },
             ],
         },
         ExpectedTable {
             name: "category",
             columns: vec![
-                ExpectedColumn { name: "id", sql_type: "INTEGER", not_null: true, default_value: None },
-                ExpectedColumn { name: "name", sql_type: "TEXT", not_null: true, default_value: None },
-                ExpectedColumn { name: "priority", sql_type: "INTEGER", not_null: false, default_value: None },
-                ExpectedColumn { name: "color", sql_type: "TEXT", not_null: false, default_value: None },
-                ExpectedColumn { name: "regex_enabled", sql_type: "INTEGER", not_null: true, default_value: Some("1") },
-                ExpectedColumn { name: "calendar_enabled", sql_type: "INTEGER", not_null: true, default_value: Some("1") },
-                ExpectedColumn { name: "is_collapsed", sql_type: "INTEGER", not_null: true, default_value: Some("1") },
+                ExpectedColumn {
+                    name: "id",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "name",
+                    sql_type: "TEXT",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "priority",
+                    sql_type: "INTEGER",
+                    not_null: false,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "color",
+                    sql_type: "TEXT",
+                    not_null: false,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "regex_enabled",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: Some("1"),
+                },
+                ExpectedColumn {
+                    name: "calendar_enabled",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: Some("1"),
+                },
+                ExpectedColumn {
+                    name: "is_collapsed",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: Some("1"),
+                },
             ],
         },
         ExpectedTable {
             name: "category_regex",
             columns: vec![
-                ExpectedColumn { name: "id", sql_type: "INTEGER", not_null: true, default_value: None },
-                ExpectedColumn { name: "cat_id", sql_type: "INTEGER", not_null: true, default_value: None },
-                ExpectedColumn { name: "regex", sql_type: "TEXT", not_null: true, default_value: None },
+                ExpectedColumn {
+                    name: "id",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "cat_id",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "regex",
+                    sql_type: "TEXT",
+                    not_null: true,
+                    default_value: None,
+                },
             ],
         },
         ExpectedTable {
             name: "skipped_apps",
             columns: vec![
-                ExpectedColumn { name: "id", sql_type: "INTEGER", not_null: true, default_value: None },
-                ExpectedColumn { name: "regex", sql_type: "TEXT", not_null: true, default_value: None },
+                ExpectedColumn {
+                    name: "id",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "regex",
+                    sql_type: "TEXT",
+                    not_null: true,
+                    default_value: None,
+                },
             ],
         },
         ExpectedTable {
             name: "google_oauth",
             columns: vec![
-                ExpectedColumn { name: "id", sql_type: "INTEGER", not_null: true, default_value: None },
-                ExpectedColumn { name: "email", sql_type: "TEXT", not_null: true, default_value: None },
-                ExpectedColumn { name: "access_token", sql_type: "TEXT", not_null: true, default_value: None },
-                ExpectedColumn { name: "refresh_token", sql_type: "TEXT", not_null: true, default_value: None },
-                ExpectedColumn { name: "expires_at", sql_type: "INTEGER", not_null: true, default_value: None },
-                ExpectedColumn { name: "created_at", sql_type: "INTEGER", not_null: false, default_value: None },
+                ExpectedColumn {
+                    name: "id",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "email",
+                    sql_type: "TEXT",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "access_token",
+                    sql_type: "TEXT",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "refresh_token",
+                    sql_type: "TEXT",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "expires_at",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "created_at",
+                    sql_type: "INTEGER",
+                    not_null: false,
+                    default_value: None,
+                },
             ],
         },
         ExpectedTable {
             name: "google_calendar_v2",
             columns: vec![
-                ExpectedColumn { name: "id", sql_type: "INTEGER", not_null: true, default_value: None },
-                ExpectedColumn { name: "google_calendar_id", sql_type: "TEXT", not_null: true, default_value: None },
-                ExpectedColumn { name: "name", sql_type: "TEXT", not_null: true, default_value: None },
-                ExpectedColumn { name: "color", sql_type: "TEXT", not_null: true, default_value: None },
-                ExpectedColumn { name: "account_email", sql_type: "TEXT", not_null: true, default_value: None },
+                ExpectedColumn {
+                    name: "id",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "google_calendar_id",
+                    sql_type: "TEXT",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "name",
+                    sql_type: "TEXT",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "color",
+                    sql_type: "TEXT",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "account_email",
+                    sql_type: "TEXT",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "is_visible",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: Some("1"),
+                },
+                ExpectedColumn {
+                    name: "in_stats",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: Some("1"),
+                },
             ],
         },
         ExpectedTable {
             name: "app_metadata",
             columns: vec![
-                ExpectedColumn { name: "key", sql_type: "TEXT", not_null: false, default_value: None },
-                ExpectedColumn { name: "value", sql_type: "TEXT", not_null: true, default_value: None },
+                ExpectedColumn {
+                    name: "key",
+                    sql_type: "TEXT",
+                    not_null: false,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "value",
+                    sql_type: "TEXT",
+                    not_null: true,
+                    default_value: None,
+                },
             ],
         },
         ExpectedTable {
             name: "settings",
             columns: vec![
-                ExpectedColumn { name: "key", sql_type: "TEXT", not_null: true, default_value: None },
-                ExpectedColumn { name: "val", sql_type: "INTEGER", not_null: true, default_value: None },
-                ExpectedColumn { name: "is_locked", sql_type: "INTEGER", not_null: true, default_value: Some("0") },
-                ExpectedColumn { name: "default_val", sql_type: "INTEGER", not_null: true, default_value: None },
-                ExpectedColumn { name: "min_val", sql_type: "INTEGER", not_null: false, default_value: None },
-                ExpectedColumn { name: "max_val", sql_type: "INTEGER", not_null: false, default_value: None },
+                ExpectedColumn {
+                    name: "key",
+                    sql_type: "TEXT",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "val",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "is_locked",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: Some("0"),
+                },
+                ExpectedColumn {
+                    name: "default_val",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "min_val",
+                    sql_type: "INTEGER",
+                    not_null: false,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "max_val",
+                    sql_type: "INTEGER",
+                    not_null: false,
+                    default_value: None,
+                },
             ],
         },
     ]
 }
 
-async fn get_table_schema(pool: &SqlitePool, table_name: &str) -> Result<Vec<ActualColumn>, sqlx::Error> {
+async fn get_table_schema(
+    pool: &SqlitePool,
+    table_name: &str,
+) -> Result<Vec<ActualColumn>, sqlx::Error> {
     let query = format!("PRAGMA table_info({})", table_name);
     let rows = sqlx::query(&query).fetch_all(pool).await?;
-    
-    let columns = rows.iter().map(|row| {
-        ActualColumn {
+
+    let columns = rows
+        .iter()
+        .map(|row| ActualColumn {
             name: row.get(1),
             sql_type: row.get(2),
             not_null: row.get::<i32, _>(3) != 0,
             default_value: row.try_get(4).ok(),
-        }
-    }).collect();
-    
+        })
+        .collect();
+
     Ok(columns)
 }
 
@@ -128,16 +319,14 @@ async fn table_exists(pool: &SqlitePool, table_name: &str) -> Result<bool, sqlx:
     )
     .fetch_one(pool)
     .await?;
-    
+
     Ok(count > 0)
 }
 
 async fn table_has_data(pool: &SqlitePool, table_name: &str) -> Result<bool, sqlx::Error> {
     let query = format!("SELECT COUNT(*) FROM {}", table_name);
-    let count: i32 = sqlx::query_scalar(&query)
-        .fetch_one(pool)
-        .await?;
-    
+    let count: i32 = sqlx::query_scalar(&query).fetch_one(pool).await?;
+
     Ok(count > 0)
 }
 
@@ -145,59 +334,65 @@ pub async fn validate_and_repair_database(pool: &SqlitePool) -> Result<Validatio
     let expected_tables = get_expected_tables();
     let mut result = ValidationResult::default();
     let mut needs_changes = false;
-    
+
     for expected in &expected_tables {
         if !table_exists(pool, expected.name).await? {
             result.missing_tables.push(expected.name.to_string());
             needs_changes = true;
         } else {
             let actual_columns = get_table_schema(pool, expected.name).await?;
-            
+
             for expected_col in &expected.columns {
                 if !actual_columns.iter().any(|c| c.name == expected_col.name) {
-                    result.missing_columns.push(format!("{}.{}", expected.name, expected_col.name));
+                    result
+                        .missing_columns
+                        .push(format!("{}.{}", expected.name, expected_col.name));
                     needs_changes = true;
                 }
             }
         }
     }
-    
+
     if needs_changes {
         if let Ok(path) = backup::create_safety_backup("schema_validation") {
             result.backup_created = Some(path.to_string_lossy().to_string());
         }
     }
-    
+
     for expected in &expected_tables {
         if !table_exists(pool, expected.name).await? {
             create_table_safe(pool, expected).await?;
             result.tables_created.push(expected.name.to_string());
         } else {
             let actual_columns = get_table_schema(pool, expected.name).await?;
-            
+
             for expected_col in &expected.columns {
                 if !actual_columns.iter().any(|c| c.name == expected_col.name) {
                     add_column_safe(pool, expected.name, expected_col).await?;
-                    result.columns_added.push(format!("{}.{}", expected.name, expected_col.name));
+                    result
+                        .columns_added
+                        .push(format!("{}.{}", expected.name, expected_col.name));
                 }
             }
-            
+
             for actual_col in &actual_columns {
                 if !expected.columns.iter().any(|c| c.name == actual_col.name) {
-                    result.extra_columns.push(format!("{}.{}", expected.name, actual_col.name));
+                    result
+                        .extra_columns
+                        .push(format!("{}.{}", expected.name, actual_col.name));
                 }
             }
         }
     }
-    
+
     ensure_default_data(pool).await?;
-    
+
     Ok(result)
 }
 
 async fn create_table_safe(pool: &SqlitePool, table: &ExpectedTable) -> Result<(), Error> {
     use crate::db::tables;
-    
+
     match table.name {
         "logs" => tables::log::create_table(pool).await?,
         "category" => tables::category::create_table(pool).await?,
@@ -220,36 +415,38 @@ async fn create_table_safe(pool: &SqlitePool, table: &ExpectedTable) -> Result<(
             return Err(anyhow::anyhow!("Unknown table: {}", table.name).into());
         }
     }
-    
+
     Ok(())
 }
 
-async fn add_column_safe(pool: &SqlitePool, table_name: &str, column: &ExpectedColumn) -> Result<(), Error> {
+async fn add_column_safe(
+    pool: &SqlitePool,
+    table_name: &str,
+    column: &ExpectedColumn,
+) -> Result<(), Error> {
     let mut sql = format!(
         "ALTER TABLE {} ADD COLUMN {} {}",
-        table_name,
-        column.name,
-        column.sql_type
+        table_name, column.name, column.sql_type
     );
-    
+
     if column.not_null {
-        let default = column.default_value.unwrap_or_else(|| {
-            match column.sql_type {
+        let default = column
+            .default_value
+            .unwrap_or_else(|| match column.sql_type {
                 "INTEGER" => "0",
                 "TEXT" => "''",
                 _ => "NULL",
-            }
-        });
+            });
         sql.push_str(&format!(" NOT NULL DEFAULT {}", default));
     } else if let Some(default) = column.default_value {
         sql.push_str(&format!(" DEFAULT {}", default));
     }
-    
-    sqlx::query(&sql)
-        .execute(pool)
-        .await
-        .context(format!("Failed to add column {}.{}", table_name, column.name))?;
-    
+
+    sqlx::query(&sql).execute(pool).await.context(format!(
+        "Failed to add column {}.{}",
+        table_name, column.name
+    ))?;
+
     Ok(())
 }
 
@@ -273,26 +470,32 @@ impl ValidationResult {
     pub fn has_changes(&self) -> bool {
         !self.tables_created.is_empty() || !self.columns_added.is_empty()
     }
-    
+
     pub fn summary(&self) -> String {
         let mut parts = Vec::new();
-        
+
         if let Some(backup) = &self.backup_created {
             parts.push(format!("Backup created: {}", backup));
         }
-        
+
         if !self.tables_created.is_empty() {
-            parts.push(format!("Tables created: {}", self.tables_created.join(", ")));
+            parts.push(format!(
+                "Tables created: {}",
+                self.tables_created.join(", ")
+            ));
         }
-        
+
         if !self.columns_added.is_empty() {
             parts.push(format!("Columns added: {}", self.columns_added.join(", ")));
         }
-        
+
         if !self.extra_columns.is_empty() {
-            parts.push(format!("Extra columns (preserved): {}", self.extra_columns.join(", ")));
+            parts.push(format!(
+                "Extra columns (preserved): {}",
+                self.extra_columns.join(", ")
+            ));
         }
-        
+
         if parts.is_empty() {
             "No changes needed".to_string()
         } else {

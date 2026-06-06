@@ -24,10 +24,12 @@ pub struct NewGoogleOAuth {
 #[derive(Debug, Serialize, FromRow, Deserialize, Clone)]
 pub struct GoogleCalendar {
     pub id: i32,
-    pub google_calendar_id: String,  // Google's calendar ID (e.g., "primary" or email)
+    pub google_calendar_id: String,
     pub name: String,
     pub color: String,
-    pub account_email: String,  // Links to google_oauth.email
+    pub account_email: String,
+    pub is_visible: bool,
+    pub in_stats: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -36,6 +38,8 @@ pub struct NewGoogleCalendar {
     pub name: String,
     pub color: String,
     pub account_email: String,
+    pub is_visible: bool,
+    pub in_stats: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -43,6 +47,8 @@ pub struct UpdateGoogleCalendar {
     pub id: i32,
     pub name: Option<String>,
     pub color: Option<String>,
+    pub is_visible: Option<bool>,
+    pub in_stats: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -51,7 +57,7 @@ pub struct GoogleCalendarInfo {
     pub name: String,
     pub color: String,
     pub access_role: String,
-    pub selected: bool,  // Whether this calendar is currently added
+    pub selected: bool,
 }
 
 pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
@@ -75,7 +81,10 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             name TEXT NOT NULL,
             color TEXT NOT NULL,
             account_email TEXT NOT NULL,
+            is_visible INTEGER NOT NULL DEFAULT 1,
+            in_stats INTEGER NOT NULL DEFAULT 1,
             FOREIGN KEY (account_email) REFERENCES google_oauth(email) ON DELETE CASCADE
+
         )",
     )
     .execute(pool)
@@ -83,7 +92,6 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 
     Ok(())
 }
-
 
 pub async fn get_google_oauth() -> Result<Option<GoogleOAuth>, Error> {
     let pool = db::get_pool().await?;
@@ -98,11 +106,11 @@ pub async fn get_google_oauth() -> Result<Option<GoogleOAuth>, Error> {
 
 pub async fn save_google_oauth(oauth: NewGoogleOAuth) -> Result<i64, Error> {
     let pool = db::get_pool().await?;
-    
+
     sqlx::query!("DELETE FROM google_oauth")
         .execute(&pool)
         .await?;
-    
+
     let result = sqlx::query!(
         "INSERT INTO google_oauth (email, access_token, refresh_token, expires_at) VALUES (?1, ?2, ?3, ?4)",
         oauth.email,
@@ -112,7 +120,7 @@ pub async fn save_google_oauth(oauth: NewGoogleOAuth) -> Result<i64, Error> {
     )
     .execute(&pool)
     .await?;
-    
+
     Ok(result.last_insert_rowid())
 }
 
@@ -130,25 +138,24 @@ pub async fn update_google_oauth_tokens(access_token: &str, expires_at: i64) -> 
 
 pub async fn delete_google_oauth() -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    
+
     sqlx::query!("DELETE FROM google_calendar_v2")
         .execute(&pool)
         .await?;
-    
+
     sqlx::query!("DELETE FROM google_oauth")
         .execute(&pool)
         .await?;
-    
+
     Ok(())
 }
-
 
 #[tauri::command]
 pub async fn get_google_calendars() -> Result<Vec<GoogleCalendar>, Error> {
     let pool = db::get_pool().await?;
     let calendars = sqlx::query_as!(
         GoogleCalendar,
-        r#"SELECT id as "id!: i32", google_calendar_id, name, color, account_email FROM google_calendar_v2 ORDER BY name"#
+        r#"SELECT id as "id!: i32", google_calendar_id, name, color, account_email, is_visible as "is_visible!: bool", in_stats  as "in_stats!: bool" FROM google_calendar_v2 ORDER BY name"#
     )
     .fetch_all(&pool)
     .await?;
@@ -160,7 +167,7 @@ pub async fn get_google_calendar_by_id(id: i32) -> Result<GoogleCalendar, Error>
     let pool = db::get_pool().await?;
     let calendar = sqlx::query_as!(
         GoogleCalendar,
-        r#"SELECT id as "id!: i32", google_calendar_id, name, color, account_email FROM google_calendar_v2 WHERE id = ?1"#,
+        r#"SELECT id as "id!: i32", google_calendar_id, name, color, account_email, is_visible as "is_visible!: bool", in_stats  as "in_stats!: bool" FROM google_calendar_v2 WHERE id = ?1"#,
         id
     )
     .fetch_one(&pool)
@@ -168,11 +175,13 @@ pub async fn get_google_calendar_by_id(id: i32) -> Result<GoogleCalendar, Error>
     Ok(calendar)
 }
 
-pub async fn get_google_calendar_by_google_id(google_calendar_id: &str) -> Result<Option<GoogleCalendar>, Error> {
+pub async fn get_google_calendar_by_google_id(
+    google_calendar_id: &str,
+) -> Result<Option<GoogleCalendar>, Error> {
     let pool = db::get_pool().await?;
     let calendar = sqlx::query_as!(
         GoogleCalendar,
-        r#"SELECT id as "id!: i32", google_calendar_id, name, color, account_email FROM google_calendar_v2 WHERE google_calendar_id = ?1"#,
+        r#"SELECT id as "id!: i32", google_calendar_id, name, color, account_email, is_visible as "is_visible!: bool", in_stats  as "in_stats!: bool" FROM google_calendar_v2 WHERE google_calendar_id = ?1"#,
         google_calendar_id
     )
     .fetch_optional(&pool)
@@ -184,11 +193,13 @@ pub async fn get_google_calendar_by_google_id(google_calendar_id: &str) -> Resul
 pub async fn insert_google_calendar(new_calendar: NewGoogleCalendar) -> Result<i64, Error> {
     let pool = db::get_pool().await?;
     let result = sqlx::query!(
-        "INSERT INTO google_calendar_v2 (google_calendar_id, name, color, account_email) VALUES (?1, ?2, ?3, ?4)",
+        "INSERT INTO google_calendar_v2 (google_calendar_id, name, color, account_email, is_visible, in_stats) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         new_calendar.google_calendar_id,
         new_calendar.name,
         new_calendar.color,
-        new_calendar.account_email
+        new_calendar.account_email,
+        new_calendar.is_visible,
+        new_calendar.in_stats,
     )
     .execute(&pool)
     .await?;
@@ -198,7 +209,7 @@ pub async fn insert_google_calendar(new_calendar: NewGoogleCalendar) -> Result<i
 #[tauri::command]
 pub async fn update_google_calendar(update: UpdateGoogleCalendar) -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    
+
     let mut updates = Vec::new();
     if let Some(name) = update.name {
         updates.push(format!("name = '{}'", name.replace("'", "''")));
@@ -206,23 +217,29 @@ pub async fn update_google_calendar(update: UpdateGoogleCalendar) -> Result<(), 
     if let Some(color) = update.color {
         updates.push(format!("color = '{}'", color.replace("'", "''")));
     }
-    
+    if let Some(is_visible) = update.is_visible {
+        updates.push(format!("is_visible = '{}'", is_visible));
+    }
+    if let Some(in_stats) = update.in_stats {
+        updates.push(format!("in_stats = '{}'", in_stats));
+    }
+
     if updates.is_empty() {
         return Ok(());
     }
-    
-    let query = format!("UPDATE google_calendar_v2 SET {} WHERE id = ?1", updates.join(", "));
-    sqlx::query(&query)
-        .bind(update.id)
-        .execute(&pool)
-        .await?;
+
+    let query = format!(
+        "UPDATE google_calendar_v2 SET {} WHERE id = ?1",
+        updates.join(", ")
+    );
+    sqlx::query(&query).bind(update.id).execute(&pool).await?;
     Ok(())
 }
 
 #[tauri::command]
 pub async fn delete_google_calendar(id: i32) -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    
+
     sqlx::query!("DELETE FROM google_calendar_v2 WHERE id = ?1", id)
         .execute(&pool)
         .await?;
@@ -231,9 +248,12 @@ pub async fn delete_google_calendar(id: i32) -> Result<(), Error> {
 
 pub async fn delete_google_calendar_by_google_id(google_calendar_id: &str) -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    
-    sqlx::query!("DELETE FROM google_calendar_v2 WHERE google_calendar_id = ?1", google_calendar_id)
-        .execute(&pool)
-        .await?;
+
+    sqlx::query!(
+        "DELETE FROM google_calendar_v2 WHERE google_calendar_id = ?1",
+        google_calendar_id
+    )
+    .execute(&pool)
+    .await?;
     Ok(())
 }

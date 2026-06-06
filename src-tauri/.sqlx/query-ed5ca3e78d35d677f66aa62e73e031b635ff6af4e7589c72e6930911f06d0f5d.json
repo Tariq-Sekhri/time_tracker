@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO google_calendar_v2 (google_calendar_id, name, color, account_email, is_visible, in_stats) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "ed5ca3e78d35d677f66aa62e73e031b635ff6af4e7589c72e6930911f06d0f5d"
+}

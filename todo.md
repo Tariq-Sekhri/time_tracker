@@ -1,7 +1,9 @@
 - High Priority
+    - manual time trai
+    - trend expla
     - cross device sync
-    - enable dev console
     - settings will hold all app matadata
+    - google calander
 - bug
     - right click app regex give u the regex that sorted it
 - ui
@@ -15,8 +17,8 @@
     - afk detection
     - macos
 
-i like the coding explisitness of the validatation thing
+category regex
 
-migrations are good for point a to b changed that are determanistic
+is visible
+is collaposed
 
-so no matter then input 
