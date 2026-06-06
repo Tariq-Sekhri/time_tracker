@@ -57,8 +57,6 @@ interface StatisticsSidebarProps {
     weekDate: Date;
     onMoreInfo: () => void;
     onCategoryClick?: (category: string) => void;
-    includeGoogleInStats: boolean;
-    calendarsInStats: Set<number>;
     googleCalendars: GoogleCalendar[];
     trailingToolbar?: ReactNode;
 }
@@ -67,11 +65,14 @@ export default function StatisticsSidebar({
     weekDate,
     onMoreInfo,
     onCategoryClick,
-    includeGoogleInStats,
-    calendarsInStats,
     googleCalendars,
     trailingToolbar,
 }: StatisticsSidebarProps) {
+    const statsCalendarIds = useMemo(
+        () => new Set(googleCalendars.filter((c) => c.in_stats).map((c) => c.id)),
+        [googleCalendars]
+    );
+    const includeGoogleInStats = statsCalendarIds.size > 0;
     const [displayMode, setDisplayMode] = useState<DisplayMode>("percentage");
     const [showAllApps, setShowAllApps] = useState(false);
     const { categorySidebarCount, calendarStartHour, uiMinAppDuration } = useBackendSettings();
@@ -113,7 +114,7 @@ export default function StatisticsSidebar({
     } = useQuery({
         queryKey: ["google_calendar_events", week_start, week_end, calendarStartHour],
         queryFn: async () => await get_all_google_calendar_events(week_start, week_end),
-        enabled: includeGoogleInStats && calendarsInStats.size > 0,
+        enabled: includeGoogleInStats,
     });
 
     const {
@@ -123,7 +124,7 @@ export default function StatisticsSidebar({
     } = useQuery({
         queryKey: ["google_calendar_events", prevWeekStart, prevWeekEnd, calendarStartHour],
         queryFn: async () => await get_all_google_calendar_events(prevWeekStart, prevWeekEnd),
-        enabled: includeGoogleInStats && calendarsInStats.size > 0,
+        enabled: includeGoogleInStats,
     });
 
     const calendarMap = useMemo(() => {
@@ -134,13 +135,13 @@ export default function StatisticsSidebar({
 
     const filteredGoogleEvents = useMemo(() => {
         const events = (googleEvents ?? []) as GoogleCalendarEvent[];
-        return filterGoogleEventsForStats(events, calendarsInStats);
-    }, [googleEvents, calendarsInStats]);
+        return filterGoogleEventsForStats(events, statsCalendarIds);
+    }, [googleEvents, statsCalendarIds]);
 
     const filteredPrevGoogleEvents = useMemo(() => {
         const events = (prevGoogleEvents ?? []) as GoogleCalendarEvent[];
-        return filterGoogleEventsForStats(events, calendarsInStats);
-    }, [prevGoogleEvents, calendarsInStats]);
+        return filterGoogleEventsForStats(events, statsCalendarIds);
+    }, [prevGoogleEvents, statsCalendarIds]);
 
     const googleCategories = useMemo<CombinedCategory[]>(() => {
         if (!includeGoogleInStats) return [];

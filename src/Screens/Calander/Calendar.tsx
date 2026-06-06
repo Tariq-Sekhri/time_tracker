@@ -2,8 +2,8 @@ import {useQuery, useQueryClient} from "@tanstack/react-query";
 import {get_categories} from "../../api/Category.ts";
 import {get_logs_for_time_block, get_logs_by_category, get_log_by_id} from "../../api/Log.ts";
 import {get_week, get_week_for_app_filter} from "../../api/week.ts";
-import { adjustInstantToCalendarDayBoundary, getCalendarDayRangeUnix, getWeekRange } from "../../utils.ts";
-import {useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback} from "react";
+import {adjustInstantToCalendarDayBoundary, getCalendarDayRangeUnix, getWeekRange} from "../../utils.ts";
+import {useState, useMemo, useEffect, useRef, useCallback} from "react";
 import {EventClickArg, DatesSetArg} from "@fullcalendar/core";
 import RenderCalendarContent from "./RenderCalenderContent.tsx";
 import {formatLocalDateYMD, getWeekStart} from "./utils.ts";
@@ -12,38 +12,24 @@ import {View} from "../../App.tsx";
 import CalenderHeader from "./RightSideBar/CalanderHeader.tsx";
 import {CalendarEvent, EventLogs} from "./types.ts";
 import {RightSideBar, SideBarView} from "./RightSideBar/RightSideBar.tsx";
-import {get_google_calendars, GoogleCalendar} from "../../api/GoogleCalendar.ts";
+import {get_google_calendars, GoogleCalendar, update_google_calendar} from "../../api/GoogleCalendar.ts";
 import {getCachedCalendars, setCachedCalendars} from "../../stores/googleCalendarCache.ts";
 import {getCurrentWindow} from "@tauri-apps/api/window";
-import { useCalendarAppFilterActive } from "../../stores/calendarAppFilterStore.ts";
-import {
-    loadCalendarViewPrefs,
-    saveCalendarViewPrefs,
-    type CalendarViewPrefsV1,
-} from "../../api/calendarViewPrefs.ts";
-import { toErrorString } from "../../types/common.ts";
-import { useAppCategorizeMenu } from "../../hooks/useAppCategorizeMenu.tsx";
-import { useFilterCategories } from "../../Componants/FilterCategories.tsx";
-import { useBackendSettings } from "../../hooks/useBackendSettings.ts";
+import {useCalendarAppFilterActive} from "../../stores/calendarAppFilterStore.ts";
+import {toErrorString} from "../../types/common.ts";
+import {useAppCategorizeMenu} from "../../hooks/useAppCategorizeMenu.tsx";
+import {useFilterCategories} from "../../Componants/FilterCategories.tsx";
+import {useBackendSettings} from "../../hooks/useBackendSettings.ts";
 
 export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View) => void }) {
     const [rightSideBarView, setRightSideBarView] = useState<SideBarView>("Week")
     const {date, setDate} = useDateStore();
-    const { calendarStartHour, timeBlockSettings } = useBackendSettings();
-    const [includeGoogleInStats, setIncludeGoogleInStats] = useState(false);
-    const skipNextIncludeGoogleApplyFromQueryRef = useRef(false);
-    const prefsSaveChainRef = useRef(Promise.resolve());
+    const {calendarStartHour, timeBlockSettings} = useBackendSettings();
     const calendarAppFilterActive = useCalendarAppFilterActive();
     const [appFilterPrevWeek, setAppFilterPrevWeek] = useState<Date | null>(null);
     const [appFilterNextWeek, setAppFilterNextWeek] = useState<Date | null>(null);
     const [isResolvingAppFilterWeeks, setIsResolvingAppFilterWeeks] = useState(false);
 
-    const { data: viewPrefs } = useQuery({
-        queryKey: ["calendarViewPrefs"],
-        queryFn: loadCalendarViewPrefs,
-        staleTime: Infinity,
-    });
-    const calendarViewPrefsQueryReady = viewPrefs != null;
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [selectedEvent, setSelectedEvent] = useState<CalendarEvent>(null);
     const [selectedEventLogs, setSelectedEventLogs] = useState<EventLogs>([]);
@@ -54,30 +40,10 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const didAlignInitialWeekToBoundary = useRef(false);
 
 
-    const [visibleCalendars, setVisibleCalendars] = useState<Set<number>>(new Set());
-    const [calendarsInStats, setCalendarsInStats] = useState<Set<number>>(new Set());
-    const { openFromContextMenuMany, categorizeLayers } = useAppCategorizeMenu({
+    const {openFromContextMenuMany, categorizeLayers} = useAppCategorizeMenu({
         extraInvalidateQueryKeys: [["logsForAppCalendar"]],
     });
     const queryClient = useQueryClient();
-    const updateIncludeGoogleInStats = useCallback(
-        (v: boolean) => {
-            setIncludeGoogleInStats(v);
-            const cur = queryClient.getQueryData<CalendarViewPrefsV1>(["calendarViewPrefs"]);
-            if (!cur) return;
-            skipNextIncludeGoogleApplyFromQueryRef.current = true;
-            queryClient.setQueryData(["calendarViewPrefs"], {
-                ...cur,
-                includeGoogleInStats: v,
-            });
-        },
-        [queryClient]
-    );
-    const savePrefsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const lastCalendarPrefsPayloadRef = useRef<CalendarViewPrefsV1 | null>(null);
-    const hasInitializedCalendars = useRef(false);
-    const hasInitializedStatsCalendars = useRef(false);
-    const prevDisplayCalendarsLenRef = useRef<number | null>(null);
 
     const {data: categories = []} = useQuery({
         queryKey: ["categories"],
@@ -90,15 +56,6 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         checkAllCategories,
         uncheckAllCategories,
     } = useFilterCategories(categories, "calendar_enabled");
-
-    useLayoutEffect(() => {
-        if (!viewPrefs) return;
-        if (skipNextIncludeGoogleApplyFromQueryRef.current) {
-            skipNextIncludeGoogleApplyFromQueryRef.current = false;
-            return;
-        }
-        setIncludeGoogleInStats(viewPrefs.includeGoogleInStats);
-    }, [viewPrefs]);
 
     useEffect(() => {
         if (didAlignInitialWeekToBoundary.current) return;
@@ -149,158 +106,6 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         return map;
     }, [displayCalendars]);
 
-    useEffect(() => {
-        const n = displayCalendars.length;
-        const prev = prevDisplayCalendarsLenRef.current;
-        if (prev !== null && prev === 0 && n > 0) {
-            hasInitializedCalendars.current = false;
-            hasInitializedStatsCalendars.current = false;
-        }
-        prevDisplayCalendarsLenRef.current = n;
-    }, [displayCalendars.length]);
-
-    useEffect(() => {
-        if (!viewPrefs) return;
-        if (displayCalendars.length === 0) {
-            if (!hasInitializedCalendars.current) hasInitializedCalendars.current = true;
-            if (!hasInitializedStatsCalendars.current) hasInitializedStatsCalendars.current = true;
-            return;
-        }
-        if (hasInitializedCalendars.current) return;
-        try {
-            const allCalendarIds = displayCalendars.map((cal) => cal.id);
-            const savedArray = viewPrefs.visibleCalendars;
-            const hasSavedState =
-                savedArray.length > 0 || viewPrefs.knownCalendars.length > 0;
-
-            if (hasSavedState) {
-                const savedSet = new Set<number>(savedArray);
-                const knownSet = new Set<number>(viewPrefs.knownCalendars);
-                const mergedSet = new Set<number>();
-                allCalendarIds.forEach((id) => {
-                    if (savedSet.has(id)) {
-                        mergedSet.add(id);
-                    } else if (viewPrefs.knownCalendars.length > 0) {
-                        if (!knownSet.has(id)) {
-                            mergedSet.add(id);
-                        }
-                    } else {
-                        mergedSet.add(id);
-                    }
-                });
-                setVisibleCalendars(mergedSet);
-            } else {
-                setVisibleCalendars(new Set(allCalendarIds));
-            }
-        } catch (e) {
-            console.error("[GCal Calendar] Failed to initialize visible calendars:", e);
-            const allCalendarIds = displayCalendars.map((cal) => cal.id);
-            setVisibleCalendars(new Set(allCalendarIds));
-        }
-        hasInitializedCalendars.current = true;
-    }, [displayCalendars, viewPrefs]);
-
-    useEffect(() => {
-        if (!viewPrefs) return;
-        if (displayCalendars.length === 0) {
-            if (!hasInitializedStatsCalendars.current) hasInitializedStatsCalendars.current = true;
-            return;
-        }
-        if (hasInitializedStatsCalendars.current) return;
-        try {
-            const allCalendarIds = displayCalendars.map((cal) => cal.id);
-            const savedArray = viewPrefs.googleCalendarsInStats;
-            const hasSavedState =
-                savedArray.length > 0 ||
-                viewPrefs.knownGoogleCalendarsInStats.length > 0;
-
-            if (hasSavedState) {
-                const savedSet = new Set<number>(savedArray);
-                const knownSet = new Set<number>(viewPrefs.knownGoogleCalendarsInStats);
-                const mergedSet = new Set<number>();
-                allCalendarIds.forEach((id) => {
-                    if (savedSet.has(id)) {
-                        mergedSet.add(id);
-                    } else if (viewPrefs.knownGoogleCalendarsInStats.length > 0) {
-                        if (!knownSet.has(id)) {
-                            mergedSet.add(id);
-                        }
-                    } else {
-                        mergedSet.add(id);
-                    }
-                });
-                setCalendarsInStats(mergedSet);
-            } else {
-                let initial = new Set(allCalendarIds);
-                const visArr = viewPrefs.visibleCalendars;
-                if (visArr.length > 0) {
-                    const fromVis = new Set(visArr.filter((id) => allCalendarIds.includes(id)));
-                    if (fromVis.size > 0) {
-                        initial = fromVis;
-                    }
-                }
-                setCalendarsInStats(initial);
-            }
-        } catch (e) {
-            console.error("Failed to initialize Google calendars in stats:", e);
-            const allCalendarIds = displayCalendars.map((cal) => cal.id);
-            setCalendarsInStats(new Set(allCalendarIds));
-        }
-        hasInitializedStatsCalendars.current = true;
-    }, [displayCalendars, viewPrefs]);
-
-    useEffect(() => {
-        if (!calendarViewPrefsQueryReady) return;
-        if (!hasInitializedCalendars.current || !hasInitializedStatsCalendars.current) {
-            return;
-        }
-        const payload: CalendarViewPrefsV1 = {
-            includeGoogleInStats,
-            visibleCalendars: [...visibleCalendars],
-            knownCalendars: displayCalendars.map((c) => c.id),
-            googleCalendarsInStats: [...calendarsInStats],
-            knownGoogleCalendarsInStats: displayCalendars.map((c) => c.id),
-        };
-        lastCalendarPrefsPayloadRef.current = payload;
-        if (savePrefsDebounceRef.current) {
-            clearTimeout(savePrefsDebounceRef.current);
-        }
-        savePrefsDebounceRef.current = setTimeout(() => {
-            savePrefsDebounceRef.current = null;
-            const snap = lastCalendarPrefsPayloadRef.current;
-            if (!snap) return;
-            prefsSaveChainRef.current = prefsSaveChainRef.current
-                .then(() => saveCalendarViewPrefs(snap))
-                .then(() => {
-                    const latest = lastCalendarPrefsPayloadRef.current;
-                    if (
-                        !latest ||
-                        JSON.stringify(latest) !== JSON.stringify(snap)
-                    ) {
-                        return;
-                    }
-                    skipNextIncludeGoogleApplyFromQueryRef.current = true;
-                    queryClient.setQueryData(["calendarViewPrefs"], snap);
-                })
-                .catch((e) => {
-                    console.error("[Calendar] Failed to save calendar view prefs:", e);
-                });
-        }, 250);
-        return () => {
-            if (savePrefsDebounceRef.current) {
-                clearTimeout(savePrefsDebounceRef.current);
-                savePrefsDebounceRef.current = null;
-            }
-        };
-    }, [
-        queryClient,
-        calendarViewPrefsQueryReady,
-        includeGoogleInStats,
-        visibleCalendars,
-        calendarsInStats,
-        displayCalendars,
-    ]);
-
     const categoryColorMap = useMemo(() => {
         const map = new Map<string, string>();
         categories.forEach(cat => {
@@ -346,7 +151,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const weekStart = getWeekStart(date, calendarStartHour);
     const weekDataQueryEnabled =
         !!weekStart && !isNaN(weekStart.getTime()) && !!selectedEvent;
-    const { data: weekData } = useQuery({
+    const {data: weekData} = useQuery({
         queryKey: [
             "week",
             formatLocalDateYMD(weekStart),
@@ -385,10 +190,10 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                 selectedEvent.timeBlockId != null
                     ? weekData.some((block) => block.id === selectedEvent.timeBlockId)
                     : weekData.some((block) => {
-                          const blockStartMs = block.startTime * 1000;
-                          const blockEndMs = block.endTime * 1000;
-                          return eventStartMs < blockEndMs && blockStartMs < eventEndMs;
-                      });
+                        const blockStartMs = block.startTime * 1000;
+                        const blockEndMs = block.endTime * 1000;
+                        return eventStartMs < blockEndMs && blockStartMs < eventEndMs;
+                    });
 
             if (!eventExists) {
                 setSelectedEvent(null);
@@ -406,7 +211,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                 let title: string;
 
                 if (selectedDate) {
-                    const { day_start, day_end } = getCalendarDayRangeUnix(selectedDate, calendarStartHour);
+                    const {day_start, day_end} = getCalendarDayRangeUnix(selectedDate, calendarStartHour);
                     startTime = day_start;
                     endTime = day_end;
                     title = `${selectedCategory} - ${selectedDate.toLocaleDateString()}`;
@@ -522,8 +327,8 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                     start: clickInfo.event.start,
                     end: clickInfo.event.end,
                     apps: (clickInfo.event.extendedProps?.apps || []) as { app: string; totalDuration: number }[],
-                    ...(category != null && category !== "" ? { category } : {}),
-                    ...(timeBlockId != null ? { timeBlockId } : {}),
+                    ...(category != null && category !== "" ? {category} : {}),
+                    ...(timeBlockId != null ? {timeBlockId} : {}),
                 };
                 setSelectedEvent(event);
                 setSelectedDate(null); // Clear date selection when event is selected
@@ -535,17 +340,17 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                     const logs = rows
                         .filter((row) => row.duration >= minSec)
                         .map((row) => {
-                        const tsSec =
-                            row.timestamp instanceof Date
-                                ? Math.floor(row.timestamp.getTime() / 1000)
-                                : Number(row.timestamp as unknown as number);
-                        return {
-                            ids: [row.id],
-                            app: row.app,
-                            timestamp: new Date(tsSec * 1000),
-                            duration: row.duration,
-                        };
-                    });
+                            const tsSec =
+                                row.timestamp instanceof Date
+                                    ? Math.floor(row.timestamp.getTime() / 1000)
+                                    : Number(row.timestamp as unknown as number);
+                            return {
+                                ids: [row.id],
+                                app: row.app,
+                                timestamp: new Date(tsSec * 1000),
+                                duration: row.duration,
+                            };
+                        });
                     logs.sort((a, b) => b.duration - a.duration);
                     setSelectedEventLogs(logs);
                 } else {
@@ -594,30 +399,54 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         }
     };
 
-    const toggleCalendar = (calendarId: number) => {
-        setVisibleCalendars(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(calendarId)) {
-                newSet.delete(calendarId);
-            } else {
-                newSet.add(calendarId);
+    const patchGoogleCalendar = useCallback(
+        (calendarId: number, patch: Partial<Pick<GoogleCalendar, "is_visible" | "in_stats">>) => {
+            queryClient.setQueryData<GoogleCalendar[]>(["googleCalendars"], (old) =>
+                old?.map((c) => (c.id === calendarId ? {...c, ...patch} : c))
+            );
+            const updated = queryClient.getQueryData<GoogleCalendar[]>(["googleCalendars"]);
+            if (updated) {
+                setCachedCalendars(updated);
             }
-            return newSet;
-        });
-    };
+        },
+        [queryClient]
+    );
 
-    const toggleCalendarInStats = (calendarId: number) => {
-        setCalendarsInStats((prev) => {
-            const newSet = new Set(prev);
-            if (newSet.has(calendarId)) {
-                newSet.delete(calendarId);
-            } else {
-                newSet.add(calendarId);
+    const toggleCalendarVisible = useCallback(
+        async (calendarId: number) => {
+            const cal = queryClient.getQueryData<GoogleCalendar[]>(["googleCalendars"])?.find(
+                (c) => c.id === calendarId
+            );
+            if (!cal) return;
+            const is_visible = !cal.is_visible;
+            patchGoogleCalendar(calendarId, {is_visible});
+            try {
+                await update_google_calendar({id: calendarId, is_visible});
+            } catch (e) {
+                console.error("[GCal Calendar] Failed to update calendar visibility:", e);
+                queryClient.invalidateQueries({queryKey: ["googleCalendars"]});
             }
-            return newSet;
-        });
-    };
+        },
+        [patchGoogleCalendar, queryClient]
+    );
 
+    const toggleCalendarInStats = useCallback(
+        async (calendarId: number) => {
+            const cal = queryClient.getQueryData<GoogleCalendar[]>(["googleCalendars"])?.find(
+                (c) => c.id === calendarId
+            );
+            if (!cal) return;
+            const in_stats = !cal.in_stats;
+            patchGoogleCalendar(calendarId, {in_stats});
+            try {
+                await update_google_calendar({id: calendarId, in_stats});
+            } catch (e) {
+                console.error("[GCal Calendar] Failed to update calendar stats:", e);
+                queryClient.invalidateQueries({queryKey: ["googleCalendars"]});
+            }
+        },
+        [patchGoogleCalendar, queryClient]
+    );
 
 
     useEffect(() => {
@@ -889,12 +718,8 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             onDatesSet={handleDatesSet}
                             googleCalendarMap={googleCalendarMap}
                             googleCalendars={displayCalendars}
-                            visibleCalendars={visibleCalendars}
-                            toggleCalendar={toggleCalendar}
-                            calendarsInStats={calendarsInStats}
+                            toggleCalendarVisible={toggleCalendarVisible}
                             toggleCalendarInStats={toggleCalendarInStats}
-                            includeGoogleInStats={includeGoogleInStats}
-                            setIncludeGoogleInStats={updateIncludeGoogleInStats}
                             onTimeBlockContextMenu={openFromContextMenuMany}
                         />
                     </div>
@@ -905,8 +730,6 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                               setSelectedDate={setSelectedDate} setCurrentView={setCurrentView}
                               selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory}
                               isLoadingCategory={isLoadingCategory}
-                              includeGoogleInStats={includeGoogleInStats}
-                              calendarsInStats={calendarsInStats}
                               googleCalendars={displayCalendars}
                 />
             </div>

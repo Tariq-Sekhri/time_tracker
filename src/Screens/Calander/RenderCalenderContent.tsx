@@ -4,7 +4,7 @@ import CalendarSkeleton from "./CalanderSkeletion.tsx";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getCategoryColor, getWeekStart, formatDuration, formatLocalDateYMD } from "./utils.ts";
 import { Category } from "../../api/Category.ts";
 import { EventClickArg, DatesSetArg } from "@fullcalendar/core";
@@ -58,12 +58,8 @@ interface RenderCalendarContentProps {
     onDatesSet: (dates: DatesSetArg) => void;
     googleCalendarMap: Map<number, GoogleCalendar>;
     googleCalendars: GoogleCalendar[];
-    visibleCalendars: Set<number>;
-    toggleCalendar: (calendarId: number) => void;
-    calendarsInStats: Set<number>;
+    toggleCalendarVisible: (calendarId: number) => void;
     toggleCalendarInStats: (calendarId: number) => void;
-    includeGoogleInStats: boolean;
-    setIncludeGoogleInStats: (v: boolean) => void;
     onTimeBlockContextMenu?: (e: globalThis.MouseEvent, appNames: string[]) => void;
 }
 
@@ -80,12 +76,8 @@ export default function RenderCalendarContent({
     onDatesSet,
     googleCalendarMap,
     googleCalendars,
-    visibleCalendars,
-    toggleCalendar,
-    calendarsInStats,
+    toggleCalendarVisible,
     toggleCalendarInStats,
-    includeGoogleInStats,
-    setIncludeGoogleInStats,
     onTimeBlockContextMenu,
 }: RenderCalendarContentProps) {
     const queryClient = useQueryClient();
@@ -280,11 +272,16 @@ export default function RenderCalendarContent({
 
     const displayedTimeBlocks = calendarAppFilter ? (filteredData ?? []) : (data ?? []);
 
+    const isCalendarVisible = useCallback(
+        (calendarId: number) => googleCalendarMap.get(calendarId)?.is_visible ?? false,
+        [googleCalendarMap]
+    );
+
     const events = useMemo(() => {
         const googleEvents = calendarAppFilter
             ? []
             : displayGoogleEvents
-                  .filter((event: GoogleCalendarEvent) => visibleCalendars.has(event.calendar_id))
+                  .filter((event: GoogleCalendarEvent) => isCalendarVisible(event.calendar_id))
                   .map((event: GoogleCalendarEvent) => {
                       if (isGoogleCalendarEventExcludedFromTimeStats(event)) {
                           return null;
@@ -368,7 +365,7 @@ export default function RenderCalendarContent({
         categoryColorMap,
         visibleCategories,
         displayGoogleEvents,
-        visibleCalendars,
+        isCalendarVisible,
         googleCalendarMap,
         calendarAppFilter,
     ]);
@@ -381,7 +378,7 @@ export default function RenderCalendarContent({
         const hasGoogleEvents =
             !calendarAppFilter &&
             displayGoogleEvents.length > 0 &&
-            displayGoogleEvents.some((event: GoogleCalendarEvent) => visibleCalendars.has(event.calendar_id));
+            displayGoogleEvents.some((event: GoogleCalendarEvent) => isCalendarVisible(event.calendar_id));
         return !!(hasTimeBlocks || hasGoogleEvents);
     }, [
         isLoading,
@@ -391,7 +388,7 @@ export default function RenderCalendarContent({
         filteredDataError,
         displayedTimeBlocks,
         displayGoogleEvents,
-        visibleCalendars,
+        isCalendarVisible,
         calendarAppFilter,
         isLoadingFilteredData,
     ]);
@@ -472,7 +469,7 @@ export default function RenderCalendarContent({
 
     const hasTimeBlocks = displayedTimeBlocks.length > 0;
     const hasGoogleEvents = displayGoogleEvents.length > 0 &&
-        displayGoogleEvents.some((event: GoogleCalendarEvent) => visibleCalendars.has(event.calendar_id));
+        displayGoogleEvents.some((event: GoogleCalendarEvent) => isCalendarVisible(event.calendar_id));
     const hasAnyEvents = hasTimeBlocks || hasGoogleEvents;
 
     if (!hasAnyEvents) {
@@ -601,26 +598,13 @@ export default function RenderCalendarContent({
                             </h3>
                         </div>
                         <p className={`text-xs text-gray-500 mb-3 ${isLeftCollapsed ? "hidden" : ""}`}>
-                            Overlay on the week view; optionally merge into the stats panel.
+                            Toggle week overlay and statistics per calendar.
                         </p>
-                        <label
-                            className={`flex items-center gap-3 p-2 rounded-lg hover:bg-gray-900/80 cursor-pointer border border-transparent hover:border-gray-800 ${isLeftCollapsed ? "hidden" : ""}`}
-                        >
-                            <input
-                                type="checkbox"
-                                checked={includeGoogleInStats}
-                                onChange={(e) => setIncludeGoogleInStats(e.target.checked)}
-                                className="w-4 h-4 rounded cursor-pointer accent-blue-600"
-                            />
-                            <span className="text-sm text-gray-200 flex-1 leading-snug">
-                                Merge Google events into week statistics
-                            </span>
-                        </label>
 
                         <div className={`space-y-1 ${isLeftCollapsed ? "space-y-0" : ""}`}>
                             {googleCalendars.map((calendar) => {
-                                const isVisible = visibleCalendars.has(calendar.id);
-                                const inStats = calendarsInStats.has(calendar.id);
+                                const isVisible = calendar.is_visible;
+                                const inStats = calendar.in_stats;
 
                                 const pillOn =
                                     "bg-slate-600 text-white shadow-sm ring-1 ring-white/10";
@@ -643,7 +627,7 @@ export default function RenderCalendarContent({
                                                     aria-pressed={isVisible}
                                                     aria-label="Show on week view"
                                                     title="Week view"
-                                                    onClick={() => toggleCalendar(calendar.id)}
+                                                    onClick={() => toggleCalendarVisible(calendar.id)}
                                                     className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${isVisible ? pillOn : pillOff}`}
                                                 >
                                                     <IconWeekGrid className="h-4 w-4" />
@@ -680,7 +664,7 @@ export default function RenderCalendarContent({
                                                 <button
                                                     type="button"
                                                     aria-pressed={isVisible}
-                                                    onClick={() => toggleCalendar(calendar.id)}
+                                                    onClick={() => toggleCalendarVisible(calendar.id)}
                                                     className={`inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] font-medium transition-all sm:justify-start sm:px-2.5 ${
                                                         isVisible ? pillOn : pillOff
                                                     }`}

@@ -21,8 +21,6 @@ interface DayStatisticsSidebarProps {
     onMoreInfo: () => void;
     onClose: () => void;
     onCategoryClick?: (category: string) => void;
-    includeGoogleInStats: boolean;
-    calendarsInStats: Set<number>;
     googleCalendars: GoogleCalendar[];
     trailingToolbar?: ReactNode;
 }
@@ -39,11 +37,14 @@ export default function DayStatisticsSidebar({
     onMoreInfo,
     onClose,
     onCategoryClick,
-    includeGoogleInStats,
-    calendarsInStats,
     googleCalendars,
     trailingToolbar,
 }: DayStatisticsSidebarProps) {
+    const statsCalendarIds = useMemo(
+        () => new Set(googleCalendars.filter((c) => c.in_stats).map((c) => c.id)),
+        [googleCalendars]
+    );
+    const includeGoogleInStats = statsCalendarIds.size > 0;
     const { calendarStartHour, categorySidebarCount } = useBackendSettings();
     const { openFromContextMenu, categorizeLayers } = useAppCategorizeMenu();
     const calendarAppFilterActive = useCalendarAppFilterActive();
@@ -82,7 +83,7 @@ export default function DayStatisticsSidebar({
     } = useQuery({
         queryKey: ["google_calendar_events", dayStart, dayEnd],
         queryFn: async () => await get_all_google_calendar_events(dayStart, dayEnd),
-        enabled: includeGoogleInStats && calendarsInStats.size > 0,
+        enabled: includeGoogleInStats,
     });
 
     const calendarMap = useMemo(() => {
@@ -93,9 +94,9 @@ export default function DayStatisticsSidebar({
 
     const filteredGoogleEvents = useMemo(() => {
         const events = (googleEvents ?? []) as GoogleCalendarEvent[];
-        if (calendarsInStats.size === 0) return [];
-        return events.filter((e) => calendarsInStats.has(e.calendar_id));
-    }, [googleEvents, calendarsInStats]);
+        if (statsCalendarIds.size === 0) return [];
+        return events.filter((e) => statsCalendarIds.has(e.calendar_id));
+    }, [googleEvents, statsCalendarIds]);
 
     const googleCategories = useMemo(() => {
         if (!includeGoogleInStats) return [] as CombinedCategory[];

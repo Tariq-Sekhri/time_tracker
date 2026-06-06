@@ -1,5 +1,4 @@
-import { invokeOrThrow } from "../utils.ts";
-import { storageKey } from "../storageKey.ts";
+import {invokeOrThrow} from "../utils.ts";
 
 const DEFAULT_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const DEFAULT_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || "";
@@ -25,25 +24,6 @@ export async function hydrateGoogleOAuthCredentials(): Promise<void> {
     let clientId = fromDb.client_id || "";
     let clientSecret = fromDb.client_secret || "";
 
-    try {
-        const legacyId = localStorage.getItem(storageKey("google_oauth_client_id"));
-        const legacySecret = localStorage.getItem(storageKey("google_oauth_client_secret"));
-        if (legacyId && legacySecret) {
-            clientId = legacyId;
-            clientSecret = legacySecret;
-            await invokeOrThrow("set_google_oauth_app_credentials", {
-                clientId,
-                clientSecret,
-            });
-            localStorage.removeItem(storageKey("google_oauth_client_id"));
-            localStorage.removeItem(storageKey("google_oauth_client_secret"));
-            applyCache({ client_id: clientId, client_secret: clientSecret });
-            return;
-        }
-    } catch (e) {
-        console.error("[Google OAuth] Failed to migrate credentials from localStorage:", e);
-    }
-
     if (!clientId && !clientSecret && DEFAULT_CLIENT_ID && DEFAULT_CLIENT_SECRET) {
         clientId = DEFAULT_CLIENT_ID;
         clientSecret = DEFAULT_CLIENT_SECRET;
@@ -53,7 +33,7 @@ export async function hydrateGoogleOAuthCredentials(): Promise<void> {
         });
     }
 
-    applyCache({ client_id: clientId, client_secret: clientSecret });
+    applyCache({client_id: clientId, client_secret: clientSecret});
 }
 
 export async function setGoogleOAuthCredentials(clientId: string, clientSecret: string): Promise<void> {
@@ -61,7 +41,7 @@ export async function setGoogleOAuthCredentials(clientId: string, clientSecret: 
         clientId,
         clientSecret,
     });
-    applyCache({ client_id: clientId, client_secret: clientSecret });
+    applyCache({client_id: clientId, client_secret: clientSecret});
 }
 
 export function getGoogleOAuthCredentials(): { clientId: string; clientSecret: string } {
@@ -85,7 +65,7 @@ export function hasGoogleOAuthCredentials(): boolean {
 }
 
 export function isUsingDefaultCredentials(): boolean {
-    const { clientId, clientSecret } = getGoogleOAuthCredentials();
+    const {clientId, clientSecret} = getGoogleOAuthCredentials();
     return clientId === DEFAULT_CLIENT_ID || clientSecret === DEFAULT_CLIENT_SECRET;
 }
 
@@ -100,6 +80,8 @@ export type GoogleCalendar = {
     name: string;
     color: string;
     account_email: string;
+    is_visible: boolean,
+    in_stats: boolean,
 };
 
 export type NewGoogleCalendar = {
@@ -107,12 +89,16 @@ export type NewGoogleCalendar = {
     name: string;
     color: string;
     account_email: string;
+    is_visible: boolean,
+    in_stats: boolean,
 };
 
 export type UpdateGoogleCalendar = {
     id: number;
     name?: string;
     color?: string;
+    is_visible?: boolean;
+    in_stats?: boolean;
 };
 
 export type GoogleCalendarInfo = {
@@ -221,19 +207,19 @@ export async function get_google_calendars(): Promise<GoogleCalendar[]> {
 }
 
 export async function get_google_calendar_by_id(id: number): Promise<GoogleCalendar> {
-    return invokeOrThrow<GoogleCalendar>("get_google_calendar_by_id", { id });
+    return invokeOrThrow<GoogleCalendar>("get_google_calendar_by_id", {id});
 }
 
 export async function insert_google_calendar(calendar: NewGoogleCalendar): Promise<number> {
-    return invokeOrThrow<number>("insert_google_calendar", { newCalendar: calendar });
+    return invokeOrThrow<number>("insert_google_calendar", {newCalendar: calendar});
 }
 
 export async function update_google_calendar(update: UpdateGoogleCalendar): Promise<null> {
-    return invokeOrThrow<null>("update_google_calendar", { update });
+    return invokeOrThrow<null>("update_google_calendar", {update});
 }
 
 export async function delete_google_calendar(id: number): Promise<null> {
-    return invokeOrThrow<null>("delete_google_calendar", { id });
+    return invokeOrThrow<null>("delete_google_calendar", {id});
 }
 
 export async function get_google_calendar_events(

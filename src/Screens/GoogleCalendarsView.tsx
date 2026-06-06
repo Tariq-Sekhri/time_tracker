@@ -82,6 +82,8 @@ export default function GoogleCalendarsView() {
                                 name: cal.name,
                                 color: cal.color,
                                 account_email: refreshedAuth.email,
+                                is_visible: true,
+                                in_stats: true,
                             };
                             await insert_google_calendar(newCal);
                             importedCount++;
@@ -141,6 +143,8 @@ export default function GoogleCalendarsView() {
                 name: calendarInfo.name,
                 color: calendarInfo.color,
                 account_email: authStatus.email,
+                is_visible: true,
+                in_stats: true,
             };
             return await insert_google_calendar(newCal);
         },

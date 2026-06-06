@@ -66,6 +66,8 @@ type GoogleCal = {
     name: string;
     color: string;
     account_email: string;
+    is_visible: boolean;
+    in_stats: boolean;
 };
 
 type GoogleEv = {
@@ -755,6 +757,8 @@ function seed() {
             name: "Family time",
             color: "#0B8043",
             account_email: "demo.user@gmail.com",
+            is_visible: true,
+            in_stats: true,
         },
         {
             id: 2,
@@ -762,6 +766,8 @@ function seed() {
             name: "Friends",
             color: "#7986CB",
             account_email: "demo.user@gmail.com",
+            is_visible: true,
+            in_stats: true,
         },
         {
             id: 3,
@@ -769,6 +775,8 @@ function seed() {
             name: "Sleep",
             color: "#673AB7",
             account_email: "demo.user@gmail.com",
+            is_visible: true,
+            in_stats: false,
         },
     ];
 }
@@ -1358,6 +1366,8 @@ export async function invoke<T>(
                     name: string;
                     color: string;
                     account_email: string;
+                    is_visible?: boolean;
+                    in_stats?: boolean;
                 };
             }).newCalendar;
             if (!nc) return null as T;
@@ -1368,16 +1378,28 @@ export async function invoke<T>(
                 name: nc.name,
                 color: nc.color,
                 account_email: nc.account_email,
+                is_visible: nc.is_visible ?? true,
+                in_stats: nc.in_stats ?? true,
             });
             return id as unknown as T;
         }
         case "update_google_calendar": {
-            const u = (a as { update?: { id: number; name?: string; color?: string } }).update;
+            const u = (a as {
+                update?: {
+                    id: number;
+                    name?: string;
+                    color?: string;
+                    is_visible?: boolean;
+                    in_stats?: boolean;
+                };
+            }).update;
             if (!u) return null as T;
             const row = googleCalendars.find((c) => c.id === u.id);
             if (row) {
                 if (u.name !== undefined) row.name = u.name;
                 if (u.color !== undefined) row.color = u.color;
+                if (u.is_visible !== undefined) row.is_visible = u.is_visible;
+                if (u.in_stats !== undefined) row.in_stats = u.in_stats;
             }
             return null as T;
         }
