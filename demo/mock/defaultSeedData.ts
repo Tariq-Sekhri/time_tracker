@@ -244,7 +244,7 @@ export const DEMO_DEFAULT_CAT_REGEX = [
   {
     "id": 36,
     "cat_id": 7,
-    "regex": "THE FINALS"
+    "regex": "Apex Legends"
   },
   {
     "id": 37,
@@ -334,7 +334,7 @@ export const DEMO_DEFAULT_CAT_REGEX = [
   {
     "id": 54,
     "cat_id": 7,
-    "regex": "^THEFINALS$"
+    "regex": "^Apex Legends$"
   },
   {
     "id": 55,
@@ -660,5 +660,10 @@ export const DEMO_DEFAULT_CAT_REGEX = [
     "id": 119,
     "cat_id": 3,
     "regex": "Waterfox"
+  },
+  {
+    "id": 120,
+    "cat_id": 1,
+    "regex": ".*"
   }
 ] as const;

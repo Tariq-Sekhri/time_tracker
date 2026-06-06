@@ -38,7 +38,7 @@ const YT_STEMS = [
 const WEB_PAGES = [
     "sqlx compile-time queries - Search",
     "docs.rs/sqlx/latest/sqlx - Vivaldi",
-    "Issues · tariqsekhri/time_tracker - Vivaldi",
+    "Issues · demo-user/time-tracker - Vivaldi",
     "Pull requests · time-tracker - GitHub - Vivaldi",
     "SQLite: pragma foreign_keys - Vivaldi",
     "React Query useQuery staleTime - Vivaldi",

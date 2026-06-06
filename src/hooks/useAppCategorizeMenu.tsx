@@ -105,7 +105,7 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
 
     const assignAppCategoryMutation = useMutation({
         mutationFn: async ({ catId, appNames }: { catId: number; appNames: string[] }) => {
-            const catRegex = await queryClient.ensureQueryData({
+            let catRegex = await queryClient.ensureQueryData({
                 queryKey: ["cat_regex"],
                 queryFn: get_cat_regex,
             });
@@ -118,9 +118,14 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
                 if (existing?.cat_id === catId) continue;
                 if (existing) {
                     await update_cat_regex_by_id({ ...existing, cat_id: catId });
+                    catRegex = catRegex.map((r) =>
+                        r.id === existing.id ? { ...existing, cat_id: catId } : r
+                    );
                 } else {
-                    await insert_cat_regex({ cat_id: catId, regex: pattern });
+                    const id = await insert_cat_regex({ cat_id: catId, regex: pattern });
+                    catRegex = [...catRegex, { id, cat_id: catId, regex: pattern }];
                 }
+                queryClient.setQueryData(["cat_regex"], catRegex);
                 didChange = true;
             }
             return { didChange, appCount: uniqueAppNames.length };

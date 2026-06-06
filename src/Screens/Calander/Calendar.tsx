@@ -29,7 +29,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const {date, setDate} = useDateStore();
     const {calendarStartHour, timeBlockSettings} = useBackendSettings();
     const calendarAppFilterActive = useCalendarAppFilterActive();
-    const [includeGoogleInStats, setIncludeGoogleInStats] = useState(false);
+    const [includeGoogleInStats, setIncludeGoogleInStats] = useState(true);
     const includeGoogleInStatsLoadedRef = useRef(false);
     const [appFilterPrevWeek, setAppFilterPrevWeek] = useState<Date | null>(null);
     const [appFilterNextWeek, setAppFilterNextWeek] = useState<Date | null>(null);
@@ -65,7 +65,8 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     useEffect(() => {
         getAppMetadata(INCLUDE_GOOGLE_IN_STATS_KEY)
             .then((raw) => {
-                if (raw === "1") setIncludeGoogleInStats(true);
+                if (raw === "0") setIncludeGoogleInStats(false);
+                else if (raw === "1") setIncludeGoogleInStats(true);
             })
             .catch(() => {})
             .finally(() => {

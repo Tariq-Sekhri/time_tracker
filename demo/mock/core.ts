@@ -4,6 +4,25 @@ import {
     DEMO_DEFAULT_SKIPPED_REGEXES,
 } from "./defaultSeedData";
 import {
+    DemoInvokeError,
+    pickCategoryRegexRow,
+    pickCategoryRow,
+    pickNewCategory,
+    pickNewCategoryRegex,
+    pickNumber,
+    pickPayload,
+    pickString,
+    validateRegexPattern,
+} from "./invokeArgs";
+import {
+    buildTimeBlocksFromLogs,
+    logsForCategoryInRange,
+    logsOverlappingBlock,
+    mergeLogsInTimeBlock,
+    type DemoLog,
+    type DemoTimeBlock,
+} from "./timeBlockEngine";
+import {
     realisticBrowserNonVideo,
     realisticCodingWindow,
     realisticDiscordLine,
@@ -18,35 +37,26 @@ import {
     realisticZoomTitle,
 } from "./realisticAppTitles";
 
-type TimeBlockRow = {
-    id: number;
-    category: string;
-    start_time: number;
-    end_time: number;
-    apps: { app: string; total_duration: number }[];
-    appLogIds: number[];
-};
-
-type RawLog = {
-    id: number;
-    app: string;
-    timestamp: number;
-    duration: number;
-};
-
-type MergedRow = {
-    ids: number[];
-    app: string;
-    timestamp: number;
-    duration: number;
-    category: string;
-};
+type RawLog = DemoLog;
+type TimeBlockRow = DemoTimeBlock;
 
 type CategoryRow = {
     id: number;
     name: string;
     priority: number;
     color: string | null;
+    regex_enabled: boolean;
+    calendar_enabled: boolean;
+    is_collapsed: boolean;
+};
+
+type SettingRow = {
+    key: string;
+    val: number;
+    is_locked: boolean;
+    default_val: number;
+    min_val: number | null;
+    max_val: number | null;
 };
 
 type RegexRow = {
@@ -120,12 +130,21 @@ const DEMO_GOOGLE_CALENDAR_CATALOG: DemoGoogleCalendarCatalogRow[] = [
     },
 ];
 
+const DEMO_TIME_BLOCKS_WEEKS_BACK = 9;
+const DEMO_TIME_BLOCKS_WEEKS_FORWARD = 0;
+
+const DEMO_APP_METADATA_DEFAULTS: Record<string, string> = {
+    "time-tracker:include-google-in-stats": "1",
+    "time-tracker:detailed-stats:trend-prefs": JSON.stringify({ showTotalLine: false }),
+};
+
 const DEMO_CLIENT_ID = "123456789-demo.apps.googleusercontent.com";
 const DEMO_CLIENT_SECRET = "GOCSPX-abcdefghijklmnopqrstuvwxyz";
 
 let seeded = false;
 let tracking = true;
 let calendarPrefsJson: string | null = null;
+let appMetadata: Record<string, string> = {};
 let googleLoggedIn = true;
 let nextCatId = 100;
 let nextRegexId = 100;
@@ -136,8 +155,6 @@ let nextEventSeq = 1;
 let categories: CategoryRow[] = [];
 let catRegex: RegexRow[] = [];
 let rawLogs: RawLog[] = [];
-let mergedLogs: MergedRow[] = [];
-let timeBlocks: TimeBlockRow[] = [];
 let skippedApps: SkippedRow[] = [];
 let googleCalendars: GoogleCal[] = [];
 let googleEvents: GoogleEv[] = [];
@@ -151,6 +168,57 @@ const defaultSkipped: SkippedRow[] = DEMO_DEFAULT_SKIPPED_REGEXES.map((regex, i)
 }));
 
 const DEMO_CALENDAR_START_HOUR = 6;
+
+const DEMO_DEFAULT_SETTINGS: SettingRow[] = [
+    { key: "calendarStartHour", val: 6, is_locked: false, default_val: 6, min_val: 0, max_val: 23 },
+    { key: "calendarHeight", val: 100, is_locked: false, default_val: 100, min_val: 50, max_val: 200 },
+    { key: "rightSidebarWidth", val: 480, is_locked: false, default_val: 480, min_val: 280, max_val: 800 },
+    { key: "minLogDuration", val: 1, is_locked: false, default_val: 1, min_val: 1, max_val: null },
+    { key: "maxAttachDistance", val: 400, is_locked: false, default_val: 400, min_val: 0, max_val: null },
+    { key: "lookaheadWindow", val: 500, is_locked: false, default_val: 500, min_val: 0, max_val: null },
+    { key: "minDuration", val: 300, is_locked: false, default_val: 300, min_val: 1, max_val: null },
+    { key: "uiMinAppDuration", val: 30, is_locked: false, default_val: 30, min_val: 1, max_val: null },
+    { key: "categorySidebarCount", val: 5, is_locked: false, default_val: 5, min_val: 1, max_val: 30 },
+];
+
+let settings: SettingRow[] = [];
+
+function toDemoCategory(c: {
+    id: number;
+    name: string;
+    priority: number;
+    color: string | null;
+}): CategoryRow {
+    return {
+        ...c,
+        regex_enabled: true,
+        calendar_enabled: true,
+        is_collapsed: false,
+    };
+}
+
+function getDemoCalendarStartHour(): number {
+    return settings.find((s) => s.key === "calendarStartHour")?.val ?? DEMO_CALENDAR_START_HOUR;
+}
+
+function resolveWeekBounds(args: Record<string, unknown>): { week_start: number; week_end: number } {
+    const weekAnchor = Number((args as { weekAnchor?: number }).weekAnchor);
+    if (Number.isFinite(weekAnchor) && weekAnchor > 0) {
+        return getWeekRangeSeconds(new Date(weekAnchor * 1000), getDemoCalendarStartHour());
+    }
+    const weekStart = Number(
+        (args as { weekStart?: number; week_start?: number }).weekStart ??
+            (args as { week_start?: number }).week_start
+    );
+    const weekEnd = Number(
+        (args as { weekEnd?: number; week_end?: number }).weekEnd ??
+            (args as { week_end?: number }).week_end
+    );
+    if (Number.isFinite(weekStart) && Number.isFinite(weekEnd) && weekEnd > weekStart) {
+        return { week_start: weekStart, week_end: weekEnd };
+    }
+    return getWeekRangeSeconds(new Date(), getDemoCalendarStartHour());
+}
 
 function getWeekRangeSeconds(
     date: Date,
@@ -200,6 +268,17 @@ function jitter(base: number, spread: number): number {
     return Math.max(60, base + randInt(-spread, spread));
 }
 
+function getTimeBlockSettings() {
+    const val = (key: string, fallback: number) =>
+        settings.find((s) => s.key === key)?.val ?? fallback;
+    return {
+        minLogDuration: Math.max(1, val("minLogDuration", 1)),
+        maxAttachDistance: Math.max(0, val("maxAttachDistance", 400)),
+        lookaheadWindow: Math.max(0, val("lookaheadWindow", 500)),
+        minDuration: Math.max(1, val("minDuration", 300)),
+    };
+}
+
 function sumApps(tb: TimeBlockRow): number {
     return tb.apps.reduce((s, a) => s + a.total_duration, 0);
 }
@@ -221,100 +300,20 @@ function isAppSkippedByRules(appName: string): boolean {
     return false;
 }
 
-type CachedDemoRegex = { re: RegExp; category: string; priority: number };
-
-function buildCachedDemoRegexTable(): CachedDemoRegex[] {
-    const catById = new Map(categories.map((c) => [c.id, c]));
-    const out: CachedDemoRegex[] = [];
-    for (const row of catRegex) {
-        const cat = catById.get(row.cat_id);
-        if (!cat) continue;
-        try {
-            out.push({ re: new RegExp(row.regex), category: cat.name, priority: cat.priority });
-        } catch {
-        }
-    }
-    out.sort((a, b) => b.priority - a.priority);
-    return out;
-}
-
-function deriveDemoCategoryForApp(app: string): string {
-    const table = buildCachedDemoRegexTable();
-    for (const entry of table) {
-        if (entry.re.test(app)) return entry.category;
-    }
-    return "Miscellaneous";
-}
-
-function syncDemoCategoriesFromRegexRules() {
-    mergedLogs = mergedLogs.map((m) => ({ ...m, category: deriveDemoCategoryForApp(m.app) }));
-    timeBlocks = timeBlocks.map((tb) => {
-        const weights = new Map<string, number>();
-        for (const a of tb.apps) {
-            const c = deriveDemoCategoryForApp(a.app);
-            weights.set(c, (weights.get(c) ?? 0) + a.total_duration);
-        }
-        let best = tb.category;
-        let bestW = -1;
-        for (const [c, w] of weights) {
-            if (w > bestW) {
-                bestW = w;
-                best = c;
-            }
-        }
-        return { ...tb, category: best };
-    });
-}
-
-function filterSkippedAppsFromBlock(b: TimeBlockRow): TimeBlockRow | null {
-    const apps: { app: string; total_duration: number }[] = [];
-    const appLogIds: number[] = [];
-    for (let i = 0; i < b.apps.length; i++) {
-        if (!isAppSkippedByRules(b.apps[i].app)) {
-            apps.push(b.apps[i]);
-            appLogIds.push(b.appLogIds[i]);
-        }
-    }
-    if (apps.length === 0) return null;
-    const span = Math.max(...apps.map((a) => a.total_duration), 0);
-    return {
-        ...b,
-        apps,
-        appLogIds,
-        end_time: b.start_time + span,
-    };
-}
-
-function removeLogIdsFromOneBlock(b: TimeBlockRow, ids: Set<number>): TimeBlockRow | null {
-    const keep: number[] = [];
-    for (let i = 0; i < b.appLogIds.length; i++) {
-        if (!ids.has(b.appLogIds[i])) keep.push(i);
-    }
-    if (keep.length === 0) return null;
-    if (keep.length === b.apps.length) return b;
-    const apps = keep.map((i) => b.apps[i]);
-    const appLogIds = keep.map((i) => b.appLogIds[i]);
-    const span = Math.max(...apps.map((a) => a.total_duration), 0);
-    return {
-        ...b,
-        apps,
-        appLogIds,
-        end_time: b.start_time + span,
-    };
-}
-
-function removeLogIdsFromBlocks(ids: Set<number>) {
-    if (ids.size === 0) return;
-    timeBlocks = timeBlocks
-        .map((b) => removeLogIdsFromOneBlock(b, ids))
-        .filter((b): b is TimeBlockRow => b !== null);
-}
-
 function blocksInRangeEffective(ws: number, we: number): TimeBlockRow[] {
-    return timeBlocks
-        .filter((b) => b.end_time > ws && b.start_time < we)
-        .map((b) => filterSkippedAppsFromBlock(b))
-        .filter((b): b is TimeBlockRow => b !== null);
+    return buildTimeBlocksFromLogs(
+        rawLogs,
+        ws,
+        we,
+        categories,
+        catRegex,
+        skippedApps,
+        getTimeBlockSettings()
+    );
+}
+
+function activeRawLogs(): RawLog[] {
+    return rawLogs.filter((r) => !isAppSkippedByRules(r.app));
 }
 
 function seed() {
@@ -325,50 +324,17 @@ function seed() {
     const week = 7 * day;
     const h = DEMO_CALENDAR_START_HOUR;
 
-    categories = DEMO_DEFAULT_CATEGORIES.map((c) => ({ ...c }));
+    settings = DEMO_DEFAULT_SETTINGS.map((s) => ({ ...s }));
+    appMetadata = { ...DEMO_APP_METADATA_DEFAULTS };
+    categories = DEMO_DEFAULT_CATEGORIES.map((c) => toDemoCategory({ ...c }));
     catRegex = DEMO_DEFAULT_CAT_REGEX.map((r) => ({ ...r }));
     nextCatId = Math.max(0, ...categories.map((c) => c.id)) + 1;
     nextRegexId = Math.max(0, ...catRegex.map((r) => r.id)) + 1;
 
     skippedApps = defaultSkipped.map((s) => ({ ...s }));
 
-    let bid = 1;
     let lid = 1;
-    const blocks: TimeBlockRow[] = [];
-    const mergeRows: MergedRow[] = [];
     const raws: RawLog[] = [];
-
-    const mkBlock = (
-        category: string,
-        start: number,
-        end: number,
-        apps: [string, number][]
-    ) => {
-        const appsRows: { app: string; total_duration: number }[] = [];
-        const appLogIds: number[] = [];
-        for (const [app, dur] of apps) {
-            const ts = start;
-            appsRows.push({ app, total_duration: dur });
-            appLogIds.push(lid);
-            raws.push({ id: lid, app, timestamp: ts, duration: dur });
-            mergeRows.push({
-                ids: [lid],
-                app,
-                timestamp: ts,
-                duration: dur,
-                category,
-            });
-            lid++;
-        }
-        blocks.push({
-            id: bid++,
-            category,
-            start_time: start,
-            end_time: end,
-            apps: appsRows,
-            appLogIds,
-        });
-    };
 
     const snapApps = (span: number, apps: [string, number][]): [string, number][] => {
         const sum = apps.reduce((a, [, d]) => a + d, 0);
@@ -378,6 +344,33 @@ function seed() {
         }
         const k = span / sum;
         return apps.map(([a, d]) => [a, Math.max(60, Math.floor(d * k))] as [string, number]);
+    };
+
+    const pushSessionLogs = (start: number, end: number, apps: [string, number][]) => {
+        const span = end - start;
+        if (span < 60) return;
+        const scaled = snapApps(span, apps);
+        let cursor = start;
+        for (const [app, dur] of scaled) {
+            let left = dur;
+            while (left > 0 && cursor < end) {
+                const chunk =
+                    left <= 90
+                        ? left
+                        : randInt(12, Math.min(left, randInt(0, 1) === 0 ? 240 : 720));
+                const piece = Math.min(chunk, left, end - cursor);
+                if (piece < 1) break;
+                raws.push({ id: lid++, app, timestamp: cursor, duration: piece });
+                cursor += piece;
+                left -= piece;
+                if (left > 0 && randInt(0, 4) === 0) {
+                    cursor += randInt(0, 3);
+                }
+            }
+            if (randInt(0, 2) === 0) {
+                cursor += randInt(0, 4);
+            }
+        }
     };
 
     const nowSec = Math.floor(Date.now() / 1000);
@@ -443,7 +436,7 @@ function seed() {
     const mkAwake = (
         dayWake: number,
         daySleep: number,
-        category: string,
+        _category: string,
         start: number,
         end: number,
         apps: [string, number][]
@@ -453,8 +446,7 @@ function seed() {
         e = Math.min(e, nowSec);
         if (s >= nowSec) return;
         if (e <= s) return;
-        const span = Math.max(60, e - s);
-        mkBlock(category, s, e, snapApps(span, apps));
+        pushSessionLogs(s, e, apps);
     };
 
     const ref = new Date();
@@ -541,6 +533,11 @@ function seed() {
                 });
             }
         }
+    }
+
+    for (let w = -DEMO_TIME_BLOCKS_WEEKS_BACK; w <= DEMO_TIME_BLOCKS_WEEKS_FORWARD; w++) {
+        const ws = anchorWeekStart + w * week;
+        boundsByAnchor.clear();
 
         for (let d = 0; d < 7; d++) {
             const anchor = ws + d * day;
@@ -746,9 +743,7 @@ function seed() {
         }
     }
 
-    timeBlocks = blocks;
-    mergedLogs = mergeRows;
-    rawLogs = raws;
+    rawLogs = raws.sort((a, b) => a.timestamp - b.timestamp || a.id - b.id);
 
     googleCalendars = [
         {
@@ -991,6 +986,7 @@ export async function invoke<T>(
     seed();
     const a = args ?? {};
 
+    try {
     switch (cmd) {
         case "get_categories":
             return categories as unknown as T;
@@ -1001,35 +997,28 @@ export async function invoke<T>(
             return c as unknown as T;
         }
         case "insert_category": {
-            const nc = (a as { newCategory?: { name: string; priority: number; color?: string | null } })
-                .newCategory;
-            if (!nc) return null as T;
+            const nc = pickNewCategory(a);
+            if (!nc) throw new DemoInvokeError(cmd, "Missing new category payload");
             const id = nextCatId++;
-            categories.push({
-                id,
-                name: nc.name,
-                priority: nc.priority,
-                color: nc.color ?? null,
-            });
+            categories.push(
+                toDemoCategory({
+                    id,
+                    name: nc.name,
+                    priority: nc.priority,
+                    color: nc.color ?? null,
+                })
+            );
             return id as unknown as T;
         }
         case "update_category_by_id": {
-            const cat = (a as { cat?: CategoryRow }).cat;
-            if (!cat) return null as T;
+            const cat = pickCategoryRow(a) as CategoryRow | undefined;
+            if (!cat || !Number.isFinite(Number(cat.id))) {
+                throw new DemoInvokeError(cmd, "Missing category payload");
+            }
             const i = categories.findIndex((x) => x.id === cat.id);
             if (i >= 0) {
-                const oldName = categories[i].name;
-                categories[i] = { ...cat };
-                if (oldName !== cat.name) {
-                    mergedLogs = mergedLogs.map((m) =>
-                        m.category === oldName ? { ...m, category: cat.name } : m
-                    );
-                    timeBlocks = timeBlocks.map((tb) =>
-                        tb.category === oldName ? { ...tb, category: cat.name } : tb
-                    );
-                }
+                categories[i] = { ...categories[i], ...cat };
             }
-            syncDemoCategoriesFromRegexRules();
             return null as T;
         }
         case "delete_category_by_id": {
@@ -1038,10 +1027,8 @@ export async function invoke<T>(
             const removed = categories.find((c) => c.id === id);
             const removedName = removed?.name;
             categories = categories.filter((c) => c.id !== id);
-            if (cascade && removedName) {
+            if (cascade) {
                 catRegex = catRegex.filter((r) => r.cat_id !== id);
-                mergedLogs = mergedLogs.filter((m) => m.category !== removedName);
-                timeBlocks = timeBlocks.filter((tb) => tb.category !== removedName);
             }
             return null as T;
         }
@@ -1054,35 +1041,45 @@ export async function invoke<T>(
             return r as unknown as T;
         }
         case "insert_cat_regex": {
-            const nr = (a as { newCategoryRegex?: { cat_id: number; regex: string } })
-                .newCategoryRegex;
-            if (!nr) return null as T;
+            const nr = pickNewCategoryRegex(a);
+            if (!nr) throw new DemoInvokeError(cmd, "Missing regex payload");
+            if (!categories.some((c) => c.id === nr.cat_id)) {
+                throw new DemoInvokeError(cmd, "Category not found");
+            }
+            validateRegexPattern(nr.regex, cmd);
             const id = nextRegexId++;
             catRegex.push({ id, cat_id: nr.cat_id, regex: nr.regex });
-            syncDemoCategoriesFromRegexRules();
             return id as unknown as T;
         }
         case "update_cat_regex_by_id": {
-            const cr = (a as { catRegex?: RegexRow }).catRegex;
-            if (!cr) return null as T;
+            const cr = pickCategoryRegexRow(a);
+            if (!cr) throw new DemoInvokeError(cmd, "Missing regex payload");
+            validateRegexPattern(cr.regex, cmd);
             const i = catRegex.findIndex((x) => x.id === cr.id);
-            if (i >= 0) catRegex[i] = { ...cr };
-            syncDemoCategoriesFromRegexRules();
+            if (i < 0) throw new DemoInvokeError(cmd, "Regex not found");
+            const cat = categories.find((c) => c.id === catRegex[i].cat_id);
+            if (cat?.name === "Miscellaneous" && catRegex[i].regex === ".*") {
+                throw new DemoInvokeError(cmd, "The catch-all Miscellaneous pattern cannot be edited");
+            }
+            catRegex[i] = { ...cr };
             return null as T;
         }
         case "delete_cat_regex_by_id": {
-            const id = Number((a as { id?: number }).id);
+            const id = pickNumber(a, ["id"]);
+            if (id === undefined) throw new DemoInvokeError(cmd, "Missing regex id");
+            const row = catRegex.find((r) => r.id === id);
+            const cat = row ? categories.find((c) => c.id === row.cat_id) : undefined;
+            if (cat?.name === "Miscellaneous" && row?.regex === ".*") {
+                throw new DemoInvokeError(cmd, "The catch-all Miscellaneous pattern cannot be deleted");
+            }
             catRegex = catRegex.filter((r) => r.id !== id);
-            syncDemoCategoriesFromRegexRules();
             return null as T;
         }
         case "get_logs":
-            return rawLogs
-                .filter((r) => !isAppSkippedByRules(r.app))
-                .map((r) => ({
-                    ...r,
-                    timestamp: new Date(r.timestamp * 1000),
-                })) as unknown as T;
+            return activeRawLogs().map((r) => ({
+                ...r,
+                timestamp: new Date(r.timestamp * 1000),
+            })) as unknown as T;
         case "get_log_by_id": {
             const id = Number((a as { id?: number }).id);
             const r = rawLogs.find((x) => x.id === id);
@@ -1100,10 +1097,9 @@ export async function invoke<T>(
                 1,
                 Math.floor(Number((a as { minLogDuration?: number }).minLogDuration ?? 60))
             );
-            const rows = rawLogs.filter(
+            const rows = activeRawLogs().filter(
                 (r) =>
                     r.app === app &&
-                    !isAppSkippedByRules(r.app) &&
                     r.timestamp >= rangeStart &&
                     r.timestamp <= rangeEnd &&
                     r.duration >= minLogDuration
@@ -1128,15 +1124,17 @@ export async function invoke<T>(
             }).request;
             if (!req) return [] as unknown as T;
             const minD = Math.max(1, Math.floor(Number(req.min_log_duration ?? 60)));
-            const rows = mergedLogs.filter(
-                (m) =>
-                    !isAppSkippedByRules(m.app) &&
-                    m.category === req.category &&
-                    m.timestamp >= req.start_time &&
-                    m.timestamp <= req.end_time &&
-                    m.duration >= minD
+            const rows = logsForCategoryInRange(
+                rawLogs,
+                req.category,
+                req.start_time,
+                req.end_time,
+                minD,
+                categories,
+                catRegex,
+                skippedApps
             );
-            return rows.map(({ category, ...rest }) => rest) as unknown as T;
+            return mergeLogsInTimeBlock(rows).sort((a, b) => b.duration - a.duration) as unknown as T;
         }
         case "get_logs_for_time_block": {
             const req = (a as {
@@ -1150,15 +1148,14 @@ export async function invoke<T>(
             if (!req) return [] as unknown as T;
             const minD = Math.max(1, Math.floor(Number(req.min_log_duration ?? 60)));
             const set = new Set(req.app_names);
-            const rows = mergedLogs.filter(
-                (m) =>
-                    !isAppSkippedByRules(m.app) &&
-                    set.has(m.app) &&
-                    m.duration >= minD &&
-                    m.timestamp + m.duration >= req.start_time &&
-                    m.timestamp <= req.end_time
+            const rows = logsOverlappingBlock(
+                activeRawLogs(),
+                set,
+                req.start_time,
+                req.end_time,
+                minD
             );
-            return rows.map(({ category, ...rest }) => rest) as unknown as T;
+            return mergeLogsInTimeBlock(rows).sort((a, b) => b.duration - a.duration) as unknown as T;
         }
         case "count_logs_for_time_block": {
             const req = (a as {
@@ -1166,38 +1163,31 @@ export async function invoke<T>(
             }).request;
             if (!req) return 0 as unknown as T;
             const set = new Set(req.app_names);
-            const n = mergedLogs.filter(
-                (m) =>
-                    set.has(m.app) &&
-                    m.timestamp + m.duration >= req.start_time &&
-                    m.timestamp <= req.end_time
+            const n = logsOverlappingBlock(
+                activeRawLogs(),
+                set,
+                req.start_time,
+                req.end_time,
+                1
             ).length;
             return n as unknown as T;
         }
         case "count_matching_logs": {
-            const regexPattern = String((a as { regexPattern?: string }).regexPattern ?? "");
-            let re: RegExp;
-            try {
-                re = new RegExp(regexPattern);
-            } catch {
-                return 0 as unknown as T;
-            }
-            const n = mergedLogs.filter((m) => re.test(m.app)).length;
+            const regexPattern = pickString(a, ["regexPattern", "regex_pattern"]) ?? "";
+            validateRegexPattern(regexPattern, cmd);
+            const re = new RegExp(regexPattern);
+            const n = activeRawLogs().filter((m) => re.test(m.app)).length;
             return n as unknown as T;
         }
         case "delete_log_by_id": {
             const id = Number((a as { id?: number }).id);
-            removeLogIdsFromBlocks(new Set([id]));
             rawLogs = rawLogs.filter((r) => r.id !== id);
-            mergedLogs = mergedLogs.filter((m) => !m.ids.includes(id));
             return null as T;
         }
         case "delete_logs_by_ids": {
             const ids = (a as { ids?: number[] }).ids ?? [];
             const set = new Set(ids);
-            removeLogIdsFromBlocks(set);
             rawLogs = rawLogs.filter((r) => !set.has(r.id));
-            mergedLogs = mergedLogs.filter((m) => !m.ids.some((i) => set.has(i)));
             return null as T;
         }
         case "delete_logs_for_time_block": {
@@ -1206,27 +1196,17 @@ export async function invoke<T>(
             }).request;
             if (!req) return 0 as unknown as T;
             const set = new Set(req.app_names);
-            const toRemove = mergedLogs.filter(
-                (m) =>
-                    set.has(m.app) &&
-                    m.timestamp + m.duration >= req.start_time &&
-                    m.timestamp <= req.end_time
+            const toRemove = new Set(
+                logsOverlappingBlock(activeRawLogs(), set, req.start_time, req.end_time, 1).map(
+                    (r) => r.id
+                )
             );
-            const idSet = new Set(toRemove.flatMap((m) => m.ids));
-            removeLogIdsFromBlocks(idSet);
-            rawLogs = rawLogs.filter((r) => !idSet.has(r.id));
-            mergedLogs = mergedLogs.filter((m) => !toRemove.includes(m));
-            return toRemove.length as unknown as T;
+            const before = rawLogs.length;
+            rawLogs = rawLogs.filter((r) => !toRemove.has(r.id));
+            return (before - rawLogs.length) as unknown as T;
         }
         case "get_week": {
-            const weekStart = Number(
-                (a as { weekStart?: number; week_start?: number }).weekStart ??
-                    (a as { week_start?: number }).week_start
-            );
-            const weekEnd = Number(
-                (a as { weekEnd?: number; week_end?: number }).weekEnd ??
-                    (a as { week_end?: number }).week_end
-            );
+            const { week_start: weekStart, week_end: weekEnd } = resolveWeekBounds(a);
             const out = blocksInRangeEffective(weekStart, weekEnd).map((b) => ({
                 id: b.id,
                 category: b.category,
@@ -1237,6 +1217,23 @@ export async function invoke<T>(
                     total_duration: x.total_duration,
                 })),
             }));
+            return out as unknown as T;
+        }
+        case "get_week_for_app_filter": {
+            const { week_start: weekStart, week_end: weekEnd } = resolveWeekBounds(a);
+            const appName = String((a as { appName?: string }).appName ?? "");
+            const out = blocksInRangeEffective(weekStart, weekEnd)
+                .filter((b) => b.apps.some((ap) => ap.app === appName))
+                .map((b) => ({
+                    id: b.id,
+                    category: b.category,
+                    start_time: b.start_time,
+                    end_time: b.end_time,
+                    apps: b.apps.map((x) => ({
+                        app: x.app,
+                        total_duration: x.total_duration,
+                    })),
+                }));
             return out as unknown as T;
         }
         case "get_week_statistics": {
@@ -1253,9 +1250,9 @@ export async function invoke<T>(
             return weekStatistics(weekStart, weekEnd) as unknown as T;
         }
         case "get_total_statistics": {
-            if (timeBlocks.length === 0) return weekStatistics(0, 1) as unknown as T;
-            const mn = Math.min(...timeBlocks.map((b) => b.start_time));
-            const mx = Math.max(...timeBlocks.map((b) => b.end_time));
+            if (rawLogs.length === 0) return weekStatistics(0, 1) as unknown as T;
+            const mn = Math.min(...rawLogs.map((b) => b.timestamp));
+            const mx = Math.max(...rawLogs.map((b) => b.timestamp + b.duration));
             return weekStatistics(mn, mx) as unknown as T;
         }
         case "get_day_statistics": {
@@ -1270,6 +1267,47 @@ export async function invoke<T>(
                     0
             );
             return dayStatistics(dayStart, dayEnd) as unknown as T;
+        }
+        case "get_settings":
+            return settings as unknown as T;
+        case "update_val_by_key": {
+            const key = String((a as { key?: string }).key ?? "");
+            const newVal = Number((a as { newVal?: number }).newVal);
+            const row = settings.find((s) => s.key === key);
+            if (row && !row.is_locked && Number.isFinite(newVal)) {
+                let val = Math.floor(newVal);
+                if (row.min_val != null) val = Math.max(row.min_val, val);
+                if (row.max_val != null) val = Math.min(row.max_val, val);
+                row.val = val;
+            }
+            return null as T;
+        }
+        case "flip_lock_by_key": {
+            const key = String((a as { key?: string }).key ?? "");
+            const row = settings.find((s) => s.key === key);
+            if (row) row.is_locked = !row.is_locked;
+            return null as T;
+        }
+        case "reset_val_by_key": {
+            const key = String((a as { key?: string }).key ?? "");
+            const row = settings.find((s) => s.key === key);
+            if (row && !row.is_locked) row.val = row.default_val;
+            return null as T;
+        }
+        case "get_app_metadata": {
+            const key = String((a as { key?: string }).key ?? "");
+            return (appMetadata[key] ?? null) as unknown as T;
+        }
+        case "set_app_metadata": {
+            const key = String((a as { key?: string }).key ?? "");
+            const value = String((a as { value?: string }).value ?? "");
+            if (key) appMetadata[key] = value;
+            return null as T;
+        }
+        case "delete_app_metadata": {
+            const key = String((a as { key?: string }).key ?? "");
+            delete appMetadata[key];
+            return null as T;
         }
         case "get_calendar_view_prefs":
             return calendarPrefsJson as unknown as T;
@@ -1298,15 +1336,9 @@ export async function invoke<T>(
             } catch {
                 return id as unknown as T;
             }
-            const before = mergedLogs.length;
-            const toDelete = new Set<number>();
-            for (const r of rawLogs) {
-                if (re.test(r.app)) toDelete.add(r.id);
-            }
-            removeLogIdsFromBlocks(toDelete);
-            mergedLogs = mergedLogs.filter((m) => !re.test(m.app));
+            const before = rawLogs.length;
             rawLogs = rawLogs.filter((r) => !re.test(r.app));
-            return (before - mergedLogs.length) as unknown as T;
+            return (before - rawLogs.length) as unknown as T;
         }
         case "update_skipped_app_by_id": {
             const sa = (a as { skippedApp?: SkippedRow }).skippedApp;
@@ -1509,7 +1541,11 @@ export async function invoke<T>(
         case "apply_update_cmd":
             return null as T;
         default:
-            console.warn(`[demo mock] unknown invoke command: ${cmd}`);
-            return null as T;
+            throw new DemoInvokeError(cmd, `Unknown demo backend command: ${cmd}`);
+    }
+    } catch (err) {
+        if (err instanceof DemoInvokeError) throw err;
+        if (err instanceof Error) throw new DemoInvokeError(cmd, err.message);
+        throw new DemoInvokeError(cmd, "Unexpected demo backend error");
     }
 }

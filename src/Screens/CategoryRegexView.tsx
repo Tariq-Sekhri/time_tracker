@@ -170,6 +170,9 @@ export default function CategoryRegexView() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({queryKey: ["cat_regex"]});
+            queryClient.invalidateQueries({queryKey: ["week"]});
+            queryClient.invalidateQueries({queryKey: ["week_statistics"]});
+            queryClient.invalidateQueries({queryKey: ["week_app_filter"]});
             setNewRegexCatId("");
             setNewRegexPattern("");
             setRegexError(null);
@@ -189,6 +192,9 @@ export default function CategoryRegexView() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({queryKey: ["cat_regex"]});
+            queryClient.invalidateQueries({queryKey: ["week"]});
+            queryClient.invalidateQueries({queryKey: ["week_statistics"]});
+            queryClient.invalidateQueries({queryKey: ["week_app_filter"]});
             setEditingRegex(null);
             setEditRegexError(null);
             setEditCatMenuOpen(false);
@@ -207,6 +213,9 @@ export default function CategoryRegexView() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({queryKey: ["cat_regex"]});
+            queryClient.invalidateQueries({queryKey: ["week"]});
+            queryClient.invalidateQueries({queryKey: ["week_statistics"]});
+            queryClient.invalidateQueries({queryKey: ["week_app_filter"]});
             showToast("Regex pattern deleted successfully", "success");
         },
         onError: (error: any) => {

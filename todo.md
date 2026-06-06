@@ -1,8 +1,9 @@
-- High Priority
+- planning
     - manual time trai
-    - trend expla
+    - trend explain
     - cross device sync
     - google calander
+    demo
 - bug
     - right click app regex give u the regex that sorted it
 - ui

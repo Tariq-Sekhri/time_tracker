@@ -1,5 +1,6 @@
 import type { Category } from "../api/Category.ts";
 import type { CategoryRegex } from "../api/CategoryRegex.ts";
+import { pickBestMatchingRegex } from "./pickBestMatchingRegex.ts";
 
 export type ResolvedCategoryRule = {
     matchedRegex: string | null;
@@ -19,17 +20,10 @@ export function resolveCategoryRuleForApp(
         if (!cat) continue;
         rows.push({ regexStr: r.regex, catId: r.cat_id, priority: cat.priority });
     }
-    rows.sort((a, b) => b.priority - a.priority);
-    for (const row of rows) {
-        try {
-            const re = new RegExp(row.regexStr);
-            if (re.test(appName)) {
-                const cat = catById.get(row.catId);
-                return { matchedRegex: row.regexStr, categoryName: cat?.name ?? "Unknown" };
-            }
-        } catch {
-            continue;
-        }
+    const best = pickBestMatchingRegex(appName, rows);
+    if (!best) {
+        return { matchedRegex: null, categoryName: "Miscellaneous" };
     }
-    return { matchedRegex: null, categoryName: "Miscellaneous" };
+    const cat = catById.get(best.catId);
+    return { matchedRegex: best.regexStr, categoryName: cat?.name ?? "Unknown" };
 }
