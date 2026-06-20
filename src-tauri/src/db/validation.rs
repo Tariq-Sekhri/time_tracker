@@ -37,6 +37,12 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
                     default_value: None,
                 },
                 ExpectedColumn {
+                    name: "device_id",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: Some("0"),
+                },
+                ExpectedColumn {
                     name: "app",
                     sql_type: "TEXT",
                     not_null: true,
@@ -53,6 +59,29 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
                     sql_type: "INTEGER",
                     not_null: true,
                     default_value: Some("0"),
+                },
+            ],
+        },
+        ExpectedTable {
+            name: "devices",
+            columns: vec![
+                ExpectedColumn {
+                    name: "id",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "uuid",
+                    sql_type: "TEXT",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "name",
+                    sql_type: "TEXT",
+                    not_null: true,
+                    default_value: None,
                 },
             ],
         },
@@ -395,6 +424,7 @@ async fn create_table_safe(pool: &SqlitePool, table: &ExpectedTable) -> Result<(
 
     match table.name {
         "logs" => tables::log::create_table(pool).await?,
+        "devices" => tables::device::create_table(pool).await?,
         "category" => tables::category::create_table(pool).await?,
         "category_regex" => tables::cat_regex::create_table(pool).await?,
         "skipped_apps" => tables::skipped_app::create_table(pool).await?,
@@ -453,6 +483,7 @@ async fn add_column_safe(
 async fn ensure_default_data(pool: &SqlitePool) -> Result<(), Error> {
     crate::db::tables::cat_regex::ensure_default_regexes(pool).await?;
     crate::db::tables::settings::seed_defaults(pool).await?;
+    crate::db::tables::device::ensure_logs_device_id(pool).await?;
     Ok(())
 }
 

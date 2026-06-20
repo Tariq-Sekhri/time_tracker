@@ -71,23 +71,23 @@ npm run tauri dev
 npx tauri build
 ```
 
-Builds use SQLx **offline mode** (the `.sqlx/` cache in `src-tauri/`). No database is required at compile time. If you change Rust SQL queries, regenerate the cache:
+Builds use SQLx **offline mode** (the `.sqlx/` cache in `src-tauri/`). No database is required at compile time. If you change Rust SQL queries, regenerate the cache from the debug database:
 
 ```bash
 cd src-tauri
-# Use the real app DB (ensure the app has been run at least once)
-$env:DATABASE_URL = "sqlite:C:/Users/<you>/AppData/Roaming/time-tracker/app.db"
+# Ensure the app has created apptest.db at least once.
+$env:DATABASE_URL = "sqlite:///C:/Users/<you>/AppData/Roaming/time-tracker/apptest.db"
 cargo sqlx prepare
 ```
 
-On Linux (after the app has created the DB at least once):
+On Linux:
 
 ```bash
-export DATABASE_URL="sqlite:/home/<you>/.local/share/time-tracker/app.db"
+export DATABASE_URL="sqlite:///home/<you>/.local/share/time-tracker/apptest.db"
 cargo sqlx prepare
 ```
 
-Commit updated `.sqlx/` after running `sqlx prepare`. For CI or builds without a DB, set `SQLX_OFFLINE=true` when running `cargo build` (Tauri build does not need it if `DATABASE_URL` is unset).
+Commit updated `.sqlx/` after running `sqlx prepare`. For CI or builds without a DB, set `SQLX_OFFLINE=true` when running `cargo build`.
 
 ## Platform Notes
 

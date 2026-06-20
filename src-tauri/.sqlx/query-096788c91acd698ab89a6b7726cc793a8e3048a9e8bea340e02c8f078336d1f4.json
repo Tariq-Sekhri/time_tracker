@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, app, timestamp, duration FROM logs",
+  "query": "SELECT id, device_id, app, timestamp, duration FROM logs",
   "describe": {
     "columns": [
       {
@@ -9,18 +9,23 @@
         "type_info": "Integer"
       },
       {
-        "name": "app",
+        "name": "device_id",
         "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "app",
+        "ordinal": 2,
         "type_info": "Text"
       },
       {
         "name": "timestamp",
-        "ordinal": 2,
+        "ordinal": 3,
         "type_info": "Integer"
       },
       {
         "name": "duration",
-        "ordinal": 3,
+        "ordinal": 4,
         "type_info": "Integer"
       }
     ],
@@ -31,8 +36,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "2a830a749ed873de13c317e73dbdef89441e6583af2e5aec9829248fe14597da"
+  "hash": "096788c91acd698ab89a6b7726cc793a8e3048a9e8bea340e02c8f078336d1f4"
 }
