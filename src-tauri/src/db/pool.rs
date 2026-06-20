@@ -101,8 +101,6 @@ async fn create_pool() -> Result<SqlitePool, sqlx::Error> {
         .connect(&connection_string)
         .await?;
 
-    run_schema_repair(&pool).await?;
-
     run_migrations(&pool).await?;
 
     run_schema_repair(&pool).await?;

@@ -406,11 +406,13 @@ fn get_foreground_app() -> Result<String, Error> {
         })
 }
 
-fn generate_log() -> Result<NewLog, Error> {
+async fn generate_log() -> Result<NewLog, Error> {
     let sanitized_app = sanitize_app_name(&get_foreground_app()?);
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
+    let device_id = log::get_or_create_device_id().await?;
     Ok(NewLog {
         app: sanitized_app,
+        device_id,
         timestamp: now,
     })
 }
@@ -431,7 +433,7 @@ async fn background_process() -> Result<(), Error> {
         if IS_SUSPENDED.load(Ordering::Relaxed) {
             continue;
         }
-        let new_log = generate_log()?;
+        let new_log = generate_log().await?;
 
         if skipped_app::is_skipped_app(&new_log.app).await? {
             // Skip this app, it matches a skipped regex pattern

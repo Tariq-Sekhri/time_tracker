@@ -1,9 +1,10 @@
 - planning
     - manual time trai
     - trend explain
-    - cross device sync
+    - cross device sync```1``
     - google calander
-    demo
+    - demo
+    - app name - process anme
 - bug
     - right click app regex give u the regex that sorted it
 - ui

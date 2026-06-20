@@ -39,6 +39,7 @@ url = "2.5"
 urlencoding = "2.1"
 dotenv = "0.15"
 dirs = "6"
+uuid = { version = "1", features = ["v4"] }
 
 # Platform-specific dependencies
 [target.'cfg(target_os = "windows")'.dependencies]
