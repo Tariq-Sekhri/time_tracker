@@ -110,7 +110,15 @@ fn local_storage_leveldb_has_data(default_dir: &std::path::Path) -> bool {
 
 #[tauri::command]
 fn get_app_version(app: tauri::AppHandle) -> String {
-    app.package_info().version.to_string()
+    let version = app.package_info().version.to_string();
+    #[cfg(debug_assertions)]
+    {
+        format!("{version}-dev")
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        version
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

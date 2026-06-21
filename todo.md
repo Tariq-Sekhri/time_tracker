@@ -5,6 +5,8 @@
     - google calander
     - demo
     - app name - process anme
+    - if we deelte a log it should store a list of deleted logs so server can delte them too (only if they are uploading
+      otherwise no)
 - bug
     - right click app regex give u the regex that sorted it
 - ui
