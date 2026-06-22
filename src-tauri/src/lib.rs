@@ -36,7 +36,7 @@ use db::tables::skipped_app::{
     count_matching_logs, delete_skipped_app_by_id, get_skipped_apps,
     insert_skipped_app_and_delete_logs, restore_default_skipped_apps, update_skipped_app_by_id,
 };
-use sync::push_all_logs;
+use sync::{get_devices, push_all_logs};
 
 use app_prefs::{
     delete_app_metadata, get_app_metadata, get_calendar_view_prefs, set_app_metadata,
@@ -296,6 +296,7 @@ pub fn run() {
             check_update_cmd,
             get_app_version,
             push_all_logs,
+            get_devices,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

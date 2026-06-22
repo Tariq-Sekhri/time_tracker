@@ -1,10 +1,23 @@
 import {useState} from "react"
 import {invokeOrThrow} from "../utils.ts";
+import {get_categories} from "../api/Category.ts";
+import {useQuery} from "@tanstack/react-query";
+
+export type Device = {
+    uuid: string,
+    name: String
+}
 
 export default function Sync() {
     const [serverLocked, setServerLocked] = useState(false)
     const [serverIp, setServerIp] = useState("100.75.95.90")
     const [errorMessage, setErrorMessage] = useState("")
+
+    const {data: Devices = []} = useQuery({
+        queryKey: ["get_devices"],
+        queryFn: invokeOrThrow<Device[]>("get_devices"),
+    });
+
 
     async function checkServer() {
         let url = `http://${serverIp}:3000/v1/check`;
