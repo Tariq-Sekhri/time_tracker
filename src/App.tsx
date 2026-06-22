@@ -16,6 +16,7 @@ import Settings from "./Screens/Settings.tsx";
 import {ToastProvider, useToast} from "./Componants/Toast.tsx";
 import {get_total_statistics} from "./api/statistics.ts";
 import {toErrorString} from "./types/common.ts";
+import Sync from "./Screens/Sync.tsx";
 
 export type View =
     | "calendar"
@@ -24,7 +25,8 @@ export type View =
     | "skipped"
     | "detailed"
     | "googleCalendars"
-    | "settings";
+    | "settings"
+    | "sync";
 
 function AppInner() {
     const queryClient = useQueryClient();
@@ -270,6 +272,7 @@ function AppInner() {
                 )}
                 {currentView === "settings" && <Settings/>}
                 {currentView === "googleCalendars" && <GoogleCalendarsView/>}
+                {currentView === "sync" && <Sync/>}
             </div>
         </main>
     );

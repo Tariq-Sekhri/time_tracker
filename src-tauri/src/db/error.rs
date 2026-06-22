@@ -33,6 +33,7 @@ macro_rules! impl_from {
 
 impl_from!(
     sqlx::Error,
+    reqwest::Error,
     std::io::Error,
     regex::Error,
     std::time::SystemTimeError,

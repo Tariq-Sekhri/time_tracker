@@ -1,21 +1,20 @@
-- planning
-    - manual time trai
+- High
+    - cross device sync
+        push all logs
+        push new logs
+        add veiw for sync
+        set server lock server change server
+        if we deelte a log it should store a list of deleted logs so server can delte them too (only if they are      uploading otherwise no)
+
+    - manual time tracking
+- low
     - trend explain
-    - cross device sync```1``
-    - google calander
-    - demo
-    - app name - process anme
-    - if we deelte a log it should store a list of deleted logs so server can delte them too (only if they are uploading
-      otherwise no)
-- bug
     - right click app regex give u the regex that sorted it
-- ui
     - remove pie chart from calander rightsidebar (add a settings for on or off, default off)
-    - add total time trend line
-- speed up
-    - detailed /trending
-    - calendar
-    - regex
+    - speedups
+        - detailed /trending
+        - calendar
+        - regex
 - not planned
     - afk detection
     - macos

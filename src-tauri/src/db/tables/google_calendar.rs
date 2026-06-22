@@ -1,7 +1,7 @@
 use crate::db;
 use crate::db::Error;
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, SqlitePool};
+use sqlx::{FromRow, QueryBuilder, Sqlite, SqlitePool};
 
 #[derive(Debug, Serialize, FromRow, Deserialize, Clone)]
 pub struct GoogleOAuth {
@@ -210,29 +210,34 @@ pub async fn insert_google_calendar(new_calendar: NewGoogleCalendar) -> Result<i
 pub async fn update_google_calendar(update: UpdateGoogleCalendar) -> Result<(), Error> {
     let pool = db::get_pool().await?;
 
-    let mut updates = Vec::new();
+    let mut has_updates = false;
+    let mut query = QueryBuilder::<Sqlite>::new("UPDATE google_calendar_v2 SET ");
+    let mut updates = query.separated(", ");
+
     if let Some(name) = update.name {
-        updates.push(format!("name = '{}'", name.replace("'", "''")));
+        updates.push("name = ").push_bind(name);
+        has_updates = true;
     }
     if let Some(color) = update.color {
-        updates.push(format!("color = '{}'", color.replace("'", "''")));
+        updates.push("color = ").push_bind(color);
+        has_updates = true;
     }
     if let Some(is_visible) = update.is_visible {
-        updates.push(format!("is_visible = {}", i32::from(is_visible)));
+        updates.push("is_visible = ").push_bind(i32::from(is_visible));
+        has_updates = true;
     }
     if let Some(in_stats) = update.in_stats {
-        updates.push(format!("in_stats = {}", i32::from(in_stats)));
+        updates.push("in_stats = ").push_bind(i32::from(in_stats));
+        has_updates = true;
     }
+    drop(updates);
 
-    if updates.is_empty() {
+    if !has_updates {
         return Ok(());
     }
 
-    let query = format!(
-        "UPDATE google_calendar_v2 SET {} WHERE id = ?1",
-        updates.join(", ")
-    );
-    sqlx::query(&query).bind(update.id).execute(&pool).await?;
+    query.push(" WHERE id = ").push_bind(update.id);
+    query.build().execute(&pool).await?;
     Ok(())
 }
 

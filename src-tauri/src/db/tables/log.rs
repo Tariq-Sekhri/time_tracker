@@ -58,8 +58,9 @@ pub async fn insert_log(log: NewLog) -> Result<i64, sqlx::Error> {
 }
 
 pub async fn get_or_create_device_id() -> Result<i64, sqlx::Error> {
-    let pool = db::get_pool().await?;
-    crate::db::tables::device::get_or_create_local_device_id(&pool).await
+    Ok(crate::db::tables::device::get_or_create_local_device()
+        .await?
+        .id)
 }
 
 #[tauri::command]
@@ -85,9 +86,12 @@ pub async fn delete_logs_by_ids(ids: Vec<i64>) -> Result<(), Error> {
 #[tauri::command]
 pub async fn get_logs() -> Result<Vec<Log>, Error> {
     let pool = db::get_pool().await?;
-    let logs = sqlx::query_as!(Log, "SELECT id, device_id, app, timestamp, duration FROM logs")
-        .fetch_all(&pool)
-        .await?;
+    let logs = sqlx::query_as!(
+        Log,
+        "SELECT id, device_id, app, timestamp, duration FROM logs"
+    )
+    .fetch_all(&pool)
+    .await?;
     Ok(logs)
 }
 

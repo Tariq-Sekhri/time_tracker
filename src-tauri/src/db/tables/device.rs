@@ -1,3 +1,4 @@
+use crate::db::get_pool;
 use crate::db::tables::app_metadata_kv::{metadata_get, metadata_set};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
@@ -25,7 +26,12 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-pub async fn get_or_create_local_device_id(pool: &SqlitePool) -> Result<i64, sqlx::Error> {
+pub async fn get_or_create_local_device() -> Result<Device, sqlx::Error> {
+    let pool = &get_pool().await?;
+    get_or_create_local_device_with_pool(pool).await
+}
+
+async fn get_or_create_local_device_with_pool(pool: &SqlitePool) -> Result<Device, sqlx::Error> {
     create_table(pool).await?;
 
     let name = local_device_name();
@@ -48,16 +54,16 @@ pub async fn get_or_create_local_device_id(pool: &SqlitePool) -> Result<i64, sql
     .execute(pool)
     .await?;
 
-    let id: i64 = sqlx::query_scalar("SELECT id FROM devices WHERE uuid = ?1")
+    let device: Device = sqlx::query_as("SELECT * FROM devices WHERE uuid = ?1")
         .bind(&uuid)
         .fetch_one(pool)
         .await?;
 
-    Ok(id)
+    Ok(device)
 }
 
 pub async fn ensure_logs_device_id(pool: &SqlitePool) -> Result<i64, sqlx::Error> {
-    let device_id = get_or_create_local_device_id(pool).await?;
+    let device_id = get_or_create_local_device_with_pool(pool).await?.id;
     sqlx::query("UPDATE logs SET device_id = ?1 WHERE device_id IS NULL OR device_id <= 0")
         .bind(device_id)
         .execute(pool)

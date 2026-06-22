@@ -326,7 +326,7 @@ async fn get_table_schema(
     table_name: &str,
 ) -> Result<Vec<ActualColumn>, sqlx::Error> {
     let query = format!("PRAGMA table_info({})", table_name);
-    let rows = sqlx::query(&query).fetch_all(pool).await?;
+    let rows = sqlx::query(sqlx::AssertSqlSafe(query)).fetch_all(pool).await?;
 
     let columns = rows
         .iter()
@@ -354,7 +354,7 @@ async fn table_exists(pool: &SqlitePool, table_name: &str) -> Result<bool, sqlx:
 
 async fn table_has_data(pool: &SqlitePool, table_name: &str) -> Result<bool, sqlx::Error> {
     let query = format!("SELECT COUNT(*) FROM {}", table_name);
-    let count: i32 = sqlx::query_scalar(&query).fetch_one(pool).await?;
+    let count: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(query)).fetch_one(pool).await?;
 
     Ok(count > 0)
 }
@@ -472,7 +472,7 @@ async fn add_column_safe(
         sql.push_str(&format!(" DEFAULT {}", default));
     }
 
-    sqlx::query(&sql).execute(pool).await.context(format!(
+    sqlx::query(sqlx::AssertSqlSafe(sql)).execute(pool).await.context(format!(
         "Failed to add column {}.{}",
         table_name, column.name
     ))?;

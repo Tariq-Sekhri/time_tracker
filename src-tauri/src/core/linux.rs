@@ -1,3 +1,4 @@
+#[cfg(target_os = "linux")]
 use crate::db::Error;
 
 #[cfg(target_os = "linux")]

@@ -114,16 +114,16 @@ pub async fn set_google_oauth_app_credentials(
 #[tauri::command]
 pub async fn google_oauth_login() -> Result<AuthStatus, Error> {
     let (client_id, client_secret) = resolve_google_oauth_app_credentials().await?;
-    let client = BasicClient::new(
-        ClientId::new(client_id),
-        Some(ClientSecret::new(client_secret)),
-        AuthUrl::new(GOOGLE_AUTH_URL.to_string())
-            .context("Invalid auth URL")?,
-        Some(
+    let client = BasicClient::new(ClientId::new(client_id))
+        .set_client_secret(ClientSecret::new(client_secret))
+        .set_auth_uri(
+            AuthUrl::new(GOOGLE_AUTH_URL.to_string())
+                .context("Invalid auth URL")?,
+        )
+        .set_token_uri(
             TokenUrl::new(GOOGLE_TOKEN_URL.to_string())
                 .context("Invalid token URL")?,
-        ),
-    )
+        )
     .set_redirect_uri(
         RedirectUrl::new(format!("http://localhost:{}/oauth/callback", REDIRECT_PORT))
             .context("Invalid redirect URL")?,
@@ -198,9 +198,14 @@ pub async fn google_oauth_login() -> Result<AuthStatus, Error> {
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     };
 
+    let http_client = oauth2::reqwest::ClientBuilder::new()
+        .redirect(oauth2::reqwest::redirect::Policy::none())
+        .build()
+        .context("Failed to build OAuth HTTP client")?;
+
     let token_result = client
         .exchange_code(AuthorizationCode::new(code))
-        .request_async(oauth2::reqwest::async_http_client)
+        .request_async(&http_client)
         .await
         .map_err(|e| match e {
             oauth2::RequestTokenError::ServerResponse(err) => {
