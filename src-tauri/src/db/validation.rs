@@ -37,10 +37,10 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
                     default_value: None,
                 },
                 ExpectedColumn {
-                    name: "device_id",
-                    sql_type: "INTEGER",
+                    name: "device_uuid",
+                    sql_type: "TEXT",
                     not_null: true,
-                    default_value: Some("0"),
+                    default_value: None,
                 },
                 ExpectedColumn {
                     name: "app",
@@ -65,12 +65,6 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
         ExpectedTable {
             name: "devices",
             columns: vec![
-                ExpectedColumn {
-                    name: "id",
-                    sql_type: "INTEGER",
-                    not_null: true,
-                    default_value: None,
-                },
                 ExpectedColumn {
                     name: "uuid",
                     sql_type: "TEXT",
@@ -326,7 +320,9 @@ async fn get_table_schema(
     table_name: &str,
 ) -> Result<Vec<ActualColumn>, sqlx::Error> {
     let query = format!("PRAGMA table_info({})", table_name);
-    let rows = sqlx::query(sqlx::AssertSqlSafe(query)).fetch_all(pool).await?;
+    let rows = sqlx::query(sqlx::AssertSqlSafe(query))
+        .fetch_all(pool)
+        .await?;
 
     let columns = rows
         .iter()
@@ -354,7 +350,9 @@ async fn table_exists(pool: &SqlitePool, table_name: &str) -> Result<bool, sqlx:
 
 async fn table_has_data(pool: &SqlitePool, table_name: &str) -> Result<bool, sqlx::Error> {
     let query = format!("SELECT COUNT(*) FROM {}", table_name);
-    let count: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(query)).fetch_one(pool).await?;
+    let count: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(query))
+        .fetch_one(pool)
+        .await?;
 
     Ok(count > 0)
 }
@@ -472,10 +470,13 @@ async fn add_column_safe(
         sql.push_str(&format!(" DEFAULT {}", default));
     }
 
-    sqlx::query(sqlx::AssertSqlSafe(sql)).execute(pool).await.context(format!(
-        "Failed to add column {}.{}",
-        table_name, column.name
-    ))?;
+    sqlx::query(sqlx::AssertSqlSafe(sql))
+        .execute(pool)
+        .await
+        .context(format!(
+            "Failed to add column {}.{}",
+            table_name, column.name
+        ))?;
 
     Ok(())
 }
@@ -483,7 +484,7 @@ async fn add_column_safe(
 async fn ensure_default_data(pool: &SqlitePool) -> Result<(), Error> {
     crate::db::tables::cat_regex::ensure_default_regexes(pool).await?;
     crate::db::tables::settings::seed_defaults(pool).await?;
-    crate::db::tables::device::ensure_logs_device_id(pool).await?;
+    crate::db::tables::device::ensure_logs_device_uuid(pool).await?;
     Ok(())
 }
 

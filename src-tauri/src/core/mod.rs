@@ -79,10 +79,10 @@ fn sanitize_app_name(name: &str) -> String {
 async fn generate_log() -> Result<NewLog, Error> {
     let sanitized_app = sanitize_app_name(&get_foreground_app()?);
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
-    let device_id = log::get_or_create_device_id().await?;
+    let device_uuid = log::get_or_create_device_uuid().await?;
     Ok(NewLog {
         app: sanitized_app,
-        device_id,
+        device_uuid,
         timestamp: now,
     })
 }

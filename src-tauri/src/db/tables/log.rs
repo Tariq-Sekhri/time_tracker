@@ -7,7 +7,7 @@ use std::collections::HashMap;
 #[derive(Debug, Serialize, FromRow, Clone, Deserialize)]
 pub struct Log {
     pub id: i64,
-    pub device_id: i64,
+    pub device_uuid: String,
     pub app: String,
     pub timestamp: i64,
     pub duration: i64,
@@ -16,7 +16,7 @@ pub struct Log {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MergedLog {
     pub ids: Vec<i64>,
-    pub device_id: i64,
+    pub device_uuid: String,
     pub app: String,
     pub timestamp: i64,
     pub duration: i64,
@@ -25,7 +25,7 @@ pub struct MergedLog {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NewLog {
     pub app: String,
-    pub device_id: i64,
+    pub device_uuid: String,
     pub timestamp: i64,
 }
 
@@ -33,7 +33,7 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        device_id INTEGER NOT NULL DEFAULT 0,
+        device_uuid TEXT NOT NULL DEFAULT '',
         app TEXT NOT NULL,
         timestamp INTEGER NOT NULL,
         duration INTEGER NOT NULL DEFAULT 0
@@ -47,8 +47,8 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 pub async fn insert_log(log: NewLog) -> Result<i64, sqlx::Error> {
     let pool = db::get_pool().await?;
     let result = sqlx::query!(
-        "INSERT INTO logs (device_id, app, timestamp) VALUES (?1, ?2, ?3)",
-        log.device_id,
+        "INSERT INTO logs (device_uuid, app, timestamp) VALUES (?1, ?2, ?3)",
+        log.device_uuid,
         log.app,
         log.timestamp
     )
@@ -57,10 +57,8 @@ pub async fn insert_log(log: NewLog) -> Result<i64, sqlx::Error> {
     Ok(result.last_insert_rowid())
 }
 
-pub async fn get_or_create_device_id() -> Result<i64, sqlx::Error> {
-    Ok(crate::db::tables::device::get_or_create_local_device()
-        .await?
-        .id)
+pub async fn get_or_create_device_uuid() -> Result<String, sqlx::Error> {
+    Ok(db::tables::device::get_or_create_local_device().await?.uuid)
 }
 
 #[tauri::command]
@@ -88,7 +86,7 @@ pub async fn get_logs() -> Result<Vec<Log>, Error> {
     let pool = db::get_pool().await?;
     let logs = sqlx::query_as!(
         Log,
-        "SELECT id, device_id, app, timestamp, duration FROM logs"
+        "SELECT id, device_uuid, app, timestamp, duration FROM logs"
     )
     .fetch_all(&pool)
     .await?;
@@ -100,7 +98,7 @@ pub async fn get_log_by_id(id: i64) -> Result<Log, Error> {
     let pool = db::get_pool().await?;
     let log = sqlx::query_as!(
         Log,
-        "SELECT id, device_id, app, timestamp, duration FROM logs WHERE id = ?1",
+        "SELECT id, device_uuid, app, timestamp, duration FROM logs WHERE id = ?1",
         id
     )
     .fetch_one(&pool)
@@ -137,7 +135,7 @@ pub async fn delete_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resu
 
     let logs = sqlx::query_as!(
         Log,
-        r#"SELECT id as "id!: i64", device_id as "device_id!: i64", app, timestamp as "timestamp!: i64", duration as "duration!: i64" FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2"#,
+        r#"SELECT id as "id!: i64", device_uuid, app, timestamp as "timestamp!: i64", duration as "duration!: i64" FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2"#,
         request.start_time,
         request.end_time
     )
@@ -163,7 +161,7 @@ pub async fn count_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resul
 
     let logs = sqlx::query_as!(
         Log,
-        r#"SELECT id as "id!: i64", device_id as "device_id!: i64", app, timestamp as "timestamp!: i64", duration as "duration!: i64" FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2"#,
+        r#"SELECT id as "id!: i64", device_uuid, app, timestamp as "timestamp!: i64", duration as "duration!: i64" FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2"#,
         request.start_time,
         request.end_time
     )
@@ -186,7 +184,7 @@ pub async fn get_logs_for_time_block(
 
     let min_d = request.min_log_duration.max(1);
     let logs = sqlx::query_as::<_, Log>(
-        "SELECT id, device_id, app, timestamp, duration FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2 AND duration >= ?3 ORDER BY duration DESC",
+        "SELECT id, device_uuid, app, timestamp, duration FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2 AND duration >= ?3 ORDER BY duration DESC",
     )
     .bind(request.start_time)
     .bind(request.end_time)
@@ -216,7 +214,7 @@ fn merge_logs_in_time_block(logs: Vec<Log>) -> Vec<MergedLog> {
                 log.app.clone(),
                 MergedLog {
                     ids: vec![log.id],
-                    device_id: log.device_id,
+                    device_uuid: log.device_uuid,
                     app: log.app,
                     timestamp: log.timestamp,
                     duration: log.duration,
@@ -250,7 +248,7 @@ pub async fn get_logs_by_category(
 
     let min_d = request.min_log_duration.max(1);
     let mut logs = sqlx::query_as::<_, Log>(
-        "SELECT id, device_id, app, timestamp, duration FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2 AND duration >= ?3 ORDER BY duration DESC",
+        "SELECT id, device_uuid, app, timestamp, duration FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2 AND duration >= ?3 ORDER BY duration DESC",
     )
     .bind(request.start_time)
     .bind(request.end_time)
@@ -332,7 +330,7 @@ pub async fn get_logs_for_app_in_time_range(
 
     let min_d = min_log_duration.max(1);
     let logs = sqlx::query_as::<_, Log>(
-        "SELECT id, device_id, app, timestamp, duration FROM logs WHERE app = ?1 AND timestamp >= ?2 AND timestamp <= ?3 AND duration >= ?4 ORDER BY timestamp ASC",
+        "SELECT id, device_uuid, app, timestamp, duration FROM logs WHERE app = ?1 AND timestamp >= ?2 AND timestamp <= ?3 AND duration >= ?4 ORDER BY timestamp ASC",
     )
     .bind(&app)
     .bind(range_start)

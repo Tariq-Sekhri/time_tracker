@@ -2,7 +2,7 @@ import { invokeOrThrow } from "../utils.ts";
 
 export type Log = {
     id: number;
-    device_id: number;
+    device_uuid: string;
     app: string;
     timestamp: Date;
     duration: number;
@@ -10,9 +10,9 @@ export type Log = {
 
 export type MergedLog = {
     ids: number[];
-    device_id: number;
+    device_uuid: string;
     app: string;
-    timestamp: number; // Unix timestamp in seconds
+    timestamp: number;
     duration: number;
 };
 
@@ -70,7 +70,7 @@ export async function get_logs_by_category(request: GetLogsByCategoryRequest): P
 
 export type AppTimeRangeLog = {
     id: number;
-    device_id: number;
+    device_uuid: string;
     app: string;
     timestamp: number;
     duration: number;

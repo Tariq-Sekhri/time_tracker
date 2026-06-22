@@ -1,0 +1,74 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: i64\", device_uuid, app, timestamp as \"timestamp!: i64\", duration as \"duration!: i64\" FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "logs",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "device_uuid",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "logs",
+            "name": "device_uuid"
+          }
+        }
+      },
+      {
+        "name": "app",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "logs",
+            "name": "app"
+          }
+        }
+      },
+      {
+        "name": "timestamp!: i64",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "logs",
+            "name": "timestamp"
+          }
+        }
+      },
+      {
+        "name": "duration!: i64",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "logs",
+            "name": "duration"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b210059dc01fb511edbd1a5c2deb9c3581c4b7846764dcc3d0e36295d72a7ec8"
+}

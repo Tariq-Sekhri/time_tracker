@@ -1,0 +1,74 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, device_uuid, app, timestamp, duration FROM logs WHERE id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "logs",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "device_uuid",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "logs",
+            "name": "device_uuid"
+          }
+        }
+      },
+      {
+        "name": "app",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "logs",
+            "name": "app"
+          }
+        }
+      },
+      {
+        "name": "timestamp",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "logs",
+            "name": "timestamp"
+          }
+        }
+      },
+      {
+        "name": "duration",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "logs",
+            "name": "duration"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "80081d4061461eb95adacdc0e4079aa8b5a45fa3af522de4f003de1df8b7c32a"
+}

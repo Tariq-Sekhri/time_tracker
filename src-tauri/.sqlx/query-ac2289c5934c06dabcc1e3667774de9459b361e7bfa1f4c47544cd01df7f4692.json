@@ -6,32 +6,68 @@
       {
         "name": "id!: i32",
         "ordinal": 0,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "google_oauth",
+            "name": "id"
+          }
+        }
       },
       {
         "name": "email",
         "ordinal": 1,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "google_oauth",
+            "name": "email"
+          }
+        }
       },
       {
         "name": "access_token",
         "ordinal": 2,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "google_oauth",
+            "name": "access_token"
+          }
+        }
       },
       {
         "name": "refresh_token",
         "ordinal": 3,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "google_oauth",
+            "name": "refresh_token"
+          }
+        }
       },
       {
         "name": "expires_at!: i64",
         "ordinal": 4,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "google_oauth",
+            "name": "expires_at"
+          }
+        }
       },
       {
         "name": "created_at!: i64",
         "ordinal": 5,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "google_oauth",
+            "name": "created_at"
+          }
+        }
       }
     ],
     "parameters": {
