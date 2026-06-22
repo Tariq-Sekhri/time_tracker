@@ -1,4 +1,6 @@
 use crate::db;
+use crate::db::get_pool;
+use crate::db::tables::app_metadata_kv::{get_server_ip, set_server_ip};
 use crate::db::tables::device::{get_or_create_local_device, Device};
 use crate::db::tables::log::{get_logs, Log};
 use db::Error;
@@ -11,21 +13,43 @@ struct PushLogBody {
     logs: Vec<Log>,
 }
 
+async fn require_server_ip() -> Result<String, Error> {
+    let pool = get_pool().await?;
+    get_server_ip(&pool)
+        .await?
+        .filter(|ip| !ip.trim().is_empty())
+        .ok_or_else(|| anyhow::anyhow!("Server IP not configured").into())
+}
+
+#[tauri::command]
+pub async fn get_local_device() -> Result<Device, Error> {
+    Ok(get_or_create_local_device().await?)
+}
+
+#[tauri::command]
+pub async fn get_sync_server_ip() -> Result<Option<String>, Error> {
+    let pool = get_pool().await?;
+    Ok(get_server_ip(&pool).await?)
+}
+
+#[tauri::command]
+pub async fn set_sync_server_ip(ip: String) -> Result<(), Error> {
+    let pool = get_pool().await?;
+    set_server_ip(&pool, &ip).await?;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn push_all_logs() -> Result<(), Error> {
     let logs: Vec<Log> = get_logs().await?;
-    // .take(10)
-    // .collect();
-
     let device = get_or_create_local_device().await?;
     let body = PushLogBody { device, logs };
-    // let server_ip= get_app_metadata("server_ip".to_string()).await?;
-    let ip = "100.75.95.90";
-    let url = format!("http://{}:3000/v1/upload_logs", ip);
+    let ip = require_server_ip().await?;
+    let url = format!("http://{}:3000/v1/upload_logs", ip.trim());
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .build()?;
-    let res = client
+    client
         .post(url)
         .json(&body)
         .send()
@@ -34,10 +58,11 @@ pub async fn push_all_logs() -> Result<(), Error> {
 
     Ok(())
 }
+
 #[tauri::command]
 pub async fn get_devices() -> Result<Vec<Device>, Error> {
-    let ip = "100.75.95.90";
-    let url = format!("http://{}:3000/v1/devices", ip);
+    let ip = require_server_ip().await?;
+    let url = format!("http://{}:3000/v1/devices", ip.trim());
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .build()?;
@@ -48,6 +73,5 @@ pub async fn get_devices() -> Result<Vec<Device>, Error> {
         .error_for_status()?
         .json::<Vec<Device>>()
         .await?;
-    println!("{:#?}", devices);
     Ok(devices)
 }

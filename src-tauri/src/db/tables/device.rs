@@ -1,21 +1,21 @@
 use crate::db::get_pool;
-use crate::db::tables::app_metadata_kv::{metadata_get, metadata_set};
+use crate::db::tables::app_metadata_kv::{metadata_get, metadata_set, META_LOCAL_DEVICE_UUID};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Row, SqlitePool};
-
-const META_LOCAL_DEVICE_UUID: &str = "local_device_uuid_v1";
 
 #[derive(Debug, Serialize, FromRow, Deserialize, Clone)]
 pub struct Device {
     pub uuid: String,
     pub name: String,
+    pub is_tracking: bool,
 }
 
 pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS devices (
             uuid TEXT NOT NULL UNIQUE,
-            name TEXT NOT NULL
+            name TEXT NOT NULL,
+            is_tracking INTEGER NOT NULL DEFAULT 0
         )",
     )
     .execute(pool)
@@ -38,18 +38,20 @@ async fn get_or_create_local_device_with_pool(pool: &SqlitePool) -> Result<Devic
 
         _ => {
             let uuid = uuid::Uuid::new_v4().to_string();
+            let uuid = "16f32370-79cd-4c12-b74f-74fae644b55a".to_string();
             metadata_set(pool, META_LOCAL_DEVICE_UUID, &uuid).await?;
             uuid
         }
     };
 
     sqlx::query(
-        "INSERT INTO devices (uuid, name)
-         VALUES (?1, ?2)
+        "INSERT INTO devices (uuid, name, is_tracking)
+         VALUES (?1, ?2, ?3)
          ON CONFLICT(uuid) DO UPDATE SET name = excluded.name",
     )
     .bind(&uuid)
     .bind(&name)
+    .bind(true)
     .execute(pool)
     .await?;
 
@@ -101,12 +103,10 @@ pub async fn ensure_logs_device_uuid(pool: &SqlitePool) -> Result<(), sqlx::Erro
         .await?;
     }
 
-    sqlx::query(
-        "UPDATE logs SET device_uuid = ?1 WHERE device_uuid IS NULL OR device_uuid = ''",
-    )
-    .bind(&device.uuid)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE logs SET device_uuid = ?1 WHERE device_uuid IS NULL OR device_uuid = ''")
+        .bind(&device.uuid)
+        .execute(pool)
+        .await?;
 
     Ok(())
 }

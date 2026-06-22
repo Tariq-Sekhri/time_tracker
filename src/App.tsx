@@ -31,7 +31,7 @@ export type View =
 function AppInner() {
     const queryClient = useQueryClient();
     const {showToast, updateToast, removeToast} = useToast();
-    const [currentView, setCurrentView] = useState<View>("calendar");
+    const [currentView, setCurrentView] = useState<View>("sync");
     const [updateAvailable, setUpdateAvailable] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
     const [updateError, setUpdateError] = useState<string | null>(null);

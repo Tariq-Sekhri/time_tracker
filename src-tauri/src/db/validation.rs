@@ -77,6 +77,12 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
                     not_null: true,
                     default_value: None,
                 },
+                ExpectedColumn {
+                    name: "is_tracking",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: Some("0"),
+                },
             ],
         },
         ExpectedTable {

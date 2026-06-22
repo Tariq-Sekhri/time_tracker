@@ -1,54 +1,70 @@
-import {useState} from "react"
-import {invokeOrThrow} from "../utils.ts";
-import {get_categories} from "../api/Category.ts";
-import {useQuery} from "@tanstack/react-query";
-
-export type Device = {
-    uuid: string,
-    name: String
-}
+import {useEffect, useState} from "react"
+import {useQuery, useQueryClient} from "@tanstack/react-query";
+import {
+    getDevices,
+    getLocalDevice,
+    getSyncServerIp,
+    pushAllLogs,
+    setSyncServerIp,
+} from "../api/sync.ts";
 
 export default function Sync() {
+    const queryClient = useQueryClient()
     const [serverLocked, setServerLocked] = useState(false)
-    const [serverIp, setServerIp] = useState("100.75.95.90")
+    const [serverIp, setServerIp] = useState("")
     const [errorMessage, setErrorMessage] = useState("")
 
-    const {data: Devices = []} = useQuery({
-        queryKey: ["get_devices"],
-        queryFn: invokeOrThrow<Device[]>("get_devices"),
+    const {data: savedServerIp} = useQuery({
+        queryKey: ["sync_server_ip"],
+        queryFn: getSyncServerIp,
+    })
+
+    const {data: localDevice} = useQuery({
+        queryKey: ["local_device"],
+        queryFn: getLocalDevice,
+    })
+
+    const {data: devices = []} = useQuery({
+        queryKey: ["get_devices", savedServerIp],
+        queryFn: getDevices,
+        enabled: serverLocked && !!savedServerIp,
     });
 
+    useEffect(() => {
+        if (savedServerIp) {
+            setServerIp(savedServerIp)
+            setServerLocked(true)
+        }
+    }, [savedServerIp])
 
     async function checkServer() {
-        let url = `http://${serverIp}:3000/v1/check`;
+        const url = `http://${serverIp}:3000/v1/check`;
         const res = await fetch(url);
 
         if (!res.ok) {
             console.error("Server check failed");
             return
         }
-        let text = await res.text();
+        const text = await res.text();
         if (text == "Time Tracker Backend v1") {
+            await setSyncServerIp(serverIp)
+            await queryClient.invalidateQueries({queryKey: ["sync_server_ip"]})
             setServerLocked(true)
         } else {
             setErrorMessage("server didnt respond with correct thing ")
         }
-        // console.log(text);
-
-    }
-
-
-    async function push_all_logs(): Promise<String> {
-        return invokeOrThrow<String>("push_all_logs");
     }
 
     async function push_logs() {
         try {
-            let res = await push_all_logs();
-            console.log(res)
+            await pushAllLogs();
         } catch (e) {
             console.error(e)
         }
+    }
+
+    function idk(uuid: string) {
+        console.log(uuid)
     }
 
     return (
@@ -61,9 +77,20 @@ export default function Sync() {
                     }}>Change Server
                     </button>
                     <br/>
-                    <button onClick={push_logs}>
+                    <button className={"p-1 bg-emerald-200 hover:bg-emerald-500"} onClick={push_logs}>
                         push logs
                     </button>
+                    {localDevice && (
+                        <p>This device: {localDevice.name} ({localDevice.uuid})</p>
+                    )}
+                    <h1 className={"text-3xl"}>Other Deives</h1>
+                    <ul>
+                        {devices.filter((device) => device.uuid !== localDevice?.uuid).map((device) => (
+                            <div key={device.uuid}>
+                                {device.name} {device.uuid} <input onClick={() => idk(device.uuid)} type={"checkbox"}/>
+                            </div>
+                        ))}
+                    </ul>
                 </div>)
                 : (
                     <>
