@@ -10,8 +10,8 @@ export async function getLocalDevice(): Promise<Device> {
     return invokeOrThrow<Device>("get_local_device");
 }
 
-export async function getSyncServerIp(): Promise<string | null> {
-    return invokeOrThrow<string | null>("get_sync_server_ip");
+export async function getSyncServerIp(): Promise<string> {
+    return invokeOrThrow<string>("get_sync_server_ip");
 }
 
 export async function setSyncServerIp(ip: string): Promise<void> {
@@ -24,4 +24,12 @@ export async function getDevices(): Promise<Device[]> {
 
 export async function pushAllLogs(): Promise<void> {
     await invokeOrThrow("push_all_logs");
+}
+
+export async function setIsTracking(isTracking: boolean, uuid: string): Promise<void> {
+    await invokeOrThrow("set_is_tracking", { new: isTracking, uuid });
+}
+
+export async function insertDevices(devices: Device[]): Promise<void> {
+    await invokeOrThrow("insert_devices", { devices });
 }

@@ -36,6 +36,7 @@ use db::tables::skipped_app::{
     count_matching_logs, delete_skipped_app_by_id, get_skipped_apps,
     insert_skipped_app_and_delete_logs, restore_default_skipped_apps, update_skipped_app_by_id,
 };
+use db::tables::device::{insert_devices, set_is_tracking};
 use sync::{get_devices, get_local_device, get_sync_server_ip, push_all_logs, set_sync_server_ip};
 
 use app_prefs::{
@@ -300,6 +301,8 @@ pub fn run() {
             get_local_device,
             get_sync_server_ip,
             set_sync_server_ip,
+            set_is_tracking,
+            insert_devices,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

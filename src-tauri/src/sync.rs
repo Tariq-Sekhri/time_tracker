@@ -1,7 +1,7 @@
 use crate::db;
 use crate::db::get_pool;
 use crate::db::tables::app_metadata_kv::{get_server_ip, set_server_ip};
-use crate::db::tables::device::{get_or_create_local_device, Device};
+use crate::db::tables::device::{get_or_create_local_device, insert_devices, Device};
 use crate::db::tables::log::{get_logs, Log};
 use db::Error;
 use serde::Serialize;
@@ -15,10 +15,7 @@ struct PushLogBody {
 
 async fn require_server_ip() -> Result<String, Error> {
     let pool = get_pool().await?;
-    get_server_ip(&pool)
-        .await?
-        .filter(|ip| !ip.trim().is_empty())
-        .ok_or_else(|| anyhow::anyhow!("Server IP not configured").into())
+    Ok(get_server_ip(&pool).await?)
 }
 
 #[tauri::command]
@@ -27,7 +24,7 @@ pub async fn get_local_device() -> Result<Device, Error> {
 }
 
 #[tauri::command]
-pub async fn get_sync_server_ip() -> Result<Option<String>, Error> {
+pub async fn get_sync_server_ip() -> Result<String, Error> {
     let pool = get_pool().await?;
     Ok(get_server_ip(&pool).await?)
 }
@@ -73,5 +70,6 @@ pub async fn get_devices() -> Result<Vec<Device>, Error> {
         .error_for_status()?
         .json::<Vec<Device>>()
         .await?;
+    insert_devices(devices.clone()).await?;
     Ok(devices)
 }

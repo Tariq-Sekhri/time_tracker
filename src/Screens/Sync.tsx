@@ -5,16 +5,17 @@ import {
     getLocalDevice,
     getSyncServerIp,
     pushAllLogs,
+    setIsTracking,
     setSyncServerIp,
 } from "../api/sync.ts";
 
 export default function Sync() {
     const queryClient = useQueryClient()
-    const [serverLocked, setServerLocked] = useState(false)
-    const [serverIp, setServerIp] = useState("")
-    const [errorMessage, setErrorMessage] = useState("")
+    const [editingServer, setEditingServer] = useState(false)
+    const [serverIpInput, setServerIpInput] = useState("")
+    const [trackingByUuid, setTrackingByUuid] = useState<Record<string, boolean>>({})
 
-    const {data: savedServerIp} = useQuery({
+    const {data: serverIp = "100.75.95.90"} = useQuery({
         queryKey: ["sync_server_ip"],
         queryFn: getSyncServerIp,
     })
@@ -24,35 +25,28 @@ export default function Sync() {
         queryFn: getLocalDevice,
     })
 
-    const {data: devices = []} = useQuery({
-        queryKey: ["get_devices", savedServerIp],
+    const {
+        data: devices = [],
+        isLoading: devicesLoading,
+        isError: devicesError,
+        error: devicesFetchError,
+        refetch: refetchDevices
+    } = useQuery({
+        queryKey: ["get_devices", serverIp],
         queryFn: getDevices,
-        enabled: serverLocked && !!savedServerIp,
     });
 
+    const otherDevices = devices.filter((device) => device.uuid !== localDevice?.uuid)
+
     useEffect(() => {
-        if (savedServerIp) {
-            setServerIp(savedServerIp)
-            setServerLocked(true)
-        }
-    }, [savedServerIp])
+        setTrackingByUuid(Object.fromEntries(devices.map((device) => [device.uuid, device.is_tracking])))
+    }, [devices])
 
-    async function checkServer() {
-        const url = `http://${serverIp}:3000/v1/check`;
-        const res = await fetch(url);
-
-        if (!res.ok) {
-            console.error("Server check failed");
-            return
-        }
-        const text = await res.text();
-        if (text == "Time Tracker Backend v1") {
-            await setSyncServerIp(serverIp)
-            await queryClient.invalidateQueries({queryKey: ["sync_server_ip"]})
-            setServerLocked(true)
-        } else {
-            setErrorMessage("server didnt respond with correct thing ")
-        }
+    async function saveServerIp() {
+        await setSyncServerIp(serverIpInput)
+        await queryClient.invalidateQueries({queryKey: ["sync_server_ip"]})
+        await queryClient.invalidateQueries({queryKey: ["get_devices"]})
+        setEditingServer(false)
     }
 
     async function push_logs() {
@@ -63,44 +57,78 @@ export default function Sync() {
         }
     }
 
-    function idk(uuid: string) {
-        console.log(uuid)
+    async function toggleTracking(uuid: string, isTracking: boolean) {
+        try {
+            await setIsTracking(isTracking, uuid);
+            setTrackingByUuid((prev) => ({...prev, [uuid]: isTracking}));
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     return (
         <div className={"pt-10 pl-5"}>
-            {serverLocked ?
-                (<div>
+            {editingServer ? (
+                <>
+                    <input
+                        className={"p-2 bg-red-500"}
+                        value={serverIpInput}
+                        onChange={(e) => setServerIpInput(e.target.value)}
+                    />
+                    <button className={"p-2 bg-emerald-200 hover:bg-emerald-500"} onClick={saveServerIp}>
+                        Save
+                    </button>
+                    <button
+                        className={"p-2 ml-2 bg-emerald-200 hover:bg-emerald-500"}
+                        onClick={() => setEditingServer(false)}
+                    >
+                        Cancel
+                    </button>
+                </>
+            ) : (
+                <>
                     {serverIp}
-                    <button className={"p-2 ml-5 bg-emerald-200 hover:bg-emerald-500 "} onClick={() => {
-                        setServerLocked(false)
-                    }}>Change Server
+                    <button
+                        className={"p-2 ml-5 bg-emerald-200 hover:bg-emerald-500"}
+                        onClick={() => {
+                            setServerIpInput(serverIp)
+                            setEditingServer(true)
+                        }}
+                    >
+                        Change Server
                     </button>
-                    <br/>
-                    <button className={"p-1 bg-emerald-200 hover:bg-emerald-500"} onClick={push_logs}>
-                        push logs
-                    </button>
-                    {localDevice && (
-                        <p>This device: {localDevice.name} ({localDevice.uuid})</p>
-                    )}
-                    <h1 className={"text-3xl"}>Other Deives</h1>
-                    <ul>
-                        {devices.filter((device) => device.uuid !== localDevice?.uuid).map((device) => (
-                            <div key={device.uuid}>
-                                {device.name} {device.uuid} <input onClick={() => idk(device.uuid)} type={"checkbox"}/>
-                            </div>
-                        ))}
-                    </ul>
-                </div>)
-                : (
-                    <>
-                        <input className={"p-2 bg-red-500"} value={serverIp}
-                               onChange={(e) => setServerIp(e.target.value)}></input>
-                        <button className={" p-2 bg-emerald-200 hover:bg-emerald-500"} onClick={checkServer}>Check
-                        </button>
-                        <p>{errorMessage}</p>
-                    </>
-                )
-            }
+                </>
+            )}
+            <br/>
+            <button className={"p-1 bg-emerald-200 hover:bg-emerald-500"} onClick={push_logs}>
+                push logs
+            </button>
+            {localDevice && (
+                <p>This device: {localDevice.name} ({localDevice.uuid})</p>
+            )}
+            <h1 className={"text-3xl"}>Other Deives</h1>
+            {devicesLoading && <p>Loading devices...</p>}
+            {devicesError && (
+                <p className={"text-red-600"}>
+                    Failed to load devices: {String(devicesFetchError)}
+                    <button className={"ml-2 underline"} onClick={() => refetchDevices()}>Retry</button>
+                </p>
+            )}
+            {!devicesLoading && !devicesError && otherDevices.length === 0 && (
+                <p>No other devices on the server yet.</p>
+            )}
+            <ul>
+                {otherDevices.map((device) => (
+                    <div key={device.uuid}>
+                        Name: {device.name} ({device.uuid}){" "}
+                        <input
+                            className={"size-4"}
+                            type={"checkbox"}
+                            checked={trackingByUuid[device.uuid] ?? device.is_tracking}
+                            onChange={(e) => toggleTracking(device.uuid, e.target.checked)}
+                        />
+                    </div>
+                ))}
+            </ul>
         </div>)
 }

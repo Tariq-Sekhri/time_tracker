@@ -1,5 +1,5 @@
-use crate::db::get_pool;
 use crate::db::tables::app_metadata_kv::{metadata_get, metadata_set, META_LOCAL_DEVICE_UUID};
+use crate::db::{get_pool, Error};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Row, SqlitePool};
 
@@ -7,6 +7,7 @@ use sqlx::{FromRow, Row, SqlitePool};
 pub struct Device {
     pub uuid: String,
     pub name: String,
+    #[serde(default)]
     pub is_tracking: bool,
 }
 
@@ -108,5 +109,34 @@ pub async fn ensure_logs_device_uuid(pool: &SqlitePool) -> Result<(), sqlx::Erro
         .execute(pool)
         .await?;
 
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn set_is_tracking(new: bool, uuid: String) -> Result<(), Error> {
+    let pool = get_pool().await?;
+    sqlx::query("UPDATE devices SET is_tracking = ?1 WHERE uuid = ?2")
+        .bind(new)
+        .bind(uuid)
+        .execute(&pool)
+        .await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn insert_devices(devices: Vec<Device>) -> Result<(), Error> {
+    let pool = get_pool().await?;
+    let mut tx = pool.begin().await?;
+    for device in &devices {
+        sqlx::query(
+            "INSERT OR IGNORE INTO devices (uuid, name, is_tracking) VALUES (?1, ?2, ?3)",
+        )
+        .bind(&device.uuid)
+        .bind(&device.name)
+        .bind(device.is_tracking)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
     Ok(())
 }

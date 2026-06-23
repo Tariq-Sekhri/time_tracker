@@ -5,6 +5,7 @@ pub const META_GOOGLE_CLIENT_SECRET: &str = "google_oauth_client_secret";
 pub const META_CALENDAR_VIEW_PREFS: &str = "calendar_view_prefs_v1";
 pub const META_LOCAL_DEVICE_UUID: &str = "local_device_uuid_v1";
 pub const META_SERVER_IP: &str = "server_ip";
+pub const DEFAULT_SERVER_IP: &str = "100.75.95.90";
 
 pub async fn metadata_get(pool: &SqlitePool, key: &str) -> Result<Option<String>, sqlx::Error> {
     sqlx::query_scalar::<_, String>("SELECT value FROM app_metadata WHERE key = ?1")
@@ -22,8 +23,18 @@ pub async fn metadata_set(pool: &SqlitePool, key: &str, value: &str) -> Result<(
     Ok(())
 }
 
-pub async fn get_server_ip(pool: &SqlitePool) -> Result<Option<String>, sqlx::Error> {
-    metadata_get(pool, META_SERVER_IP).await
+pub async fn ensure_default_server_ip(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    if metadata_get(pool, META_SERVER_IP).await?.is_none() {
+        metadata_set(pool, META_SERVER_IP, DEFAULT_SERVER_IP).await?;
+    }
+    Ok(())
+}
+
+pub async fn get_server_ip(pool: &SqlitePool) -> Result<String, sqlx::Error> {
+    ensure_default_server_ip(pool).await?;
+    Ok(metadata_get(pool, META_SERVER_IP)
+        .await?
+        .unwrap_or_else(|| DEFAULT_SERVER_IP.to_string()))
 }
 
 pub async fn set_server_ip(pool: &SqlitePool, ip: &str) -> Result<(), sqlx::Error> {
