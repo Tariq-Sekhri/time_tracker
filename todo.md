@@ -1,11 +1,5 @@
 - High
     - cross device sync
-        push all logs
-        push new logs
-        add veiw for sync
-        set server lock server change server
-        if we deelte a log it should store a list of deleted logs so server can delte them too (only if they are      uploading otherwise no)
-
     - manual time tracking
 - low
     - trend explain
@@ -19,3 +13,30 @@
     - afk detection
     - macos
 
+struct and tables
+
+```Rust
+enum DeviceState {
+    Us(token),
+    IsTracking(bool)
+}
+
+struct Devices {
+    uuid: String,
+    name: String,
+    state: DeviceState,
+    last_sync_id: i64,
+}
+
+struct Log {
+    id: i64,
+    //default none
+    device_uuid: Option<String>,
+    app: String,
+    timestamp: i64,
+    duration: i64
+}
+
+```
+
+appmetadata key = deleted_log_ids = vec<i64>

@@ -3,12 +3,81 @@ use crate::db::{get_pool, Error};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Row, SqlitePool};
 
-#[derive(Debug, Serialize, FromRow, Deserialize, Clone)]
+const KIND_LOCAL: &str = "local";
+const KIND_REMOTE: &str = "remote";
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum DeviceState {
+    Local { token: String },
+    Remote { is_tracking: bool },
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Device {
     pub uuid: String,
     pub name: String,
-    #[serde(default)]
-    pub is_tracking: bool,
+    state: DeviceState,
+    last_sync_id: i64,
+}
+
+#[derive(Debug, FromRow)]
+struct RowDevice {
+    uuid: String,
+    name: String,
+    kind: String,
+    token: Option<String>,
+    is_tracking: bool,
+    last_sync_id: i64,
+}
+
+impl TryFrom<RowDevice> for Device {
+    type Error = sqlx::Error;
+
+    fn try_from(row: RowDevice) -> Result<Self, Self::Error> {
+        let state = match row.kind.as_str() {
+            KIND_LOCAL => DeviceState::Local {
+                token: row.token.unwrap_or_default(),
+            },
+            KIND_REMOTE => DeviceState::Remote {
+                is_tracking: row.is_tracking,
+            },
+            kind => {
+                return Err(sqlx::Error::Decode(
+                    format!("unknown device kind: {kind}").into(),
+                ));
+            }
+        };
+
+        Ok(Device {
+            uuid: row.uuid,
+            name: row.name,
+            state,
+            last_sync_id: row.last_sync_id,
+        })
+    }
+}
+
+impl From<&Device> for RowDevice {
+    fn from(device: &Device) -> Self {
+        match &device.state {
+            DeviceState::Local { token } => RowDevice {
+                uuid: device.uuid.clone(),
+                name: device.name.clone(),
+                kind: KIND_LOCAL.to_string(),
+                token: Some(token.clone()),
+                is_tracking: false,
+                last_sync_id: device.last_sync_id,
+            },
+            DeviceState::Remote { is_tracking } => RowDevice {
+                uuid: device.uuid.clone(),
+                name: device.name.clone(),
+                kind: KIND_REMOTE.to_string(),
+                token: None,
+                is_tracking: *is_tracking,
+                last_sync_id: device.last_sync_id,
+            },
+        }
+    }
 }
 
 pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
@@ -16,7 +85,10 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         "CREATE TABLE IF NOT EXISTS devices (
             uuid TEXT NOT NULL UNIQUE,
             name TEXT NOT NULL,
-            is_tracking INTEGER NOT NULL DEFAULT 0
+            kind TEXT NOT NULL,
+            token TEXT,
+            is_tracking INTEGER NOT NULL DEFAULT 0,
+            last_sync_id INTEGER NOT NULL DEFAULT 0
         )",
     )
     .execute(pool)
@@ -46,22 +118,25 @@ async fn get_or_create_local_device_with_pool(pool: &SqlitePool) -> Result<Devic
     };
 
     sqlx::query(
-        "INSERT INTO devices (uuid, name, is_tracking)
-         VALUES (?1, ?2, ?3)
+        "INSERT INTO devices (uuid, name, kind, token, is_tracking, last_sync_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
          ON CONFLICT(uuid) DO UPDATE SET name = excluded.name",
     )
     .bind(&uuid)
     .bind(&name)
-    .bind(true)
+    .bind(KIND_LOCAL)
+    .bind("")
+    .bind(false)
+    .bind(0i64)
     .execute(pool)
     .await?;
 
-    let device: Device = sqlx::query_as("SELECT * FROM devices WHERE uuid = ?1")
+    let row: RowDevice = sqlx::query_as("SELECT * FROM devices WHERE uuid = ?1")
         .bind(&uuid)
         .fetch_one(pool)
         .await?;
 
-    Ok(device)
+    Ok(row.try_into()?)
 }
 
 fn local_device_name() -> String {
@@ -128,12 +203,17 @@ pub async fn insert_devices(devices: Vec<Device>) -> Result<(), Error> {
     let pool = get_pool().await?;
     let mut tx = pool.begin().await?;
     for device in &devices {
+        let row = RowDevice::from(device);
         sqlx::query(
-            "INSERT OR IGNORE INTO devices (uuid, name, is_tracking) VALUES (?1, ?2, ?3)",
+            "INSERT OR IGNORE INTO devices (uuid, name, kind, token, is_tracking, last_sync_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         )
-        .bind(&device.uuid)
-        .bind(&device.name)
-        .bind(device.is_tracking)
+        .bind(&row.uuid)
+        .bind(&row.name)
+        .bind(&row.kind)
+        .bind(&row.token)
+        .bind(row.is_tracking)
+        .bind(row.last_sync_id)
         .execute(&mut *tx)
         .await?;
     }
