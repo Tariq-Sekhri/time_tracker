@@ -214,7 +214,7 @@ where
     let row = RowDevice::from(device);
     sqlx::query!(
         "INSERT OR IGNORE INTO devices (uuid, name, kind, token, is_tracking, last_sync_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         row.uuid,
         row.name,
         row.kind,
@@ -237,23 +237,11 @@ pub async fn register_local_device(device: Device) -> Result<()> {
 }
 
 #[tauri::command]
-pub async fn insert_devices(devices: Vec<Device>) -> Result<()> {
+pub async fn insert_devices(devices: Vec<Device>) -> Result<(), Error> {
     let pool = get_pool().await?;
     let mut tx = pool.begin().await?;
     for device in &devices {
-        let row = RowDevice::from(device);
-        sqlx::query!(
-            "INSERT OR IGNORE INTO devices (uuid, name, kind, token, is_tracking, last_sync_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            row.uuid,
-            row.name,
-            row.kind,
-            row.token,
-            row.is_tracking,
-            row.last_sync_id
-        )
-        .execute(&mut *tx)
-        .await?;
+        insert_device(&mut *tx, device).await?;
     }
     tx.commit().await?;
     Ok(())

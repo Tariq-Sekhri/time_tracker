@@ -2,7 +2,9 @@ use crate::app_prefs::{get_app_metadata, set_app_metadata};
 use crate::db;
 use crate::db::get_pool;
 use crate::db::tables::app_metadata_kv::get_server_ip;
-use crate::db::tables::device::{get_or_create_local_device, register_local_device, Device, DeviceState};
+use crate::db::tables::device::{
+    get_or_create_local_device, register_local_device, Device, DeviceState,
+};
 use crate::db::tables::log::{get_logs, Log};
 use anyhow::{anyhow, Result};
 use db::Error;
@@ -69,9 +71,7 @@ pub async fn register() -> Result<()> {
 }
 #[tauri::command]
 pub async fn upload_all_logs() -> bool {
-    //post
-    //get local device
-    // get all logs
+    //get local device id -1
     // post
     //lat sync id update
     todo!()
