@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE devices SET is_tracking = ?1 WHERE uuid = ?2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "b72ba9e68ed420e73021f6762b4ff2da50d65936210fce3a4d461c36e530b6fe"
+}

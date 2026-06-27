@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO devices (uuid, name, kind, token, is_tracking, last_sync_id)\n         VALUES (?1, ?2, ?3, ?4, ?5, ?6)\n         ON CONFLICT(uuid) DO UPDATE SET name = excluded.name",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "566dddb2aed00fba36ef4c26d69338a1922be32f57f91f708db5977be3d2182b"
+}

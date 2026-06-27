@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO devices (uuid, name, kind, token, is_tracking, last_sync_id)\n             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "4c98fd35879ef1df36e3a172f77963f44d002793a05074e5d5aca50a2bc172ab"
+}

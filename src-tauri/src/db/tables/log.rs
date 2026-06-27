@@ -1,5 +1,6 @@
 use crate::db;
-use crate::db::Error;
+use crate::db::{get_pool, Error};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
 use std::collections::HashMap;
@@ -345,4 +346,13 @@ pub async fn get_logs_for_app_in_time_range(
         .collect();
 
     Ok(logs)
+}
+
+pub async fn set_local_uuid(uuid: String) -> Result<()> {
+    let pool = get_pool().await?;
+    sqlx::query("update logs  set uuid = ? where device_id IS NULL ")
+        .bind(uuid)
+        .execute(&pool)
+        .await?;
+    Ok(())
 }

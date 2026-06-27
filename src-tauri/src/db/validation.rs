@@ -78,7 +78,25 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
                     default_value: None,
                 },
                 ExpectedColumn {
+                    name: "kind",
+                    sql_type: "TEXT",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "token",
+                    sql_type: "TEXT",
+                    not_null: false,
+                    default_value: None,
+                },
+                ExpectedColumn {
                     name: "is_tracking",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: Some("0"),
+                },
+                ExpectedColumn {
+                    name: "last_sync_id",
                     sql_type: "INTEGER",
                     not_null: true,
                     default_value: Some("0"),
@@ -490,7 +508,6 @@ async fn add_column_safe(
 async fn ensure_default_data(pool: &SqlitePool) -> Result<(), Error> {
     crate::db::tables::cat_regex::ensure_default_regexes(pool).await?;
     crate::db::tables::settings::seed_defaults(pool).await?;
-    crate::db::tables::app_metadata_kv::ensure_default_server_ip(pool).await?;
     crate::db::tables::device::ensure_logs_device_uuid(pool).await?;
     Ok(())
 }

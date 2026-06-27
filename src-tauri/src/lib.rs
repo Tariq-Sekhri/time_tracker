@@ -22,6 +22,7 @@ use db::tables::category::{
     delete_category_by_id, get_categories, get_category_by_id, insert_category,
     update_category_by_id,
 };
+use db::tables::device::{insert_devices, set_is_tracking};
 use db::tables::google_calendar::{
     delete_google_calendar, get_google_calendar_by_id, get_google_calendars,
     insert_google_calendar, update_google_calendar,
@@ -36,8 +37,6 @@ use db::tables::skipped_app::{
     count_matching_logs, delete_skipped_app_by_id, get_skipped_apps,
     insert_skipped_app_and_delete_logs, restore_default_skipped_apps, update_skipped_app_by_id,
 };
-use db::tables::device::{insert_devices, set_is_tracking};
-use sync::{get_devices, get_local_device, get_sync_server_ip, push_all_logs, set_sync_server_ip};
 
 use app_prefs::{
     delete_app_metadata, get_app_metadata, get_calendar_view_prefs, set_app_metadata,
@@ -296,11 +295,6 @@ pub fn run() {
             apply_update_cmd,
             check_update_cmd,
             get_app_version,
-            push_all_logs,
-            get_devices,
-            get_local_device,
-            get_sync_server_ip,
-            set_sync_server_ip,
             set_is_tracking,
             insert_devices,
         ])
