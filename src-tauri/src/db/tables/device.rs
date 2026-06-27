@@ -1,8 +1,9 @@
 use crate::db::tables::app_metadata_kv::{metadata_get, metadata_set, META_LOCAL_DEVICE_UUID};
+use crate::db::tables::log::set_local_device_uuid_with_tx;
 use crate::db::{get_pool, Error};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use sqlx::{Row, SqlitePool};
+use sqlx::{Executor, Row, Sqlite, SqlitePool};
 
 const KIND_LOCAL: &str = "local";
 const KIND_REMOTE: &str = "remote";
@@ -194,7 +195,7 @@ pub async fn ensure_logs_device_uuid(pool: &SqlitePool) -> Result<()> {
 }
 
 #[tauri::command]
-pub async fn set_is_tracking(new: bool, uuid: String) -> Result<()> {
+pub async fn set_is_tracking(new: bool, uuid: String) -> Result<(), Error> {
     let pool = get_pool().await?;
     sqlx::query!(
         "UPDATE devices SET is_tracking = ?1 WHERE uuid = ?2",
@@ -203,6 +204,35 @@ pub async fn set_is_tracking(new: bool, uuid: String) -> Result<()> {
     )
     .execute(&pool)
     .await?;
+    Ok(())
+}
+
+pub(crate) async fn insert_device<'e, E>(executor: E, device: &Device) -> Result<(), sqlx::Error>
+where
+    E: Executor<'e, Database = Sqlite>,
+{
+    let row = RowDevice::from(device);
+    sqlx::query!(
+        "INSERT OR IGNORE INTO devices (uuid, name, kind, token, is_tracking, last_sync_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        row.uuid,
+        row.name,
+        row.kind,
+        row.token,
+        row.is_tracking,
+        row.last_sync_id
+    )
+    .execute(executor)
+    .await?;
+    Ok(())
+}
+
+pub async fn register_local_device(device: Device) -> Result<()> {
+    let pool = get_pool().await?;
+    let mut tx = pool.begin().await?;
+    insert_device(&mut *tx, &device).await?;
+    set_local_device_uuid_with_tx(&mut tx, &device.uuid).await?;
+    tx.commit().await?;
     Ok(())
 }
 

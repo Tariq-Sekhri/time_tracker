@@ -2,8 +2,8 @@ use crate::app_prefs::{get_app_metadata, set_app_metadata};
 use crate::db;
 use crate::db::get_pool;
 use crate::db::tables::app_metadata_kv::get_server_ip;
-use crate::db::tables::device::{get_or_create_local_device, insert_devices, Device, DeviceState};
-use crate::db::tables::log::{get_logs, set_local_uuid, Log};
+use crate::db::tables::device::{get_or_create_local_device, register_local_device, Device, DeviceState};
+use crate::db::tables::log::{get_logs, Log};
 use anyhow::{anyhow, Result};
 use db::Error;
 use serde::{Deserialize, Serialize};
@@ -58,15 +58,13 @@ pub async fn register() -> Result<()> {
         .error_for_status()?
         .json::<RegisterResponse>()
         .await?;
-    let uuid = res.uuid.clone();
     let device = Device {
         name,
         uuid: res.uuid,
         state: DeviceState::Local { token: res.token },
         last_sync_id: 0,
     };
-    insert_devices(vec![device]).await?;
-    set_local_uuid(uuid).await?;
+    register_local_device(device).await?;
     Ok(())
 }
 #[tauri::command]

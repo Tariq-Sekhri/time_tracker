@@ -2,7 +2,7 @@ use crate::db;
 use crate::db::{get_pool, Error};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, SqlitePool};
+use sqlx::{FromRow, Sqlite, SqlitePool, Transaction};
 use std::collections::HashMap;
 
 #[derive(Debug, Serialize, FromRow, Clone, Deserialize)]
@@ -348,11 +348,15 @@ pub async fn get_logs_for_app_in_time_range(
     Ok(logs)
 }
 
-pub async fn set_local_uuid(uuid: String) -> Result<()> {
-    let pool = get_pool().await?;
-    sqlx::query("update logs  set uuid = ? where device_id IS NULL ")
-        .bind(uuid)
-        .execute(&pool)
-        .await?;
+pub(crate) async fn set_local_device_uuid_with_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    uuid: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "UPDATE logs SET device_uuid = ?1 WHERE device_uuid IS NULL OR device_uuid = ''",
+        uuid
+    )
+    .execute(&mut **tx)
+    .await?;
     Ok(())
 }
