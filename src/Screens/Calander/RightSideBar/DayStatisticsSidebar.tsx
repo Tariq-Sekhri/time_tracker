@@ -23,6 +23,8 @@ interface DayStatisticsSidebarProps {
     onCategoryClick?: (category: string) => void;
     includeGoogleInStats: boolean;
     googleCalendars: GoogleCalendar[];
+    statsCategoryNames: Set<string>;
+    statsDeviceUuids: string[] | null;
     trailingToolbar?: ReactNode;
 }
 
@@ -40,6 +42,8 @@ export default function DayStatisticsSidebar({
     onCategoryClick,
     includeGoogleInStats,
     googleCalendars,
+    statsCategoryNames,
+    statsDeviceUuids,
     trailingToolbar,
 }: DayStatisticsSidebarProps) {
     const statsCalendarIds = useMemo(
@@ -62,11 +66,11 @@ export default function DayStatisticsSidebar({
         error,
         isError,
     } = useQuery({
-        queryKey: ["day_statistics", dayStart, dayEnd],
+        queryKey: ["day_statistics", dayStart, dayEnd, statsDeviceUuids],
         queryFn: async () => {
             if (!dayStart || !dayEnd) return null;
             try {
-                const stats = await get_day_statistics(dayStart, dayEnd);
+                const stats = await get_day_statistics(dayStart, dayEnd, statsDeviceUuids);
                 return stats;
             } catch (e) {
                 console.error("[DayStats] queryFn threw:", e);
@@ -132,7 +136,9 @@ export default function DayStatisticsSidebar({
     const topCategories = useMemo(() => {
         if (!dayStats) return [] as CombinedCategory[];
 
-        const trackingCategories: CombinedCategory[] = dayStats.categories.map((c) => ({
+        const trackingCategories: CombinedCategory[] = dayStats.categories
+            .filter((c) => statsCategoryNames.has(c.category))
+            .map((c) => ({
             category: c.category,
             total_duration: c.total_duration,
             color: c.color,
@@ -146,7 +152,7 @@ export default function DayStatisticsSidebar({
         const combined = [...trackingCategories, ...googleCategories];
         combined.sort((a, b) => b.total_duration - a.total_duration);
         return combined.slice(0, categorySidebarCount);
-    }, [dayStats, includeGoogleInStats, googleCategories, categorySidebarCount]);
+    }, [dayStats, includeGoogleInStats, googleCategories, categorySidebarCount, statsCategoryNames]);
 
     const maxCategoryDuration = topCategories.length > 0 ? topCategories[0].total_duration : 1;
 
@@ -173,9 +179,12 @@ export default function DayStatisticsSidebar({
 
     const totalTime = useMemo(() => {
         if (!dayStats) return 0;
-        if (!includeGoogleInStats) return dayStats.total_time;
-        return dayStats.total_time + googleTotalDuration;
-    }, [dayStats, includeGoogleInStats, googleTotalDuration]);
+        const trackingTotal = dayStats.categories
+            .filter((c) => statsCategoryNames.has(c.category))
+            .reduce((sum, c) => sum + c.total_duration, 0);
+        if (!includeGoogleInStats) return trackingTotal;
+        return trackingTotal + googleTotalDuration;
+    }, [dayStats, includeGoogleInStats, googleTotalDuration, statsCategoryNames]);
 
     const filteredDayTopApps = useMemo(() => {
         if (!dayStats?.top_apps) {

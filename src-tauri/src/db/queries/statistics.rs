@@ -180,9 +180,14 @@ fn get_hour(timestamp: i64) -> i32 {
 }
 
 #[tauri::command]
-pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekStatistics, Error> {
+pub async fn get_week_statistics(
+    week_start: i64,
+    week_end: i64,
+    device_uuids: Option<Vec<String>>,
+) -> Result<WeekStatistics, Error> {
     use chrono::{Local, TimeZone};
 
+    let local_uuid = crate::db::tables::device::get_local_device_uuid().await?;
     let mut logs = get_logs().await?;
     let skipped_apps = get_skipped_apps().await?;
 
@@ -195,6 +200,8 @@ pub async fn get_week_statistics(week_start: i64, week_end: i64) -> Result<WeekS
         |app_name: &str| -> bool { skipped_regexes.iter().any(|regex| regex.is_match(app_name)) };
 
     logs.retain(|log| !is_skipped(&log.app));
+
+    logs = crate::db::tables::device::filter_logs_by_devices(logs, device_uuids, local_uuid);
 
     let cat_regex = get_cat_regex().await?;
     let categories = get_categories().await?;
@@ -572,7 +579,12 @@ pub async fn get_total_statistics() -> Result<WeekStatistics, Error> {
 }
 
 #[tauri::command]
-pub async fn get_day_statistics(day_start: i64, day_end: i64) -> Result<DayStatistics, Error> {
+pub async fn get_day_statistics(
+    day_start: i64,
+    day_end: i64,
+    device_uuids: Option<Vec<String>>,
+) -> Result<DayStatistics, Error> {
+    let local_uuid = crate::db::tables::device::get_local_device_uuid().await?;
     let mut logs = get_logs().await?;
     let skipped_apps = get_skipped_apps().await?;
 
@@ -585,6 +597,8 @@ pub async fn get_day_statistics(day_start: i64, day_end: i64) -> Result<DayStati
         |app_name: &str| -> bool { skipped_regexes.iter().any(|regex| regex.is_match(app_name)) };
 
     logs.retain(|log| !is_skipped(&log.app));
+
+    logs = crate::db::tables::device::filter_logs_by_devices(logs, device_uuids, local_uuid);
 
     let cat_regex = get_cat_regex().await?;
     let categories = get_categories().await?;

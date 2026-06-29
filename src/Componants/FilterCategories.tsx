@@ -14,7 +14,7 @@ import {createPortal} from "react-dom";
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 import {Category, get_categories, update_category_by_id} from "../api/Category.ts";
 
-export type CategoryEnabledField = "regex_enabled" | "calendar_enabled";
+export type CategoryEnabledField = "regex_enabled";
 
 const VIEWPORT_PAD = 12;
 const PANEL_MAX_WIDTH = 700;

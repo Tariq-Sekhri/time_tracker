@@ -30,23 +30,27 @@ function transformTimeBlock(block: TimeBlockBackend): TimeBlock {
 }
 
 export async function get_week(
-    date: Date
+    date: Date,
+    deviceUuids?: string[] | null,
 ): Promise<TimeBlock[]> {
     const weekAnchor = Math.floor(date.getTime() / 1000);
     const result = await invokeOrThrow<TimeBlockBackend[]>("get_week", {
         weekAnchor,
+        deviceUuids: deviceUuids ?? null,
     });
     return result.map(transformTimeBlock);
 }
 
 export async function get_week_for_app_filter(
     date: Date,
-    appName: string
+    appName: string,
+    deviceUuids?: string[] | null,
 ): Promise<TimeBlock[]> {
     const weekAnchor = Math.floor(date.getTime() / 1000);
     const result = await invokeOrThrow<TimeBlockBackend[]>("get_week_for_app_filter", {
         weekAnchor,
         appName,
+        deviceUuids: deviceUuids ?? null,
     });
     return result.map(transformTimeBlock);
 }

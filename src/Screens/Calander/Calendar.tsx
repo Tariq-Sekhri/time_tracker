@@ -1,5 +1,5 @@
 import {useQuery, useQueryClient} from "@tanstack/react-query";
-import {get_categories} from "../../api/Category.ts";
+import {get_categories, Category, update_category_by_id} from "../../api/Category.ts";
 import {get_logs_for_time_block, get_logs_by_category, get_log_by_id} from "../../api/Log.ts";
 import {get_week, get_week_for_app_filter} from "../../api/week.ts";
 import {adjustInstantToCalendarDayBoundary, getCalendarDayRangeUnix, getWeekRange} from "../../utils.ts";
@@ -18,7 +18,7 @@ import {getCurrentWindow} from "@tauri-apps/api/window";
 import {useCalendarAppFilterActive} from "../../stores/calendarAppFilterStore.ts";
 import {toErrorString} from "../../types/common.ts";
 import {useAppCategorizeMenu} from "../../hooks/useAppCategorizeMenu.tsx";
-import {useFilterCategories} from "../../Componants/FilterCategories.tsx";
+import {getDevices, getCalendarDevices, buildDeviceUuidsForFilter, updateDevice, getServerIp, type Device} from "../../api/sync.ts";
 import {useBackendSettings} from "../../hooks/useBackendSettings.ts";
 import {getAppMetadata, setAppMetadata} from "../../api/appMetadata.ts";
 
@@ -55,12 +55,44 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         queryFn: get_categories,
     });
 
-    const {
-        visibleCategoryNames,
-        toggleVisibleCategory,
-        checkAllCategories,
-        uncheckAllCategories,
-    } = useFilterCategories(categories, "calendar_enabled");
+    const visibleCategoryNames = useMemo(() => {
+        const names = new Set<string>();
+        for (const cat of categories) {
+            if (cat.is_visible) names.add(cat.name);
+        }
+        return names;
+    }, [categories]);
+
+    const statsCategoryNames = useMemo(() => {
+        const names = new Set<string>();
+        for (const cat of categories) {
+            if (cat.in_stats) names.add(cat.name);
+        }
+        return names;
+    }, [categories]);
+
+    const {data: serverIp} = useQuery({
+        queryKey: ["sync", "serverIp"],
+        queryFn: getServerIp,
+    });
+
+    const {data: devices = []} = useQuery({
+        queryKey: ["sync", "devices"],
+        queryFn: getDevices,
+        enabled: !!serverIp,
+    });
+
+    const calendarDevices = useMemo(() => getCalendarDevices(devices), [devices]);
+
+    const calDeviceUuids = useMemo(
+        () => buildDeviceUuidsForFilter(calendarDevices, (d) => d.in_cal),
+        [calendarDevices],
+    );
+
+    const statsDeviceUuids = useMemo(
+        () => buildDeviceUuidsForFilter(calendarDevices, (d) => d.in_cal && d.in_stats),
+        [calendarDevices],
+    );
 
     useEffect(() => {
         getAppMetadata(INCLUDE_GOOGLE_IN_STATS_KEY)
@@ -107,20 +139,25 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
 
     const {data: googleCalendars, isError: isGoogleCalendarsError, error: googleCalendarsError} = useQuery({
         queryKey: ["googleCalendars"],
-        queryFn: () => get_google_calendars(),
+        queryFn: async () => {
+            const cals = await get_google_calendars();
+            setCachedCalendars(cals);
+            return cals;
+        },
+        placeholderData: () => getCachedCalendars() ?? undefined,
     });
 
     if (googleCalendarsError) {
         console.error("[GCal Calendar] calendar fetch error:", googleCalendarsError);
     }
 
-    const displayCalendars = googleCalendars ?? (isGoogleCalendarsError ? (getCachedCalendars() ?? []) : []);
+    const displayCalendars = googleCalendars ?? getCachedCalendars() ?? [];
 
     useEffect(() => {
-        if (googleCalendars && googleCalendars.length >= 0) {
+        if (googleCalendars) {
             setCachedCalendars(googleCalendars);
         }
-    }, [displayCalendars]);
+    }, [googleCalendars]);
 
     const googleCalendarMap = useMemo(() => {
         const map = new Map<number, GoogleCalendar>();
@@ -182,10 +219,11 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
             timeBlockSettings.maxAttachDistance,
             timeBlockSettings.lookaheadWindow,
             timeBlockSettings.minDuration,
+            calDeviceUuids,
         ],
         queryFn: async () => {
             try {
-                const rows = await get_week(weekStart);
+                const rows = await get_week(weekStart, calDeviceUuids);
                 return rows;
             } catch (e) {
                 console.error("[Week Calendar.tsx] queryFn threw:", e);
@@ -414,60 +452,157 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     };
 
 
-    const toggleCategory = (categoryName: string) => {
-        const cat = categories.find((c) => c.name === categoryName);
-        if (cat) {
-            toggleVisibleCategory(cat.id);
-        }
-    };
-
-    const patchGoogleCalendar = useCallback(
-        (calendarId: number, patch: Partial<Pick<GoogleCalendar, "is_visible" | "in_stats">>) => {
-            queryClient.setQueryData<GoogleCalendar[]>(["googleCalendars"], (old) =>
-                old?.map((c) => (c.id === calendarId ? {...c, ...patch} : c))
+    const toggleCategory = useCallback(
+        async (categoryId: number, field: "is_visible" | "in_stats") => {
+            const cat = queryClient.getQueryData<Category[]>(["categories"])?.find((c) => c.id === categoryId);
+            if (!cat) return;
+            const updated = {...cat, [field]: !cat[field]};
+            queryClient.setQueryData<Category[]>(["categories"], (old) =>
+                old?.map((c) => (c.id === categoryId ? updated : c))
             );
-            const updated = queryClient.getQueryData<GoogleCalendar[]>(["googleCalendars"]);
-            if (updated) {
-                setCachedCalendars(updated);
+            try {
+                await update_category_by_id(updated);
+            } catch (e) {
+                console.error("[Calendar] Failed to update category:", e);
+                await queryClient.invalidateQueries({queryKey: ["categories"]});
             }
         },
         [queryClient]
     );
 
+    const toggleCategoryVisible = useCallback(
+        (categoryId: number) => toggleCategory(categoryId, "is_visible"),
+        [toggleCategory]
+    );
+
+    const toggleCategoryInStats = useCallback(
+        (categoryId: number) => toggleCategory(categoryId, "in_stats"),
+        [toggleCategory]
+    );
+
+    const allCategoriesInCal = useMemo(
+        () => categories.length > 0 && categories.every((c) => c.is_visible),
+        [categories],
+    );
+
+    const allCategoriesInStats = useMemo(
+        () => categories.length > 0 && categories.every((c) => c.in_stats),
+        [categories],
+    );
+
+    const toggleAllCategoriesVisible = useCallback(async () => {
+        const next = !categories.every((c) => c.is_visible);
+        const updated = categories.map((c) => ({...c, is_visible: next}));
+        queryClient.setQueryData<Category[]>(["categories"], updated);
+        try {
+            await Promise.all(updated.map((c) => update_category_by_id(c)));
+        } catch (e) {
+            console.error("[Calendar] Failed to update all category visibility:", e);
+            await queryClient.invalidateQueries({queryKey: ["categories"]});
+        }
+    }, [categories, queryClient]);
+
+    const toggleAllCategoriesInStats = useCallback(async () => {
+        const next = !categories.every((c) => c.in_stats);
+        const updated = categories.map((c) => ({...c, in_stats: next}));
+        queryClient.setQueryData<Category[]>(["categories"], updated);
+        try {
+            await Promise.all(updated.map((c) => update_category_by_id(c)));
+        } catch (e) {
+            console.error("[Calendar] Failed to update all category stats:", e);
+            await queryClient.invalidateQueries({queryKey: ["categories"]});
+        }
+    }, [categories, queryClient]);
+
+    const patchDevice = useCallback(
+        (uuid: string, patch: Partial<Pick<Device, "in_cal" | "in_stats">>) => {
+            queryClient.setQueryData<Device[]>(["sync", "devices"], (old) =>
+                old?.map((d) => (d.uuid === uuid ? {...d, ...patch} : d))
+            );
+        },
+        [queryClient]
+    );
+
+    const toggleDeviceInCal = useCallback(
+        async (uuid: string) => {
+            const device = queryClient.getQueryData<Device[]>(["sync", "devices"])?.find((d) => d.uuid === uuid);
+            if (!device) return;
+            const in_cal = !device.in_cal;
+            patchDevice(uuid, {in_cal});
+            try {
+                await updateDevice({uuid, in_cal});
+            } catch (e) {
+                console.error("[Calendar] Failed to update device cal:", e);
+                await queryClient.invalidateQueries({queryKey: ["sync", "devices"]});
+            }
+        },
+        [patchDevice, queryClient]
+    );
+
+    const toggleDeviceInStats = useCallback(
+        async (uuid: string) => {
+            const device = queryClient.getQueryData<Device[]>(["sync", "devices"])?.find((d) => d.uuid === uuid);
+            if (!device) return;
+            const in_stats = !device.in_stats;
+            patchDevice(uuid, {in_stats});
+            try {
+                await updateDevice({uuid, in_stats});
+            } catch (e) {
+                console.error("[Calendar] Failed to update device stats:", e);
+                await queryClient.invalidateQueries({queryKey: ["sync", "devices"]});
+            }
+        },
+        [patchDevice, queryClient]
+    );
+
     const toggleCalendarVisible = useCallback(
         async (calendarId: number) => {
-            const cal = queryClient.getQueryData<GoogleCalendar[]>(["googleCalendars"])?.find(
-                (c) => c.id === calendarId
-            );
+            const previous =
+                queryClient.getQueryData<GoogleCalendar[]>(["googleCalendars"]) ??
+                getCachedCalendars() ??
+                displayCalendars;
+            const cal = previous?.find((c) => c.id === calendarId);
             if (!cal) return;
             const is_visible = !cal.is_visible;
-            patchGoogleCalendar(calendarId, {is_visible});
+            const updated = previous.map((c) =>
+                c.id === calendarId ? {...c, is_visible} : c
+            );
+            queryClient.setQueryData<GoogleCalendar[]>(["googleCalendars"], updated);
+            setCachedCalendars(updated);
             try {
                 await update_google_calendar({id: calendarId, is_visible});
             } catch (e) {
                 console.error("[GCal Calendar] Failed to update calendar visibility:", e);
-                queryClient.invalidateQueries({queryKey: ["googleCalendars"]});
+                queryClient.setQueryData<GoogleCalendar[]>(["googleCalendars"], previous);
+                setCachedCalendars(previous);
             }
         },
-        [patchGoogleCalendar, queryClient]
+        [displayCalendars, queryClient]
     );
 
     const toggleCalendarInStats = useCallback(
         async (calendarId: number) => {
-            const cal = queryClient.getQueryData<GoogleCalendar[]>(["googleCalendars"])?.find(
-                (c) => c.id === calendarId
-            );
+            const previous =
+                queryClient.getQueryData<GoogleCalendar[]>(["googleCalendars"]) ??
+                getCachedCalendars() ??
+                displayCalendars;
+            const cal = previous?.find((c) => c.id === calendarId);
             if (!cal) return;
             const in_stats = !cal.in_stats;
-            patchGoogleCalendar(calendarId, {in_stats});
+            const updated = previous.map((c) =>
+                c.id === calendarId ? {...c, in_stats} : c
+            );
+            queryClient.setQueryData<GoogleCalendar[]>(["googleCalendars"], updated);
+            setCachedCalendars(updated);
             try {
                 await update_google_calendar({id: calendarId, in_stats});
             } catch (e) {
                 console.error("[GCal Calendar] Failed to update calendar stats:", e);
-                queryClient.invalidateQueries({queryKey: ["googleCalendars"]});
+                queryClient.setQueryData<GoogleCalendar[]>(["googleCalendars"], previous);
+                setCachedCalendars(previous);
             }
         },
-        [patchGoogleCalendar, queryClient]
+        [displayCalendars, queryClient]
     );
 
 
@@ -651,7 +786,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
             const maxSteps = 520;
 
             const hasAppInWeek = async (targetWeek: Date): Promise<boolean> => {
-                const rows = await get_week_for_app_filter(targetWeek, calendarAppFilterActive);
+                const rows = await get_week_for_app_filter(targetWeek, calendarAppFilterActive, calDeviceUuids);
                 return rows.length > 0;
             };
 
@@ -703,7 +838,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         return () => {
             cancelled = true;
         };
-    }, [calendarAppFilterActive, date, calendarStartHour, timeBlockSettings]);
+    }, [calendarAppFilterActive, date, calendarStartHour, timeBlockSettings, calDeviceUuids]);
 
     const appJumpNextDisabled = !calendarAppFilterActive || isResolvingAppFilterWeeks || !appFilterNextWeek;
     const appJumpPrevDisabled = !calendarAppFilterActive || isResolvingAppFilterWeeks || !appFilterPrevWeek;
@@ -733,9 +868,16 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             categoryColorMap={categoryColorMap}
                             visibleCategories={visibleCategoryNames}
                             categories={categories}
-                            toggleCategory={toggleCategory}
-                            checkAllCategories={checkAllCategories}
-                            uncheckAllCategories={uncheckAllCategories}
+                            toggleCategoryVisible={toggleCategoryVisible}
+                            toggleCategoryInStats={toggleCategoryInStats}
+                            allCategoriesInCal={allCategoriesInCal}
+                            allCategoriesInStats={allCategoriesInStats}
+                            toggleAllCategoriesVisible={toggleAllCategoriesVisible}
+                            toggleAllCategoriesInStats={toggleAllCategoriesInStats}
+                            calendarDevices={calendarDevices}
+                            toggleDeviceInCal={toggleDeviceInCal}
+                            toggleDeviceInStats={toggleDeviceInStats}
+                            calDeviceUuids={calDeviceUuids}
                             handleEventClick={handleEventClick}
                             onDatesSet={handleDatesSet}
                             googleCalendarMap={googleCalendarMap}
@@ -756,6 +898,8 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                               isLoadingCategory={isLoadingCategory}
                               includeGoogleInStats={includeGoogleInStats}
                               googleCalendars={displayCalendars}
+                              statsCategoryNames={statsCategoryNames}
+                              statsDeviceUuids={statsDeviceUuids}
                 />
             </div>
             {categorizeLayers}

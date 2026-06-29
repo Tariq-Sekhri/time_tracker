@@ -211,7 +211,8 @@ export default function CategoriesManagement() {
             priority: newCategoryPriority,
             color: newCategoryColor || null,
             regex_enabled: true,
-            calendar_enabled: true,
+            is_visible: true,
+            in_stats: true,
             is_collapsed: false,
         });
     };

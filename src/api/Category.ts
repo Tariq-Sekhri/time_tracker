@@ -1,4 +1,4 @@
-import {invokeOrThrow} from "../utils.ts";
+import { invokeOrThrow } from "../utils.ts";
 
 export type Category = {
     id: number;
@@ -6,7 +6,8 @@ export type Category = {
     priority: number;
     color?: string | null;
     regex_enabled: boolean;
-    calendar_enabled: boolean;
+    is_visible: boolean;
+    in_stats: boolean;
     is_collapsed: boolean;
 };
 
@@ -15,7 +16,8 @@ export type NewCategory = {
     priority: number;
     color?: string | null;
     regex_enabled: boolean;
-    calendar_enabled: boolean;
+    is_visible: boolean;
+    in_stats: boolean;
     is_collapsed: boolean;
 };
 

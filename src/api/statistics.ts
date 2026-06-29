@@ -50,10 +50,15 @@ export type DayStatistics = {
     hourly_distribution: HourlyStat[];
 };
 
-export async function get_week_statistics(weekStart: number, weekEnd: number): Promise<WeekStatistics> {
+export async function get_week_statistics(
+    weekStart: number,
+    weekEnd: number,
+    deviceUuids?: string[] | null,
+): Promise<WeekStatistics> {
     return invokeOrThrow<WeekStatistics>("get_week_statistics", {
         weekStart,
         weekEnd,
+        deviceUuids: deviceUuids ?? null,
     });
 }
 
@@ -61,9 +66,14 @@ export async function get_total_statistics(): Promise<WeekStatistics> {
     return invokeOrThrow<WeekStatistics>("get_total_statistics");
 }
 
-export async function get_day_statistics(dayStart: number, dayEnd: number): Promise<DayStatistics> {
+export async function get_day_statistics(
+    dayStart: number,
+    dayEnd: number,
+    deviceUuids?: string[] | null,
+): Promise<DayStatistics> {
     return invokeOrThrow<DayStatistics>("get_day_statistics", {
         dayStart,
         dayEnd,
+        deviceUuids: deviceUuids ?? null,
     });
 }

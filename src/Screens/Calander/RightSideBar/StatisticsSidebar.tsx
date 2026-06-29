@@ -59,6 +59,8 @@ interface StatisticsSidebarProps {
     onCategoryClick?: (category: string) => void;
     includeGoogleInStats: boolean;
     googleCalendars: GoogleCalendar[];
+    statsCategoryNames: Set<string>;
+    statsDeviceUuids: string[] | null;
     trailingToolbar?: ReactNode;
 }
 
@@ -68,6 +70,8 @@ export default function StatisticsSidebar({
     onCategoryClick,
     includeGoogleInStats,
     googleCalendars,
+    statsCategoryNames,
+    statsDeviceUuids,
     trailingToolbar,
 }: StatisticsSidebarProps) {
     const statsCalendarIds = useMemo(
@@ -94,10 +98,10 @@ export default function StatisticsSidebar({
         error,
         isError,
     } = useQuery({
-        queryKey: ["week_statistics", week_start, week_end, calendarStartHour],
+        queryKey: ["week_statistics", week_start, week_end, calendarStartHour, statsDeviceUuids],
         queryFn: async () => {
             try {
-                const stats = await get_week_statistics(week_start, week_end);
+                const stats = await get_week_statistics(week_start, week_end, statsDeviceUuids);
                 return stats;
             } catch (e) {
                 console.error("[WeekStats] queryFn threw:", e);
@@ -227,7 +231,9 @@ export default function StatisticsSidebar({
     const topCategories = useMemo<CombinedCategory[]>(() => {
         if (!weekStats) return [] as CombinedCategory[];
 
-        const trackingCategories = weekStats.categories.map((c) => ({
+        const trackingCategories = weekStats.categories
+            .filter((c) => statsCategoryNames.has(c.category))
+            .map((c) => ({
             ...c,
             source: "tracking" as const,
         }));
@@ -239,7 +245,7 @@ export default function StatisticsSidebar({
         const combined = [...trackingCategories, ...googleCategories];
         combined.sort((a, b) => b.total_duration - a.total_duration);
         return combined.slice(0, categorySidebarCount);
-    }, [weekStats, includeGoogleInStats, googleCategories, categorySidebarCount]);
+    }, [weekStats, includeGoogleInStats, googleCategories, categorySidebarCount, statsCategoryNames]);
 
     const maxCategoryDuration = topCategories.length > 0 ? topCategories[0].total_duration : 1;
 
@@ -266,9 +272,12 @@ export default function StatisticsSidebar({
 
     const totalTime = useMemo(() => {
         if (!weekStats) return 0;
-        if (!includeGoogleInStats) return weekStats.total_time;
-        return weekStats.total_time + googleTotalDuration;
-    }, [weekStats, includeGoogleInStats, googleTotalDuration]);
+        const trackingTotal = weekStats.categories
+            .filter((c) => statsCategoryNames.has(c.category))
+            .reduce((sum, c) => sum + c.total_duration, 0);
+        if (!includeGoogleInStats) return trackingTotal;
+        return trackingTotal + googleTotalDuration;
+    }, [weekStats, includeGoogleInStats, googleTotalDuration, statsCategoryNames]);
 
     const combinedTotalTimeChange = useMemo((): number | null => {
         if (!weekStats || !includeGoogleInStats) return null;

@@ -71,10 +71,6 @@ impl TimeBlock {
 
         let combined_category = if self.category == other.category {
             self.category.clone()
-        } else if self.category == "miscellaneous" {
-            other.category.clone()
-        } else if self.category == "miscellaneous" {
-            self.category.clone()
         } else if self.category.contains(&other.category) {
             self.category.clone()
         } else if other.category.contains(&self.category) {
@@ -178,7 +174,7 @@ fn get_time_blocks(
         let log_end_time = log.timestamp + log.duration;
 
         if let Some(current_time_block) = time_blocks.get_mut(time_block_index) {
-            if current_time_block.category == log_cat || log_cat == "Miscellaneous" {
+            if current_time_block.category == log_cat {
                 if log.timestamp <= current_time_block.end_time {
                     current_time_block.end_time = current_time_block.end_time.max(log_end_time);
                     if let Some(matching_app) = current_time_block
@@ -285,9 +281,11 @@ fn week_bounds_from_anchor(anchor_unix: i64, calendar_start_hour: i64) -> (i64, 
 #[tauri::command]
 pub async fn get_week(
     week_anchor: i64,
+    device_uuids: Option<Vec<String>>,
 ) -> Result<Vec<TimeBlock>, Error> {
     let (calendar_start_hour, time_block_settings) = load_runtime_settings().await?;
     let (week_start, week_end) = week_bounds_from_anchor(week_anchor, calendar_start_hour);
+    let local_uuid = crate::db::tables::device::get_local_device_uuid().await?;
     let mut logs = get_logs().await?;
     let skipped_apps = get_skipped_apps().await?;
 
@@ -310,6 +308,8 @@ pub async fn get_week(
     }
 
     logs.retain(|log| !is_skipped(&log.app));
+
+    logs = crate::db::tables::device::filter_logs_by_devices(logs, device_uuids, local_uuid);
 
     let cat_regex = get_cat_regex().await?;
     let categories = get_categories().await?;
@@ -334,9 +334,11 @@ pub async fn get_week(
 pub async fn get_week_for_app_filter(
     week_anchor: i64,
     app_name: String,
+    device_uuids: Option<Vec<String>>,
 ) -> Result<Vec<TimeBlock>, Error> {
     let (calendar_start_hour, time_block_settings) = load_runtime_settings().await?;
     let (week_start, week_end) = week_bounds_from_anchor(week_anchor, calendar_start_hour);
+    let local_uuid = crate::db::tables::device::get_local_device_uuid().await?;
     let mut logs = get_logs().await?;
     let skipped_apps = get_skipped_apps().await?;
 
@@ -349,6 +351,8 @@ pub async fn get_week_for_app_filter(
         |app: &str| -> bool { skipped_regexes.iter().any(|regex| regex.is_match(app)) };
 
     logs.retain(|log| !is_skipped(&log.app));
+
+    logs = crate::db::tables::device::filter_logs_by_devices(logs, device_uuids, local_uuid);
 
     let cat_regex = get_cat_regex().await?;
     let categories = get_categories().await?;
@@ -382,23 +386,8 @@ fn ensure_non_overlapping(mut blocks: Vec<TimeBlock>) -> Vec<TimeBlock> {
     let mut current = blocks[0].clone();
 
     for next in blocks.into_iter().skip(1) {
-        if next.start_time <= current.end_time {
+        if next.start_time <= current.end_time && next.category == current.category {
             current.end_time = current.end_time.max(next.end_time);
-
-            let combined_category = if current.category == next.category {
-                current.category.clone()
-            } else if current.category == "miscellaneous" || current.category == "Miscellaneous" {
-                next.category.clone()
-            } else if next.category == "miscellaneous" || next.category == "Miscellaneous" {
-                current.category.clone()
-            } else if current.category.contains(&next.category) {
-                current.category.clone()
-            } else if next.category.contains(&current.category) {
-                next.category.clone()
-            } else {
-                current.category.clone()
-            };
-            current.category = combined_category;
 
             for next_app in next.apps {
                 if let Some(existing_app) = current.apps.iter_mut().find(|a| a.app == next_app.app)

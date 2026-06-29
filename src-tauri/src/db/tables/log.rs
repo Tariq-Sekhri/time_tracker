@@ -468,12 +468,13 @@ pub async fn delete_deleted_logs() -> Result<(), Error> {
 pub async fn insert_logs(logs: &Vec<Log>) -> Result<(), Error> {
     let mut tx = get_pool().await?.begin().await?;
     for log in logs {
-        sqlx::query!(
-            "INSERT INTO logs (device_uuid, app, timestamp) VALUES (?1, ?2, ?3)",
-            log.device_uuid,
-            log.app,
-            log.timestamp
+        sqlx::query(
+            "INSERT INTO logs (device_uuid, app, timestamp, duration) VALUES (?1, ?2, ?3, ?4)",
         )
+        .bind(&log.device_uuid)
+        .bind(&log.app)
+        .bind(log.timestamp)
+        .bind(log.duration)
         .execute(tx.deref_mut())
         .await?;
     }

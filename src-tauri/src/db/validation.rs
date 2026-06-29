@@ -107,6 +107,24 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
                     not_null: true,
                     default_value: Some("0"),
                 },
+                ExpectedColumn {
+                    name: "color",
+                    sql_type: "TEXT",
+                    not_null: true,
+                    default_value: Some("'#6366f1'"),
+                },
+                ExpectedColumn {
+                    name: "in_cal",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: Some("1"),
+                },
+                ExpectedColumn {
+                    name: "in_stats",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: Some("1"),
+                },
             ],
         },
         ExpectedTable {
@@ -143,7 +161,13 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
                     default_value: Some("1"),
                 },
                 ExpectedColumn {
-                    name: "calendar_enabled",
+                    name: "is_visible",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: Some("1"),
+                },
+                ExpectedColumn {
+                    name: "in_stats",
                     sql_type: "INTEGER",
                     not_null: true,
                     default_value: Some("1"),
@@ -442,9 +466,53 @@ pub async fn validate_and_repair_database(pool: &SqlitePool) -> Result<Validatio
         }
     }
 
+    migrate_legacy_category_prefs(pool).await?;
+    migrate_legacy_device_prefs(pool).await?;
+
     ensure_default_data(pool).await?;
 
     Ok(result)
+}
+
+async fn table_has_column(
+    pool: &SqlitePool,
+    table_name: &str,
+    column_name: &str,
+) -> Result<bool, Error> {
+    let query = format!("PRAGMA table_info({})", table_name);
+    let rows = sqlx::query(sqlx::AssertSqlSafe(query))
+        .fetch_all(pool)
+        .await?;
+    Ok(rows
+        .iter()
+        .any(|row| row.try_get::<String, _>(1).ok().as_deref() == Some(column_name)))
+}
+
+async fn migrate_legacy_category_prefs(pool: &SqlitePool) -> Result<(), Error> {
+    if !table_has_column(pool, "category", "calendar_enabled").await? {
+        return Ok(());
+    }
+    if !table_has_column(pool, "category", "is_visible").await? {
+        return Ok(());
+    }
+    sqlx::query(
+        "UPDATE category SET is_visible = calendar_enabled, in_stats = calendar_enabled",
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn migrate_legacy_device_prefs(pool: &SqlitePool) -> Result<(), Error> {
+    if !table_has_column(pool, "devices", "color").await? {
+        return Ok(());
+    }
+    sqlx::query(
+        "UPDATE devices SET color = '#6366f1' WHERE color IS NULL OR color = ''",
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 async fn create_table_safe(pool: &SqlitePool, table: &ExpectedTable) -> Result<(), Error> {
@@ -514,6 +582,8 @@ async fn add_column_safe(
 async fn ensure_default_data(pool: &SqlitePool) -> Result<(), Error> {
     crate::db::tables::cat_regex::ensure_default_regexes(pool).await?;
     crate::db::tables::settings::seed_defaults(pool).await?;
+    crate::db::tables::device::cleanup_dev_local_device_seed_once(pool).await?;
+    crate::db::tables::device::seed_default_local_device(pool).await?;
     Ok(())
 }
 

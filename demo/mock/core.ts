@@ -46,7 +46,9 @@ type CategoryRow = {
     priority: number;
     color: string | null;
     regex_enabled: boolean;
-    calendar_enabled: boolean;
+    regex_enabled: boolean;
+    is_visible: boolean;
+    in_stats: boolean;
     is_collapsed: boolean;
 };
 
@@ -192,7 +194,8 @@ function toDemoCategory(c: {
     return {
         ...c,
         regex_enabled: true,
-        calendar_enabled: true,
+        is_visible: true,
+        in_stats: true,
         is_collapsed: false,
     };
 }

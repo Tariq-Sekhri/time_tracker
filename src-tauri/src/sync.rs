@@ -14,25 +14,51 @@ use anyhow::{anyhow, Result};
 use db::Error;
 use reqwest::Response;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::try_join;
 
 pub const DEFAULT_SERVER_IP: &str = "100.75.95.90";
 
+fn normalize_server_ip(server_ip: &str) -> String {
+    let mut ip = server_ip.trim();
+    if let Some(rest) = ip.strip_prefix("http://") {
+        ip = rest;
+    } else if let Some(rest) = ip.strip_prefix("https://") {
+        ip = rest;
+    }
+    if let Some((host, _)) = ip.split_once('/') {
+        ip = host;
+    }
+    if let Some((host, _)) = ip.split_once(':') {
+        ip = host;
+    }
+    ip.to_string()
+}
+
+fn sync_server_url(server_ip: &str, path: &str) -> String {
+    let ip = normalize_server_ip(server_ip);
+    let path = path.trim_start_matches('/');
+    format!("http://{ip}:3000/v1/{path}")
+}
+
 #[tauri::command]
-pub async fn check() -> Result<(), Error> {
-    let ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
-    let url = format!("http://{}:3000/v1/check", ip);
-    let res = reqwest::get(url).await?;
+pub async fn check(ip: String) -> Result<String, Error> {
+    let normalized_ip = normalize_server_ip(&ip);
+    let url = sync_server_url(&normalized_ip, "check");
+    let res = reqwest::get(&url)
+        .await
+        .map_err(|e| anyhow!("Failed to reach {url}: {e}"))?;
     if res.status().is_success() {
-        if res.text().await? == "Time Tracker Backend v1" {
-            Ok(())
+        let body = res.text().await?.trim().to_string();
+        if body == "Time Tracker Backend v1" {
+            Ok(normalized_ip)
         } else {
-            Err(anyhow!("Server backend returned wrong string").into())
+            Err(anyhow!("Server backend returned wrong string from {url}: {body}").into())
         }
     } else {
-        Err(anyhow!("Server returned error").into())
+        Err(anyhow!("Server returned error from {url}: {}", res.status()).into())
     }
 }
 #[derive(Debug, Deserialize, Serialize)]
@@ -42,8 +68,8 @@ struct RegisterResponse {
 }
 #[tauri::command]
 pub async fn register() -> Result<(), Error> {
-    check().await?;
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
+    check(server_ip.clone()).await?;
     // post
     let name = local_device_name();
 
@@ -52,7 +78,7 @@ pub async fn register() -> Result<(), Error> {
     });
 
     let res = reqwest::Client::new()
-        .post(format!("http://{}:3000/v1/register", server_ip))
+        .post(sync_server_url(&server_ip, "register"))
         .json(&body)
         .send()
         .await?
@@ -61,21 +87,44 @@ pub async fn register() -> Result<(), Error> {
         .await?;
     let device = Device {
         name,
-        uuid: res.uuid,
+        uuid: res.uuid.clone(),
         state: DeviceState::Local { token: res.token },
         last_sync_id: -1,
+        color: crate::db::tables::device::device_color_for_uuid(&res.uuid),
+        in_cal: true,
+        in_stats: true,
     };
     register_local_device(device).await?;
     Ok(())
 }
 #[tauri::command]
-pub async fn upload_all_logs() -> Result<(), Error> {
+pub async fn upload_all_logs() -> Result<usize, Error> {
     let logs = get_local_logs().await?;
+    let count = logs.len();
+    if count == 0 {
+        return Ok(0);
+    }
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
+    let device = get_local_device()
+        .await?
+        .ok_or(anyhow!("Local device not found"))?;
+    let token = match device.state {
+        DeviceState::Local { token } => token,
+        DeviceState::Remote { is_tracking } => {
+            return Err(Error::from(anyhow!("somehow got remote device?")));
+        }
+    };
+    let body = json!(
+        {
 
+        "token":token,
+            "logs":logs,
+        }
+
+    );
     let res = reqwest::Client::new()
-        .post(format!("http://{}:3000/v1/upload_all_logs", server_ip))
-        .json(&logs)
+        .post(sync_server_url(&server_ip, "upload_all_logs"))
+        .json(&body)
         .send()
         .await?
         .error_for_status()?;
@@ -88,7 +137,7 @@ pub async fn upload_all_logs() -> Result<(), Error> {
         let uuid = get_local_device_uuid().await?.unwrap();
         set_last_sync_id(&uuid, max).await?;
     }
-    Ok(())
+    Ok(count)
 }
 
 #[tauri::command]
@@ -116,7 +165,7 @@ pub async fn sync() -> Result<(), Error> {
         "deleted_ids": deleted_ids,
     });
     let res = reqwest::Client::new()
-        .post(format!("http://{}:3000/v1/upload_all_logs", server_ip))
+        .post(sync_server_url(&server_ip, "upload_all_logs"))
         .json(&body)
         .send()
         .await?;
@@ -140,10 +189,32 @@ struct ServerDevice {
     last_sync_id: i64,
 }
 
+#[derive(Debug, Deserialize)]
+struct ServerLog {
+    id: i64,
+    device_uuid: Option<String>,
+    app: String,
+    timestamp: i64,
+    duration: i64,
+}
+
+impl From<ServerLog> for Log {
+    fn from(log: ServerLog) -> Self {
+        Log {
+            id: log.id,
+            device_uuid: log.device_uuid,
+            app: log.app,
+            timestamp: log.timestamp,
+            duration: log.duration,
+            is_deleted: false,
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn get_devices() -> Result<Vec<Device>, Error> {
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
-    let devices: Vec<Device> = reqwest::get(format!("http://{}:3000/v1/devices", server_ip))
+    let devices: Vec<Device> = reqwest::get(sync_server_url(&server_ip, "devices"))
         .await?
         .error_for_status()?
         .json::<Vec<ServerDevice>>()
@@ -156,8 +227,8 @@ pub async fn get_devices() -> Result<Vec<Device>, Error> {
     get_devices_from_db().await
 }
 #[tauri::command]
-pub async fn device_logs() -> Result<(), Error> {
-    let devices: Vec<Device> = get_devices()
+pub async fn device_logs(device_uuid: Option<String>) -> Result<usize, Error> {
+    let mut devices: Vec<Device> = get_devices()
         .await?
         .into_iter()
         .filter(|device| match device.state {
@@ -166,7 +237,14 @@ pub async fn device_logs() -> Result<(), Error> {
         })
         .collect();
 
-    //devices/{device_uuid}"
+    if let Some(uuid) = &device_uuid {
+        devices.retain(|device| &device.uuid == uuid);
+    }
+
+    if devices.is_empty() {
+        return Ok(0);
+    }
+
     let de = devices
         .iter()
         .map(|device| ServerDevice {
@@ -177,15 +255,27 @@ pub async fn device_logs() -> Result<(), Error> {
         .collect::<Vec<ServerDevice>>();
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
     let res = reqwest::Client::new()
-        .get(format!("http://{}:3000/v1/device_logs", server_ip))
+        .get(sync_server_url(&server_ip, "devices/"))
         .json(&de)
         .send()
         .await?
         .error_for_status()?;
 
-    // insert the new logs
-    let logs = res.json::<Vec<Log>>().await?;
+    let logs: Vec<Log> = res
+        .json::<Vec<ServerLog>>()
+        .await?
+        .into_iter()
+        .map(Log::from)
+        .collect();
     insert_logs(&logs).await?;
+
+    let count = if let Some(uuid) = device_uuid {
+        logs.iter()
+            .filter(|log| log.device_uuid.as_deref() == Some(uuid.as_str()))
+            .count()
+    } else {
+        logs.len()
+    };
 
     let mut max_id_by_device: HashMap<String, i64> = HashMap::new();
     for log in &logs {
@@ -202,5 +292,5 @@ pub async fn device_logs() -> Result<(), Error> {
         }
     }
 
-    Ok(())
+    Ok(count)
 }

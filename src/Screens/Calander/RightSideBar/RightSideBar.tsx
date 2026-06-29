@@ -30,6 +30,8 @@ export function RightSideBar({
     isLoadingCategory,
     includeGoogleInStats,
     googleCalendars,
+    statsCategoryNames,
+    statsDeviceUuids,
 }: {
     view: SideBarView,
     setView: (newView: SideBarView) => void,
@@ -45,6 +47,8 @@ export function RightSideBar({
     isLoadingCategory: boolean,
     includeGoogleInStats: boolean,
     googleCalendars: GoogleCalendar[],
+    statsCategoryNames: Set<string>,
+    statsDeviceUuids: string[] | null,
 }) {
     const { date } = useDateStore();
     const { rightSidebarWidth } = useBackendSettings();
@@ -98,6 +102,8 @@ export function RightSideBar({
                         }}
                         includeGoogleInStats={includeGoogleInStats}
                         googleCalendars={googleCalendars}
+                        statsCategoryNames={statsCategoryNames}
+                        statsDeviceUuids={statsDeviceUuids}
                         trailingToolbar={collapseSidebarButton}
                     />}
                     {view === "Day" && selectedDate && <DayStatisticsSidebar
@@ -113,6 +119,8 @@ export function RightSideBar({
                         }}
                         includeGoogleInStats={includeGoogleInStats}
                         googleCalendars={googleCalendars}
+                        statsCategoryNames={statsCategoryNames}
+                        statsDeviceUuids={statsDeviceUuids}
                         trailingToolbar={collapseSidebarButton}
                     />}
                     {view === "Event" && selectedEvent && (

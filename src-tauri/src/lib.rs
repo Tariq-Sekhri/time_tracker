@@ -23,7 +23,7 @@ use db::tables::category::{
     update_category_by_id,
 };
 use db::tables::app_metadata_kv::{get_server_ip, set_server_ip};
-use db::tables::device::{insert_devices, set_is_tracking};
+use db::tables::device::{insert_devices, set_is_tracking, update_device};
 use db::tables::google_calendar::{
     delete_google_calendar, get_google_calendar_by_id, get_google_calendars,
     insert_google_calendar, update_google_calendar,
@@ -300,6 +300,7 @@ pub fn run() {
             check_update_cmd,
             get_app_version,
             set_is_tracking,
+            update_device,
             insert_devices,
             check,
             register,
