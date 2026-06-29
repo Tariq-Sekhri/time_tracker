@@ -1,4 +1,4 @@
-use crate::db::get_pool;
+use crate::db::{get_pool, Error};
 use anyhow::Result;
 use sqlx::SqlitePool;
 pub const META_GOOGLE_CLIENT_ID: &str = "google_oauth_client_id";
@@ -12,6 +12,7 @@ pub async fn metadata_get(pool: &SqlitePool, key: &str) -> Result<Option<String>
         .fetch_optional(pool)
         .await
 }
+pub const SERVER_IP: &str = "server_ip";
 
 pub async fn metadata_set(pool: &SqlitePool, key: &str, value: &str) -> Result<(), sqlx::Error> {
     sqlx::query("INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?1, ?2)")
@@ -22,21 +23,15 @@ pub async fn metadata_set(pool: &SqlitePool, key: &str, value: &str) -> Result<(
     Ok(())
 }
 
-pub async fn get_server_ip() -> Result<Option<String>, sqlx::Error> {
+#[tauri::command]
+pub async fn get_server_ip() -> Result<Option<String>, Error> {
     let pool = get_pool().await?;
-    sqlx::query_scalar::<_, String>("select value from app_metadata where key = ?")
-        .bind(SERVER_IP.to_string())
-        .fetch_optional(&pool)
-        .await
+    Ok(metadata_get(&pool, SERVER_IP).await?)
 }
 
-pub const SERVER_IP: &str = "server_ip";
-pub async fn set_server_ip(pool: &SqlitePool, server_ip: String) -> Result<()> {
+#[tauri::command]
+pub async fn set_server_ip(server_ip: String) -> Result<(), Error> {
     let pool = get_pool().await?;
-    sqlx::query("UPDATE app_metadata SET value = ?1 WHERE key = ?")
-        .bind(server_ip)
-        .bind(SERVER_IP.to_string())
-        .execute(&pool)
-        .await?;
+    metadata_set(&pool, SERVER_IP, &server_ip).await?;
     Ok(())
 }

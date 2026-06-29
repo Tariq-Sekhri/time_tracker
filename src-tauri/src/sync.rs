@@ -21,7 +21,7 @@ use tokio::try_join;
 pub const DEFAULT_SERVER_IP: &str = "100.75.95.90";
 
 #[tauri::command]
-pub async fn check() -> Result<()> {
+pub async fn check() -> Result<(), Error> {
     let ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
     let url = format!("http://{}:3000/v1/check", ip);
     let res = reqwest::get(url).await?;
@@ -29,10 +29,10 @@ pub async fn check() -> Result<()> {
         if res.text().await? == "Time Tracker Backend v1" {
             Ok(())
         } else {
-            Err(anyhow!("Server backend returned wrong string"))
+            Err(anyhow!("Server backend returned wrong string").into())
         }
     } else {
-        Err(anyhow!("Server returned error"))
+        Err(anyhow!("Server returned error").into())
     }
 }
 #[derive(Debug, Deserialize, Serialize)]
@@ -41,7 +41,7 @@ struct RegisterResponse {
     token: String,
 }
 #[tauri::command]
-pub async fn register() -> Result<()> {
+pub async fn register() -> Result<(), Error> {
     check().await?;
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
     // post

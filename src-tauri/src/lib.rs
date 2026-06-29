@@ -22,6 +22,7 @@ use db::tables::category::{
     delete_category_by_id, get_categories, get_category_by_id, insert_category,
     update_category_by_id,
 };
+use db::tables::app_metadata_kv::{get_server_ip, set_server_ip};
 use db::tables::device::{insert_devices, set_is_tracking};
 use db::tables::google_calendar::{
     delete_google_calendar, get_google_calendar_by_id, get_google_calendars,
@@ -54,6 +55,9 @@ use db::{
 use google_oauth::{
     get_google_auth_status, get_google_oauth_app_credentials, google_oauth_login,
     google_oauth_logout, set_google_oauth_app_credentials,
+};
+use sync::{
+    check, device_logs, get_devices, register, upload_all_logs,
 };
 use tauri::{Emitter, Manager};
 use tray::refresh_tray_menu;
@@ -297,6 +301,14 @@ pub fn run() {
             get_app_version,
             set_is_tracking,
             insert_devices,
+            check,
+            register,
+            upload_all_logs,
+            sync::sync,
+            get_devices,
+            device_logs,
+            get_server_ip,
+            set_server_ip,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
