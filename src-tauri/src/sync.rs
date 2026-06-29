@@ -6,7 +6,9 @@ use crate::db::tables::device::{
     get_local_device, get_local_device_uuid, local_device_name, register_local_device,
     set_last_sync_id, Device, DeviceState,
 };
-use crate::db::tables::log::{get_local_logs, get_logs, get_logs_for_sync, Log};
+use crate::db::tables::log::{
+    delete_deleted_logs, get_deleted_logs, get_local_logs, get_logs, get_logs_for_sync, Log,
+};
 use anyhow::{anyhow, Result};
 use db::Error;
 use serde::{Deserialize, Serialize};
@@ -87,7 +89,7 @@ pub async fn upload_all_logs() -> Result<(), Error> {
 
 #[tauri::command]
 pub async fn sync() -> Result<(), Error> {
-    // get logs  remove latest log
+    let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
     let logs = get_logs_for_sync().await?;
     let device = get_local_device()
         .await?
@@ -98,12 +100,32 @@ pub async fn sync() -> Result<(), Error> {
             return Err(Error::from(anyhow!("somehow got remote device?")));
         }
     };
+    let deleted_ids: Vec<i64> = get_deleted_logs()
+        .await?
+        .into_iter()
+        .map(|logs| logs.id)
+        .collect();
 
-    // post
-    let deleted_ids: Vec<i64> = vec![];
-
-    // device token, logs, deleted logs
-
+    let body = serde_json::json!({
+        "logs": logs,
+        "token":token,
+        "deleted_ids": deleted_ids,
+    });
+    let res = reqwest::Client::new()
+        .post(format!("http://{}:3000/v1/upload_all_logs", server_ip))
+        .json(&body)
+        .send()
+        .await?;
+    if res.status().is_success() {
+        delete_deleted_logs().await?;
+        let max = logs
+            .iter()
+            .max()
+            .ok_or(anyhow!("could not get server ip"))?
+            .id;
+        let uuid = get_local_device_uuid().await?;
+        set_last_sync_id(&uuid, max).await?;
+    }
     Ok(())
 }
 #[tauri::command]

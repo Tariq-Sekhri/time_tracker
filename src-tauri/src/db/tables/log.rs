@@ -449,3 +449,17 @@ pub async fn get_logs_for_sync() -> Result<Vec<Log>, Error> {
     .await?;
     Ok(logs)
 }
+
+pub async fn get_deleted_logs() -> Result<Vec<Log>, Error> {
+    let logs = sqlx::query_as::<_, Log>("select * from logs where is_deleted = 1 order by id asc ")
+        .fetch_all(&get_pool().await?)
+        .await?;
+    Ok(logs)
+}
+
+pub async fn delete_deleted_logs() -> Result<(), Error> {
+    sqlx::query("DELETE FROM logs WHERE is_deleted = 1")
+        .execute(&get_pool().await?)
+        .await?;
+    Ok(())
+}
