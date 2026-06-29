@@ -7,12 +7,16 @@ use crate::db::tables::device::{
     local_device_name, register_local_device, set_last_sync_id, Device, DeviceState,
 };
 use crate::db::tables::log::{
-    delete_deleted_logs, get_deleted_logs, get_local_logs, get_logs, get_logs_for_sync, Log,
+    delete_deleted_logs, get_deleted_logs, get_local_logs, get_logs, get_logs_for_sync,
+    insert_logs, Log,
 };
 use anyhow::{anyhow, Result};
 use db::Error;
+use reqwest::Response;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::time::Duration;
+use tokio::try_join;
 
 pub const DEFAULT_SERVER_IP: &str = "100.75.95.90";
 
@@ -31,7 +35,7 @@ pub async fn check() -> Result<()> {
         Err(anyhow!("Server returned error"))
     }
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct RegisterResponse {
     uuid: String,
     token: String,
@@ -81,7 +85,7 @@ pub async fn upload_all_logs() -> Result<(), Error> {
             .max()
             .ok_or(anyhow!("could not get server ip"))?
             .id;
-        let uuid = get_local_device_uuid().await?;
+        let uuid = get_local_device_uuid().await?.unwrap();
         set_last_sync_id(&uuid, max).await?;
     }
     Ok(())
@@ -123,17 +127,17 @@ pub async fn sync() -> Result<(), Error> {
             .max()
             .ok_or(anyhow!("could not get server ip"))?
             .id;
-        let uuid = get_local_device_uuid().await?;
+        let uuid = get_local_device_uuid().await?.unwrap();
         set_last_sync_id(&uuid, max).await?;
     }
 
     Ok(())
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct ServerDevice {
     name: String,
     uuid: String,
-    last_sync_id: i32,
+    last_sync_id: i64,
 }
 
 #[tauri::command]
@@ -152,7 +156,7 @@ pub async fn get_devices() -> Result<Vec<Device>, Error> {
     get_devices_from_db().await
 }
 #[tauri::command]
-pub async fn device_logs() -> Result<Vec<Vec<Log>>, Error> {
+pub async fn device_logs() -> Result<(), Error> {
     let devices: Vec<Device> = get_devices()
         .await?
         .into_iter()
@@ -162,11 +166,41 @@ pub async fn device_logs() -> Result<Vec<Vec<Log>>, Error> {
         })
         .collect();
 
-    ///devices/{device_uuid}"
-    // get devices
-    // for each device where is tracking then get all logs
-    // once we have a Vec<logs>
+    //devices/{device_uuid}"
+    let de = devices
+        .iter()
+        .map(|device| ServerDevice {
+            name: device.name.clone(),
+            uuid: device.uuid.clone(),
+            last_sync_id: device.last_sync_id,
+        })
+        .collect::<Vec<ServerDevice>>();
+    let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
+    let res = reqwest::Client::new()
+        .get(format!("http://{}:3000/v1/device_logs", server_ip))
+        .json(&de)
+        .send()
+        .await?
+        .error_for_status()?;
+
     // insert the new logs
-    // set last sync id
-    todo!()
+    let logs = res.json::<Vec<Log>>().await?;
+    insert_logs(&logs).await?;
+
+    let mut max_id_by_device: HashMap<String, i64> = HashMap::new();
+    for log in &logs {
+        if let Some(uuid) = &log.device_uuid {
+            max_id_by_device
+                .entry(uuid.clone())
+                .and_modify(|max| *max = (*max).max(log.id))
+                .or_insert(log.id);
+        }
+    }
+    for device in &devices {
+        if let Some(&max_id) = max_id_by_device.get(&device.uuid) {
+            set_last_sync_id(&device.uuid, max_id).await?;
+        }
+    }
+
+    Ok(())
 }

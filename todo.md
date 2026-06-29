@@ -2,6 +2,7 @@
     - cross device sync
     - manual time tracking
     - threand veiw shows top app
+    - use transations in atomic opperations
 - low
     - trend explain
     - right click app regex give u the regex that sorted it

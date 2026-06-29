@@ -207,7 +207,7 @@ pub async fn get_local_device_uuid() -> Result<Option<String>, Error> {
     }
 }
 
-pub async fn set_last_sync_id(uuid: &Option<String>, new_last_sync_id: i64) -> Result<(), Error> {
+pub async fn set_last_sync_id(uuid: &String, new_last_sync_id: i64) -> Result<(), Error> {
     let pool = get_pool().await?;
     sqlx::query("UPDATE devices SET last_sync_id = ? WHERE uuid = ?")
         .bind(new_last_sync_id)

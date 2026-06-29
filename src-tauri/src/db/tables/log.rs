@@ -6,6 +6,7 @@ use regex::bytes::Replacer;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Sqlite, SqlitePool, Transaction};
 use std::collections::HashMap;
+use std::ops::DerefMut;
 
 #[derive(Debug, Serialize, FromRow, Clone, Deserialize, PartialOrd, PartialEq, Ord, Eq)]
 pub struct Log {
@@ -461,5 +462,21 @@ pub async fn delete_deleted_logs() -> Result<(), Error> {
     sqlx::query("DELETE FROM logs WHERE is_deleted = 1")
         .execute(&get_pool().await?)
         .await?;
+    Ok(())
+}
+
+pub async fn insert_logs(logs: &Vec<Log>) -> Result<(), Error> {
+    let mut tx = get_pool().await?.begin().await?;
+    for log in logs {
+        sqlx::query!(
+            "INSERT INTO logs (device_uuid, app, timestamp) VALUES (?1, ?2, ?3)",
+            log.device_uuid,
+            log.app,
+            log.timestamp
+        )
+        .execute(tx.deref_mut())
+        .await?;
+    }
+    tx.commit().await?;
     Ok(())
 }
