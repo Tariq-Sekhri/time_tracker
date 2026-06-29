@@ -3,10 +3,10 @@ use crate::db;
 use crate::db::get_pool;
 use crate::db::tables::app_metadata_kv::get_server_ip;
 use crate::db::tables::device::{
-    get_local_device_uuid, local_device_name, register_local_device, set_last_sync_id, Device,
-    DeviceState,
+    get_local_device, get_local_device_uuid, local_device_name, register_local_device,
+    set_last_sync_id, Device, DeviceState,
 };
-use crate::db::tables::log::{get_local_logs, get_logs, Log};
+use crate::db::tables::log::{get_local_logs, get_logs, get_logs_for_sync, Log};
 use anyhow::{anyhow, Result};
 use db::Error;
 use serde::{Deserialize, Serialize};
@@ -86,9 +86,22 @@ pub async fn upload_all_logs() -> Result<(), Error> {
 }
 
 #[tauri::command]
-pub async fn sync() -> Result<()> {
+pub async fn sync() -> Result<(), Error> {
     // get logs  remove latest log
+    let logs = get_logs_for_sync().await?;
+    let device = get_local_device()
+        .await?
+        .ok_or(anyhow!("Local device not found"))?;
+    let token = match device.state {
+        DeviceState::Local { token } => token,
+        DeviceState::Remote { is_tracking } => {
+            return Err(Error::from(anyhow!("somehow got remote device?")));
+        }
+    };
+
     // post
+    let deleted_ids: Vec<i64> = vec![];
+
     // device token, logs, deleted logs
 
     Ok(())

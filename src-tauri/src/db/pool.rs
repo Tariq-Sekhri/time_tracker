@@ -50,7 +50,7 @@ pub async fn reset_pool() -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-pub async fn get_pool() -> Result<SqlitePool, sqlx::Error> {
+pub async fn get_pool() -> Result<&SqlitePool, sqlx::Error> {
     let should_create = {
         let pool_guard = POOL.lock().unwrap();
         pool_guard.is_none()

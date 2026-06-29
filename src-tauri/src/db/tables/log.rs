@@ -1,7 +1,8 @@
 use crate::db;
-use crate::db::tables::device::get_local_device_uuid;
+use crate::db::tables::device::{get_local_device, get_local_device_uuid};
 use crate::db::{get_pool, Error};
 use anyhow::Result;
+use regex::bytes::Replacer;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Sqlite, SqlitePool, Transaction};
 use std::collections::HashMap;
@@ -379,6 +380,34 @@ pub async fn get_local_logs() -> anyhow::Result<Vec<Log>> {
     .bind(&uuid)
     .bind(&uuid)
     .fetch_all(&pool)
+    .await?;
+    Ok(logs)
+}
+
+pub async fn get_logs_for_sync() -> Result<Vec<Log>, Error> {
+    let pool = get_pool().await?;
+    let device = get_local_device()
+        .await?
+        .ok_or(anyhow::anyhow!("local device not set found"))?;
+    let logs = sqlx::query_as::<_, Log>(
+        r#"
+        SELECT *
+        FROM logs
+        WHERE device_uuid = ?
+          AND id != (
+              SELECT MAX(id)
+              FROM logs
+              WHERE device_uuid = ?
+          )
+        and
+            id > ?
+        ORDER BY id ASC
+        "#,
+    )
+    .bind(&device.uuid)
+    .bind(&device.uuid)
+    .bind(&device.last_sync_id)
+    .fetch_all(pool)
     .await?;
     Ok(logs)
 }

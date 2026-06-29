@@ -177,10 +177,14 @@ pub async fn insert_devices(devices: Vec<Device>) -> Result<(), Error> {
 
 pub async fn get_local_device() -> std::result::Result<Option<Device>, Error> {
     let pool = get_pool().await?;
-    sqlx::query_as::<_, RowDevice>("SELECT * FROM devices where token not null")
-        .fetch_optional(&pool)
-        .await;
-    todo!()
+    let device = sqlx::query_as::<_, RowDevice>("SELECT * FROM devices where token not null")
+        .fetch_optional(pool)
+        .await?;
+    let ret: Option<Device> = match device {
+        Some(device) => Some(device.try_into()?),
+        None => None,
+    };
+    Ok(ret)
 }
 
 pub async fn get_local_device_uuid() -> Result<Option<String>, Error> {
