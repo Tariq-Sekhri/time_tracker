@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id as \"id!: i64\", device_uuid, app, timestamp as \"timestamp!: i64\", duration as \"duration!: i64\" FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2",
+  "query": "SELECT id as \"id!: i64\", device_uuid, app, timestamp as \"timestamp!: i64\", duration as \"duration!: i64\", is_deleted as \"is_deleted!: bool\" FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2 AND is_deleted = 0",
   "describe": {
     "columns": [
       {
@@ -57,6 +57,17 @@
             "name": "duration"
           }
         }
+      },
+      {
+        "name": "is_deleted!: bool",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "logs",
+            "name": "is_deleted"
+          }
+        }
       }
     ],
     "parameters": {
@@ -67,8 +78,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "b210059dc01fb511edbd1a5c2deb9c3581c4b7846764dcc3d0e36295d72a7ec8"
+  "hash": "637bbccd3eea953c1275d2a5735f98fb0805e6d232d570035af5543b9cc6a088"
 }

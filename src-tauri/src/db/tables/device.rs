@@ -1,9 +1,7 @@
-use crate::db::tables::app_metadata_kv::{metadata_get, metadata_set, META_LOCAL_DEVICE_UUID};
-use crate::db::tables::log::set_local_device_uuid_with_tx;
-use crate::db::{get_pool, Error};
+use crate::db::tables::log::set_local_device_uuid_with_tx;use crate::db::{get_pool, Error};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use sqlx::{Executor, Row, Sqlite, SqlitePool};
+use sqlx::{Executor, FromRow, Row, Sqlite, SqlitePool};
 
 const KIND_LOCAL: &str = "local";
 const KIND_REMOTE: &str = "remote";
@@ -22,6 +20,7 @@ pub struct Device {
     pub(crate) last_sync_id: i64,
 }
 
+#[derive(FromRow)]
 struct RowDevice {
     uuid: String,
     name: String,
@@ -178,7 +177,7 @@ pub async fn insert_devices(devices: Vec<Device>) -> Result<(), Error> {
 pub async fn get_local_device() -> std::result::Result<Option<Device>, Error> {
     let pool = get_pool().await?;
     let device = sqlx::query_as::<_, RowDevice>("SELECT * FROM devices where token not null")
-        .fetch_optional(pool)
+        .fetch_optional(&pool)
         .await?;
     let ret: Option<Device> = match device {
         Some(device) => Some(device.try_into()?),

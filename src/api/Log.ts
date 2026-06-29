@@ -6,6 +6,7 @@ export type Log = {
     app: string;
     timestamp: Date;
     duration: number;
+    is_deleted: boolean;
 };
 
 export type MergedLog = {

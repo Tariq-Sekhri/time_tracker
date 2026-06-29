@@ -75,7 +75,10 @@ pub async fn insert_skipped_app_and_delete_logs(new_app: NewSkippedApp) -> Resul
     if !matching_ids.is_empty() {
         let mut tx = (&pool).begin().await?;
         for log_id in matching_ids {
-            sqlx::query!("DELETE FROM logs WHERE id = ?1", log_id)
+            sqlx::query!(
+                "UPDATE logs SET is_deleted = 1 WHERE id = ?1 AND is_deleted = 0",
+                log_id
+            )
                 .execute(&mut *tx)
                 .await?;
         }

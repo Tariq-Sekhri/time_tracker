@@ -14,6 +14,7 @@ pub struct Log {
     pub app: String,
     pub timestamp: i64,
     pub duration: i64,
+    pub is_deleted: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -39,7 +40,8 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         device_uuid TEXT,
         app TEXT NOT NULL,
         timestamp INTEGER NOT NULL,
-        duration INTEGER NOT NULL DEFAULT 0
+        duration INTEGER NOT NULL DEFAULT 0,
+        is_deleted INTEGER NOT NULL DEFAULT 0
     )",
     )
     .execute(pool)
@@ -49,7 +51,9 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 
 pub async fn insert_log(log: NewLog) -> Result<i64, sqlx::Error> {
     let pool = db::get_pool().await?;
-    let uuid = get_local_device_uuid().await?;
+    let uuid = get_local_device_uuid()
+        .await
+        .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
     let result = sqlx::query!(
         "INSERT INTO logs (device_uuid, app, timestamp) VALUES (?1, ?2, ?3)",
         uuid,
@@ -61,12 +65,27 @@ pub async fn insert_log(log: NewLog) -> Result<i64, sqlx::Error> {
     Ok(result.last_insert_rowid())
 }
 
+pub async fn mark_log_deleted(id: i64) -> Result<(), sqlx::Error> {
+    let pool = db::get_pool().await?;
+    sqlx::query!(
+        "UPDATE logs SET is_deleted = 1 WHERE id = ?1 AND is_deleted = 0",
+        id
+    )
+    .execute(&pool)
+    .await?;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn delete_log_by_id(id: i64, uuid: String) -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    sqlx::query!("DELETE FROM logs WHERE id = ?1, ?2", id, uuid?)
-        .execute(&pool)
-        .await?;
+    sqlx::query!(
+        "UPDATE logs SET is_deleted = 1 WHERE id = ?1 AND device_uuid = ?2 AND is_deleted = 0",
+        id,
+        uuid
+    )
+    .execute(&pool)
+    .await?;
     Ok(())
 }
 
@@ -74,9 +93,13 @@ pub async fn delete_log_by_id(id: i64, uuid: String) -> Result<(), Error> {
 pub async fn delete_logs_by_ids(ids: Vec<i64>, uuid: String) -> Result<(), Error> {
     let pool = db::get_pool().await?;
     for id in ids {
-        sqlx::query!("DELETE FROM logs WHERE id = ?1", id)
-            .execute(&pool)
-            .await?;
+        sqlx::query!(
+            "UPDATE logs SET is_deleted = 1 WHERE id = ?1 AND device_uuid = ?2 AND is_deleted = 0",
+            id,
+            uuid
+        )
+        .execute(&pool)
+        .await?;
     }
     Ok(())
 }
@@ -86,7 +109,7 @@ pub async fn get_logs() -> Result<Vec<Log>, Error> {
     let pool = db::get_pool().await?;
     let logs = sqlx::query_as!(
         Log,
-        "SELECT id, device_uuid, app, timestamp, duration FROM logs"
+        r#"SELECT id, device_uuid, app, timestamp, duration, is_deleted as "is_deleted!: bool" FROM logs WHERE is_deleted = 0"#
     )
     .fetch_all(&pool)
     .await?;
@@ -98,7 +121,7 @@ pub async fn get_log_by_id(id: i64) -> Result<Log, Error> {
     let pool = db::get_pool().await?;
     let log = sqlx::query_as!(
         Log,
-        "SELECT id, device_uuid, app, timestamp, duration FROM logs WHERE id = ?1",
+        r#"SELECT id, device_uuid, app, timestamp, duration, is_deleted as "is_deleted!: bool" FROM logs WHERE id = ?1 AND is_deleted = 0"#,
         id
     )
     .fetch_one(&pool)
@@ -108,9 +131,12 @@ pub async fn get_log_by_id(id: i64) -> Result<Log, Error> {
 
 pub async fn increase_duration(id: i64) -> Result<(), sqlx::Error> {
     let pool = db::get_pool().await?;
-    sqlx::query!("UPDATE logs SET duration = duration + 1 WHERE id = ?1", id)
-        .execute(&pool)
-        .await?;
+    sqlx::query!(
+        "UPDATE logs SET duration = duration + 1 WHERE id = ?1 AND is_deleted = 0",
+        id
+    )
+    .execute(&pool)
+    .await?;
     Ok(())
 }
 
@@ -135,7 +161,7 @@ pub async fn delete_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resu
 
     let logs = sqlx::query_as!(
         Log,
-        r#"SELECT id as "id!: i64", device_uuid, app, timestamp as "timestamp!: i64", duration as "duration!: i64" FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2"#,
+        r#"SELECT id as "id!: i64", device_uuid, app, timestamp as "timestamp!: i64", duration as "duration!: i64", is_deleted as "is_deleted!: bool" FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2 AND is_deleted = 0"#,
         request.start_time,
         request.end_time
     )
@@ -145,9 +171,12 @@ pub async fn delete_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resu
     let mut deleted_count = 0i64;
     for log in logs {
         if request.app_names.contains(&log.app) {
-            sqlx::query!("DELETE FROM logs WHERE id = ?1", log.id)
-                .execute(&pool)
-                .await?;
+            sqlx::query!(
+                "UPDATE logs SET is_deleted = 1 WHERE id = ?1 AND is_deleted = 0",
+                log.id
+            )
+            .execute(&pool)
+            .await?;
             deleted_count += 1;
         }
     }
@@ -161,7 +190,7 @@ pub async fn count_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resul
 
     let logs = sqlx::query_as!(
         Log,
-        r#"SELECT id as "id!: i64", device_uuid, app, timestamp as "timestamp!: i64", duration as "duration!: i64" FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2"#,
+        r#"SELECT id as "id!: i64", device_uuid, app, timestamp as "timestamp!: i64", duration as "duration!: i64", is_deleted as "is_deleted!: bool" FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2 AND is_deleted = 0"#,
         request.start_time,
         request.end_time
     )
@@ -184,7 +213,7 @@ pub async fn get_logs_for_time_block(
 
     let min_d = request.min_log_duration.max(1);
     let logs = sqlx::query_as::<_, Log>(
-        "SELECT id, device_uuid, app, timestamp, duration FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2 AND duration >= ?3 ORDER BY duration DESC",
+        "SELECT id, device_uuid, app, timestamp, duration, is_deleted FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2 AND duration >= ?3 AND is_deleted = 0 ORDER BY duration DESC",
     )
     .bind(request.start_time)
     .bind(request.end_time)
@@ -248,7 +277,7 @@ pub async fn get_logs_by_category(
 
     let min_d = request.min_log_duration.max(1);
     let mut logs = sqlx::query_as::<_, Log>(
-        "SELECT id, device_uuid, app, timestamp, duration FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2 AND duration >= ?3 ORDER BY duration DESC",
+        "SELECT id, device_uuid, app, timestamp, duration, is_deleted FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2 AND duration >= ?3 AND is_deleted = 0 ORDER BY duration DESC",
     )
     .bind(request.start_time)
     .bind(request.end_time)
@@ -330,7 +359,7 @@ pub async fn get_logs_for_app_in_time_range(
 
     let min_d = min_log_duration.max(1);
     let logs = sqlx::query_as::<_, Log>(
-        "SELECT id, device_uuid, app, timestamp, duration FROM logs WHERE app = ?1 AND timestamp >= ?2 AND timestamp <= ?3 AND duration >= ?4 ORDER BY timestamp ASC",
+        "SELECT id, device_uuid, app, timestamp, duration, is_deleted FROM logs WHERE app = ?1 AND timestamp >= ?2 AND timestamp <= ?3 AND duration >= ?4 AND is_deleted = 0 ORDER BY timestamp ASC",
     )
     .bind(&app)
     .bind(range_start)
@@ -362,17 +391,24 @@ pub(crate) async fn set_local_device_uuid_with_tx(
 
 pub async fn get_local_logs() -> anyhow::Result<Vec<Log>> {
     let pool = get_pool().await?;
-    let uuid = get_local_device_uuid().await;
+    let uuid = get_local_device_uuid()
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let Some(uuid) = uuid else {
+        return Ok(vec![]);
+    };
 
     let logs = sqlx::query_as::<_, Log>(
         r#"
         SELECT *
         FROM logs
         WHERE device_uuid = ?
+          AND is_deleted = 0
           AND id != (
               SELECT MAX(id)
               FROM logs
               WHERE device_uuid = ?
+                AND is_deleted = 0
           )
         ORDER BY id ASC
         "#,
@@ -394,10 +430,12 @@ pub async fn get_logs_for_sync() -> Result<Vec<Log>, Error> {
         SELECT *
         FROM logs
         WHERE device_uuid = ?
+          AND is_deleted = 0
           AND id != (
               SELECT MAX(id)
               FROM logs
               WHERE device_uuid = ?
+                AND is_deleted = 0
           )
         and
             id > ?
@@ -407,7 +445,7 @@ pub async fn get_logs_for_sync() -> Result<Vec<Log>, Error> {
     .bind(&device.uuid)
     .bind(&device.uuid)
     .bind(&device.last_sync_id)
-    .fetch_all(pool)
+    .fetch_all(&pool)
     .await?;
     Ok(logs)
 }

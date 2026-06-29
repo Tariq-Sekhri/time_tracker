@@ -39,7 +39,7 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
                 ExpectedColumn {
                     name: "device_uuid",
                     sql_type: "TEXT",
-                    not_null: true,
+                    not_null: false,
                     default_value: None,
                 },
                 ExpectedColumn {
@@ -56,6 +56,12 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
                 },
                 ExpectedColumn {
                     name: "duration",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: Some("0"),
+                },
+                ExpectedColumn {
+                    name: "is_deleted",
                     sql_type: "INTEGER",
                     not_null: true,
                     default_value: Some("0"),
@@ -508,7 +514,6 @@ async fn add_column_safe(
 async fn ensure_default_data(pool: &SqlitePool) -> Result<(), Error> {
     crate::db::tables::cat_regex::ensure_default_regexes(pool).await?;
     crate::db::tables::settings::seed_defaults(pool).await?;
-    crate::db::tables::device::ensure_logs_device_uuid(pool).await?;
     Ok(())
 }
 

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, device_uuid, app, timestamp, duration FROM logs",
+  "query": "SELECT id, device_uuid, app, timestamp, duration, is_deleted as \"is_deleted!: bool\" FROM logs WHERE is_deleted = 0",
   "describe": {
     "columns": [
       {
@@ -57,6 +57,17 @@
             "name": "duration"
           }
         }
+      },
+      {
+        "name": "is_deleted!: bool",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "logs",
+            "name": "is_deleted"
+          }
+        }
       }
     ],
     "parameters": {
@@ -67,8 +78,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "d59092920f0d6ed44affafdd10870b4ea62440f0a23293bc79dbc9df51448a2f"
+  "hash": "dd4dd7391dfe8aa2ae9a311cad7925789755c98d126dfe0a043188217d004391"
 }

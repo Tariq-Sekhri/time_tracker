@@ -2,7 +2,7 @@ use crate::db;
 use crate::db::error::Error;
 use crate::db::tables::cat_regex::{get_cat_regex, CategoryRegex};
 use crate::db::tables::category::{get_categories, Category};
-use crate::db::tables::log::{delete_log_by_id, get_logs, Log};
+use crate::db::tables::log::{get_logs, mark_log_deleted, Log};
 use crate::db::tables::skipped_app::get_skipped_apps;
 use crate::db::tables::settings::get_settings;
 
@@ -306,7 +306,7 @@ pub async fn get_week(
         .collect();
 
     for log_id in logs_to_delete {
-        let _ = delete_log_by_id(log_id).await;
+        let _ = mark_log_deleted(log_id).await;
     }
 
     logs.retain(|log| !is_skipped(&log.app));
