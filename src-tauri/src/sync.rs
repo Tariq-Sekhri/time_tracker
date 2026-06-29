@@ -3,24 +3,16 @@ use crate::db;
 use crate::db::get_pool;
 use crate::db::tables::app_metadata_kv::get_server_ip;
 use crate::db::tables::device::{
-    get_or_create_local_device, register_local_device, Device, DeviceState,
+    get_local_device_uuid, local_device_name, register_local_device, set_last_sync_id, Device,
+    DeviceState,
 };
-use crate::db::tables::log::{get_logs, Log};
+use crate::db::tables::log::{get_local_logs, get_logs, Log};
 use anyhow::{anyhow, Result};
 use db::Error;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 pub const DEFAULT_SERVER_IP: &str = "100.75.95.90";
-
-fn local_device_name() -> String {
-    std::env::var("COMPUTERNAME")
-        .or_else(|_| std::env::var("HOSTNAME"))
-        .map(|name| name.trim().to_string())
-        .ok()
-        .filter(|name| !name.is_empty())
-        .unwrap_or_else(|| "Unknown Device".to_string())
-}
 
 #[tauri::command]
 pub async fn check() -> Result<()> {
@@ -45,6 +37,7 @@ struct RegisterResponse {
 #[tauri::command]
 pub async fn register() -> Result<()> {
     check().await?;
+    let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
     // post
     let name = local_device_name();
 
@@ -53,7 +46,7 @@ pub async fn register() -> Result<()> {
     });
 
     let res = reqwest::Client::new()
-        .post("http://127.0.0.1:3000/v1/register")
+        .post(format!("http://{}:3000/v1/register", server_ip))
         .json(&body)
         .send()
         .await?
@@ -64,17 +57,32 @@ pub async fn register() -> Result<()> {
         name,
         uuid: res.uuid,
         state: DeviceState::Local { token: res.token },
-        last_sync_id: 0,
+        last_sync_id: -1,
     };
     register_local_device(device).await?;
     Ok(())
 }
 #[tauri::command]
-pub async fn upload_all_logs() -> bool {
-    //get local device id -1
-    // post
-    //lat sync id update
-    todo!()
+pub async fn upload_all_logs() -> Result<(), Error> {
+    let logs = get_local_logs().await?;
+    let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
+
+    let res = reqwest::Client::new()
+        .post(format!("http://{}:3000/v1/upload_all_logs", server_ip))
+        .json(&logs)
+        .send()
+        .await?
+        .error_for_status()?;
+    if res.status().is_success() {
+        let max = logs
+            .iter()
+            .max()
+            .ok_or(anyhow!("could not get server ip"))?
+            .id;
+        let uuid = get_local_device_uuid().await?;
+        set_last_sync_id(&uuid, max).await?;
+    }
+    Ok(())
 }
 
 #[tauri::command]

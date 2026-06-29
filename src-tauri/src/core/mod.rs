@@ -9,6 +9,7 @@ use crate::db::Error;
 use crate::core::linux::get_foreground_app;
 #[cfg(target_os = "windows")]
 use crate::core::windows::get_foreground_app;
+use crate::db::tables::device::get_local_device_uuid;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
@@ -79,7 +80,7 @@ fn sanitize_app_name(name: &str) -> String {
 async fn generate_log() -> Result<NewLog, Error> {
     let sanitized_app = sanitize_app_name(&get_foreground_app()?);
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
-    let device_uuid = log::get_or_create_device_uuid().await?;
+    let device_uuid = get_local_device_uuid().await?;
     Ok(NewLog {
         app: sanitized_app,
         device_uuid,

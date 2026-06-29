@@ -1,14 +1,15 @@
 use crate::db;
+use crate::db::tables::device::get_local_device_uuid;
 use crate::db::{get_pool, Error};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Sqlite, SqlitePool, Transaction};
 use std::collections::HashMap;
 
-#[derive(Debug, Serialize, FromRow, Clone, Deserialize)]
+#[derive(Debug, Serialize, FromRow, Clone, Deserialize, PartialOrd, PartialEq, Ord, Eq)]
 pub struct Log {
     pub id: i64,
-    pub device_uuid: String,
+    pub device_uuid: Option<String>,
     pub app: String,
     pub timestamp: i64,
     pub duration: i64,
@@ -17,7 +18,7 @@ pub struct Log {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MergedLog {
     pub ids: Vec<i64>,
-    pub device_uuid: String,
+    pub device_uuid: Option<String>,
     pub app: String,
     pub timestamp: i64,
     pub duration: i64,
@@ -26,7 +27,7 @@ pub struct MergedLog {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NewLog {
     pub app: String,
-    pub device_uuid: String,
+    pub device_uuid: Option<String>,
     pub timestamp: i64,
 }
 
@@ -34,7 +35,7 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        device_uuid TEXT NOT NULL DEFAULT '',
+        device_uuid TEXT,
         app TEXT NOT NULL,
         timestamp INTEGER NOT NULL,
         duration INTEGER NOT NULL DEFAULT 0
@@ -47,9 +48,10 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 
 pub async fn insert_log(log: NewLog) -> Result<i64, sqlx::Error> {
     let pool = db::get_pool().await?;
+    let uuid = get_local_device_uuid().await?;
     let result = sqlx::query!(
         "INSERT INTO logs (device_uuid, app, timestamp) VALUES (?1, ?2, ?3)",
-        log.device_uuid,
+        uuid,
         log.app,
         log.timestamp
     )
@@ -58,21 +60,17 @@ pub async fn insert_log(log: NewLog) -> Result<i64, sqlx::Error> {
     Ok(result.last_insert_rowid())
 }
 
-pub async fn get_or_create_device_uuid() -> Result<String, sqlx::Error> {
-    Ok(db::tables::device::get_or_create_local_device().await?.uuid)
-}
-
 #[tauri::command]
-pub async fn delete_log_by_id(id: i64) -> Result<(), Error> {
+pub async fn delete_log_by_id(id: i64, uuid: String) -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    sqlx::query!("DELETE FROM logs WHERE id = ?1", id)
+    sqlx::query!("DELETE FROM logs WHERE id = ?1, ?2", id, uuid?)
         .execute(&pool)
         .await?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn delete_logs_by_ids(ids: Vec<i64>) -> Result<(), Error> {
+pub async fn delete_logs_by_ids(ids: Vec<i64>, uuid: String) -> Result<(), Error> {
     let pool = db::get_pool().await?;
     for id in ids {
         sqlx::query!("DELETE FROM logs WHERE id = ?1", id)
@@ -359,4 +357,28 @@ pub(crate) async fn set_local_device_uuid_with_tx(
     .execute(&mut **tx)
     .await?;
     Ok(())
+}
+
+pub async fn get_local_logs() -> anyhow::Result<Vec<Log>> {
+    let pool = get_pool().await?;
+    let uuid = get_local_device_uuid().await;
+
+    let logs = sqlx::query_as::<_, Log>(
+        r#"
+        SELECT *
+        FROM logs
+        WHERE device_uuid = ?
+          AND id != (
+              SELECT MAX(id)
+              FROM logs
+              WHERE device_uuid = ?
+          )
+        ORDER BY id ASC
+        "#,
+    )
+    .bind(&uuid)
+    .bind(&uuid)
+    .fetch_all(&pool)
+    .await?;
+    Ok(logs)
 }

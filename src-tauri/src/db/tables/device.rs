@@ -98,53 +98,7 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-pub async fn get_or_create_local_device() -> Result<Device, sqlx::Error> {
-    let pool = &get_pool().await?;
-    get_or_create_local_device_with_pool(pool).await
-}
-
-async fn get_or_create_local_device_with_pool(pool: &SqlitePool) -> Result<Device, sqlx::Error> {
-    create_table(pool).await?;
-
-    let name = local_device_name();
-    let uuid = match metadata_get(pool, META_LOCAL_DEVICE_UUID).await? {
-        Some(uuid) if uuid::Uuid::parse_str(uuid.trim()).is_ok() => uuid.trim().to_string(),
-
-        _ => {
-            let _uuid = uuid::Uuid::new_v4().to_string();
-            let uuid = "16f32370-79cd-4c12-b74f-74fae644b55a".to_string();
-            metadata_set(pool, META_LOCAL_DEVICE_UUID, &uuid).await?;
-            uuid
-        }
-    };
-
-    sqlx::query!(
-        "INSERT INTO devices (uuid, name, kind, token, is_tracking, last_sync_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-         ON CONFLICT(uuid) DO UPDATE SET name = excluded.name",
-        uuid,
-        name,
-        KIND_LOCAL,
-        "",
-        false,
-        0i64
-    )
-    .execute(pool)
-    .await?;
-
-    let row = sqlx::query_as!(
-        RowDevice,
-        r#"SELECT uuid, name, kind, token, is_tracking as "is_tracking!: bool", last_sync_id as "last_sync_id!: i64"
-           FROM devices WHERE uuid = ?1"#,
-        uuid
-    )
-    .fetch_one(pool)
-    .await?;
-
-    Ok(row.try_into()?)
-}
-
-fn local_device_name() -> String {
+pub fn local_device_name() -> String {
     std::env::var("COMPUTERNAME")
         .or_else(|_| std::env::var("HOSTNAME"))
         .map(|name| name.trim().to_string())
@@ -166,32 +120,6 @@ async fn column_exists(
     Ok(rows
         .iter()
         .any(|row| row.try_get::<String, _>(1).ok().as_deref() == Some(column_name)))
-}
-
-pub async fn ensure_logs_device_uuid(pool: &SqlitePool) -> Result<()> {
-    let device = get_or_create_local_device_with_pool(pool).await?;
-
-    if column_exists(pool, "logs", "device_id").await? {
-        sqlx::query(
-            r#"UPDATE logs SET device_uuid = (
-                SELECT d.uuid FROM devices d WHERE d.id = logs.device_id
-            )
-            WHERE (device_uuid IS NULL OR device_uuid = '')
-              AND device_id != 0
-              AND EXISTS (SELECT 1 FROM devices d WHERE d.id = logs.device_id)"#,
-        )
-        .execute(pool)
-        .await?;
-    }
-
-    sqlx::query!(
-        "UPDATE logs SET device_uuid = ?1 WHERE device_uuid IS NULL OR device_uuid = ''",
-        device.uuid
-    )
-    .execute(pool)
-    .await?;
-
-    Ok(())
 }
 
 #[tauri::command]
@@ -244,5 +172,32 @@ pub async fn insert_devices(devices: Vec<Device>) -> Result<(), Error> {
         insert_device(&mut *tx, device).await?;
     }
     tx.commit().await?;
+    Ok(())
+}
+
+pub async fn get_local_device() -> std::result::Result<Option<Device>, Error> {
+    let pool = get_pool().await?;
+    sqlx::query_as::<_, RowDevice>("SELECT * FROM devices where token not null")
+        .fetch_optional(&pool)
+        .await;
+    todo!()
+}
+
+pub async fn get_local_device_uuid() -> Result<Option<String>, Error> {
+    let local = get_local_device().await?;
+    if let Some(local) = local {
+        Ok(Some(local.uuid))
+    } else {
+        Ok(None)
+    }
+}
+
+pub async fn set_last_sync_id(uuid: &Option<String>, new_last_sync_id: i64) -> Result<(), Error> {
+    let pool = get_pool().await?;
+    sqlx::query("UPDATE devices SET last_sync_id = ? WHERE uuid = ?")
+        .bind(new_last_sync_id)
+        .bind(uuid)
+        .execute(&pool)
+        .await?;
     Ok(())
 }
