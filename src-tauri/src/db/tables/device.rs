@@ -1,4 +1,5 @@
-use crate::db::tables::log::set_local_device_uuid_with_tx;use crate::db::{get_pool, Error};
+use crate::db::tables::log::set_local_device_uuid_with_tx;
+use crate::db::{get_pool, Error};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, FromRow, Row, Sqlite, SqlitePool};
@@ -18,6 +19,17 @@ pub struct Device {
     pub name: String,
     pub(crate) state: DeviceState,
     pub(crate) last_sync_id: i64,
+}
+
+impl Device {
+    pub fn new(uuid: String, name: String) -> Self {
+        Self {
+            uuid,
+            name,
+            state: DeviceState::Remote { is_tracking: false },
+            last_sync_id: 0,
+        }
+    }
 }
 
 #[derive(FromRow)]
@@ -167,8 +179,8 @@ pub async fn register_local_device(device: Device) -> Result<()> {
 pub async fn insert_devices(devices: Vec<Device>) -> Result<(), Error> {
     let pool = get_pool().await?;
     let mut tx = pool.begin().await?;
-    for device in &devices {
-        insert_device(&mut *tx, device).await?;
+    for device in devices {
+        insert_device(&mut *tx, &device).await?;
     }
     tx.commit().await?;
     Ok(())
@@ -203,4 +215,16 @@ pub async fn set_last_sync_id(uuid: &Option<String>, new_last_sync_id: i64) -> R
         .execute(&pool)
         .await?;
     Ok(())
+}
+
+pub async fn get_devices() -> Result<Vec<Device>, Error> {
+    let pool = get_pool().await?;
+
+    let devices = sqlx::query_as::<_, RowDevice>("SELECT * FROM devices")
+        .fetch_all(&pool)
+        .await?
+        .into_iter()
+        .map(Device::try_from)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(devices)
 }

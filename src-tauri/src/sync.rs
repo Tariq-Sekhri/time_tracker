@@ -3,8 +3,8 @@ use crate::db;
 use crate::db::get_pool;
 use crate::db::tables::app_metadata_kv::get_server_ip;
 use crate::db::tables::device::{
-    get_local_device, get_local_device_uuid, local_device_name, register_local_device,
-    set_last_sync_id, Device, DeviceState,
+    get_devices as get_devices_from_db, get_local_device, get_local_device_uuid, insert_devices,
+    local_device_name, register_local_device, set_last_sync_id, Device, DeviceState,
 };
 use crate::db::tables::log::{
     delete_deleted_logs, get_deleted_logs, get_local_logs, get_logs, get_logs_for_sync, Log,
@@ -126,22 +126,47 @@ pub async fn sync() -> Result<(), Error> {
         let uuid = get_local_device_uuid().await?;
         set_last_sync_id(&uuid, max).await?;
     }
+
     Ok(())
 }
+#[derive(Debug, Deserialize)]
+struct ServerDevice {
+    name: String,
+    uuid: String,
+    last_sync_id: i32,
+}
+
 #[tauri::command]
-pub async fn devices() -> Result<Vec<Device>> {
-    // get from server
-    //  add new
-    // return all
-    todo!()
+pub async fn get_devices() -> Result<Vec<Device>, Error> {
+    let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
+    let devices: Vec<Device> = reqwest::get(format!("http://{}:3000/v1/devices", server_ip))
+        .await?
+        .error_for_status()?
+        .json::<Vec<ServerDevice>>()
+        .await?
+        .into_iter()
+        .map(|device| Device::new(device.uuid, device.name))
+        .collect();
+
+    insert_devices(devices).await?;
+    get_devices_from_db().await
 }
 #[tauri::command]
-pub async fn device_logs() -> Result<()> {
+pub async fn device_logs() -> Result<Vec<Vec<Log>>, Error> {
+    let devices: Vec<Device> = get_devices()
+        .await?
+        .into_iter()
+        .filter(|device| match device.state {
+            DeviceState::Local { .. } => false,
+            DeviceState::Remote { is_tracking } => is_tracking,
+        })
+        .collect();
+
     ///devices/{device_uuid}"
     // get devices
     // for each device where is tracking then get all logs
     // once we have a Vec<logs>
     // insert the new logs
     // set last sync id
-    Ok(())
+    todo!()
 }
