@@ -145,14 +145,19 @@ fn get_time_blocks(
         return Ok(Vec::new());
     }
 
+    let mut ordered_logs: Vec<&Log> = logs.iter().collect();
+    ordered_logs.sort_by(|a, b| a.timestamp.cmp(&b.timestamp).then(a.id.cmp(&b.id)));
+
     let min_log_duration = time_block_settings.min_log_duration.max(1);
 
-    let long_logs: Vec<&Log> = logs
+    let long_logs: Vec<&Log> = ordered_logs
         .iter()
+        .copied()
         .filter(|log| log.duration >= min_log_duration)
         .collect();
-    let short_logs: Vec<&Log> = logs
+    let short_logs: Vec<&Log> = ordered_logs
         .iter()
+        .copied()
         .filter(|log| log.duration < min_log_duration)
         .collect();
 
@@ -176,6 +181,7 @@ fn get_time_blocks(
         if let Some(current_time_block) = time_blocks.get_mut(time_block_index) {
             if current_time_block.category == log_cat {
                 if log.timestamp <= current_time_block.end_time {
+                    current_time_block.start_time = current_time_block.start_time.min(log.timestamp);
                     current_time_block.end_time = current_time_block.end_time.max(log_end_time);
                     if let Some(matching_app) = current_time_block
                         .apps
