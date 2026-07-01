@@ -104,6 +104,10 @@ async fn background_process() -> Result<(), Error> {
         if IS_SUSPENDED.load(Ordering::Relaxed) {
             continue;
         }
+        if get_local_device_uuid().await?.is_none() {
+            last_log_id = -1;
+            continue;
+        }
         let new_log = generate_log().await?;
 
         if skipped_app::is_skipped_app(&new_log.app).await? {

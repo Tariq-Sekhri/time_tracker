@@ -71,10 +71,15 @@ async fn migrate_logs_composite_primary_key(pool: &SqlitePool) -> Result<(), sql
 
     sqlx::query(
         "UPDATE logs SET device_uuid = (SELECT uuid FROM devices WHERE kind = 'local' LIMIT 1)
-         WHERE device_uuid IS NULL OR device_uuid = ''",
+         WHERE (device_uuid IS NULL OR device_uuid = '')
+           AND EXISTS (SELECT 1 FROM devices WHERE kind = 'local' LIMIT 1)",
     )
     .execute(pool)
     .await?;
+
+    sqlx::query("DELETE FROM logs WHERE device_uuid IS NULL OR device_uuid = ''")
+        .execute(pool)
+        .await?;
 
     let mut tx = pool.begin().await?;
 
@@ -111,10 +116,14 @@ async fn migrate_logs_composite_primary_key(pool: &SqlitePool) -> Result<(), sql
 
 pub async fn insert_log(log: NewLog) -> Result<i64, sqlx::Error> {
     let pool = db::get_pool().await?;
-    let uuid = get_local_device_uuid()
+    let local_uuid = get_local_device_uuid()
         .await
         .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
-    let Some(uuid) = uuid else {
+    let Some(uuid) = log
+        .device_uuid
+        .filter(|u| !u.is_empty())
+        .or(local_uuid.filter(|u| !u.is_empty()))
+    else {
         return Err(sqlx::Error::Protocol("local device not set".into()));
     };
     let next_id: i64 = sqlx::query_scalar(
