@@ -1,26 +1,17 @@
-use crate::app_prefs::{get_app_metadata, set_app_metadata};
 use crate::db;
-use crate::db::get_pool;
 use crate::db::tables::app_metadata_kv::get_server_ip;
 use crate::db::tables::device::{
     get_devices as get_devices_from_db, get_local_device, get_local_device_uuid, insert_devices,
     local_device_name, register_local_device, set_last_sync_id, Device, DeviceState,
 };
 use crate::db::tables::log::{
-    delete_deleted_logs, get_deleted_logs, get_local_logs, get_logs, get_logs_for_sync,
-    insert_logs, Log,
+    delete_deleted_logs, get_deleted_logs, get_local_logs, get_logs_for_sync, insert_logs, Log,
 };
 use anyhow::{anyhow, Result};
 use db::Error;
-use reqwest::Response;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sqlx::testing::TestTermination;
 use std::collections::HashMap;
-
-pub async fn is_syncing() -> Result<bool, Error> {
-    Ok(get_local_device().await?.is_some())
-}
 
 fn normalize_server_ip(server_ip: &str) -> String {
     let mut ip = server_ip.trim();
@@ -74,7 +65,7 @@ pub async fn register() -> Result<(), Error> {
     // post
     let name = local_device_name();
 
-    let body = serde_json::json!({
+    let body = json!({
         "name": name
     });
 
@@ -111,7 +102,7 @@ pub async fn upload_all_logs() -> Result<usize, Error> {
         .ok_or(anyhow!("Local device not found"))?;
     let token = match device.state {
         DeviceState::Local { token } => token,
-        DeviceState::Remote { is_tracking } => {
+        DeviceState::Remote { .. } => {
             return Err(Error::from(anyhow!("somehow got remote device?")));
         }
     };
@@ -150,7 +141,7 @@ pub async fn sync() -> Result<(), Error> {
         .ok_or(anyhow!("Local device not found"))?;
     let token = match device.state {
         DeviceState::Local { token } => token,
-        DeviceState::Remote { is_tracking } => {
+        DeviceState::Remote { .. } => {
             return Err(Error::from(anyhow!("somehow got remote device?")));
         }
     };
