@@ -82,7 +82,6 @@ pub async fn register() -> Result<(), Error> {
         uuid: res.uuid.clone(),
         state: DeviceState::Local { token: res.token },
         last_sync_id: -1,
-        color: crate::db::tables::device::device_color_for_uuid(&res.uuid),
         in_cal: true,
         in_stats: true,
     };

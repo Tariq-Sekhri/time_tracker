@@ -540,7 +540,7 @@ export default function RenderCalendarContent({
                                         <CalendarSourceToggles
                                             key={device.uuid}
                                             name={device.name}
-                                            color={device.color}
+                                            color="#6b7280"
                                             inCal={device.in_cal}
                                             inStats={device.in_stats}
                                             onToggleCal={() => toggleDeviceInCal(device.uuid)}

@@ -15,7 +15,15 @@ fn app_data_time_tracker_dir() -> PathBuf {
 }
 
 #[cfg(debug_assertions)]
-fn refresh_dev_database_from_production(dev_path: &PathBuf) -> std::io::Result<()> {
+fn seed_dev_database_from_production_once(dev_path: &PathBuf) -> std::io::Result<()> {
+    if dev_path.exists()
+        && std::fs::metadata(dev_path)
+            .map(|m| m.len() > 0)
+            .unwrap_or(false)
+    {
+        return Ok(());
+    }
+
     let prod = app_data_time_tracker_dir().join("app.db");
     if prod.exists()
         && std::fs::metadata(&prod)
@@ -83,7 +91,7 @@ async fn create_pool() -> Result<SqlitePool, sqlx::Error> {
     let db_path = get_db_path();
     #[cfg(debug_assertions)]
     {
-        refresh_dev_database_from_production(&db_path).map_err(sqlx::Error::Io)?;
+        seed_dev_database_from_production_once(&db_path).map_err(sqlx::Error::Io)?;
     }
     ensure_db_path(&db_path)?;
 

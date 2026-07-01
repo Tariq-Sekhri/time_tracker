@@ -9,7 +9,6 @@ export type Device = {
     name: string;
     state: DeviceState;
     last_sync_id: number;
-    color: string;
     in_cal: boolean;
     in_stats: boolean;
 };

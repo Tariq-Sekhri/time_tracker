@@ -1,4 +1,3 @@
-use crate::db::tables::app_metadata_kv::META_LOCAL_DEVICE_UUID;
 use crate::db::tables::log::set_local_device_uuid_with_tx;
 use crate::db::{get_pool, Error};
 use anyhow::Result;
@@ -7,21 +6,6 @@ use sqlx::{Executor, FromRow, Row, Sqlite, SqlitePool};
 
 const KIND_LOCAL: &str = "local";
 const KIND_REMOTE: &str = "remote";
-
-const DEVICE_COLORS: &[&str] = &[
-    "#6366f1", "#ec4899", "#14b8a6", "#f59e0b", "#8b5cf6", "#ef4444", "#22c55e", "#3b82f6",
-];
-const OLD_DEV_SEED_UUID: &str = "fd737a3a-1e65-4d1c-ace2-ddd4a1807605";
-const DEV_SEED_CLEANUP_KEY: &str = "dev_local_device_seed_cleanup_v1";
-const DEFAULT_LOCAL_UUID: &str = "3512cfc3-d5c7-4923-9cdb-c780120de44f";
-const DEFAULT_LOCAL_TOKEN: &str = "B6FJ2cE6fEdgI99vZHI76czNf0sKEWbokxQ_Z6OwgYo";
-const DEFAULT_LOCAL_NAME: &str = "TARIQ-DESKTOP";
-const DEFAULT_LOCAL_LAST_SYNC_ID: i64 = 171123;
-
-pub fn device_color_for_uuid(uuid: &str) -> String {
-    let hash = uuid.bytes().fold(0u32, |acc, b| acc.wrapping_add(b as u32));
-    DEVICE_COLORS[(hash as usize) % DEVICE_COLORS.len()].to_string()
-}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum DeviceState {
@@ -35,20 +19,17 @@ pub struct Device {
     pub name: String,
     pub(crate) state: DeviceState,
     pub(crate) last_sync_id: i64,
-    pub color: String,
     pub in_cal: bool,
     pub in_stats: bool,
 }
 
 impl Device {
     pub fn new(uuid: String, name: String) -> Self {
-        let color = device_color_for_uuid(&uuid);
         Self {
             uuid,
             name,
             state: DeviceState::Remote { is_tracking: false },
             last_sync_id: 0,
-            color,
             in_cal: true,
             in_stats: true,
         }
@@ -63,7 +44,6 @@ struct RowDevice {
     token: Option<String>,
     is_tracking: bool,
     last_sync_id: i64,
-    color: String,
     in_cal: bool,
     in_stats: bool,
 }
@@ -91,7 +71,6 @@ impl TryFrom<RowDevice> for Device {
             name: row.name,
             state,
             last_sync_id: row.last_sync_id,
-            color: row.color,
             in_cal: row.in_cal,
             in_stats: row.in_stats,
         })
@@ -108,7 +87,6 @@ impl From<&Device> for RowDevice {
                 token: Some(token.clone()),
                 is_tracking: false,
                 last_sync_id: device.last_sync_id,
-                color: device.color.clone(),
                 in_cal: device.in_cal,
                 in_stats: device.in_stats,
             },
@@ -119,7 +97,6 @@ impl From<&Device> for RowDevice {
                 token: None,
                 is_tracking: *is_tracking,
                 last_sync_id: device.last_sync_id,
-                color: device.color.clone(),
                 in_cal: device.in_cal,
                 in_stats: device.in_stats,
             },
@@ -136,7 +113,6 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             token TEXT,
             is_tracking INTEGER NOT NULL DEFAULT 0,
             last_sync_id INTEGER NOT NULL DEFAULT 0,
-            color TEXT NOT NULL DEFAULT '#6366f1',
             in_cal INTEGER NOT NULL DEFAULT 1,
             in_stats INTEGER NOT NULL DEFAULT 1
         )",
@@ -206,8 +182,8 @@ where
 {
     let row = RowDevice::from(device);
     sqlx::query(
-        "INSERT OR IGNORE INTO devices (uuid, name, kind, token, is_tracking, last_sync_id, color, in_cal, in_stats)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        "INSERT OR IGNORE INTO devices (uuid, name, kind, token, is_tracking, last_sync_id, in_cal, in_stats)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
     )
     .bind(&row.uuid)
     .bind(&row.name)
@@ -215,7 +191,6 @@ where
     .bind(&row.token)
     .bind(row.is_tracking)
     .bind(row.last_sync_id)
-    .bind(&row.color)
     .bind(row.in_cal)
     .bind(row.in_stats)
     .execute(executor)
@@ -228,71 +203,6 @@ pub async fn register_local_device(device: Device) -> Result<()> {
     let mut tx = pool.begin().await?;
     insert_device(&mut *tx, &device).await?;
     set_local_device_uuid_with_tx(&mut tx, &device.uuid).await?;
-    tx.commit().await?;
-    Ok(())
-}
-
-pub async fn cleanup_dev_local_device_seed_once(pool: &SqlitePool) -> Result<(), Error> {
-    let cleanup_done: Option<String> =
-        sqlx::query_scalar("SELECT value FROM app_metadata WHERE key = ?1")
-            .bind(DEV_SEED_CLEANUP_KEY)
-            .fetch_optional(pool)
-            .await?;
-    if cleanup_done.as_deref() == Some("1") {
-        return Ok(());
-    }
-
-    let mut tx = pool.begin().await?;
-
-    sqlx::query("UPDATE logs SET device_uuid = NULL WHERE device_uuid = ?1")
-        .bind(OLD_DEV_SEED_UUID)
-        .execute(&mut *tx)
-        .await?;
-
-    sqlx::query("DELETE FROM devices WHERE uuid = ?1 AND kind = ?2")
-        .bind(OLD_DEV_SEED_UUID)
-        .bind(KIND_LOCAL)
-        .execute(&mut *tx)
-        .await?;
-
-    sqlx::query("DELETE FROM app_metadata WHERE key = ?1 AND value = ?2")
-        .bind(META_LOCAL_DEVICE_UUID)
-        .bind(OLD_DEV_SEED_UUID)
-        .execute(&mut *tx)
-        .await?;
-
-    sqlx::query("INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?1, '1')")
-        .bind(DEV_SEED_CLEANUP_KEY)
-        .execute(&mut *tx)
-        .await?;
-
-    tx.commit().await?;
-    Ok(())
-}
-
-pub async fn seed_default_local_device(pool: &SqlitePool) -> Result<(), Error> {
-    let existing = sqlx::query_as::<_, RowDevice>("SELECT * FROM devices WHERE kind = ?1")
-        .bind(KIND_LOCAL)
-        .fetch_optional(pool)
-        .await?;
-    if existing.is_some() {
-        return Ok(());
-    }
-
-    let mut tx = pool.begin().await?;
-    sqlx::query(
-        "INSERT INTO devices (uuid, name, kind, token, is_tracking, last_sync_id, color, in_cal, in_stats)
-         VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6, 1, 1)",
-    )
-    .bind(DEFAULT_LOCAL_UUID)
-    .bind(DEFAULT_LOCAL_NAME)
-    .bind(KIND_LOCAL)
-    .bind(DEFAULT_LOCAL_TOKEN)
-    .bind(DEFAULT_LOCAL_LAST_SYNC_ID)
-    .bind(device_color_for_uuid(DEFAULT_LOCAL_UUID))
-    .execute(&mut *tx)
-    .await?;
-    set_local_device_uuid_with_tx(&mut tx, DEFAULT_LOCAL_UUID).await?;
     tx.commit().await?;
     Ok(())
 }

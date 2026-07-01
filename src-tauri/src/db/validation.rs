@@ -108,12 +108,6 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
                     default_value: Some("0"),
                 },
                 ExpectedColumn {
-                    name: "color",
-                    sql_type: "TEXT",
-                    not_null: true,
-                    default_value: Some("'#6366f1'"),
-                },
-                ExpectedColumn {
                     name: "in_cal",
                     sql_type: "INTEGER",
                     not_null: true,
@@ -467,7 +461,6 @@ pub async fn validate_and_repair_database(pool: &SqlitePool) -> Result<Validatio
     }
 
     migrate_legacy_category_prefs(pool).await?;
-    migrate_legacy_device_prefs(pool).await?;
 
     ensure_default_data(pool).await?;
 
@@ -497,18 +490,6 @@ async fn migrate_legacy_category_prefs(pool: &SqlitePool) -> Result<(), Error> {
     }
     sqlx::query(
         "UPDATE category SET is_visible = calendar_enabled, in_stats = calendar_enabled",
-    )
-    .execute(pool)
-    .await?;
-    Ok(())
-}
-
-async fn migrate_legacy_device_prefs(pool: &SqlitePool) -> Result<(), Error> {
-    if !table_has_column(pool, "devices", "color").await? {
-        return Ok(());
-    }
-    sqlx::query(
-        "UPDATE devices SET color = '#6366f1' WHERE color IS NULL OR color = ''",
     )
     .execute(pool)
     .await?;
@@ -583,8 +564,6 @@ async fn ensure_default_data(pool: &SqlitePool) -> Result<(), Error> {
     crate::db::tables::cat_regex::ensure_default_regexes(pool).await?;
     crate::db::tables::settings::seed_defaults(pool).await?;
     crate::db::tables::app_metadata_kv::ensure_default_server_ip(pool).await?;
-    crate::db::tables::device::cleanup_dev_local_device_seed_once(pool).await?;
-    crate::db::tables::device::seed_default_local_device(pool).await?;
     Ok(())
 }
 
