@@ -14,10 +14,9 @@ fn app_data_time_tracker_dir() -> PathBuf {
         .join("time-tracker")
 }
 
-#[cfg(debug_assertions)]
-fn seed_dev_database_from_production_once(dev_path: &PathBuf) -> std::io::Result<()> {
-    if dev_path.exists()
-        && std::fs::metadata(dev_path)
+fn seed_database_from_app_db_once(target_path: &PathBuf) -> std::io::Result<()> {
+    if target_path.exists()
+        && std::fs::metadata(target_path)
             .map(|m| m.len() > 0)
             .unwrap_or(false)
     {
@@ -30,10 +29,10 @@ fn seed_dev_database_from_production_once(dev_path: &PathBuf) -> std::io::Result
             .map(|m| m.len() > 0)
             .unwrap_or(false)
     {
-        if let Some(parent) = dev_path.parent() {
+        if let Some(parent) = target_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::copy(&prod, dev_path)?;
+        std::fs::copy(&prod, target_path)?;
     }
     Ok(())
 }
@@ -42,7 +41,7 @@ pub fn get_db_path() -> PathBuf {
     let db_filename = if cfg!(debug_assertions) {
         "apptest.db"
     } else {
-        "app.db"
+        "dev.db"
     };
     app_data_time_tracker_dir().join(db_filename)
 }
@@ -89,10 +88,7 @@ fn ensure_db_path(db_path: &PathBuf) -> Result<(), sqlx::Error> {
 
 async fn create_pool() -> Result<SqlitePool, sqlx::Error> {
     let db_path = get_db_path();
-    #[cfg(debug_assertions)]
-    {
-        seed_dev_database_from_production_once(&db_path).map_err(sqlx::Error::Io)?;
-    }
+    seed_database_from_app_db_once(&db_path).map_err(sqlx::Error::Io)?;
     ensure_db_path(&db_path)?;
 
     if db_path.exists()
