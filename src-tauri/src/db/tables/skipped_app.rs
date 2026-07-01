@@ -66,21 +66,26 @@ pub async fn insert_skipped_app_and_delete_logs(new_app: NewSkippedApp) -> Resul
     let compiled_regex = Regex::new(&new_app.regex)?;
     let pool = db::get_pool().await?;
     let logs = get_logs().await?;
-    let matching_ids: Vec<i64> = logs
+    let matching: Vec<(i64, String)> = logs
         .iter()
         .filter(|log| compiled_regex.is_match(&log.app))
-        .map(|log| log.id)
+        .filter_map(|log| {
+            log.device_uuid
+                .as_ref()
+                .map(|uuid| (log.id, uuid.clone()))
+        })
         .collect();
 
-    if !matching_ids.is_empty() {
+    if !matching.is_empty() {
         let mut tx = (&pool).begin().await?;
-        for log_id in matching_ids {
+        for (log_id, uuid) in matching {
             sqlx::query!(
-                "UPDATE logs SET is_deleted = 1 WHERE id = ?1 AND is_deleted = 0",
-                log_id
+                "UPDATE logs SET is_deleted = 1 WHERE id = ?1 AND device_uuid = ?2 AND is_deleted = 0",
+                log_id,
+                uuid
             )
-                .execute(&mut *tx)
-                .await?;
+            .execute(&mut *tx)
+            .await?;
         }
         tx.commit().await?;
     }

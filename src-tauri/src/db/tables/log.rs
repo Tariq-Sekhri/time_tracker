@@ -37,16 +37,72 @@ pub struct NewLog {
 pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        device_uuid TEXT,
+        id INTEGER NOT NULL,
+        device_uuid TEXT NOT NULL,
         app TEXT NOT NULL,
         timestamp INTEGER NOT NULL,
         duration INTEGER NOT NULL DEFAULT 0,
-        is_deleted INTEGER NOT NULL DEFAULT 0
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (device_uuid, id)
     )",
     )
     .execute(pool)
     .await?;
+    migrate_logs_composite_primary_key(pool).await?;
+    Ok(())
+}
+
+async fn migrate_logs_composite_primary_key(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    let ddl: Option<String> =
+        sqlx::query_scalar("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'logs'")
+            .fetch_optional(pool)
+            .await?;
+
+    let Some(ddl) = ddl else {
+        return Ok(());
+    };
+
+    if ddl.contains("PRIMARY KEY (device_uuid, id)") {
+        return Ok(());
+    }
+
+    sqlx::query(
+        "UPDATE logs SET device_uuid = (SELECT uuid FROM devices WHERE kind = 'local' LIMIT 1)
+         WHERE device_uuid IS NULL OR device_uuid = ''",
+    )
+    .execute(pool)
+    .await?;
+
+    let mut tx = pool.begin().await?;
+
+    sqlx::query(
+        "CREATE TABLE logs_new (
+            id INTEGER NOT NULL,
+            device_uuid TEXT NOT NULL,
+            app TEXT NOT NULL,
+            timestamp INTEGER NOT NULL,
+            duration INTEGER NOT NULL DEFAULT 0,
+            is_deleted INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (device_uuid, id)
+        )",
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "INSERT OR IGNORE INTO logs_new (id, device_uuid, app, timestamp, duration, is_deleted)
+         SELECT id, device_uuid, app, timestamp, duration, is_deleted FROM logs
+         WHERE device_uuid IS NOT NULL AND device_uuid != ''",
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query("DROP TABLE logs").execute(&mut *tx).await?;
+    sqlx::query("ALTER TABLE logs_new RENAME TO logs")
+        .execute(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
     Ok(())
 }
 
@@ -55,22 +111,39 @@ pub async fn insert_log(log: NewLog) -> Result<i64, sqlx::Error> {
     let uuid = get_local_device_uuid()
         .await
         .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
-    let result = sqlx::query!(
-        "INSERT INTO logs (device_uuid, app, timestamp) VALUES (?1, ?2, ?3)",
-        uuid,
-        log.app,
-        log.timestamp
+    let Some(uuid) = uuid else {
+        return Err(sqlx::Error::Protocol("local device not set".into()));
+    };
+    let next_id: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(id), 0) + 1 FROM logs WHERE device_uuid = ?1",
     )
+    .bind(&uuid)
+    .fetch_one(&pool)
+    .await?;
+    sqlx::query(
+        "INSERT INTO logs (id, device_uuid, app, timestamp) VALUES (?1, ?2, ?3, ?4)",
+    )
+    .bind(next_id)
+    .bind(&uuid)
+    .bind(&log.app)
+    .bind(log.timestamp)
     .execute(&pool)
     .await?;
-    Ok(result.last_insert_rowid())
+    Ok(next_id)
 }
 
 pub async fn mark_log_deleted(id: i64) -> Result<(), sqlx::Error> {
     let pool = db::get_pool().await?;
+    let uuid = get_local_device_uuid()
+        .await
+        .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
+    let Some(uuid) = uuid else {
+        return Err(sqlx::Error::Protocol("local device not set".into()));
+    };
     sqlx::query!(
-        "UPDATE logs SET is_deleted = 1 WHERE id = ?1 AND is_deleted = 0",
-        id
+        "UPDATE logs SET is_deleted = 1 WHERE id = ?1 AND device_uuid = ?2 AND is_deleted = 0",
+        id,
+        uuid
     )
     .execute(&pool)
     .await?;
@@ -120,11 +193,15 @@ pub async fn get_logs() -> Result<Vec<Log>, Error> {
 #[tauri::command]
 pub async fn get_log_by_id(id: i64) -> Result<Log, Error> {
     let pool = db::get_pool().await?;
-    let log = sqlx::query_as!(
-        Log,
-        r#"SELECT id, device_uuid, app, timestamp, duration, is_deleted as "is_deleted!: bool" FROM logs WHERE id = ?1 AND is_deleted = 0"#,
-        id
+    let uuid = get_local_device_uuid().await?;
+    let Some(uuid) = uuid else {
+        return Err(anyhow::anyhow!("local device not set").into());
+    };
+    let log = sqlx::query_as::<_, Log>(
+        "SELECT id, device_uuid, app, timestamp, duration, is_deleted FROM logs WHERE id = ?1 AND device_uuid = ?2 AND is_deleted = 0",
     )
+    .bind(id)
+    .bind(&uuid)
     .fetch_one(&pool)
     .await?;
     Ok(log)
@@ -132,10 +209,17 @@ pub async fn get_log_by_id(id: i64) -> Result<Log, Error> {
 
 pub async fn increase_duration(id: i64) -> Result<(), sqlx::Error> {
     let pool = db::get_pool().await?;
-    sqlx::query!(
-        "UPDATE logs SET duration = duration + 1 WHERE id = ?1 AND is_deleted = 0",
-        id
+    let uuid = get_local_device_uuid()
+        .await
+        .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
+    let Some(uuid) = uuid else {
+        return Err(sqlx::Error::Protocol("local device not set".into()));
+    };
+    sqlx::query(
+        "UPDATE logs SET duration = duration + 1 WHERE id = ?1 AND device_uuid = ?2 AND is_deleted = 0",
     )
+    .bind(id)
+    .bind(&uuid)
     .execute(&pool)
     .await?;
     Ok(())
@@ -172,13 +256,16 @@ pub async fn delete_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resu
     let mut deleted_count = 0i64;
     for log in logs {
         if request.app_names.contains(&log.app) {
-            sqlx::query!(
-                "UPDATE logs SET is_deleted = 1 WHERE id = ?1 AND is_deleted = 0",
-                log.id
-            )
-            .execute(&pool)
-            .await?;
-            deleted_count += 1;
+            if let Some(uuid) = &log.device_uuid {
+                sqlx::query!(
+                    "UPDATE logs SET is_deleted = 1 WHERE id = ?1 AND device_uuid = ?2 AND is_deleted = 0",
+                    log.id,
+                    uuid
+                )
+                .execute(&pool)
+                .await?;
+                deleted_count += 1;
+            }
         }
     }
 
@@ -468,10 +555,15 @@ pub async fn delete_deleted_logs() -> Result<(), Error> {
 pub async fn insert_logs(logs: &Vec<Log>) -> Result<(), Error> {
     let mut tx = get_pool().await?.begin().await?;
     for log in logs {
+        let Some(uuid) = &log.device_uuid else {
+            continue;
+        };
         sqlx::query(
-            "INSERT INTO logs (device_uuid, app, timestamp, duration) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT OR IGNORE INTO logs (id, device_uuid, app, timestamp, duration, is_deleted)
+             VALUES (?1, ?2, ?3, ?4, ?5, 0)",
         )
-        .bind(&log.device_uuid)
+        .bind(log.id)
+        .bind(uuid)
         .bind(&log.app)
         .bind(log.timestamp)
         .bind(log.duration)

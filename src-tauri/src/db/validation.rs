@@ -39,7 +39,7 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
                 ExpectedColumn {
                     name: "device_uuid",
                     sql_type: "TEXT",
-                    not_null: false,
+                    not_null: true,
                     default_value: None,
                 },
                 ExpectedColumn {
