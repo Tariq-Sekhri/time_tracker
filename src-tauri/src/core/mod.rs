@@ -93,7 +93,6 @@ pub async fn supervisor(app: AppHandle) {
         if let Err(e) = background_process().await {
             let _ = app.emit("BackgroundProcessError", &e);
         }
-        // TODO: add sync polling
     }
 }
 

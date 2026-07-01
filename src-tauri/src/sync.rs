@@ -15,11 +15,12 @@ use db::Error;
 use reqwest::Response;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use sqlx::testing::TestTermination;
 use std::collections::HashMap;
-use std::time::Duration;
-use tokio::try_join;
 
-pub const DEFAULT_SERVER_IP: &str = "100.75.95.90";
+pub async fn is_syncing() -> Result<bool, Error> {
+    Ok(get_local_device().await?.is_some())
+}
 
 fn normalize_server_ip(server_ip: &str) -> String {
     let mut ip = server_ip.trim();

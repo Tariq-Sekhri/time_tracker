@@ -6,14 +6,13 @@ mod google_oauth;
 mod sync;
 mod tray;
 
-use std::sync::{atomic::AtomicBool, Mutex};
-
 use commands::{apply_update_cmd, check_update_cmd};
 use core::{get_tracking_status, set_tracking_status, supervisor};
 use db::queries::{
     get_day_statistics, get_total_statistics, get_week, get_week_for_app_filter,
     get_week_statistics,
 };
+use db::tables::app_metadata_kv::{get_server_ip, set_server_ip};
 use db::tables::cat_regex::{
     delete_cat_regex_by_id, get_cat_regex, get_cat_regex_by_id, insert_cat_regex,
     update_cat_regex_by_id,
@@ -22,7 +21,6 @@ use db::tables::category::{
     delete_category_by_id, get_categories, get_category_by_id, insert_category,
     update_category_by_id,
 };
-use db::tables::app_metadata_kv::{get_server_ip, set_server_ip};
 use db::tables::device::{insert_devices, set_is_tracking, update_device};
 use db::tables::google_calendar::{
     delete_google_calendar, get_google_calendar_by_id, get_google_calendars,
@@ -38,7 +36,10 @@ use db::tables::skipped_app::{
     count_matching_logs, delete_skipped_app_by_id, get_skipped_apps,
     insert_skipped_app_and_delete_logs, restore_default_skipped_apps, update_skipped_app_by_id,
 };
+use std::sync::atomic::Ordering;
+use std::sync::{atomic::AtomicBool, Mutex};
 
+use crate::sync::sync;
 use app_prefs::{
     delete_app_metadata, get_app_metadata, get_calendar_view_prefs, set_app_metadata,
     set_calendar_view_prefs,
@@ -56,9 +57,7 @@ use google_oauth::{
     get_google_auth_status, get_google_oauth_app_credentials, google_oauth_login,
     google_oauth_logout, set_google_oauth_app_credentials,
 };
-use sync::{
-    check, device_logs, get_devices, register, upload_all_logs,
-};
+use sync::{check, device_logs, get_devices, register, upload_all_logs};
 use tauri::{Emitter, Manager};
 use tray::refresh_tray_menu;
 
@@ -158,12 +157,34 @@ pub fn run() {
             }
 
             tray::setup_tray(app.handle())?;
+            let app_handle = app.handle().clone();
+
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(1 * 60)).await;
+                let sync_interval_secs = 5 * 60;
+                loop {
+                    let _ = app_handle.emit("sync_started", ());
+                    match sync().await {
+                        Ok(()) => {
+                            let _ = app_handle.emit("sync-successful", ());
+                            println!("sync successful");
+                        }
+                        Err(e) => {
+                            let _ = app_handle.emit("sync-error", e.to_string());
+                            println!("sync failed: {}", e);
+                        }
+                    }
+                    for remaining in (1..=sync_interval_secs).rev() {
+                        let _ = app_handle.emit("count_down_to_sync", remaining);
+                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    }
+                }
+            });
 
             tauri::async_runtime::spawn(supervisor(app.handle().clone()));
 
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                use std::sync::atomic::Ordering;
                 use tauri_plugin_updater::UpdaterExt;
 
                 let update = match handle.updater_builder().build() {

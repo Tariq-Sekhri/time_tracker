@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     checkSyncServer,
@@ -14,7 +15,11 @@ import {
 import { useToast } from "../Componants/Toast.tsx";
 import { toErrorString } from "../types/common.ts";
 
-const DEFAULT_SERVER_IP = "100.75.95.90";
+function formatCountdown(seconds: number) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${String(secs).padStart(2, "0")}`;
+}
 
 export default function Sync() {
     const queryClient = useQueryClient();
@@ -24,20 +29,37 @@ export default function Sync() {
     const [registerError, setRegisterError] = useState<string | null>(null);
     const [trackingError, setTrackingError] = useState<string | null>(null);
     const [showRegisterConfirm, setShowRegisterConfirm] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
+    const [countdownSeconds, setCountdownSeconds] = useState<number | null>(null);
+
+    useEffect(() => {
+        let unlistenCountdown: (() => void) | null = null;
+        let unlistenSyncStarted: (() => void) | null = null;
+
+        const setup = async () => {
+            unlistenCountdown = await listen<number>("count_down_to_sync", (e) => {
+                const seconds = typeof e.payload === "number" ? e.payload : Number(e.payload);
+                if (!Number.isFinite(seconds)) return;
+                setIsSyncing(false);
+                setCountdownSeconds(seconds);
+            });
+            unlistenSyncStarted = await listen("sync_started", () => {
+                setIsSyncing(true);
+                setCountdownSeconds(null);
+            });
+        };
+
+        void setup();
+
+        return () => {
+            if (unlistenCountdown) unlistenCountdown();
+            if (unlistenSyncStarted) unlistenSyncStarted();
+        };
+    }, []);
 
     const serverIpQuery = useQuery({
         queryKey: ["sync", "serverIp"],
         queryFn: getServerIp,
-    });
-
-    const setServerIpMutation = useMutation({
-        mutationFn: setServerIp,
-        onSuccess: async () => {
-            await queryClient.invalidateQueries({ queryKey: ["sync", "serverIp"] });
-        },
-        onError: (e: unknown) => {
-            setServerError(toErrorString(e));
-        },
     });
 
     const checkMutation = useMutation({
@@ -113,14 +135,6 @@ export default function Sync() {
 
     const serverIp = serverIpQuery.data ?? null;
     const isChecking = checkMutation.isPending;
-    const isSettingDefaultServerIp = setServerIpMutation.isPending;
-
-    useEffect(() => {
-        if (serverIpQuery.isLoading) return;
-        if (serverIp) return;
-        if (setServerIpMutation.isPending) return;
-        setServerIpMutation.mutate(DEFAULT_SERVER_IP);
-    }, [serverIp, serverIpQuery.isLoading, setServerIpMutation]);
 
     const localDevice = useMemo(() => {
         const devices = devicesQuery.data ?? [];
@@ -155,12 +169,26 @@ export default function Sync() {
 
     return (
         <div className="pt-10 pl-5 pr-5 text-white space-y-6">
-            <div className="rounded bg-gray-900 p-4 inline-block">
-                <div className="text-sm text-gray-300">Server IP locked</div>
-                <div className="mt-1 font-mono">{serverIp ?? DEFAULT_SERVER_IP}</div>
+            <div className="flex flex-wrap gap-4">
+                {serverIp ? (
+                    <div className="rounded bg-gray-900 p-4 inline-block">
+                        <div className="text-sm text-gray-300">Server IP</div>
+                        <div className="mt-1 font-mono">{serverIp}</div>
+                    </div>
+                ) : null}
+                <div className="rounded bg-gray-900 p-4 inline-block min-w-[160px]">
+                    <div className="text-sm text-gray-300">Next automatic sync</div>
+                    <div className="mt-1 font-mono text-lg">
+                        {isSyncing
+                            ? "Syncing…"
+                            : countdownSeconds !== null
+                              ? formatCountdown(countdownSeconds)
+                              : "—"}
+                    </div>
+                </div>
             </div>
 
-            {!serverIp && !isSettingDefaultServerIp ? (
+            {!serverIp ? (
                 <div className="flex flex-col gap-3 max-w-md">
                     <div className="text-sm text-gray-300">No server configured. Enter a server IP.</div>
                     <div className="flex gap-2">
@@ -168,7 +196,7 @@ export default function Sync() {
                             type="text"
                             value={ipInput}
                             onChange={(e) => setIpInput(e.target.value)}
-                            placeholder="e.g. 100.75.95.90"
+                            placeholder="Server IP"
                             className="flex-1 px-3 py-2 rounded bg-gray-800 text-white"
                         />
                         <button

@@ -582,8 +582,6 @@ async fn add_column_safe(
 async fn ensure_default_data(pool: &SqlitePool) -> Result<(), Error> {
     crate::db::tables::cat_regex::ensure_default_regexes(pool).await?;
     crate::db::tables::settings::seed_defaults(pool).await?;
-    crate::db::tables::device::cleanup_dev_local_device_seed_once(pool).await?;
-    crate::db::tables::device::seed_default_local_device(pool).await?;
     Ok(())
 }
 

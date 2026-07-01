@@ -15,7 +15,5 @@
     - afk detection
     - macos
 
-when we delte anu log
-
-is delted log table
+make whole sync more robust 
 

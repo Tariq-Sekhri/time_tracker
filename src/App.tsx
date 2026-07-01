@@ -42,6 +42,23 @@ function AppInner() {
     const removeToastRef = useRef(removeToast);
 
     useEffect(() => {
+        let unlistenSyncError: (() => void) | null = null;
+
+        const setup = async () => {
+            unlistenSyncError = await listen<string>("sync-error", (e) => {
+                const msg = typeof e.payload === "string" ? e.payload : toErrorString(e.payload);
+                showToastRef.current("Sync failed", "error", 5000, msg);
+            });
+        };
+
+        setup();
+
+        return () => {
+            if (unlistenSyncError) unlistenSyncError();
+        };
+    }, []);
+
+    useEffect(() => {
         showToastRef.current = showToast;
         updateToastRef.current = updateToast;
         removeToastRef.current = removeToast;
