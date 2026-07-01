@@ -164,15 +164,20 @@ pub fn run() {
                 let sync_interval_secs = 5 * 60;
                 loop {
                     let _ = app_handle.emit("sync_started", ());
-                    match sync().await {
-                        Ok(()) => {
-                            let _ = app_handle.emit("sync-successful", ());
-                            println!("sync successful");
-                        }
-                        Err(e) => {
-                            let _ = app_handle.emit("sync-error", e.to_string());
-                            println!("sync failed: {}", e);
-                        }
+                    let mut errors = Vec::new();
+                    if let Err(e) = sync().await {
+                        errors.push(format!("sync: {}", e));
+                    }
+                    if let Err(e) = device_logs(None).await {
+                        errors.push(format!("pull logs: {}", e));
+                    }
+                    if errors.is_empty() {
+                        let _ = app_handle.emit("sync-successful", ());
+                        println!("sync successful");
+                    } else {
+                        let msg = errors.join("; ");
+                        let _ = app_handle.emit("sync-error", &msg);
+                        println!("sync failed: {}", msg);
                     }
                     for remaining in (1..=sync_interval_secs).rev() {
                         let _ = app_handle.emit("count_down_to_sync", remaining);

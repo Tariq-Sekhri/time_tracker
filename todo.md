@@ -15,5 +15,4 @@
     - afk detection
     - macos
 
-make whole sync more robust 
 
