@@ -48,8 +48,11 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     )
     .execute(pool)
     .await?;
-    migrate_logs_composite_primary_key(pool).await?;
     Ok(())
+}
+
+pub async fn ensure_logs_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    migrate_logs_composite_primary_key(pool).await
 }
 
 async fn migrate_logs_composite_primary_key(pool: &SqlitePool) -> Result<(), sqlx::Error> {
