@@ -57,7 +57,7 @@ use google_oauth::{
     get_google_auth_status, get_google_oauth_app_credentials, google_oauth_login,
     google_oauth_logout, set_google_oauth_app_credentials,
 };
-use sync::{check, device_logs, get_devices, register, upload_all_logs};
+use sync::{check, device_logs, get_devices, register, reupload_all_logs, upload_all_logs};
 use tauri::{Emitter, Manager};
 use tray::refresh_tray_menu;
 
@@ -331,6 +331,7 @@ pub fn run() {
             check,
             register,
             upload_all_logs,
+            reupload_all_logs,
             sync::sync,
             get_devices,
             device_logs,

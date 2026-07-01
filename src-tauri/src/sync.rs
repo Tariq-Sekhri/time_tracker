@@ -5,7 +5,8 @@ use crate::db::tables::device::{
     local_device_name, register_local_device, set_last_sync_id, Device, DeviceState,
 };
 use crate::db::tables::log::{
-    delete_deleted_logs, get_deleted_logs, get_local_logs, get_logs_for_sync, insert_logs, Log,
+    consolidate_local_logs_for_reupload, delete_deleted_logs, get_all_local_logs_for_reupload,
+    get_deleted_logs, get_local_logs, get_logs_for_sync, insert_logs, Log,
 };
 use anyhow::{anyhow, Result};
 use db::Error;
@@ -88,11 +89,39 @@ pub async fn register() -> Result<(), Error> {
     register_local_device(device).await?;
     Ok(())
 }
+
+async fn post_logs_to_server(
+    logs: Vec<Log>,
+    token: String,
+    server_ip: String,
+    device_uuid: String,
+) -> Result<usize, Error> {
+    let count = logs.len();
+    if count == 0 {
+        return Ok(0);
+    }
+    let body = json!({
+        "token": token,
+        "logs": logs,
+    });
+    let res = reqwest::Client::new()
+        .post(sync_server_url(&server_ip, "upload_all_logs"))
+        .json(&body)
+        .send()
+        .await?
+        .error_for_status()?;
+    if res.status().is_success() {
+        if let Some(max) = logs.iter().map(|log| log.id).max() {
+            set_last_sync_id(&device_uuid, max).await?;
+        }
+    }
+    Ok(count)
+}
+
 #[tauri::command]
 pub async fn upload_all_logs() -> Result<usize, Error> {
     let logs = get_local_logs().await?;
-    let count = logs.len();
-    if count == 0 {
+    if logs.is_empty() {
         return Ok(0);
     }
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
@@ -105,30 +134,25 @@ pub async fn upload_all_logs() -> Result<usize, Error> {
             return Err(Error::from(anyhow!("somehow got remote device?")));
         }
     };
-    let body = json!(
-        {
+    post_logs_to_server(logs, token, server_ip, device.uuid).await
+}
 
-        "token":token,
-            "logs":logs,
-        }
-
-    );
-    let res = reqwest::Client::new()
-        .post(sync_server_url(&server_ip, "upload_all_logs"))
-        .json(&body)
-        .send()
+#[tauri::command]
+pub async fn reupload_all_logs() -> Result<usize, Error> {
+    let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
+    let device = get_local_device()
         .await?
-        .error_for_status()?;
-    if res.status().is_success() {
-        let max = logs
-            .iter()
-            .max()
-            .ok_or(anyhow!("could not get server ip"))?
-            .id;
-        let uuid = get_local_device_uuid().await?.unwrap();
-        set_last_sync_id(&uuid, max).await?;
-    }
-    Ok(count)
+        .ok_or(anyhow!("Local device not found"))?;
+    let token = match device.state {
+        DeviceState::Local { token } => token,
+        DeviceState::Remote { .. } => {
+            return Err(Error::from(anyhow!("somehow got remote device?")));
+        }
+    };
+    consolidate_local_logs_for_reupload(&device.uuid).await?;
+    set_last_sync_id(&device.uuid, -1).await?;
+    let logs = get_all_local_logs_for_reupload(&device.uuid).await?;
+    post_logs_to_server(logs, token, server_ip, device.uuid).await
 }
 
 #[tauri::command]
@@ -162,17 +186,15 @@ pub async fn sync() -> Result<(), Error> {
         .await?;
     if res.status().is_success() {
         delete_deleted_logs().await?;
-        let max = logs
-            .iter()
-            .max()
-            .ok_or(anyhow!("could not get server ip"))?
-            .id;
-        let uuid = get_local_device_uuid().await?.unwrap();
-        set_last_sync_id(&uuid, max).await?;
+        if let Some(max) = logs.iter().map(|log| log.id).max() {
+            let uuid = get_local_device_uuid().await?.unwrap();
+            set_last_sync_id(&uuid, max).await?;
+        }
     }
 
     Ok(())
 }
+
 #[derive(Debug, Deserialize, Serialize)]
 struct ServerDevice {
     name: String,

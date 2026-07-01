@@ -291,7 +291,7 @@ pub async fn get_week(
 ) -> Result<Vec<TimeBlock>, Error> {
     let (calendar_start_hour, time_block_settings) = load_runtime_settings().await?;
     let (week_start, week_end) = week_bounds_from_anchor(week_anchor, calendar_start_hour);
-    let local_uuid = crate::db::tables::device::get_local_device_uuid().await?;
+    let local_uuid = crate::db::tables::device::get_local_log_device_uuid().await?;
     let mut logs = get_logs().await?;
     let skipped_apps = get_skipped_apps().await?;
 
@@ -344,7 +344,7 @@ pub async fn get_week_for_app_filter(
 ) -> Result<Vec<TimeBlock>, Error> {
     let (calendar_start_hour, time_block_settings) = load_runtime_settings().await?;
     let (week_start, week_end) = week_bounds_from_anchor(week_anchor, calendar_start_hour);
-    let local_uuid = crate::db::tables::device::get_local_device_uuid().await?;
+    let local_uuid = crate::db::tables::device::get_local_log_device_uuid().await?;
     let mut logs = get_logs().await?;
     let skipped_apps = get_skipped_apps().await?;
 

@@ -9,7 +9,7 @@ import {
     registerDevice,
     setIsTracking,
     setServerIp,
-    uploadAllLogs,
+    reuploadAllLogs,
     type Device,
 } from "../api/sync.ts";
 import { useToast } from "../Componants/Toast.tsx";
@@ -81,13 +81,13 @@ export default function Sync() {
         enabled: !!serverIpQuery.data,
     });
 
-    const uploadLogsMutation = useMutation({
-        mutationFn: uploadAllLogs,
+    const reuploadLogsMutation = useMutation({
+        mutationFn: reuploadAllLogs,
         onSuccess: (count) => {
-            showToast(`Uploaded ${count} logs`, "success");
+            showToast(`Re-uploaded ${count} logs`, "success");
         },
         onError: (e: unknown) => {
-            showToast("Failed to upload logs", "error", 5000, toErrorString(e));
+            showToast("Failed to re-upload logs", "error", 5000, toErrorString(e));
         },
     });
 
@@ -97,7 +97,7 @@ export default function Sync() {
             await queryClient.invalidateQueries({ queryKey: ["sync", "devices"] });
             setRegisterError(null);
             setShowRegisterConfirm(false);
-            uploadLogsMutation.mutate();
+            reuploadLogsMutation.mutate();
         },
         onError: (e: unknown) => {
             setRegisterError(toErrorString(e));
@@ -218,7 +218,7 @@ export default function Sync() {
                     <h2 className="text-lg font-semibold">Local device (push to server)</h2>
                     <div className="text-sm text-gray-300">Register this device to get a local UUID and token.</div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                     {!isRegistered ? (
                         <button
                             type="button"
@@ -229,7 +229,17 @@ export default function Sync() {
                             Register
                         </button>
                     ) : (
-                        <span className="px-3 py-1 rounded bg-green-900/50 text-green-300 text-sm">Registered</span>
+                        <>
+                            <span className="px-3 py-1 rounded bg-green-900/50 text-green-300 text-sm">Registered</span>
+                            <button
+                                type="button"
+                                onClick={() => reuploadLogsMutation.mutate()}
+                                disabled={reuploadLogsMutation.isPending || !serverIp}
+                                className="px-4 py-2 rounded bg-amber-700 hover:bg-amber-600 disabled:opacity-60 text-sm"
+                            >
+                                {reuploadLogsMutation.isPending ? "Re-uploading..." : "Re-upload all logs"}
+                            </button>
+                        </>
                     )}
                 </div>
                 <div className="text-sm">

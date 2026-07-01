@@ -34,6 +34,8 @@ pub struct NewLog {
     pub timestamp: i64,
 }
 
+pub const PENDING_LOCAL_DEVICE_UUID: &str = "__pending_local__";
+
 pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS logs (
@@ -66,6 +68,7 @@ async fn migrate_logs_composite_primary_key(pool: &SqlitePool) -> Result<(), sql
     };
 
     if ddl.contains("PRIMARY KEY (device_uuid, id)") {
+        reclaim_pending_local_logs(pool).await?;
         return Ok(());
     }
 
@@ -77,9 +80,13 @@ async fn migrate_logs_composite_primary_key(pool: &SqlitePool) -> Result<(), sql
     .execute(pool)
     .await?;
 
-    sqlx::query("DELETE FROM logs WHERE device_uuid IS NULL OR device_uuid = ''")
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "UPDATE logs SET device_uuid = ?1
+         WHERE device_uuid IS NULL OR device_uuid = ''",
+    )
+    .bind(PENDING_LOCAL_DEVICE_UUID)
+    .execute(pool)
+    .await?;
 
     let mut tx = pool.begin().await?;
 
@@ -111,6 +118,21 @@ async fn migrate_logs_composite_primary_key(pool: &SqlitePool) -> Result<(), sql
         .await?;
 
     tx.commit().await?;
+    reclaim_pending_local_logs(pool).await?;
+    Ok(())
+}
+
+async fn reclaim_pending_local_logs(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE logs SET device_uuid = (
+            SELECT uuid FROM devices WHERE kind = 'local' AND token IS NOT NULL LIMIT 1
+         )
+         WHERE device_uuid = ?1
+           AND EXISTS (SELECT 1 FROM devices WHERE kind = 'local' AND token IS NOT NULL LIMIT 1)",
+    )
+    .bind(PENDING_LOCAL_DEVICE_UUID)
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
@@ -480,10 +502,12 @@ pub(crate) async fn set_local_device_uuid_with_tx(
     tx: &mut Transaction<'_, Sqlite>,
     uuid: &str,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        "UPDATE logs SET device_uuid = ?1 WHERE device_uuid IS NULL OR device_uuid = ''",
-        uuid
+    sqlx::query(
+        "UPDATE logs SET device_uuid = ?1
+         WHERE device_uuid IS NULL OR device_uuid = '' OR device_uuid = ?2",
     )
+    .bind(uuid)
+    .bind(PENDING_LOCAL_DEVICE_UUID)
     .execute(&mut **tx)
     .await?;
     Ok(())
@@ -515,6 +539,34 @@ pub async fn get_local_logs() -> anyhow::Result<Vec<Log>> {
     )
     .bind(&uuid)
     .bind(&uuid)
+    .fetch_all(&pool)
+    .await?;
+    Ok(logs)
+}
+
+pub async fn consolidate_local_logs_for_reupload(current_uuid: &str) -> Result<(), Error> {
+    let pool = get_pool().await?;
+    sqlx::query(
+        "UPDATE logs SET device_uuid = ?1
+         WHERE is_deleted = 0
+         AND (device_uuid IS NULL OR device_uuid = '' OR device_uuid = ?2
+              OR device_uuid IN (SELECT uuid FROM devices WHERE kind = 'local'))",
+    )
+    .bind(current_uuid)
+    .bind(PENDING_LOCAL_DEVICE_UUID)
+    .execute(&pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn get_all_local_logs_for_reupload(uuid: &str) -> Result<Vec<Log>, Error> {
+    let pool = get_pool().await?;
+    let logs = sqlx::query_as::<_, Log>(
+        "SELECT id, device_uuid, app, timestamp, duration, is_deleted FROM logs
+         WHERE device_uuid = ?1 AND is_deleted = 0
+         ORDER BY id ASC",
+    )
+    .bind(uuid)
     .fetch_all(&pool)
     .await?;
     Ok(logs)

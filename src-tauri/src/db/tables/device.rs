@@ -1,4 +1,4 @@
-use crate::db::tables::log::set_local_device_uuid_with_tx;
+use crate::db::tables::log::{set_local_device_uuid_with_tx, PENDING_LOCAL_DEVICE_UUID};
 use crate::db::{get_pool, Error};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -239,6 +239,24 @@ pub async fn get_local_device_uuid() -> Result<Option<String>, Error> {
     }
 }
 
+pub async fn get_local_log_device_uuid() -> Result<Option<String>, Error> {
+    if let Some(uuid) = get_local_device_uuid().await? {
+        return Ok(Some(uuid));
+    }
+    let pool = get_pool().await?;
+    let has_pending: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM logs WHERE device_uuid = ?1 AND is_deleted = 0 LIMIT 1)",
+    )
+    .bind(PENDING_LOCAL_DEVICE_UUID)
+    .fetch_one(&pool)
+    .await?;
+    if has_pending {
+        Ok(Some(PENDING_LOCAL_DEVICE_UUID.to_string()))
+    } else {
+        Ok(None)
+    }
+}
+
 pub async fn set_last_sync_id(uuid: &String, new_last_sync_id: i64) -> Result<(), Error> {
     let pool = get_pool().await?;
     sqlx::query("UPDATE devices SET last_sync_id = ? WHERE uuid = ?")
@@ -275,7 +293,14 @@ pub fn filter_logs_by_devices(
     let allowed: std::collections::HashSet<String> = uuids.into_iter().collect();
     logs.into_iter()
         .filter(|log| match &log.device_uuid {
-            Some(uuid) => allowed.contains(uuid),
+            Some(uuid) => {
+                allowed.contains(uuid)
+                    || (uuid == PENDING_LOCAL_DEVICE_UUID
+                        && local_uuid
+                            .as_ref()
+                            .map(|u| allowed.contains(u))
+                            .unwrap_or(true))
+            }
             None => local_uuid
                 .as_ref()
                 .map(|u| allowed.contains(u))

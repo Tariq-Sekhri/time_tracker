@@ -187,7 +187,7 @@ pub async fn get_week_statistics(
 ) -> Result<WeekStatistics, Error> {
     use chrono::{Local, TimeZone};
 
-    let local_uuid = crate::db::tables::device::get_local_device_uuid().await?;
+    let local_uuid = crate::db::tables::device::get_local_log_device_uuid().await?;
     let mut logs = get_logs().await?;
     let skipped_apps = get_skipped_apps().await?;
 
@@ -584,7 +584,7 @@ pub async fn get_day_statistics(
     day_end: i64,
     device_uuids: Option<Vec<String>>,
 ) -> Result<DayStatistics, Error> {
-    let local_uuid = crate::db::tables::device::get_local_device_uuid().await?;
+    let local_uuid = crate::db::tables::device::get_local_log_device_uuid().await?;
     let mut logs = get_logs().await?;
     let skipped_apps = get_skipped_apps().await?;
 
