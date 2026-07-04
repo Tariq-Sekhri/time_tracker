@@ -298,10 +298,7 @@ export default function Sync() {
                         <div className="flex items-center gap-3 flex-wrap">
                             {!isRegistered ? (
                                 <div>
-
-                                    <div className="text-sm text-gray-300">Register this device to get a local UUID and
-                                        token.
-                                    </div>
+                                    
                                     <button
                                         type="button"
                                         onClick={onOpenRegisterConfirm}
