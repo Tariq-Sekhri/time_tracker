@@ -4,6 +4,7 @@
     - threand veiw shows top app
     - use transations in atomic opperations
 - low
+    - app trend line (process name)
     - trend explain
     - right click app regex give u the regex that sorted it
     - remove pie chart from calander rightsidebar (add a settings for on or off, default off)
@@ -14,5 +15,6 @@
 - not planned
     - afk detection
     - macos
+
 
 

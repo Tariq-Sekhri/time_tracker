@@ -16,7 +16,10 @@ use tables::log::{get_logs, Log};
 use tables::skipped_app::{get_skipped_apps, SkippedApp};
 
 pub use error::Error;
-pub use pool::{get_pool, reset_pool};
+pub use pool::{
+    get_database_location, get_pool, probe_database_location, reset_database_location,
+    reset_pool, set_database_location,
+};
 pub use queries::get_week;
 
 #[derive(Serialize)]

@@ -132,6 +132,11 @@ pub fn local_device_name() -> String {
         .unwrap_or_else(|| "Unknown Device".to_string())
 }
 
+#[tauri::command]
+pub fn get_local_device_name() -> String {
+    local_device_name()
+}
+
 #[derive(Debug, Deserialize)]
 pub struct UpdateDevice {
     pub uuid: String,

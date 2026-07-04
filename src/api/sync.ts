@@ -31,8 +31,12 @@ export async function checkSyncServer(ip: string): Promise<string> {
     return invokeOrThrow<string>("check", { ip });
 }
 
-export async function registerDevice(): Promise<void> {
-    await invokeOrThrow("register");
+export async function getLocalDeviceName(): Promise<string> {
+    return invokeOrThrow<string>("get_local_device_name");
+}
+
+export async function registerDevice(name: string): Promise<void> {
+    await invokeOrThrow("register", { name });
 }
 
 export async function uploadAllLogs(): Promise<number> {

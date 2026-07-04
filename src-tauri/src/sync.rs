@@ -2,7 +2,7 @@ use crate::db;
 use crate::db::tables::app_metadata_kv::get_server_ip;
 use crate::db::tables::device::{
     get_devices as get_devices_from_db, get_local_device, get_local_device_uuid, insert_devices,
-    local_device_name, register_local_device, set_last_sync_id, Device, DeviceState,
+    register_local_device, set_last_sync_id, Device, DeviceState,
 };
 use crate::db::tables::log::{
     consolidate_local_logs_for_reupload, delete_deleted_logs, get_all_local_logs_for_reupload,
@@ -13,6 +13,7 @@ use db::Error;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
+use tauri::Emitter;
 
 fn normalize_server_ip(server_ip: &str) -> String {
     let mut ip = server_ip.trim();
@@ -39,6 +40,7 @@ fn sync_server_url(server_ip: &str, path: &str) -> String {
 #[tauri::command]
 pub async fn check(ip: String) -> Result<String, Error> {
     let normalized_ip = normalize_server_ip(&ip);
+    return Ok(normalized_ip);
     let url = sync_server_url(&normalized_ip, "check");
     let res = reqwest::get(&url)
         .await
@@ -60,12 +62,13 @@ struct RegisterResponse {
     token: String,
 }
 #[tauri::command]
-pub async fn register() -> Result<(), Error> {
+pub async fn register(name: String) -> Result<(), Error> {
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
     check(server_ip.clone()).await?;
-    // post
-    let name = local_device_name();
-
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err(Error(anyhow!("Device name cannot be empty")));
+    }
     let body = json!({
         "name": name
     });
@@ -225,23 +228,30 @@ impl From<ServerLog> for Log {
 }
 
 #[tauri::command]
-pub async fn get_devices() -> Result<Vec<Device>, Error> {
-    let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
-    let devices: Vec<Device> = reqwest::get(sync_server_url(&server_ip, "devices"))
-        .await?
-        .error_for_status()?
-        .json::<Vec<ServerDevice>>()
-        .await?
-        .into_iter()
-        .map(|device| Device::new(device.uuid, device.name))
-        .collect();
+pub async fn get_devices(app_handle: tauri::AppHandle) -> Result<Vec<Device>, Error> {
+    async fn inner() -> Result<(), Error> {
+        let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
+        let devices: Vec<Device> = reqwest::get(sync_server_url(&server_ip, "devices"))
+            .await?
+            .error_for_status()?
+            .json::<Vec<ServerDevice>>()
+            .await?
+            .into_iter()
+            .map(|device| Device::new(device.uuid, device.name))
+            .collect();
 
-    insert_devices(devices).await?;
+        insert_devices(devices).await?;
+        Ok(())
+    }
+    if let Err(e) = inner().await {
+        let _ = app_handle.emit("Server Error", &e);
+    }
     get_devices_from_db().await
 }
 #[tauri::command]
 pub async fn device_logs(device_uuid: Option<String>) -> Result<usize, Error> {
-    let mut devices: Vec<Device> = get_devices()
+    let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
+    let mut devices: Vec<Device> = get_devices_from_db()
         .await?
         .into_iter()
         .filter(|device| match device.state {
@@ -266,7 +276,6 @@ pub async fn device_logs(device_uuid: Option<String>) -> Result<usize, Error> {
             last_sync_id: device.last_sync_id,
         })
         .collect::<Vec<ServerDevice>>();
-    let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
     let res = reqwest::Client::new()
         .get(sync_server_url(&server_ip, "devices/"))
         .json(&de)

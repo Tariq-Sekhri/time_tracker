@@ -21,7 +21,7 @@ use db::tables::category::{
     delete_category_by_id, get_categories, get_category_by_id, insert_category,
     update_category_by_id,
 };
-use db::tables::device::{insert_devices, set_is_tracking, update_device};
+use db::tables::device::{get_local_device_name, insert_devices, set_is_tracking, update_device};
 use db::tables::google_calendar::{
     delete_google_calendar, get_google_calendar_by_id, get_google_calendars,
     insert_google_calendar, update_google_calendar,
@@ -50,8 +50,9 @@ use db::tables::google_calendar_sync::{
     get_google_calendar_events, list_available_google_calendars, update_google_calendar_event,
 };
 use db::{
-    create_manual_backup, create_safety_backup, get_backup_dir, get_db_path_cmd, list_backups,
-    restore_backup,
+    create_manual_backup, create_safety_backup, get_backup_dir, get_database_location,
+    get_db_path_cmd, list_backups, probe_database_location, reset_database_location,
+    restore_backup, set_database_location,
 };
 use google_oauth::{
     get_google_auth_status, get_google_oauth_app_credentials, google_oauth_login,
@@ -288,6 +289,10 @@ pub fn run() {
             count_matching_logs,
             restore_default_skipped_apps,
             get_db_path_cmd,
+            get_database_location,
+            probe_database_location,
+            set_database_location,
+            reset_database_location,
             get_tracking_status,
             set_tracking_status,
             refresh_tray_menu,
@@ -330,6 +335,7 @@ pub fn run() {
             insert_devices,
             check,
             register,
+            get_local_device_name,
             upload_all_logs,
             reupload_all_logs,
             sync::sync,

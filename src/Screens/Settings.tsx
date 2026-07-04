@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "../Componants/Toast.tsx";
 import { useBackendSettings, type SettingField } from "../hooks/useBackendSettings.ts";
+import {
+    getDatabaseLocation,
+    resetDatabaseLocation,
+    setDatabaseLocation,
+    type DatabaseLocationInfo,
+} from "../api/databaseLocation.ts";
+import { toErrorString } from "../types/common.ts";
 
 type FieldDef = { key: string; label: string };
 type CategoryDef = { title: string; fields: FieldDef[] };
@@ -218,6 +226,124 @@ function NumberSettingField({
     );
 }
 
+function DatabaseLocationSetting() {
+    const { showToast } = useToast();
+    const queryClient = useQueryClient();
+    const [info, setInfo] = useState<DatabaseLocationInfo | null>(null);
+    const [draft, setDraft] = useState("");
+    const [busy, setBusy] = useState(false);
+
+    useEffect(() => {
+        getDatabaseLocation()
+            .then((location) => {
+                setInfo(location);
+                setDraft(location.path);
+            })
+            .catch((e) => showToast("Failed to load database location", "error", 5000, toErrorString(e)));
+    }, [showToast]);
+
+    const applyLocation = async (path: string) => {
+        setBusy(true);
+        try {
+            let result = await setDatabaseLocation(path, false);
+            if (result.status === "needs_overwrite_confirmation") {
+                const confirmed = window.confirm(
+                    `The file at:\n\n${result.path}\n\nexists but is not a valid SQLite database.\n\nReplace it with a new empty database? This cannot be undone.`
+                );
+                if (!confirmed) return;
+                result = await setDatabaseLocation(path, true);
+                if (result.status !== "ok") return;
+            }
+            const next = await getDatabaseLocation();
+            setInfo(next);
+            setDraft(next.path);
+            await queryClient.invalidateQueries();
+            showToast("Database location updated", "success");
+        } catch (e) {
+            showToast("Failed to update database location", "error", 5000, toErrorString(e));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const handleApply = () => {
+        const path = draft.trim();
+        if (!path) {
+            showToast("Enter a database file path", "error");
+            return;
+        }
+        if (info && path === info.path) return;
+        void applyLocation(path);
+    };
+
+    const handleReset = async () => {
+        if (!info?.is_custom) return;
+        setBusy(true);
+        try {
+            const next = await resetDatabaseLocation();
+            setInfo(next);
+            setDraft(next.path);
+            await queryClient.invalidateQueries();
+            showToast("Database location reset to default", "success");
+        } catch (e) {
+            showToast("Failed to reset database location", "error", 5000, toErrorString(e));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <div className="bg-gray-900 p-4 rounded">
+            <h2 className="text-lg font-semibold mb-1">Data</h2>
+            <p className="text-sm text-gray-400 mb-4">
+                Point the app at a different SQLite file. Existing valid databases are used as-is; nothing is copied over.
+            </p>
+            <div className="space-y-3">
+                <div className="flex flex-col gap-2">
+                    <span className="text-sm text-gray-300">Database file</span>
+                    <input
+                        type="text"
+                        value={draft}
+                        disabled={busy || !info}
+                        onChange={(e) => setDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                                e.currentTarget.blur();
+                                handleApply();
+                            }
+                        }}
+                        className="w-full px-2 py-1.5 bg-gray-800 text-white rounded text-sm font-mono disabled:opacity-50"
+                        spellCheck={false}
+                    />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <button
+                        type="button"
+                        disabled={busy || !info || draft.trim() === (info?.path ?? "")}
+                        onClick={handleApply}
+                        className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded text-white text-sm font-medium disabled:opacity-40 disabled:pointer-events-none"
+                    >
+                        Apply
+                    </button>
+                    <button
+                        type="button"
+                        disabled={busy || !info?.is_custom}
+                        onClick={() => void handleReset()}
+                        className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded text-white text-sm font-medium disabled:opacity-40 disabled:pointer-events-none"
+                    >
+                        Use default
+                    </button>
+                </div>
+                {info && (
+                    <p className="text-xs text-gray-500 font-mono break-all">
+                        Default: {info.default_path}
+                    </p>
+                )}
+            </div>
+        </div>
+    );
+}
+
 export default function Settings() {
     const { showToast } = useToast();
     const { fields, allLocked, setVal, toggleLock, resetField, resetSettings } = useBackendSettings();
@@ -240,6 +366,7 @@ export default function Settings() {
             </div>
 
             <div className="space-y-6">
+                <DatabaseLocationSetting />
                 {SETTINGS_LAYOUT.map((category) => (
                     <div key={category.title} className="bg-gray-900 p-4 rounded">
                         <h2 className="text-lg font-semibold mb-4">{category.title}</h2>
