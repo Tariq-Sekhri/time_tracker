@@ -225,7 +225,9 @@ pub async fn insert_devices(devices: Vec<Device>) -> Result<(), Error> {
 
 pub async fn get_local_device() -> std::result::Result<Option<Device>, Error> {
     let pool = get_pool().await?;
-    let device = sqlx::query_as::<_, RowDevice>("SELECT * FROM devices where token not null")
+    let device = sqlx::query_as::<_, RowDevice>(
+        "SELECT * FROM devices WHERE kind = 'local' AND token IS NOT NULL",
+    )
         .fetch_optional(&pool)
         .await?;
     let ret: Option<Device> = match device {

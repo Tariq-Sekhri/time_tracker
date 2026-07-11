@@ -16,6 +16,7 @@ import Settings from "./Screens/Settings.tsx";
 import {ToastProvider, useToast} from "./Componants/Toast.tsx";
 import {get_total_statistics} from "./api/statistics.ts";
 import {toErrorString} from "./types/common.ts";
+import {useSyncTimer} from "./hooks/useSyncTimer.ts";
 import Sync from "./Screens/Sync.tsx";
 
 export type View =
@@ -31,6 +32,7 @@ export type View =
 function AppInner() {
     const queryClient = useQueryClient();
     const {showToast, updateToast, removeToast} = useToast();
+    const syncTimer = useSyncTimer();
     const [currentView, setCurrentView] = useState<View>("sync");
     const [updateAvailable, setUpdateAvailable] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
@@ -289,7 +291,7 @@ function AppInner() {
                 )}
                 {currentView === "settings" && <Settings/>}
                 {currentView === "googleCalendars" && <GoogleCalendarsView/>}
-                {currentView === "sync" && <Sync/>}
+                {currentView === "sync" && <Sync syncTimer={syncTimer} />}
             </div>
         </main>
     );

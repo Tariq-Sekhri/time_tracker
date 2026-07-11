@@ -13,7 +13,23 @@ use db::Error;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
-use tauri::Emitter;
+use std::sync::{Arc, OnceLock};
+use tauri::{AppHandle, Emitter};
+use tokio::sync::Notify;
+
+pub const SYNC_INTERVAL_SECS: u64 = 5 * 60;
+
+static SYNC_COUNTDOWN_RESET: OnceLock<Arc<Notify>> = OnceLock::new();
+
+pub fn sync_countdown_reset_notify() -> Arc<Notify> {
+    SYNC_COUNTDOWN_RESET
+        .get_or_init(|| Arc::new(Notify::new()))
+        .clone()
+}
+
+pub fn request_sync_countdown_reset() {
+    sync_countdown_reset_notify().notify_waiters();
+}
 
 fn normalize_server_ip(server_ip: &str) -> String {
     let mut ip = server_ip.trim();
@@ -158,8 +174,58 @@ pub async fn reupload_all_logs() -> Result<usize, Error> {
     post_logs_to_server(logs, token, server_ip, device.uuid).await
 }
 
+pub async fn is_registered_for_sync() -> Result<bool, Error> {
+    Ok(get_local_device().await?.is_some())
+}
+
+pub enum AutoSyncResult {
+    Skipped,
+    Completed { errors: Vec<String> },
+}
+
+pub async fn run_auto_sync_cycle() -> AutoSyncResult {
+    let Ok(registered) = is_registered_for_sync().await else {
+        return AutoSyncResult::Skipped;
+    };
+    if !registered {
+        return AutoSyncResult::Skipped;
+    }
+
+    let mut errors = Vec::new();
+    if let Err(e) = sync().await {
+        errors.push(format!("sync: {}", e));
+    }
+    if let Err(e) = device_logs(None).await {
+        errors.push(format!("pull logs: {}", e));
+    }
+    AutoSyncResult::Completed { errors }
+}
+
+#[tauri::command]
+pub async fn sync_now(app: AppHandle) -> Result<(), Error> {
+    let _ = app.emit("sync_started", ());
+    match run_auto_sync_cycle().await {
+        AutoSyncResult::Skipped => {
+            return Err(Error(anyhow!("Device not registered")));
+        }
+        AutoSyncResult::Completed { errors } => {
+            if errors.is_empty() {
+                let _ = app.emit("sync-successful", ());
+            } else {
+                return Err(Error(anyhow!(errors.join("; "))));
+            }
+        }
+    }
+    request_sync_countdown_reset();
+    let _ = app.emit("count_down_to_sync", SYNC_INTERVAL_SECS as i64);
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn sync() -> Result<(), Error> {
+    if !is_registered_for_sync().await? {
+        return Ok(());
+    }
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
     let logs = get_logs_for_sync().await?;
     let device = get_local_device()
@@ -250,6 +316,9 @@ pub async fn get_devices(app_handle: tauri::AppHandle) -> Result<Vec<Device>, Er
 }
 #[tauri::command]
 pub async fn device_logs(device_uuid: Option<String>) -> Result<usize, Error> {
+    if device_uuid.is_none() && !is_registered_for_sync().await? {
+        return Ok(0);
+    }
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
     let mut devices: Vec<Device> = get_devices_from_db()
         .await?

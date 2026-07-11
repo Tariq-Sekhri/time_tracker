@@ -11,9 +11,7 @@ use serde::Serialize;
 static POOL: Mutex<Option<SqlitePool>> = Mutex::new(None);
 
 fn app_data_time_tracker_dir() -> PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("time-tracker")
+    crate::instance::data_dir()
 }
 
 fn database_location_config_path() -> PathBuf {

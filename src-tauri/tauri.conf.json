@@ -44,6 +44,7 @@
         "silent": true
       },
       "nsis": {
+        "template": "./windows/installer.nsi",
         "installerHooks": "./nsis-hooks.nsh"
       }
     },

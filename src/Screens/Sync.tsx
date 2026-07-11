@@ -1,5 +1,4 @@
 import {useEffect, useMemo, useState} from "react";
-import {listen} from "@tauri-apps/api/event";
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {
     checkSyncServer,
@@ -11,10 +10,12 @@ import {
     setIsTracking,
     setServerIp as persistServerIp,
     reuploadAllLogs,
+    syncNow,
     type Device,
 } from "../api/sync.ts";
 import {useToast} from "../Componants/Toast.tsx";
 import {toErrorString} from "../types/common.ts";
+import type {useSyncTimer} from "../hooks/useSyncTimer.ts";
 
 function formatCountdown(seconds: number) {
     const mins = Math.floor(seconds / 60);
@@ -22,9 +23,10 @@ function formatCountdown(seconds: number) {
     return `${mins}:${String(secs).padStart(2, "0")}`;
 }
 
-export default function Sync() {
+export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncTimer>}) {
     const queryClient = useQueryClient();
     const {showToast} = useToast();
+    const {countdownSeconds, isSyncing, setIsSyncing, setCountdownSeconds} = syncTimer;
     const [ipInput, setIpInput] = useState("");
     const [serverError, setServerError] = useState<string | null>(null);
     const [registerError, setRegisterError] = useState<string | null>(null);
@@ -33,33 +35,7 @@ export default function Sync() {
     const [deviceNameInput, setDeviceNameInput] = useState("");
     const [deviceNameInitialized, setDeviceNameInitialized] = useState(false);
     const [isChangingServer, setIsChangingServer] = useState(false);
-    const [isSyncing, setIsSyncing] = useState(false);
-    const [countdownSeconds, setCountdownSeconds] = useState<number | null>(null);
-
-    useEffect(() => {
-        let unlistenCountdown: (() => void) | null = null;
-        let unlistenSyncStarted: (() => void) | null = null;
-
-        const setup = async () => {
-            unlistenCountdown = await listen<number>("count_down_to_sync", (e) => {
-                const seconds = typeof e.payload === "number" ? e.payload : Number(e.payload);
-                if (!Number.isFinite(seconds)) return;
-                setIsSyncing(false);
-                setCountdownSeconds(seconds);
-            });
-            unlistenSyncStarted = await listen("sync_started", () => {
-                setIsSyncing(true);
-                setCountdownSeconds(null);
-            });
-        };
-
-        void setup();
-
-        return () => {
-            if (unlistenCountdown) unlistenCountdown();
-            if (unlistenSyncStarted) unlistenSyncStarted();
-        };
-    }, []);
+    const [pendingDeviceUuids, setPendingDeviceUuids] = useState<Set<string>>(() => new Set());
 
     const serverIpQuery = useQuery({
         queryKey: ["sync", "serverIp"],
@@ -102,6 +78,18 @@ export default function Sync() {
         },
     });
 
+    const syncNowMutation = useMutation({
+        mutationFn: syncNow,
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({queryKey: ["sync", "devices"]});
+            showToast("Synced", "success");
+        },
+        onError: (e: unknown) => {
+            setIsSyncing(false);
+            showToast("Sync failed", "error", 5000, toErrorString(e));
+        },
+    });
+
     const registerMutation = useMutation({
         mutationFn: registerDevice,
         onSuccess: async () => {
@@ -132,6 +120,9 @@ export default function Sync() {
             }
             return null;
         },
+        onMutate: ({uuid}) => {
+            setPendingDeviceUuids((prev) => new Set(prev).add(uuid));
+        },
         onSuccess: async (result) => {
             await queryClient.invalidateQueries({queryKey: ["sync", "devices"]});
             setTrackingError(null);
@@ -141,6 +132,13 @@ export default function Sync() {
         },
         onError: (e: unknown) => {
             setTrackingError(toErrorString(e));
+        },
+        onSettled: (_result, _error, variables) => {
+            setPendingDeviceUuids((prev) => {
+                const next = new Set(prev);
+                next.delete(variables.uuid);
+                return next;
+            });
         },
     });
     const serverIp = serverIpQuery.data ?? null;
@@ -164,6 +162,13 @@ export default function Sync() {
         setDeviceNameInput(defaultDeviceNameQuery.data);
         setDeviceNameInitialized(true);
     }, [defaultDeviceNameQuery.data, deviceNameInitialized, isRegistered]);
+
+    useEffect(() => {
+        if (!isRegistered) {
+            setIsSyncing(false);
+            setCountdownSeconds(null);
+        }
+    }, [isRegistered, setIsSyncing, setCountdownSeconds]);
 
     const onCheck = () => {
         const ip = ipInput.trim();
@@ -196,7 +201,11 @@ export default function Sync() {
     };
 
     if (serverIpQuery.isLoading) {
-        return <div className="pt-10 pl-5 text-white">Loading server settings...</div>;
+        return (
+            <div className="p-6 text-white h-full overflow-y-auto nice-scrollbar">
+                <div className="text-gray-400">Loading server settings...</div>
+            </div>
+        );
     }
 
     function changeServerClicked() {
@@ -205,194 +214,240 @@ export default function Sync() {
     }
 
     function syncNowClicked() {
-
+        if (syncNowMutation.isPending || isSyncing) return;
+        syncNowMutation.mutate();
     }
 
+    const syncCountdownLabel =
+        isSyncing ? "Syncing…" : countdownSeconds !== null ? formatCountdown(countdownSeconds) : "—";
+
     return (
-        <div className="pt-10 pl-5 pr-5 text-white space-y-6">
-            {showServerConfig ? (
-                <div className="flex flex-wrap gap-4">
-                    <div className="rounded bg-gray-900 p-4 inline-block">
-                        <div className="text-sm text-gray-300">Server IP</div>
-                        <div className="mt-1 font-mono">{serverIp}</div>
-                        <button
-                            onClick={changeServerClicked}
-                            className={"px-4 py-2 mt-2 rounded bg-amber-700 hover:bg-amber-600 disabled:opacity-60 text-sm"}>Change
-                            Server
-                        </button>
-                    </div>
+        <div className="p-6 text-white h-full overflow-y-auto nice-scrollbar">
+            <div className="max-w-3xl mx-auto space-y-5">
+                <h1 className="text-2xl font-bold">Sync</h1>
 
-                    <div className="rounded bg-gray-900 p-4 inline-block min-w-[160px]">
-                        <div className="text-sm text-gray-300">Next automatic sync</div>
-                        <div className="mt-1 font-mono text-lg">
-                            {isSyncing
-                                ? "Syncing…"
-                                : countdownSeconds !== null
-                                    ? formatCountdown(countdownSeconds)
-                                    : "—"}
+                {!showServerConfig ? (
+                    <section className="bg-gray-900 rounded-lg border border-gray-800 p-5 space-y-4">
+                        <div>
+                            <h2 className="text-lg font-semibold">Connect to server</h2>
+                            <p className="text-sm text-gray-400 mt-1">
+                                Enter your sync server IP to upload logs and pull from other devices.
+                            </p>
                         </div>
-                        <button
-                            onClick={syncNowClicked}
-                            className={"px-4 py-2 mt-2 rounded bg-amber-700 hover:bg-amber-600 disabled:opacity-60 text-sm"}>
-                            Sync Now
-                        </button>
-                    </div>
-
-                </div>
-            ) : null}
-
-            {!showServerConfig ? (
-                <div className="flex flex-col gap-3 max-w-md">
-                    <div className="text-sm text-gray-300">No server configured. Enter a server IP.</div>
-                    <div className="flex gap-2">
-                        <input
-                            type="text"
-                            value={ipInput}
-                            onChange={(e) => setIpInput(e.target.value)}
-                            placeholder="Server IP"
-                            className="flex-1 px-3 py-2 rounded bg-gray-800 text-white"
-                        />
-                        <button
-                            type="button"
-                            onClick={onCheck}
-                            disabled={isChecking}
-                            className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-60"
-                        >
-                            {isChecking ? "Checking..." : "Check"}
-                        </button>
-                    </div>
-                </div>
-            ) : null}
-
-            {serverError ? <div className="text-sm text-red-400">{serverError}</div> : null}
-            {showServerConfig ? (
-                <>
-                    <section className="bg-gray-900 rounded p-4 space-y-3">
-                        <div className={"flex"}>
-                            <h2 className="text-lg font-semibold">Local device</h2>
-                            {isRegistered ? (
-                                <span
-                                    className="ml-4 px-3 py-1 rounded bg-green-900/50 text-green-300 text-sm">Registered</span>
-                            ) : (
-                                <span
-                                    className="ml-4 px-3 py-1 rounded bg-red-900/50 text-red-300 text-sm">Unregistered</span>
-
-                            )}
-
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-sm text-gray-300 block">Device name</label>
-                            {isRegistered ? (
-                                <div className="font-medium">{localDevice?.name}</div>
-                            ) : (
-                                <input
-                                    type="text"
-                                    value={deviceNameInput}
-                                    onChange={(e) => setDeviceNameInput(e.target.value)}
-                                    placeholder={defaultDeviceNameQuery.isLoading ? "Loading..." : "Device name"}
-                                    disabled={defaultDeviceNameQuery.isLoading || registerMutation.isPending}
-                                    className="w-full max-w-md px-3 py-2 rounded bg-gray-800 text-white disabled:opacity-60"
-                                />
-                            )}
-                        </div>
-                        <div className="flex items-center gap-3 flex-wrap">
-                            {!isRegistered ? (
-                                <div>
-                                    
-                                    <button
-                                        type="button"
-                                        onClick={onOpenRegisterConfirm}
-                                        disabled={registerMutation.isPending || !serverIp || !deviceNameInput.trim()}
-                                        className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-60"
-                                    >
-                                        Register
-                                    </button>
-                                </div>
-                            ) : null}
-                        </div>
-                        <div className="text-sm">
-                            {localDevice && (
-                                <span>
-                            Local UUID: <span className="font-mono">{localDevice.uuid}</span>
-                        </span>
-                            )}
-                        </div>
-                        {registerError ? <div className="text-sm text-red-400">{registerError}</div> : null}
-                    </section>
-
-                    <section className="bg-gray-900 rounded p-4 space-y-3">
-                        <div className="flex items-center justify-between gap-3">
-                            <div>
-                                <h2 className="text-lg font-semibold">Server devices (pull from server)</h2>
-                                <div className="text-sm text-gray-300">Subscribe to devices to download their logs.
-                                </div>
-                            </div>
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                value={ipInput}
+                                onChange={(e) => setIpInput(e.target.value)}
+                                placeholder="Server IP"
+                                className="flex-1 px-3 py-2 rounded bg-gray-800 border border-gray-700 text-white"
+                            />
                             <button
                                 type="button"
-                                onClick={() => devicesQuery.refetch()}
-                                disabled={devicesQuery.isFetching || !serverIp}
-                                className="px-4 py-2 rounded bg-gray-800 hover:bg-gray-700 disabled:opacity-60"
+                                onClick={onCheck}
+                                disabled={isChecking}
+                                className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-60 shrink-0"
                             >
-                                Refresh devices
+                                {isChecking ? "Checking..." : "Connect"}
                             </button>
                         </div>
-                        {devicesQuery.isLoading ? (
-                            <div className="text-sm text-gray-300">Loading devices...</div>
-                        ) : devicesQuery.isError ? (
-                            <div className="text-sm text-red-400">{toErrorString(devicesQuery.error)}</div>
-                        ) : remoteDevices.length === 0 ? (
-                            <div className="text-sm text-gray-300">No remote devices found.</div>
-                        ) : (
-                            <div className="space-y-2">
-                                {remoteDevices.map((device) => {
-                                    const isTracking =
-                                        "Remote" in device.state ? device.state.Remote.is_tracking : false;
-                                    const isPendingForDevice =
-                                        trackingMutation.isPending &&
-                                        trackingMutation.variables?.uuid === device.uuid;
-                                    return (
-                                        <div
-                                            key={device.uuid}
-                                            className="rounded border border-gray-700 bg-gray-800/80 px-3 py-3 flex items-center justify-between gap-3"
-                                        >
-                                            <div className="min-w-0">
-                                                <div className="font-medium">{device.name}</div>
-                                                <div
-                                                    className="text-xs text-gray-300 font-mono truncate">{device.uuid}</div>
-                                            </div>
-                                            <button
-                                                type="button"
-                                                disabled={isPendingForDevice}
-                                                onClick={() =>
-                                                    trackingMutation.mutate({
-                                                        isTracking: !isTracking,
-                                                        uuid: device.uuid,
-                                                        deviceName: device.name,
-                                                    })
-                                                }
-                                                className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
-                                                    isTracking
-                                                        ? "bg-blue-600/20 border-blue-500 text-blue-300 hover:bg-blue-600/30"
-                                                        : "bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700"
-                                                } disabled:opacity-60`}
-                                            >
-                                                {isPendingForDevice
-                                                    ? isTracking
-                                                        ? "Unsubscribing..."
-                                                        : "Downloading..."
-                                                    : isTracking
-                                                        ? "Subscribed"
-                                                        : "Subscribe"}
-                                            </button>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                        {trackingError ? <div className="text-sm text-red-400">{trackingError}</div> : null}
                     </section>
-                </>
-            ) : null}
+                ) : (
+                    <>
+                        <section className="bg-gray-900 rounded-lg border border-gray-800 p-5">
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="min-w-0">
+                                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                                        Server
+                                    </div>
+                                    <div className="mt-1 font-mono text-sm truncate">{serverIp}</div>
+                                </div>
+
+                                {isRegistered ? (
+                                    <div className="flex items-center gap-3 sm:gap-4 shrink-0">
+                                        <div className="text-right">
+                                            <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                                                Next sync
+                                            </div>
+                                            <div className="mt-1 font-mono text-2xl tabular-nums leading-none">
+                                                {syncCountdownLabel}
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={syncNowClicked}
+                                            disabled={syncNowMutation.isPending || isSyncing}
+                                            className="px-4 py-2 rounded bg-amber-700 hover:bg-amber-600 disabled:opacity-60 text-sm font-medium whitespace-nowrap"
+                                        >
+                                            {syncNowMutation.isPending || isSyncing ? "Syncing..." : "Sync Now"}
+                                        </button>
+                                    </div>
+                                ) : null}
+
+                                <button
+                                    type="button"
+                                    onClick={changeServerClicked}
+                                    className="px-3 py-1.5 rounded text-sm text-gray-300 hover:text-white hover:bg-gray-800 shrink-0 self-start sm:self-center"
+                                >
+                                    Change server
+                                </button>
+                            </div>
+                        </section>
+
+                        <section className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden">
+                            <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-800">
+                                <h2 className="text-lg font-semibold">Local device</h2>
+                                <span
+                                    className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                        isRegistered
+                                            ? "bg-green-900/50 text-green-300"
+                                            : "bg-red-900/50 text-red-300"
+                                    }`}
+                                >
+                                    {isRegistered ? "Registered" : "Unregistered"}
+                                </span>
+                            </div>
+
+                            <div className="px-5 py-4 space-y-4">
+                                {isRegistered ? (
+                                    <dl className="space-y-3">
+                                        <div>
+                                            <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                                                Device name
+                                            </dt>
+                                            <dd className="mt-0.5 font-medium">{localDevice?.name}</dd>
+                                        </div>
+                                        {localDevice ? (
+                                            <div>
+                                                <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                                                    Local UUID
+                                                </dt>
+                                                <dd className="mt-0.5 text-sm font-mono text-gray-300 break-all">
+                                                    {localDevice.uuid}
+                                                </dd>
+                                            </div>
+                                        ) : null}
+                                    </dl>
+                                ) : (
+                                    <>
+                                        <div>
+                                            <label className="text-xs font-medium uppercase tracking-wide text-gray-500 block mb-1.5">
+                                                Device name
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={deviceNameInput}
+                                                onChange={(e) => setDeviceNameInput(e.target.value)}
+                                                placeholder={
+                                                    defaultDeviceNameQuery.isLoading ? "Loading..." : "Device name"
+                                                }
+                                                disabled={
+                                                    defaultDeviceNameQuery.isLoading || registerMutation.isPending
+                                                }
+                                                className="w-full px-3 py-2 rounded bg-gray-800 border border-gray-700 text-white disabled:opacity-60"
+                                            />
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={onOpenRegisterConfirm}
+                                            disabled={
+                                                registerMutation.isPending || !serverIp || !deviceNameInput.trim()
+                                            }
+                                            className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-sm font-medium"
+                                        >
+                                            Register this device
+                                        </button>
+                                    </>
+                                )}
+                                {registerError ? (
+                                    <div className="text-sm text-red-400">{registerError}</div>
+                                ) : null}
+                            </div>
+                        </section>
+
+                        <section className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden">
+                            <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-800">
+                                <div>
+                                    <h2 className="text-lg font-semibold">Other devices</h2>
+                                    <p className="text-sm text-gray-400 mt-0.5">
+                                        Subscribe to pull logs from other machines on the server.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => devicesQuery.refetch()}
+                                    disabled={devicesQuery.isFetching || !serverIp}
+                                    className="px-3 py-1.5 rounded bg-gray-800 hover:bg-gray-700 disabled:opacity-60 text-sm shrink-0"
+                                >
+                                    {devicesQuery.isFetching ? "Refreshing..." : "Refresh"}
+                                </button>
+                            </div>
+
+                            <div className="px-5 py-4">
+                                {devicesQuery.isLoading ? (
+                                    <div className="text-sm text-gray-400">Loading devices...</div>
+                                ) : devicesQuery.isError ? (
+                                    <div className="text-sm text-red-400">{toErrorString(devicesQuery.error)}</div>
+                                ) : remoteDevices.length === 0 ? (
+                                    <div className="text-sm text-gray-400">No other devices on the server yet.</div>
+                                ) : (
+                                    <ul className="divide-y divide-gray-800 rounded-lg border border-gray-800 overflow-hidden">
+                                        {remoteDevices.map((device) => {
+                                            const isTracking =
+                                                "Remote" in device.state
+                                                    ? device.state.Remote.is_tracking
+                                                    : false;
+                                            const isPendingForDevice = pendingDeviceUuids.has(device.uuid);
+                                            return (
+                                                <li
+                                                    key={device.uuid}
+                                                    className="flex items-center justify-between gap-4 bg-gray-800/40 px-4 py-3"
+                                                >
+                                                    <div className="min-w-0">
+                                                        <div className="font-medium truncate">{device.name}</div>
+                                                        <div className="text-xs text-gray-500 font-mono truncate mt-0.5">
+                                                            {device.uuid}
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        disabled={isPendingForDevice}
+                                                        onClick={() =>
+                                                            trackingMutation.mutate({
+                                                                isTracking: !isTracking,
+                                                                uuid: device.uuid,
+                                                                deviceName: device.name,
+                                                            })
+                                                        }
+                                                        className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                                                            isTracking
+                                                                ? "bg-blue-600/20 border-blue-500/60 text-blue-300 hover:bg-blue-600/30"
+                                                                : "bg-gray-900 border-gray-600 text-gray-300 hover:bg-gray-800"
+                                                        } disabled:opacity-60`}
+                                                    >
+                                                        {isPendingForDevice
+                                                            ? isTracking
+                                                                ? "Unsubscribing..."
+                                                                : "Downloading..."
+                                                            : isTracking
+                                                              ? "Subscribed"
+                                                              : "Subscribe"}
+                                                    </button>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                )}
+                                {trackingError ? (
+                                    <div className="text-sm text-red-400 mt-3">{trackingError}</div>
+                                ) : null}
+                            </div>
+                        </section>
+                    </>
+                )}
+
+                {serverError ? <div className="text-sm text-red-400">{serverError}</div> : null}
+            </div>
 
             {showRegisterConfirm ? (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">

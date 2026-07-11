@@ -3,6 +3,7 @@ mod commands;
 mod core;
 mod db;
 mod google_oauth;
+mod instance;
 mod sync;
 mod tray;
 
@@ -39,7 +40,6 @@ use db::tables::skipped_app::{
 use std::sync::atomic::Ordering;
 use std::sync::{atomic::AtomicBool, Mutex};
 
-use crate::sync::sync;
 use app_prefs::{
     delete_app_metadata, get_app_metadata, get_calendar_view_prefs, set_app_metadata,
     set_calendar_view_prefs,
@@ -58,7 +58,10 @@ use google_oauth::{
     get_google_auth_status, get_google_oauth_app_credentials, google_oauth_login,
     google_oauth_logout, set_google_oauth_app_credentials,
 };
-use sync::{check, device_logs, get_devices, register, reupload_all_logs, upload_all_logs};
+use sync::{
+    check, device_logs, get_devices, register, reupload_all_logs, run_auto_sync_cycle,
+    sync_countdown_reset_notify, sync_now, upload_all_logs, SYNC_INTERVAL_SECS,
+};
 use tauri::{Emitter, Manager};
 use tray::refresh_tray_menu;
 
@@ -127,21 +130,15 @@ fn get_app_version(app: tauri::AppHandle) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    instance::init_env();
+
     #[cfg(debug_assertions)]
     {
         let _ = dotenv::dotenv();
     }
 
-    #[allow(unused_mut)]
-    let mut builder = tauri::Builder::default();
-    #[cfg(all(desktop, not(debug_assertions)))]
-    {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}));
-    }
-
-    builder
+    tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_autostart::Builder::new().build())
         .setup(|app| {
             app.manage(UpdateState {
                 update: Mutex::new(None),
@@ -150,6 +147,8 @@ pub fn run() {
             });
 
             if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_title(instance::display_name());
+
                 #[cfg(debug_assertions)]
                 let _ = window.show();
 
@@ -162,27 +161,47 @@ pub fn run() {
 
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_secs(1 * 60)).await;
-                let sync_interval_secs = 5 * 60;
+                let reset_notify = sync_countdown_reset_notify();
+                let sync_interval_secs = SYNC_INTERVAL_SECS;
                 loop {
+                    let registered =
+                        matches!(sync::is_registered_for_sync().await, Ok(true));
+                    if !registered {
+                        tokio::time::sleep(std::time::Duration::from_secs(sync_interval_secs))
+                            .await;
+                        continue;
+                    }
+
                     let _ = app_handle.emit("sync_started", ());
-                    let mut errors = Vec::new();
-                    if let Err(e) = sync().await {
-                        errors.push(format!("sync: {}", e));
-                    }
-                    if let Err(e) = device_logs(None).await {
-                        errors.push(format!("pull logs: {}", e));
-                    }
-                    if errors.is_empty() {
-                        let _ = app_handle.emit("sync-successful", ());
-                        println!("sync successful");
-                    } else {
-                        let msg = errors.join("; ");
-                        let _ = app_handle.emit("sync-error", &msg);
-                        println!("sync failed: {}", msg);
-                    }
-                    for remaining in (1..=sync_interval_secs).rev() {
-                        let _ = app_handle.emit("count_down_to_sync", remaining);
-                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    match run_auto_sync_cycle().await {
+                        sync::AutoSyncResult::Skipped => {
+                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                            continue;
+                        }
+                        sync::AutoSyncResult::Completed { errors } => {
+                            if errors.is_empty() {
+                                let _ = app_handle.emit("sync-successful", ());
+                                println!("sync successful");
+                            } else {
+                                let msg = errors.join("; ");
+                                let _ = app_handle.emit("sync-error", &msg);
+                                println!("sync failed: {}", msg);
+                            }
+
+                            'countdown: loop {
+                                for remaining in (1..=sync_interval_secs).rev() {
+                                    let _ =
+                                        app_handle.emit("count_down_to_sync", remaining as i64);
+                                    tokio::select! {
+                                        _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
+                                        _ = reset_notify.notified() => {
+                                            continue 'countdown;
+                                        }
+                                    }
+                                }
+                                break;
+                            }
+                        }
                     }
                 }
             });
@@ -330,6 +349,7 @@ pub fn run() {
             apply_update_cmd,
             check_update_cmd,
             get_app_version,
+            instance::get_instance_info,
             set_is_tracking,
             update_device,
             insert_devices,
@@ -339,6 +359,7 @@ pub fn run() {
             upload_all_logs,
             reupload_all_logs,
             sync::sync,
+            sync_now,
             get_devices,
             device_logs,
             get_server_ip,

@@ -47,6 +47,10 @@ export async function reuploadAllLogs(): Promise<number> {
     return invokeOrThrow<number>("reupload_all_logs");
 }
 
+export async function syncNow(): Promise<void> {
+    await invokeOrThrow("sync_now");
+}
+
 export async function syncLogs(): Promise<void> {
     await invokeOrThrow("sync");
 }
