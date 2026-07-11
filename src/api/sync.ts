@@ -49,6 +49,10 @@ export async function reuploadAllLogs(): Promise<number> {
     return invokeOrThrow<number>("reupload_all_logs");
 }
 
+export async function getSyncCountdown(): Promise<number | null> {
+    return invokeOrThrow<number | null>("get_sync_countdown");
+}
+
 export async function syncNow(): Promise<void> {
     await invokeOrThrow("sync_now");
 }

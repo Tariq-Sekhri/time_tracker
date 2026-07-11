@@ -6,6 +6,7 @@ import {
     getDevices,
     getLocalDeviceName,
     getServerIp,
+    getSyncCountdown,
     registerDevice,
     setIsTracking,
     setServerIp as persistServerIp,
@@ -203,11 +204,19 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
     }, [defaultDeviceNameQuery.data, deviceNameInitialized, isRegistered]);
 
     useEffect(() => {
+        if (devicesQuery.isLoading || !isRegistered || isPreparingSync) return;
+        void getSyncCountdown().then((seconds) => {
+            if (seconds !== null) setCountdownSeconds(seconds);
+        });
+    }, [devicesQuery.isLoading, isRegistered, isPreparingSync, setCountdownSeconds]);
+
+    useEffect(() => {
+        if (devicesQuery.isLoading) return;
         if (!isRegistered || isPreparingSync) {
             setIsSyncing(false);
             setCountdownSeconds(null);
         }
-    }, [isRegistered, isPreparingSync, setIsSyncing, setCountdownSeconds]);
+    }, [devicesQuery.isLoading, isRegistered, isPreparingSync, setIsSyncing, setCountdownSeconds]);
 
     const onCheck = () => {
         const ip = ipInput.trim();

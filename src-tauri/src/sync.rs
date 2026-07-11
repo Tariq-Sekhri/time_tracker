@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, OnceLock};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::Notify;
@@ -22,6 +23,16 @@ use tokio::sync::Notify;
 pub const SYNC_INTERVAL_SECS: u64 = 5 * 60;
 
 static SYNC_COUNTDOWN_RESET: OnceLock<Arc<Notify>> = OnceLock::new();
+static SYNC_COUNTDOWN_REMAINING: AtomicI64 = AtomicI64::new(-1);
+
+pub fn set_sync_countdown_remaining(secs: i64) {
+    SYNC_COUNTDOWN_REMAINING.store(secs, Ordering::Relaxed);
+}
+
+pub fn get_sync_countdown_remaining() -> Option<i64> {
+    let secs = SYNC_COUNTDOWN_REMAINING.load(Ordering::Relaxed);
+    if secs >= 0 { Some(secs) } else { None }
+}
 
 pub fn sync_countdown_reset_notify() -> Arc<Notify> {
     SYNC_COUNTDOWN_RESET
@@ -243,8 +254,17 @@ pub async fn sync_now(app: AppHandle) -> Result<(), Error> {
         }
     }
     request_sync_countdown_reset();
+    set_sync_countdown_remaining(SYNC_INTERVAL_SECS as i64);
     let _ = app.emit("count_down_to_sync", SYNC_INTERVAL_SECS as i64);
     Ok(())
+}
+
+#[tauri::command]
+pub async fn get_sync_countdown() -> Result<Option<i64>, Error> {
+    if !is_sync_ready().await? {
+        return Ok(None);
+    }
+    Ok(get_sync_countdown_remaining())
 }
 
 #[tauri::command]

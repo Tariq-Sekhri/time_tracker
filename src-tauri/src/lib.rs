@@ -59,8 +59,9 @@ use google_oauth::{
     google_oauth_logout, set_google_oauth_app_credentials,
 };
 use sync::{
-    check, device_logs, get_devices, register, reupload_all_logs, run_auto_sync_cycle,
-    sync_countdown_reset_notify, sync_now, unsubscribe_device, upload_all_logs, SYNC_INTERVAL_SECS,
+    check, device_logs, get_devices, get_sync_countdown, register, reupload_all_logs,
+    run_auto_sync_cycle, set_sync_countdown_remaining, sync_countdown_reset_notify, sync_now,
+    unsubscribe_device, upload_all_logs, SYNC_INTERVAL_SECS,
 };
 use tauri::{Emitter, Manager};
 use tray::refresh_tray_menu;
@@ -160,21 +161,35 @@ pub fn run() {
             let app_handle = app.handle().clone();
 
             tauri::async_runtime::spawn(async move {
-                tokio::time::sleep(std::time::Duration::from_secs(1 * 60)).await;
+                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
                 let reset_notify = sync_countdown_reset_notify();
                 let sync_interval_secs = SYNC_INTERVAL_SECS;
-                loop {
-                    let sync_ready = matches!(sync::is_sync_ready().await, Ok(true));
-                    if !sync_ready {
+
+                'outer: loop {
+                    while !matches!(sync::is_sync_ready().await, Ok(true)) {
                         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                        continue;
+                    }
+
+                    'countdown: loop {
+                        for remaining in (1..=sync_interval_secs).rev() {
+                            set_sync_countdown_remaining(remaining as i64);
+                            let _ =
+                                app_handle.emit("count_down_to_sync", remaining as i64);
+                            tokio::select! {
+                                _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
+                                _ = reset_notify.notified() => {
+                                    continue 'countdown;
+                                }
+                            }
+                        }
+                        break;
                     }
 
                     let _ = app_handle.emit("sync_started", ());
                     match run_auto_sync_cycle().await {
                         sync::AutoSyncResult::Skipped => {
                             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                            continue;
+                            continue 'outer;
                         }
                         sync::AutoSyncResult::Completed { errors } => {
                             if errors.is_empty() {
@@ -184,20 +199,6 @@ pub fn run() {
                                 let msg = errors.join("; ");
                                 let _ = app_handle.emit("sync-error", &msg);
                                 println!("sync failed: {}", msg);
-                            }
-
-                            'countdown: loop {
-                                for remaining in (1..=sync_interval_secs).rev() {
-                                    let _ =
-                                        app_handle.emit("count_down_to_sync", remaining as i64);
-                                    tokio::select! {
-                                        _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
-                                        _ = reset_notify.notified() => {
-                                            continue 'countdown;
-                                        }
-                                    }
-                                }
-                                break;
                             }
                         }
                     }
@@ -359,6 +360,7 @@ pub fn run() {
             reupload_all_logs,
             sync::sync,
             sync_now,
+            get_sync_countdown,
             get_devices,
             device_logs,
             get_server_ip,
