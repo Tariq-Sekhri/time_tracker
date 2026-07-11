@@ -21,6 +21,10 @@ pub struct Device {
     pub(crate) last_sync_id: i64,
     pub in_cal: bool,
     pub in_stats: bool,
+    #[serde(default)]
+    pub available_on_server: bool,
+    #[serde(default)]
+    pub has_local_logs: bool,
 }
 
 impl Device {
@@ -32,6 +36,8 @@ impl Device {
             last_sync_id: 0,
             in_cal: true,
             in_stats: true,
+            available_on_server: true,
+            has_local_logs: false,
         }
     }
 }
@@ -73,6 +79,8 @@ impl TryFrom<RowDevice> for Device {
             last_sync_id: row.last_sync_id,
             in_cal: row.in_cal,
             in_stats: row.in_stats,
+            available_on_server: false,
+            has_local_logs: false,
         })
     }
 }
@@ -175,6 +183,51 @@ pub async fn set_is_tracking(new: bool, uuid: String) -> Result<(), Error> {
     if new {
         sqlx::query("UPDATE devices SET in_cal = 1, in_stats = 1 WHERE uuid = ?1")
             .bind(&uuid)
+            .execute(&pool)
+            .await?;
+    }
+    Ok(())
+}
+
+pub async fn device_has_logs(uuid: &str) -> Result<bool, Error> {
+    let pool = get_pool().await?;
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM logs WHERE device_uuid = ?1")
+        .bind(uuid)
+        .fetch_one(&pool)
+        .await?;
+    Ok(count > 0)
+}
+
+pub async fn unsubscribe_remote_device(uuid: String) -> Result<(), Error> {
+    crate::db::tables::log::delete_logs_for_device(&uuid).await?;
+    let pool = get_pool().await?;
+    sqlx::query(
+        "UPDATE devices SET is_tracking = 0, in_cal = 0, in_stats = 0 WHERE uuid = ?1 AND kind = 'remote'",
+    )
+    .bind(&uuid)
+    .execute(&pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn untrack_remote_devices_not_on_server(server_uuids: &[String]) -> Result<(), Error> {
+    let devices = get_devices().await?;
+    for device in devices {
+        if let DeviceState::Remote { is_tracking } = device.state {
+            if is_tracking && !server_uuids.contains(&device.uuid) {
+                set_is_tracking(false, device.uuid).await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+pub async fn update_remote_device_names(server_devices: &[(String, String)]) -> Result<(), Error> {
+    let pool = get_pool().await?;
+    for (uuid, name) in server_devices {
+        sqlx::query("UPDATE devices SET name = ?1 WHERE uuid = ?2 AND kind = 'remote'")
+            .bind(name)
+            .bind(uuid)
             .execute(&pool)
             .await?;
     }

@@ -60,7 +60,7 @@ use google_oauth::{
 };
 use sync::{
     check, device_logs, get_devices, register, reupload_all_logs, run_auto_sync_cycle,
-    sync_countdown_reset_notify, sync_now, upload_all_logs, SYNC_INTERVAL_SECS,
+    sync_countdown_reset_notify, sync_now, unsubscribe_device, upload_all_logs, SYNC_INTERVAL_SECS,
 };
 use tauri::{Emitter, Manager};
 use tray::refresh_tray_menu;
@@ -351,6 +351,7 @@ pub fn run() {
             get_app_version,
             instance::get_instance_info,
             set_is_tracking,
+            unsubscribe_device,
             update_device,
             insert_devices,
             check,

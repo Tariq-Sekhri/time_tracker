@@ -616,6 +616,14 @@ pub async fn delete_deleted_logs() -> Result<(), Error> {
     Ok(())
 }
 
+pub async fn delete_logs_for_device(device_uuid: &str) -> Result<(), Error> {
+    sqlx::query("DELETE FROM logs WHERE device_uuid = ?1")
+        .bind(device_uuid)
+        .execute(&get_pool().await?)
+        .await?;
+    Ok(())
+}
+
 pub async fn insert_logs(logs: &Vec<Log>) -> Result<(), Error> {
     let mut tx = get_pool().await?.begin().await?;
     for log in logs {

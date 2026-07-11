@@ -1,8 +1,9 @@
 use crate::db;
 use crate::db::tables::app_metadata_kv::get_server_ip;
 use crate::db::tables::device::{
-    get_devices as get_devices_from_db, get_local_device, get_local_device_uuid, insert_devices,
-    register_local_device, set_last_sync_id, Device, DeviceState,
+    device_has_logs, get_devices as get_devices_from_db, get_local_device, get_local_device_uuid,
+    insert_devices, register_local_device, set_last_sync_id, untrack_remote_devices_not_on_server,
+    unsubscribe_remote_device, update_remote_device_names, Device, DeviceState,
 };
 use crate::db::tables::log::{
     consolidate_local_logs_for_reupload, delete_deleted_logs, get_all_local_logs_for_reupload,
@@ -13,6 +14,7 @@ use db::Error;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::{Arc, OnceLock};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::Notify;
@@ -104,6 +106,8 @@ pub async fn register(name: String) -> Result<(), Error> {
         last_sync_id: -1,
         in_cal: true,
         in_stats: true,
+        available_on_server: true,
+        has_local_logs: false,
     };
     register_local_device(device).await?;
     Ok(())
@@ -293,32 +297,90 @@ impl From<ServerLog> for Log {
     }
 }
 
+async fn sync_devices_with_server() -> Result<HashSet<String>, Error> {
+    let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
+    let server_devices: Vec<ServerDevice> = reqwest::get(sync_server_url(&server_ip, "devices"))
+        .await?
+        .error_for_status()?
+        .json::<Vec<ServerDevice>>()
+        .await?;
+
+    let local_uuid = get_local_device_uuid().await?;
+    let server_uuids: HashSet<String> = server_devices.iter().map(|d| d.uuid.clone()).collect();
+
+    let to_insert: Vec<Device> = server_devices
+        .iter()
+        .filter(|d| local_uuid.as_ref() != Some(&d.uuid))
+        .map(|d| Device::new(d.uuid.clone(), d.name.clone()))
+        .collect();
+    insert_devices(to_insert).await?;
+
+    let name_updates: Vec<(String, String)> = server_devices
+        .iter()
+        .map(|d| (d.uuid.clone(), d.name.clone()))
+        .collect();
+    update_remote_device_names(&name_updates).await?;
+    untrack_remote_devices_not_on_server(&server_uuids.iter().cloned().collect::<Vec<_>>()).await?;
+
+    Ok(server_uuids)
+}
+
+fn annotate_devices_on_sync_failure(mut devices: Vec<Device>) -> Vec<Device> {
+    for device in &mut devices {
+        device.available_on_server = match &device.state {
+            DeviceState::Local { .. } => true,
+            DeviceState::Remote { .. } => true,
+        };
+    }
+    devices
+}
+
+async fn annotate_devices_with_local_logs(mut devices: Vec<Device>) -> Result<Vec<Device>, Error> {
+    for device in &mut devices {
+        if matches!(device.state, DeviceState::Remote { .. }) {
+            device.has_local_logs = device_has_logs(&device.uuid).await?;
+        }
+    }
+    Ok(devices)
+}
+
+fn annotate_devices_with_server(mut devices: Vec<Device>, server_uuids: &HashSet<String>) -> Vec<Device> {
+    for device in &mut devices {
+        device.available_on_server = match &device.state {
+            DeviceState::Local { .. } => true,
+            DeviceState::Remote { .. } => server_uuids.contains(&device.uuid),
+        };
+    }
+    devices
+}
+
+#[tauri::command]
+pub async fn unsubscribe_device(uuid: String) -> Result<(), Error> {
+    unsubscribe_remote_device(uuid).await
+}
+
 #[tauri::command]
 pub async fn get_devices(app_handle: tauri::AppHandle) -> Result<Vec<Device>, Error> {
-    async fn inner() -> Result<(), Error> {
-        let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
-        let devices: Vec<Device> = reqwest::get(sync_server_url(&server_ip, "devices"))
-            .await?
-            .error_for_status()?
-            .json::<Vec<ServerDevice>>()
-            .await?
-            .into_iter()
-            .map(|device| Device::new(device.uuid, device.name))
-            .collect();
-
-        insert_devices(devices).await?;
-        Ok(())
-    }
-    if let Err(e) = inner().await {
-        let _ = app_handle.emit("Server Error", &e);
-    }
-    get_devices_from_db().await
+    let server_uuids = match sync_devices_with_server().await {
+        Ok(uuids) => Some(uuids),
+        Err(e) => {
+            let _ = app_handle.emit("Server Error", &e);
+            None
+        }
+    };
+    let devices = get_devices_from_db().await?;
+    let devices = match server_uuids {
+        Some(uuids) => annotate_devices_with_server(devices, &uuids),
+        None => annotate_devices_on_sync_failure(devices),
+    };
+    annotate_devices_with_local_logs(devices).await
 }
 #[tauri::command]
 pub async fn device_logs(device_uuid: Option<String>) -> Result<usize, Error> {
     if device_uuid.is_none() && !is_registered_for_sync().await? {
         return Ok(0);
     }
+    let _ = sync_devices_with_server().await;
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
     let mut devices: Vec<Device> = get_devices_from_db()
         .await?
