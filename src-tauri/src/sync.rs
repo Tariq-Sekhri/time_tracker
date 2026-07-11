@@ -175,11 +175,23 @@ pub async fn reupload_all_logs() -> Result<usize, Error> {
     consolidate_local_logs_for_reupload(&device.uuid).await?;
     set_last_sync_id(&device.uuid, -1).await?;
     let logs = get_all_local_logs_for_reupload(&device.uuid).await?;
-    post_logs_to_server(logs, token, server_ip, device.uuid).await
+    let count = post_logs_to_server(logs, token, server_ip, device.uuid.clone()).await?;
+    if count == 0 {
+        set_last_sync_id(&device.uuid, 0).await?;
+    }
+    request_sync_countdown_reset();
+    Ok(count)
 }
 
 pub async fn is_registered_for_sync() -> Result<bool, Error> {
     Ok(get_local_device().await?.is_some())
+}
+
+pub async fn is_sync_ready() -> Result<bool, Error> {
+    let Some(device) = get_local_device().await? else {
+        return Ok(false);
+    };
+    Ok(device.last_sync_id != -1)
 }
 
 pub enum AutoSyncResult {
@@ -195,6 +207,13 @@ pub async fn run_auto_sync_cycle() -> AutoSyncResult {
         return AutoSyncResult::Skipped;
     }
 
+    let Ok(sync_ready) = is_sync_ready().await else {
+        return AutoSyncResult::Skipped;
+    };
+    if !sync_ready {
+        return AutoSyncResult::Skipped;
+    }
+
     let mut errors = Vec::new();
     if let Err(e) = sync().await {
         errors.push(format!("sync: {}", e));
@@ -207,6 +226,9 @@ pub async fn run_auto_sync_cycle() -> AutoSyncResult {
 
 #[tauri::command]
 pub async fn sync_now(app: AppHandle) -> Result<(), Error> {
+    if !is_sync_ready().await? {
+        return Err(Error(anyhow!("Initial log upload still in progress")));
+    }
     let _ = app.emit("sync_started", ());
     match run_auto_sync_cycle().await {
         AutoSyncResult::Skipped => {

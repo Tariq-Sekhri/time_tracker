@@ -164,11 +164,9 @@ pub fn run() {
                 let reset_notify = sync_countdown_reset_notify();
                 let sync_interval_secs = SYNC_INTERVAL_SECS;
                 loop {
-                    let registered =
-                        matches!(sync::is_registered_for_sync().await, Ok(true));
-                    if !registered {
-                        tokio::time::sleep(std::time::Duration::from_secs(sync_interval_secs))
-                            .await;
+                    let sync_ready = matches!(sync::is_sync_ready().await, Ok(true));
+                    if !sync_ready {
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                         continue;
                     }
 

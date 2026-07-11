@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {
     checkSyncServer,
@@ -40,6 +40,7 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
     const [deviceNameInitialized, setDeviceNameInitialized] = useState(false);
     const [isChangingServer, setIsChangingServer] = useState(false);
     const [pendingDeviceUuids, setPendingDeviceUuids] = useState<Set<string>>(() => new Set());
+    const initialUploadAttemptedRef = useRef(false);
 
     const serverIpQuery = useQuery({
         queryKey: ["sync", "serverIp"],
@@ -72,13 +73,14 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
         enabled: !!serverIpQuery.data,
     });
 
-    const reuploadLogsMutation = useMutation({
+    const initialUploadMutation = useMutation({
         mutationFn: reuploadAllLogs,
-        onSuccess: (count) => {
-            showToast(`Re-uploaded ${count} logs`, "success");
+        onSuccess: async (count) => {
+            await queryClient.invalidateQueries({queryKey: ["sync", "devices"]});
+            showToast(`Uploaded ${count} logs`, "success");
         },
         onError: (e: unknown) => {
-            showToast("Failed to re-upload logs", "error", 5000, toErrorString(e));
+            showToast("Failed to upload logs", "error", 5000, toErrorString(e));
         },
     });
 
@@ -95,12 +97,15 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
     });
 
     const registerMutation = useMutation({
-        mutationFn: registerDevice,
-        onSuccess: async () => {
+        mutationFn: async (name: string) => {
+            await registerDevice(name);
+            return await reuploadAllLogs();
+        },
+        onSuccess: async (count) => {
             await queryClient.invalidateQueries({queryKey: ["sync", "devices"]});
             setRegisterError(null);
             setShowRegisterConfirm(false);
-            reuploadLogsMutation.mutate();
+            showToast(`Registered and uploaded ${count} logs`, "success");
         },
         onError: (e: unknown) => {
             setRegisterError(toErrorString(e));
@@ -177,6 +182,19 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
     }, [devicesQuery.data]);
 
     const isRegistered = !!localDevice;
+    const needsInitialUpload = isRegistered && localDevice.last_sync_id === -1;
+    const isPreparingSync =
+        registerMutation.isPending ||
+        initialUploadMutation.isPending ||
+        (needsInitialUpload && !initialUploadMutation.isError);
+
+    useEffect(() => {
+        if (!needsInitialUpload || initialUploadAttemptedRef.current || registerMutation.isPending) {
+            return;
+        }
+        initialUploadAttemptedRef.current = true;
+        initialUploadMutation.mutate();
+    }, [needsInitialUpload, registerMutation.isPending]);
 
     useEffect(() => {
         if (isRegistered || deviceNameInitialized || !defaultDeviceNameQuery.data) return;
@@ -185,11 +203,11 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
     }, [defaultDeviceNameQuery.data, deviceNameInitialized, isRegistered]);
 
     useEffect(() => {
-        if (!isRegistered) {
+        if (!isRegistered || isPreparingSync) {
             setIsSyncing(false);
             setCountdownSeconds(null);
         }
-    }, [isRegistered, setIsSyncing, setCountdownSeconds]);
+    }, [isRegistered, isPreparingSync, setIsSyncing, setCountdownSeconds]);
 
     const onCheck = () => {
         const ip = ipInput.trim();
@@ -235,12 +253,17 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
     }
 
     function syncNowClicked() {
-        if (syncNowMutation.isPending || isSyncing) return;
+        if (syncNowMutation.isPending || isSyncing || isPreparingSync) return;
         syncNowMutation.mutate();
     }
 
-    const syncCountdownLabel =
-        isSyncing ? "Syncing…" : countdownSeconds !== null ? formatCountdown(countdownSeconds) : "—";
+    const syncCountdownLabel = isPreparingSync
+        ? "Uploading…"
+        : isSyncing
+          ? "Syncing…"
+          : countdownSeconds !== null
+            ? formatCountdown(countdownSeconds)
+            : "—";
 
     return (
         <div className="p-6 text-white h-full overflow-y-auto nice-scrollbar">
@@ -284,7 +307,7 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
                                     <div className="mt-1 font-mono text-sm truncate">{serverIp}</div>
                                 </div>
 
-                                {isRegistered ? (
+                                {isRegistered && !isPreparingSync ? (
                                     <div className="flex items-center gap-3 sm:gap-4 shrink-0">
                                         <div className="text-right">
                                             <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
@@ -302,6 +325,13 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
                                         >
                                             {syncNowMutation.isPending || isSyncing ? "Syncing..." : "Sync Now"}
                                         </button>
+                                    </div>
+                                ) : isPreparingSync ? (
+                                    <div className="text-right shrink-0">
+                                        <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                                            Preparing sync
+                                        </div>
+                                        <div className="mt-1 text-sm text-amber-300">Uploading logs…</div>
                                     </div>
                                 ) : null}
 
