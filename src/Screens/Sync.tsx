@@ -11,6 +11,7 @@ import {
     setServerIp as persistServerIp,
     reuploadAllLogs,
     syncNow,
+    unsubscribeDevice,
     type Device,
 } from "../api/sync.ts";
 import {useToast} from "../Componants/Toast.tsx";
@@ -32,6 +33,9 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
     const [registerError, setRegisterError] = useState<string | null>(null);
     const [trackingError, setTrackingError] = useState<string | null>(null);
     const [showRegisterConfirm, setShowRegisterConfirm] = useState(false);
+    const [unsubscribeConfirm, setUnsubscribeConfirm] = useState<{ uuid: string; name: string } | null>(
+        null,
+    );
     const [deviceNameInput, setDeviceNameInput] = useState("");
     const [deviceNameInitialized, setDeviceNameInitialized] = useState(false);
     const [isChangingServer, setIsChangingServer] = useState(false);
@@ -103,22 +107,11 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
         },
     });
 
-    const trackingMutation = useMutation({
-        mutationFn: async ({
-                               isTracking,
-                               uuid,
-                               deviceName,
-                           }: {
-            isTracking: boolean;
-            uuid: string;
-            deviceName: string;
-        }) => {
-            await setIsTracking(isTracking, uuid);
-            if (isTracking) {
-                const count = await fetchDeviceLogs(uuid);
-                return {count, deviceName};
-            }
-            return null;
+    const subscribeMutation = useMutation({
+        mutationFn: async ({uuid, deviceName}: {uuid: string; deviceName: string}) => {
+            await setIsTracking(true, uuid);
+            const count = await fetchDeviceLogs(uuid);
+            return {count, deviceName};
         },
         onMutate: ({uuid}) => {
             setPendingDeviceUuids((prev) => new Set(prev).add(uuid));
@@ -126,9 +119,32 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
         onSuccess: async (result) => {
             await queryClient.invalidateQueries({queryKey: ["sync", "devices"]});
             setTrackingError(null);
-            if (result) {
-                showToast(`Added ${result.count} logs from ${result.deviceName}`, "success");
-            }
+            showToast(`Added ${result.count} logs from ${result.deviceName}`, "success");
+        },
+        onError: (e: unknown) => {
+            setTrackingError(toErrorString(e));
+        },
+        onSettled: (_result, _error, variables) => {
+            setPendingDeviceUuids((prev) => {
+                const next = new Set(prev);
+                next.delete(variables.uuid);
+                return next;
+            });
+        },
+    });
+
+    const unsubscribeMutation = useMutation({
+        mutationFn: async ({uuid}: {uuid: string}) => {
+            await unsubscribeDevice(uuid);
+        },
+        onMutate: ({uuid}) => {
+            setPendingDeviceUuids((prev) => new Set(prev).add(uuid));
+        },
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({queryKey: ["sync", "devices"]});
+            setTrackingError(null);
+            setUnsubscribeConfirm(null);
+            showToast("Unsubscribed and removed local logs for this device", "success");
         },
         onError: (e: unknown) => {
             setTrackingError(toErrorString(e));
@@ -152,7 +168,12 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
 
     const remoteDevices = useMemo(() => {
         const devices = devicesQuery.data ?? [];
-        return devices.filter((device: Device) => "Remote" in device.state);
+        return devices.filter((device: Device) => {
+            if (!("Remote" in device.state)) return false;
+            if (device.available_on_server) return true;
+            if (device.state.Remote.is_tracking) return true;
+            return device.has_local_logs;
+        });
     }, [devicesQuery.data]);
 
     const isRegistered = !!localDevice;
@@ -397,6 +418,10 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
                                                 "Remote" in device.state
                                                     ? device.state.Remote.is_tracking
                                                     : false;
+                                            const canSubscribe = device.available_on_server && !isTracking;
+                                            const canUnsubscribe =
+                                                isTracking ||
+                                                (!device.available_on_server && device.has_local_logs);
                                             const isPendingForDevice = pendingDeviceUuids.has(device.uuid);
                                             return (
                                                 <li
@@ -408,31 +433,46 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
                                                         <div className="text-xs text-gray-500 font-mono truncate mt-0.5">
                                                             {device.uuid}
                                                         </div>
+                                                        {!device.available_on_server && isTracking ? (
+                                                            <div className="text-xs text-amber-400/90 mt-1">
+                                                                No longer on server — tracking paused
+                                                            </div>
+                                                        ) : null}
                                                     </div>
-                                                    <button
-                                                        type="button"
-                                                        disabled={isPendingForDevice}
-                                                        onClick={() =>
-                                                            trackingMutation.mutate({
-                                                                isTracking: !isTracking,
-                                                                uuid: device.uuid,
-                                                                deviceName: device.name,
-                                                            })
-                                                        }
-                                                        className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                                                            isTracking
-                                                                ? "bg-blue-600/20 border-blue-500/60 text-blue-300 hover:bg-blue-600/30"
-                                                                : "bg-gray-900 border-gray-600 text-gray-300 hover:bg-gray-800"
-                                                        } disabled:opacity-60`}
-                                                    >
-                                                        {isPendingForDevice
-                                                            ? isTracking
-                                                                ? "Unsubscribing..."
-                                                                : "Downloading..."
-                                                            : isTracking
-                                                              ? "Subscribed"
-                                                              : "Subscribe"}
-                                                    </button>
+                                                    {canSubscribe || canUnsubscribe ? (
+                                                        <button
+                                                            type="button"
+                                                            disabled={isPendingForDevice}
+                                                            onClick={() => {
+                                                                if (canUnsubscribe) {
+                                                                    setUnsubscribeConfirm({
+                                                                        uuid: device.uuid,
+                                                                        name: device.name,
+                                                                    });
+                                                                    return;
+                                                                }
+                                                                subscribeMutation.mutate({
+                                                                    uuid: device.uuid,
+                                                                    deviceName: device.name,
+                                                                });
+                                                            }}
+                                                            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                                                                canUnsubscribe
+                                                                    ? "bg-blue-600/20 border-blue-500/60 text-blue-300 hover:bg-blue-600/30"
+                                                                    : "bg-gray-900 border-gray-600 text-gray-300 hover:bg-gray-800"
+                                                            } disabled:opacity-60`}
+                                                        >
+                                                            {isPendingForDevice
+                                                                ? canUnsubscribe
+                                                                    ? "Unsubscribing..."
+                                                                    : "Downloading..."
+                                                                : canUnsubscribe
+                                                                  ? isTracking
+                                                                      ? "Subscribed"
+                                                                      : "Remove logs"
+                                                                  : "Subscribe"}
+                                                        </button>
+                                                    ) : null}
                                                 </li>
                                             );
                                         })}
@@ -448,6 +488,38 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
 
                 {serverError ? <div className="text-sm text-red-400">{serverError}</div> : null}
             </div>
+
+            {unsubscribeConfirm ? (
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+                    <div className="bg-gray-900 p-6 rounded-lg max-w-md w-full mx-4 border border-gray-700">
+                        <h3 className="text-xl font-bold mb-4 text-white">Unsubscribe from device?</h3>
+                        <p className="text-gray-300 mb-4">
+                            This will stop syncing from{" "}
+                            <span className="font-medium text-white">{unsubscribeConfirm.name}</span> and delete all
+                            of its logs stored on this machine.
+                        </p>
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setUnsubscribeConfirm(null)}
+                                disabled={unsubscribeMutation.isPending}
+                                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => unsubscribeMutation.mutate({uuid: unsubscribeConfirm.uuid})}
+                                disabled={unsubscribeMutation.isPending}
+                                className="px-4 py-2 bg-red-700 hover:bg-red-600 rounded text-white disabled:opacity-50"
+                            >
+                                {unsubscribeMutation.isPending ? "Unsubscribing..." : "Unsubscribe"}
+                            </button>
+                        </div>
+                        {trackingError ? <div className="text-sm text-red-400 mt-4">{trackingError}</div> : null}
+                    </div>
+                </div>
+            ) : null}
 
             {showRegisterConfirm ? (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">

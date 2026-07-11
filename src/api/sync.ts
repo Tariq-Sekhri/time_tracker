@@ -11,6 +11,8 @@ export type Device = {
     last_sync_id: number;
     in_cal: boolean;
     in_stats: boolean;
+    available_on_server: boolean;
+    has_local_logs: boolean;
 };
 
 export type UpdateDevice = {
@@ -65,6 +67,10 @@ export async function fetchDeviceLogs(deviceUuid?: string): Promise<number> {
 
 export async function setIsTracking(isTracking: boolean, uuid: string): Promise<void> {
     await invokeOrThrow("set_is_tracking", { new: isTracking, uuid });
+}
+
+export async function unsubscribeDevice(uuid: string): Promise<void> {
+    await invokeOrThrow("unsubscribe_device", { uuid });
 }
 
 export async function updateDevice(update: UpdateDevice): Promise<void> {
