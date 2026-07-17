@@ -1,5 +1,7 @@
 use crate::db;
-use crate::db::tables::device::{get_local_device, get_local_device_uuid};
+use crate::db::tables::device::{
+    get_local_device, get_local_device_uuid, get_local_log_device_uuid,
+};
 use crate::db::{get_pool, Error};
 use anyhow::Result;
 use regex::bytes::Replacer;
@@ -227,7 +229,7 @@ pub async fn get_logs() -> Result<Vec<Log>, Error> {
 #[tauri::command]
 pub async fn get_log_by_id(id: i64) -> Result<Log, Error> {
     let pool = db::get_pool().await?;
-    let uuid = get_local_device_uuid().await?;
+    let uuid = get_local_log_device_uuid().await?;
     let Some(uuid) = uuid else {
         return Err(anyhow::anyhow!("local device not set").into());
     };
@@ -243,7 +245,7 @@ pub async fn get_log_by_id(id: i64) -> Result<Log, Error> {
 
 pub async fn increase_duration(id: i64) -> Result<(), sqlx::Error> {
     let pool = db::get_pool().await?;
-    let uuid = get_local_device_uuid()
+    let uuid = get_local_log_device_uuid()
         .await
         .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
     let Some(uuid) = uuid else {

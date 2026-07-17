@@ -45,11 +45,16 @@ function AppInner() {
 
     useEffect(() => {
         let unlistenSyncError: (() => void) | null = null;
+        let unlistenTrackingError: (() => void) | null = null;
 
         const setup = async () => {
             unlistenSyncError = await listen<string>("sync-error", (e) => {
                 const msg = typeof e.payload === "string" ? e.payload : toErrorString(e.payload);
                 showToastRef.current("Sync failed", "error", 5000, msg);
+            });
+            unlistenTrackingError = await listen<string>("tracking-error", (e) => {
+                const msg = typeof e.payload === "string" ? e.payload : toErrorString(e.payload);
+                showToastRef.current("Time tracking failed", "error", 10000, msg);
             });
         };
 
@@ -57,6 +62,7 @@ function AppInner() {
 
         return () => {
             if (unlistenSyncError) unlistenSyncError();
+            if (unlistenTrackingError) unlistenTrackingError();
         };
     }, []);
 
