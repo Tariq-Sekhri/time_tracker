@@ -2,8 +2,8 @@
 use crate::db::Error;
 
 #[cfg(target_os = "linux")]
-fn get_foreground_app() -> Result<String, Error> {
-    crate::core::linux_fg::active_window_title().ok_or_else(|| {
+pub(crate) fn get_foreground_app() -> Result<String, Error> {
+    linux_fg::active_window_title().ok_or_else(|| {
         anyhow::anyhow!(
                 "Failed to get active window title (tried gdbus/GNOME, hyprctl, swaymsg, kdotool, xdotool, AT-SPI)"
             )
