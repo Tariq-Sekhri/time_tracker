@@ -2,6 +2,12 @@ name: Build Release
 
 on:
   workflow_dispatch:
+    inputs:
+      beta:
+        description: Create a uniquely tagged beta prerelease
+        required: true
+        type: boolean
+        default: true
   push:
     branches:
       - master
@@ -39,7 +45,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            bundles: --bundles deb
+            rust_target: ""
+          - os: windows-latest
+            bundles: --bundles nsis
+            rust_target: ""
+          - os: macos-latest
+            bundles: --target aarch64-apple-darwin --bundles dmg
+            rust_target: aarch64-apple-darwin
+          - os: macos-latest
+            bundles: --target x86_64-apple-darwin --bundles dmg
+            rust_target: x86_64-apple-darwin
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -65,6 +83,8 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
 
       - name: Rust cache
         continue-on-error: true
@@ -84,8 +104,9 @@ jobs:
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
           VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.VITE_GOOGLE_CLIENT_SECRET }}
         with:
-          tagName: app-v__VERSION__
-          releaseName: "Time Tracker v__VERSION__"
-          releaseBody: "Installers for Windows (.exe) and Linux (.deb) are in Assets. Ignore .sig and latest.json where present; they are used for automatic updates."
+          tagName: ${{ github.event_name == 'workflow_dispatch' && inputs.beta && format('app-v__VERSION__-beta.{0}', github.run_number) || 'app-v__VERSION__' }}
+          releaseName: ${{ github.event_name == 'workflow_dispatch' && inputs.beta && format('Time Tracker v__VERSION__ Beta {0}', github.run_number) || 'Time Tracker v__VERSION__' }}
+          releaseBody: "Installers for Windows (.exe), Linux (.deb), Apple Silicon macOS (.dmg), and Intel macOS (.dmg) are in Assets. macOS beta builds are unsigned, so macOS may require explicit approval before opening them. Ignore .sig and latest.json where present; they are used for automatic updates."
           releaseDraft: false
-          prerelease: false
+          prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.beta }}
+          args: ${{ matrix.bundles }}
