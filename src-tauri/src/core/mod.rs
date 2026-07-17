@@ -1,4 +1,8 @@
+#[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "windows")]
 mod windows;
 
 use crate::db::tables::log::{self, increase_duration, NewLog};
@@ -7,6 +11,8 @@ use crate::db::Error;
 
 #[cfg(target_os = "linux")]
 use crate::core::linux::get_foreground_app;
+#[cfg(target_os = "macos")]
+use crate::core::macos::get_foreground_app;
 #[cfg(target_os = "windows")]
 use crate::core::windows::get_foreground_app;
 use crate::db::tables::device::get_local_device_uuid;
