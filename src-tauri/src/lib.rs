@@ -59,9 +59,10 @@ use google_oauth::{
     google_oauth_logout, set_google_oauth_app_credentials,
 };
 use sync::{
-    check, device_logs, get_devices, get_sync_countdown, register, reupload_all_logs,
-    run_auto_sync_cycle, set_sync_countdown_remaining, sync_countdown_reset_notify, sync_now,
-    unsubscribe_device, upload_all_logs, SYNC_INTERVAL_SECS,
+    check, check_device_activation, device_logs, get_devices, get_sync_countdown, register,
+    reupload_all_logs, run_auto_sync_cycle, set_sync_countdown_remaining,
+    sync_countdown_reset_notify, sync_now, unsubscribe_device, upload_all_logs,
+    SYNC_INTERVAL_SECS,
 };
 use tauri::{Emitter, Manager};
 use tray::refresh_tray_menu;
@@ -355,6 +356,7 @@ pub fn run() {
             insert_devices,
             check,
             register,
+            check_device_activation,
             get_local_device_name,
             upload_all_logs,
             reupload_all_logs,

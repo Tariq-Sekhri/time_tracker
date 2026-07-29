@@ -2,6 +2,7 @@ import {useEffect, useMemo, useRef, useState} from "react";
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {
     checkSyncServer,
+    checkDeviceActivation,
     fetchDeviceLogs,
     getDevices,
     getLocalDeviceName,
@@ -81,6 +82,7 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
             showToast(`Uploaded ${count} logs`, "success");
         },
         onError: (e: unknown) => {
+            void queryClient.invalidateQueries({queryKey: ["sync", "devices"]});
             showToast("Failed to upload logs", "error", 5000, toErrorString(e));
         },
     });
@@ -93,6 +95,7 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
         },
         onError: (e: unknown) => {
             setIsSyncing(false);
+            void queryClient.invalidateQueries({queryKey: ["sync", "devices"]});
             showToast("Sync failed", "error", 5000, toErrorString(e));
         },
     });
@@ -100,16 +103,37 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
     const registerMutation = useMutation({
         mutationFn: async (name: string) => {
             await registerDevice(name);
-            return await reuploadAllLogs();
         },
-        onSuccess: async (count) => {
+        onSuccess: async () => {
             await queryClient.invalidateQueries({queryKey: ["sync", "devices"]});
             setRegisterError(null);
             setShowRegisterConfirm(false);
-            showToast(`Registered and uploaded ${count} logs`, "success");
+            showToast("Registered. Waiting for admin approval.", "success");
         },
         onError: (e: unknown) => {
+            void queryClient.invalidateQueries({queryKey: ["sync", "devices"]});
             setRegisterError(toErrorString(e));
+        },
+    });
+
+    const activationMutation = useMutation({
+        mutationFn: async () => {
+            const active = await checkDeviceActivation();
+            if (!active) return {active, count: 0};
+            const count = await reuploadAllLogs();
+            return {active, count};
+        },
+        onSuccess: async ({active, count}) => {
+            await queryClient.invalidateQueries({queryKey: ["sync", "devices"]});
+            if (active) {
+                showToast(`Approved and uploaded ${count} logs`, "success");
+            } else {
+                showToast("Still waiting for admin approval", "info");
+            }
+        },
+        onError: (e: unknown) => {
+            void queryClient.invalidateQueries({queryKey: ["sync", "devices"]});
+            showToast("Could not check approval", "error", 5000, toErrorString(e));
         },
     });
 
@@ -183,7 +207,8 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
     }, [devicesQuery.data]);
 
     const isRegistered = !!localDevice;
-    const needsInitialUpload = isRegistered && localDevice.last_sync_id === -1;
+    const isActive = !!localDevice?.is_active;
+    const needsInitialUpload = isRegistered && isActive && localDevice.last_sync_id === -1;
     const isPreparingSync =
         registerMutation.isPending ||
         initialUploadMutation.isPending ||
@@ -316,7 +341,7 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
                                     <div className="mt-1 font-mono text-sm truncate">{serverIp}</div>
                                 </div>
 
-                                {isRegistered && !isPreparingSync ? (
+                                {isRegistered && isActive && !isPreparingSync ? (
                                     <div className="flex items-center gap-3 sm:gap-4 shrink-0">
                                         <div className="text-right">
                                             <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
@@ -359,12 +384,18 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
                                 <h2 className="text-lg font-semibold">Local device</h2>
                                 <span
                                     className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                        isRegistered
+                                        isRegistered && isActive
                                             ? "bg-green-900/50 text-green-300"
+                                            : isRegistered
+                                              ? "bg-amber-900/50 text-amber-300"
                                             : "bg-red-900/50 text-red-300"
                                     }`}
                                 >
-                                    {isRegistered ? "Registered" : "Unregistered"}
+                                    {isRegistered && isActive
+                                        ? "Active"
+                                        : isRegistered
+                                          ? "Waiting for approval"
+                                          : "Unregistered"}
                                 </span>
                             </div>
 
@@ -419,12 +450,39 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
                                         </button>
                                     </>
                                 )}
+                                {isRegistered && !isActive ? (
+                                    <div className="rounded-lg border border-amber-800/70 bg-amber-950/30 p-4">
+                                        <p className="text-sm text-amber-200">
+                                            An admin must activate this device before it can upload, sync, or view
+                                            server devices.
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={() => activationMutation.mutate()}
+                                            disabled={activationMutation.isPending}
+                                            className="mt-3 px-4 py-2 rounded bg-amber-700 hover:bg-amber-600 disabled:opacity-60 text-sm font-medium"
+                                        >
+                                            {activationMutation.isPending ? "Checking..." : "Check approval"}
+                                        </button>
+                                    </div>
+                                ) : null}
+                                {needsInitialUpload && initialUploadMutation.isError ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => initialUploadMutation.mutate()}
+                                        disabled={initialUploadMutation.isPending}
+                                        className="px-4 py-2 rounded bg-amber-700 hover:bg-amber-600 disabled:opacity-60 text-sm font-medium"
+                                    >
+                                        Retry initial upload
+                                    </button>
+                                ) : null}
                                 {registerError ? (
                                     <div className="text-sm text-red-400">{registerError}</div>
                                 ) : null}
                             </div>
                         </section>
 
+                        {isActive ? (
                         <section className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden">
                             <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-800">
                                 <div>
@@ -522,6 +580,7 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
                                 ) : null}
                             </div>
                         </section>
+                        ) : null}
                     </>
                 )}
 

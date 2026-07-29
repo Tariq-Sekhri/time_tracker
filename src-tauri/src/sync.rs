@@ -2,12 +2,13 @@ use crate::db;
 use crate::db::tables::app_metadata_kv::get_server_ip;
 use crate::db::tables::device::{
     device_has_logs, get_devices as get_devices_from_db, get_local_device, get_local_device_uuid,
-    insert_devices, register_local_device, set_last_sync_id, untrack_remote_devices_not_on_server,
-    unsubscribe_remote_device, update_remote_device_names, Device, DeviceState,
+    insert_devices, invalidate_local_device_registration, register_local_device, set_last_sync_id,
+    set_local_device_active, untrack_remote_devices_not_on_server, unsubscribe_remote_device,
+    update_remote_device_names, Device, DeviceState,
 };
 use crate::db::tables::log::{
-    consolidate_local_logs_for_reupload, delete_deleted_logs, get_all_local_logs_for_reupload,
-    get_deleted_logs, get_local_logs, get_logs_for_sync, insert_logs, Log,
+    consolidate_local_logs_for_reupload, delete_local_deleted_logs, get_all_local_logs_for_reupload,
+    get_local_deleted_logs, get_local_logs, get_logs_for_sync, insert_logs, Log,
 };
 use anyhow::{anyhow, Result};
 use db::Error;
@@ -17,13 +18,30 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, OnceLock};
+use std::time::Duration;
 use tauri::{AppHandle, Emitter};
-use tokio::sync::Notify;
+use tokio::sync::{Mutex as AsyncMutex, Notify};
 
 pub const SYNC_INTERVAL_SECS: u64 = 5 * 60;
 
 static SYNC_COUNTDOWN_RESET: OnceLock<Arc<Notify>> = OnceLock::new();
 static SYNC_COUNTDOWN_REMAINING: AtomicI64 = AtomicI64::new(-1);
+static SYNC_HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+static SYNC_CYCLE_LOCK: OnceLock<AsyncMutex<()>> = OnceLock::new();
+
+fn sync_http_client() -> &'static reqwest::Client {
+    SYNC_HTTP_CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("sync HTTP client configuration is valid")
+    })
+}
+
+fn sync_cycle_lock() -> &'static AsyncMutex<()> {
+    SYNC_CYCLE_LOCK.get_or_init(|| AsyncMutex::new(()))
+}
 
 pub fn set_sync_countdown_remaining(secs: i64) {
     SYNC_COUNTDOWN_REMAINING.store(secs, Ordering::Relaxed);
@@ -69,9 +87,13 @@ fn sync_server_url(server_ip: &str, path: &str) -> String {
 #[tauri::command]
 pub async fn check(ip: String) -> Result<String, Error> {
     let normalized_ip = normalize_server_ip(&ip);
-    return Ok(normalized_ip);
+    if normalized_ip.is_empty() {
+        return Err(Error(anyhow!("Server IP cannot be empty")));
+    }
     let url = sync_server_url(&normalized_ip, "check");
-    let res = reqwest::get(&url)
+    let res = sync_http_client()
+        .get(&url)
+        .send()
         .await
         .map_err(|e| anyhow!("Failed to reach {url}: {e}"))?;
     if res.status().is_success() {
@@ -85,10 +107,30 @@ pub async fn check(ip: String) -> Result<String, Error> {
         Err(anyhow!("Server returned error from {url}: {}", res.status()).into())
     }
 }
+
+async fn require_authenticated_success(
+    response: reqwest::Response,
+    device_uuid: &str,
+) -> Result<reqwest::Response, Error> {
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        invalidate_local_device_registration(device_uuid).await?;
+        return Err(Error(anyhow!(
+            "This device is no longer registered on the sync server. Register it again to resume syncing."
+        )));
+    }
+    if response.status() == reqwest::StatusCode::FORBIDDEN {
+        set_local_device_active(device_uuid, false).await?;
+        return Err(Error(anyhow!(
+            "This device is waiting for admin approval."
+        )));
+    }
+    Ok(response.error_for_status()?)
+}
 #[derive(Debug, Deserialize, Serialize)]
 struct RegisterResponse {
     uuid: String,
     token: String,
+    is_active: bool,
 }
 #[tauri::command]
 pub async fn register(name: String) -> Result<(), Error> {
@@ -102,7 +144,7 @@ pub async fn register(name: String) -> Result<(), Error> {
         "name": name
     });
 
-    let res = reqwest::Client::new()
+    let res = sync_http_client()
         .post(sync_server_url(&server_ip, "register"))
         .json(&body)
         .send()
@@ -115,6 +157,7 @@ pub async fn register(name: String) -> Result<(), Error> {
         uuid: res.uuid.clone(),
         state: DeviceState::Local { token: res.token },
         last_sync_id: -1,
+        is_active: res.is_active,
         in_cal: true,
         in_stats: true,
         available_on_server: true,
@@ -138,30 +181,31 @@ async fn post_logs_to_server(
         "token": token,
         "logs": logs,
     });
-    let res = reqwest::Client::new()
+    let res = sync_http_client()
         .post(sync_server_url(&server_ip, "upload_all_logs"))
         .json(&body)
         .send()
-        .await?
-        .error_for_status()?;
-    if res.status().is_success() {
-        if let Some(max) = logs.iter().map(|log| log.id).max() {
-            set_last_sync_id(&device_uuid, max).await?;
-        }
+        .await?;
+    require_authenticated_success(res, &device_uuid).await?;
+    if let Some(max) = logs.iter().map(|log| log.id).max() {
+        set_last_sync_id(&device_uuid, max).await?;
     }
     Ok(count)
 }
 
 #[tauri::command]
 pub async fn upload_all_logs() -> Result<usize, Error> {
+    let device = get_local_device()
+        .await?
+        .ok_or(anyhow!("Local device not found"))?;
+    if !device.is_active {
+        return Err(Error(anyhow!("Device is waiting for admin approval")));
+    }
     let logs = get_local_logs().await?;
     if logs.is_empty() {
         return Ok(0);
     }
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
-    let device = get_local_device()
-        .await?
-        .ok_or(anyhow!("Local device not found"))?;
     let token = match device.state {
         DeviceState::Local { token } => token,
         DeviceState::Remote { .. } => {
@@ -177,6 +221,9 @@ pub async fn reupload_all_logs() -> Result<usize, Error> {
     let device = get_local_device()
         .await?
         .ok_or(anyhow!("Local device not found"))?;
+    if !device.is_active {
+        return Err(Error(anyhow!("Device is waiting for admin approval")));
+    }
     let token = match device.state {
         DeviceState::Local { token } => token,
         DeviceState::Remote { .. } => {
@@ -184,7 +231,6 @@ pub async fn reupload_all_logs() -> Result<usize, Error> {
         }
     };
     consolidate_local_logs_for_reupload(&device.uuid).await?;
-    set_last_sync_id(&device.uuid, -1).await?;
     let logs = get_all_local_logs_for_reupload(&device.uuid).await?;
     let count = post_logs_to_server(logs, token, server_ip, device.uuid.clone()).await?;
     if count == 0 {
@@ -202,7 +248,48 @@ pub async fn is_sync_ready() -> Result<bool, Error> {
     let Some(device) = get_local_device().await? else {
         return Ok(false);
     };
-    Ok(device.last_sync_id != -1)
+    Ok(device.is_active && device.last_sync_id != -1)
+}
+
+#[derive(Debug, Deserialize)]
+struct DeviceStatusResponse {
+    uuid: String,
+    is_active: bool,
+}
+
+#[tauri::command]
+pub async fn check_device_activation() -> Result<bool, Error> {
+    let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
+    let device = get_local_device()
+        .await?
+        .ok_or(anyhow!("Local device not found"))?;
+    let token = match &device.state {
+        DeviceState::Local { token } => token,
+        DeviceState::Remote { .. } => return Err(Error(anyhow!("Local device state is invalid"))),
+    };
+    let response = sync_http_client()
+        .post(sync_server_url(&server_ip, "status"))
+        .json(&json!({ "token": token }))
+        .send()
+        .await?;
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        invalidate_local_device_registration(&device.uuid).await?;
+        return Err(Error(anyhow!(
+            "This registration was removed from the server. Register the device again."
+        )));
+    }
+    let status = response
+        .error_for_status()?
+        .json::<DeviceStatusResponse>()
+        .await?;
+    if status.uuid != device.uuid {
+        return Err(Error(anyhow!("Server returned status for a different device")));
+    }
+    set_local_device_active(&device.uuid, status.is_active).await?;
+    if status.is_active {
+        request_sync_countdown_reset();
+    }
+    Ok(status.is_active)
 }
 
 pub enum AutoSyncResult {
@@ -211,6 +298,7 @@ pub enum AutoSyncResult {
 }
 
 pub async fn run_auto_sync_cycle() -> AutoSyncResult {
+    let _cycle_guard = sync_cycle_lock().lock().await;
     let Ok(registered) = is_registered_for_sync().await else {
         return AutoSyncResult::Skipped;
     };
@@ -226,7 +314,7 @@ pub async fn run_auto_sync_cycle() -> AutoSyncResult {
     }
 
     let mut errors = Vec::new();
-    if let Err(e) = sync().await {
+    if let Err(e) = sync_impl().await {
         errors.push(format!("sync: {}", e));
     }
     if let Err(e) = device_logs(None).await {
@@ -269,6 +357,11 @@ pub async fn get_sync_countdown() -> Result<Option<i64>, Error> {
 
 #[tauri::command]
 pub async fn sync() -> Result<(), Error> {
+    let _cycle_guard = sync_cycle_lock().lock().await;
+    sync_impl().await
+}
+
+async fn sync_impl() -> Result<(), Error> {
     if !is_registered_for_sync().await? {
         return Ok(());
     }
@@ -277,13 +370,16 @@ pub async fn sync() -> Result<(), Error> {
     let device = get_local_device()
         .await?
         .ok_or(anyhow!("Local device not found"))?;
+    if !device.is_active {
+        return Err(Error(anyhow!("Device is waiting for admin approval")));
+    }
     let token = match device.state {
         DeviceState::Local { token } => token,
         DeviceState::Remote { .. } => {
             return Err(Error::from(anyhow!("somehow got remote device?")));
         }
     };
-    let deleted_ids: Vec<i64> = get_deleted_logs()
+    let deleted_ids: Vec<i64> = get_local_deleted_logs()
         .await?
         .into_iter()
         .map(|logs| logs.id)
@@ -292,19 +388,17 @@ pub async fn sync() -> Result<(), Error> {
     let body = serde_json::json!({
         "logs": logs,
         "token":token,
-        "deleted_ids": deleted_ids,
+        "deleted_log_ids": deleted_ids,
     });
-    let res = reqwest::Client::new()
-        .post(sync_server_url(&server_ip, "upload_all_logs"))
+    let res = sync_http_client()
+        .post(sync_server_url(&server_ip, "sync"))
         .json(&body)
         .send()
         .await?;
-    if res.status().is_success() {
-        delete_deleted_logs().await?;
-        if let Some(max) = logs.iter().map(|log| log.id).max() {
-            let uuid = get_local_device_uuid().await?.unwrap();
-            set_last_sync_id(&uuid, max).await?;
-        }
+    require_authenticated_success(res, &device.uuid).await?;
+    delete_local_deleted_logs().await?;
+    if let Some(max) = logs.iter().map(|log| log.id).max() {
+        set_last_sync_id(&device.uuid, max).await?;
     }
 
     Ok(())
@@ -315,6 +409,7 @@ struct ServerDevice {
     name: String,
     uuid: String,
     last_sync_id: i64,
+    is_active: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -341,14 +436,35 @@ impl From<ServerLog> for Log {
 
 async fn sync_devices_with_server() -> Result<HashSet<String>, Error> {
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
-    let server_devices: Vec<ServerDevice> = reqwest::get(sync_server_url(&server_ip, "devices"))
+    let local = get_local_device()
         .await?
-        .error_for_status()?
+        .ok_or(anyhow!("Local device not registered"))?;
+    if !local.is_active {
+        return Err(Error(anyhow!("Device is waiting for admin approval")));
+    }
+    let token = match &local.state {
+        DeviceState::Local { token } => token,
+        DeviceState::Remote { .. } => return Err(Error(anyhow!("Local device state is invalid"))),
+    };
+    let response = sync_http_client()
+        .get(sync_server_url(&server_ip, "devices"))
+        .bearer_auth(token)
+        .send()
+        .await?;
+    let server_devices: Vec<ServerDevice> = require_authenticated_success(response, &local.uuid)
+        .await?
         .json::<Vec<ServerDevice>>()
         .await?;
 
     let local_uuid = get_local_device_uuid().await?;
     let server_uuids: HashSet<String> = server_devices.iter().map(|d| d.uuid.clone()).collect();
+    let local_device = get_local_device().await?;
+    if let Some(device) = local_device.as_ref() {
+        if device.is_active && !server_uuids.contains(&device.uuid) {
+            let uuid = &device.uuid;
+            invalidate_local_device_registration(uuid).await?;
+        }
+    }
 
     let to_insert: Vec<Device> = server_devices
         .iter()
@@ -403,6 +519,14 @@ pub async fn unsubscribe_device(uuid: String) -> Result<(), Error> {
 
 #[tauri::command]
 pub async fn get_devices(app_handle: tauri::AppHandle) -> Result<Vec<Device>, Error> {
+    let local = get_local_device().await?;
+    if !local.as_ref().map(|device| device.is_active).unwrap_or(false) {
+        return Ok(get_devices_from_db()
+            .await?
+            .into_iter()
+            .filter(|device| matches!(device.state, DeviceState::Local { .. }))
+            .collect());
+    }
     let server_uuids = match sync_devices_with_server().await {
         Ok(uuids) => Some(uuids),
         Err(e) => {
@@ -424,6 +548,17 @@ pub async fn device_logs(device_uuid: Option<String>) -> Result<usize, Error> {
     }
     let _ = sync_devices_with_server().await;
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
+    let local = get_local_device()
+        .await?
+        .ok_or(anyhow!("Local device not registered"))?;
+    if !local.is_active {
+        return Err(Error(anyhow!("Device is waiting for admin approval")));
+    }
+    let local_uuid = local.uuid.clone();
+    let token = match local.state {
+        DeviceState::Local { token } => token,
+        DeviceState::Remote { .. } => return Err(Error(anyhow!("Local device state is invalid"))),
+    };
     let mut devices: Vec<Device> = get_devices_from_db()
         .await?
         .into_iter()
@@ -447,14 +582,16 @@ pub async fn device_logs(device_uuid: Option<String>) -> Result<usize, Error> {
             name: device.name.clone(),
             uuid: device.uuid.clone(),
             last_sync_id: device.last_sync_id,
+            is_active: true,
         })
         .collect::<Vec<ServerDevice>>();
-    let res = reqwest::Client::new()
+    let res = sync_http_client()
         .get(sync_server_url(&server_ip, "devices/"))
+        .bearer_auth(token)
         .json(&de)
         .send()
-        .await?
-        .error_for_status()?;
+        .await?;
+    let res = require_authenticated_success(res, &local_uuid).await?;
 
     let logs: Vec<Log> = res
         .json::<Vec<ServerLog>>()

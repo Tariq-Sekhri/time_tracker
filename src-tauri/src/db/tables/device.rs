@@ -19,6 +19,7 @@ pub struct Device {
     pub name: String,
     pub(crate) state: DeviceState,
     pub(crate) last_sync_id: i64,
+    pub is_active: bool,
     pub in_cal: bool,
     pub in_stats: bool,
     #[serde(default)]
@@ -34,6 +35,7 @@ impl Device {
             name,
             state: DeviceState::Remote { is_tracking: false },
             last_sync_id: 0,
+            is_active: true,
             in_cal: true,
             in_stats: true,
             available_on_server: true,
@@ -50,6 +52,7 @@ struct RowDevice {
     token: Option<String>,
     is_tracking: bool,
     last_sync_id: i64,
+    is_active: bool,
     in_cal: bool,
     in_stats: bool,
 }
@@ -77,6 +80,7 @@ impl TryFrom<RowDevice> for Device {
             name: row.name,
             state,
             last_sync_id: row.last_sync_id,
+            is_active: row.is_active,
             in_cal: row.in_cal,
             in_stats: row.in_stats,
             available_on_server: false,
@@ -95,6 +99,7 @@ impl From<&Device> for RowDevice {
                 token: Some(token.clone()),
                 is_tracking: false,
                 last_sync_id: device.last_sync_id,
+                is_active: device.is_active,
                 in_cal: device.in_cal,
                 in_stats: device.in_stats,
             },
@@ -105,6 +110,7 @@ impl From<&Device> for RowDevice {
                 token: None,
                 is_tracking: *is_tracking,
                 last_sync_id: device.last_sync_id,
+                is_active: device.is_active,
                 in_cal: device.in_cal,
                 in_stats: device.in_stats,
             },
@@ -121,6 +127,7 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             token TEXT,
             is_tracking INTEGER NOT NULL DEFAULT 0,
             last_sync_id INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 0,
             in_cal INTEGER NOT NULL DEFAULT 1,
             in_stats INTEGER NOT NULL DEFAULT 1
         )",
@@ -240,8 +247,8 @@ where
 {
     let row = RowDevice::from(device);
     sqlx::query(
-        "INSERT OR IGNORE INTO devices (uuid, name, kind, token, is_tracking, last_sync_id, in_cal, in_stats)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        "INSERT OR IGNORE INTO devices (uuid, name, kind, token, is_tracking, last_sync_id, is_active, in_cal, in_stats)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
     )
     .bind(&row.uuid)
     .bind(&row.name)
@@ -249,6 +256,7 @@ where
     .bind(&row.token)
     .bind(row.is_tracking)
     .bind(row.last_sync_id)
+    .bind(row.is_active)
     .bind(row.in_cal)
     .bind(row.in_stats)
     .execute(executor)
@@ -263,6 +271,88 @@ pub async fn register_local_device(device: Device) -> Result<()> {
     set_local_device_uuid_with_tx(&mut tx, &device.uuid).await?;
     tx.commit().await?;
     Ok(())
+}
+
+pub async fn invalidate_local_device_registration(uuid: &str) -> Result<(), Error> {
+    let pool = get_pool().await?;
+    invalidate_local_device_registration_with_pool(&pool, uuid).await?;
+    Ok(())
+}
+
+async fn invalidate_local_device_registration_with_pool(
+    pool: &SqlitePool,
+    uuid: &str,
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+
+    sqlx::query("UPDATE logs SET device_uuid = ?1 WHERE device_uuid = ?2")
+        .bind(PENDING_LOCAL_DEVICE_UUID)
+        .bind(uuid)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query(
+        "UPDATE devices
+         SET kind = 'remote', token = NULL, is_tracking = 0, is_active = 0, in_cal = 0, in_stats = 0
+         WHERE uuid = ?1 AND kind = 'local'",
+    )
+    .bind(uuid)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod sync_registration_tests {
+    use super::*;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    #[tokio::test]
+    async fn invalidating_registration_preserves_logs_under_pending_identity() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        create_table(&pool).await.unwrap();
+        crate::db::tables::log::create_table(&pool).await.unwrap();
+
+        sqlx::query(
+            "INSERT INTO devices
+             (uuid, name, kind, token, is_tracking, last_sync_id, in_cal, in_stats)
+             VALUES ('old-device', 'Desktop', 'local', 'token', 0, 12, 1, 1)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO logs (id, device_uuid, app, timestamp, duration, is_deleted)
+             VALUES (1, 'old-device', 'Editor', 100, 15, 0)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        invalidate_local_device_registration_with_pool(&pool, "old-device")
+            .await
+            .unwrap();
+
+        let pending_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM logs WHERE device_uuid = ?")
+                .bind(PENDING_LOCAL_DEVICE_UUID)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let active_local_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM devices WHERE kind = 'local' AND token IS NOT NULL",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!((pending_count, active_local_count), (1, 0));
+    }
 }
 
 #[tauri::command]
@@ -323,6 +413,15 @@ pub async fn set_last_sync_id(uuid: &String, new_last_sync_id: i64) -> Result<()
         .bind(new_last_sync_id)
         .bind(uuid)
         .execute(&pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn set_local_device_active(uuid: &str, is_active: bool) -> Result<(), Error> {
+    sqlx::query("UPDATE devices SET is_active = ?1 WHERE uuid = ?2 AND kind = 'local'")
+        .bind(is_active)
+        .bind(uuid)
+        .execute(&get_pool().await?)
         .await?;
     Ok(())
 }

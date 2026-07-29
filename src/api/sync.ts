@@ -9,6 +9,7 @@ export type Device = {
     name: string;
     state: DeviceState;
     last_sync_id: number;
+    is_active: boolean;
     in_cal: boolean;
     in_stats: boolean;
     available_on_server: boolean;
@@ -39,6 +40,10 @@ export async function getLocalDeviceName(): Promise<string> {
 
 export async function registerDevice(name: string): Promise<void> {
     await invokeOrThrow("register", { name });
+}
+
+export async function checkDeviceActivation(): Promise<boolean> {
+    return invokeOrThrow<boolean>("check_device_activation");
 }
 
 export async function uploadAllLogs(): Promise<number> {

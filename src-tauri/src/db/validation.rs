@@ -108,6 +108,12 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
                     default_value: Some("0"),
                 },
                 ExpectedColumn {
+                    name: "is_active",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: Some("0"),
+                },
+                ExpectedColumn {
                     name: "in_cal",
                     sql_type: "INTEGER",
                     not_null: true,

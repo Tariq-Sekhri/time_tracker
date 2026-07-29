@@ -143,13 +143,13 @@ pub async fn insert_log(log: NewLog) -> Result<i64, sqlx::Error> {
     let local_uuid = get_local_device_uuid()
         .await
         .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
-    let Some(uuid) = log
-        .device_uuid
+    let uuid = local_uuid
         .filter(|u| !u.is_empty())
-        .or(local_uuid.filter(|u| !u.is_empty()))
-    else {
-        return Err(sqlx::Error::Protocol("local device not set".into()));
-    };
+        .or_else(|| {
+            log.device_uuid
+                .filter(|u| u == PENDING_LOCAL_DEVICE_UUID)
+        })
+        .unwrap_or_else(|| PENDING_LOCAL_DEVICE_UUID.to_string());
     let next_id: i64 = sqlx::query_scalar(
         "SELECT COALESCE(MAX(id), 0) + 1 FROM logs WHERE device_uuid = ?1",
     )
@@ -604,15 +604,25 @@ pub async fn get_logs_for_sync() -> Result<Vec<Log>, Error> {
     Ok(logs)
 }
 
-pub async fn get_deleted_logs() -> Result<Vec<Log>, Error> {
-    let logs = sqlx::query_as::<_, Log>("select * from logs where is_deleted = 1 order by id asc ")
-        .fetch_all(&get_pool().await?)
-        .await?;
+pub async fn get_local_deleted_logs() -> Result<Vec<Log>, Error> {
+    let Some(uuid) = get_local_device_uuid().await? else {
+        return Ok(Vec::new());
+    };
+    let logs = sqlx::query_as::<_, Log>(
+        "SELECT * FROM logs WHERE is_deleted = 1 AND device_uuid = ?1 ORDER BY id ASC",
+    )
+    .bind(uuid)
+    .fetch_all(&get_pool().await?)
+    .await?;
     Ok(logs)
 }
 
-pub async fn delete_deleted_logs() -> Result<(), Error> {
-    sqlx::query("DELETE FROM logs WHERE is_deleted = 1")
+pub async fn delete_local_deleted_logs() -> Result<(), Error> {
+    let Some(uuid) = get_local_device_uuid().await? else {
+        return Ok(());
+    };
+    sqlx::query("DELETE FROM logs WHERE is_deleted = 1 AND device_uuid = ?1")
+        .bind(uuid)
         .execute(&get_pool().await?)
         .await?;
     Ok(())
