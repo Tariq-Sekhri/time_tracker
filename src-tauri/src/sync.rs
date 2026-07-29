@@ -81,7 +81,7 @@ fn normalize_server_ip(server_ip: &str) -> String {
 fn sync_server_url(server_ip: &str, path: &str) -> String {
     let ip = normalize_server_ip(server_ip);
     let path = path.trim_start_matches('/');
-    format!("http://{ip}:3000/v1/{path}")
+    format!("http://{ip}:8765/v1/{path}")
 }
 
 #[tauri::command]
