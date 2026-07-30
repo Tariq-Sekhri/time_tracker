@@ -1,4 +1,4 @@
-name: Server Sync Test Build
+name: Server Sync Beta Release
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - server-sync
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   windows-installer:
@@ -35,6 +35,11 @@ jobs:
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
           VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.VITE_GOOGLE_CLIENT_SECRET }}
         with:
+          tagName: app-v__VERSION__-server-sync-beta.${{ github.run_number }}
+          releaseName: Time Tracker v__VERSION__ Server Sync Beta ${{ github.run_number }}
+          releaseBody: "Windows installer for the server-sync test build. Download the .exe asset below."
+          releaseDraft: false
+          prerelease: true
           args: --bundles nsis
 
       - name: Upload test installer
