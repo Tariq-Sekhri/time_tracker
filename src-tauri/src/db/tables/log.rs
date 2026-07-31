@@ -354,9 +354,10 @@ pub async fn get_logs_for_time_block(
 }
 
 fn merge_logs_in_time_block(logs: Vec<Log>) -> Vec<MergedLog> {
-    let mut app_map: HashMap<String, MergedLog> = HashMap::new();
+    let mut app_map: HashMap<(Option<String>, String), MergedLog> = HashMap::new();
     for log in logs {
-        if let Some(existing) = app_map.get_mut(&log.app) {
+        let key = (log.device_uuid.clone(), log.app.clone());
+        if let Some(existing) = app_map.get_mut(&key) {
             existing.duration += log.duration;
             existing.ids.push(log.id);
             if log.timestamp < existing.timestamp {
@@ -364,7 +365,7 @@ fn merge_logs_in_time_block(logs: Vec<Log>) -> Vec<MergedLog> {
             }
         } else {
             app_map.insert(
-                log.app.clone(),
+                key,
                 MergedLog {
                     ids: vec![log.id],
                     device_uuid: log.device_uuid,
@@ -376,6 +377,41 @@ fn merge_logs_in_time_block(logs: Vec<Log>) -> Vec<MergedLog> {
         }
     }
     app_map.into_values().collect()
+}
+
+#[cfg(test)]
+mod merge_logs_tests {
+    use super::*;
+
+    #[test]
+    fn keeps_same_app_logs_separate_by_device_uuid() {
+        let merged = merge_logs_in_time_block(vec![
+            Log {
+                id: 1,
+                device_uuid: Some("device-a".into()),
+                app: "Editor".into(),
+                timestamp: 100,
+                duration: 30,
+                is_deleted: false,
+            },
+            Log {
+                id: 2,
+                device_uuid: Some("device-b".into()),
+                app: "Editor".into(),
+                timestamp: 110,
+                duration: 45,
+                is_deleted: false,
+            },
+        ]);
+
+        assert_eq!(merged.len(), 2);
+        assert!(merged.iter().any(|log| {
+            log.device_uuid.as_deref() == Some("device-a") && log.ids == vec![1]
+        }));
+        assert!(merged.iter().any(|log| {
+            log.device_uuid.as_deref() == Some("device-b") && log.ids == vec![2]
+        }));
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

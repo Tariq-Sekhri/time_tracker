@@ -13,6 +13,7 @@ export type CalendarEvent = {
 
 export type EventLogs = {
     ids: number[];
+    device_uuid: string | null;
     app: string;
     timestamp: Date;
     duration: number;

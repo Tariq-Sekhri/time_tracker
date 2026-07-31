@@ -292,13 +292,15 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
 
                     const logMap = new Map<string, {
                         ids: number[],
+                        device_uuid: string | null,
                         app: string,
                         timestamp: Date,
                         duration: number
                     }>();
 
                     result.forEach(log => {
-                        const existing = logMap.get(log.app);
+                        const logKey = `${log.device_uuid}\u0000${log.app}`;
+                        const existing = logMap.get(logKey);
                         if (existing) {
                             existing.ids.push(...log.ids);
                             existing.duration += log.duration;
@@ -307,8 +309,9 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                                 existing.timestamp = logTimestamp;
                             }
                         } else {
-                            logMap.set(log.app, {
+                            logMap.set(logKey, {
                                 ids: [...log.ids],
+                                device_uuid: log.device_uuid,
                                 app: log.app,
                                 timestamp: new Date(log.timestamp * 1000),
                                 duration: log.duration,
@@ -406,6 +409,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                                     : Number(row.timestamp as unknown as number);
                             return {
                                 ids: [row.id],
+                                device_uuid: row.device_uuid,
                                 app: row.app,
                                 timestamp: new Date(tsSec * 1000),
                                 duration: row.duration,
@@ -427,6 +431,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
 
                     const logs = result.map((log) => ({
                         ids: log.ids,
+                        device_uuid: log.device_uuid,
                         app: log.app,
                         timestamp: new Date(log.timestamp * 1000),
                         duration: log.duration,

@@ -107,10 +107,10 @@ export default function AppsInTimeBlock({
     }
 
     const handleDeleteLogMutation = useMutation({
-        mutationFn: async (ids: number[]) => {
-            return await delete_logs_by_ids(ids)
+        mutationFn: async ({ ids, uuid }: { ids: number[]; uuid: string }) => {
+            return await delete_logs_by_ids(ids, uuid)
         },
-        onSuccess: (_, deletedIds) => {
+        onSuccess: (_, { ids: deletedIds }) => {
             const updatedLogs = selectedEventLogs.filter((log) => {
                 return !log.ids.some(id => deletedIds.includes(id))
             })
@@ -151,8 +151,12 @@ export default function AppsInTimeBlock({
         }
     })
 
-    const handleDeleteLog = (ids: number[]) => {
-        handleDeleteLogMutation.mutate(ids)
+    const handleDeleteLog = (ids: number[], uuid: string | null) => {
+        if (!uuid) {
+            showToast("Cannot delete this log", "error", 5000, "The log has no device UUID.");
+            return;
+        }
+        handleDeleteLogMutation.mutate({ ids, uuid })
     }
 
     const appClicked = async (name: string) => {
@@ -324,7 +328,7 @@ export default function AppsInTimeBlock({
                                     </svg>
                                     <svg onClick={(e) => {
                                         e.stopPropagation();
-                                        handleDeleteLog(log.ids)
+                                        handleDeleteLog(log.ids, log.device_uuid)
                                     }} className="w-4 h-4 cursor-pointer hover:text-red-400" fill="none"
                                         stroke="currentColor"
                                         viewBox="0 0 24 24">

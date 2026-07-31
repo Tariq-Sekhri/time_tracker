@@ -2,7 +2,7 @@ import { invokeOrThrow } from "../utils.ts";
 
 export type Log = {
     id: number;
-    device_uuid: string;
+    device_uuid: string | null;
     app: string;
     timestamp: Date;
     duration: number;
@@ -11,7 +11,7 @@ export type Log = {
 
 export type MergedLog = {
     ids: number[];
-    device_uuid: string;
+    device_uuid: string | null;
     app: string;
     timestamp: number;
     duration: number;
@@ -37,8 +37,8 @@ export type GetLogsForTimeBlockRequest = {
     min_log_duration: number;
 };
 
-export async function delete_log_by_id(id: number): Promise<null> {
-    return invokeOrThrow<null>("delete_log_by_id", { id });
+export async function delete_log_by_id(id: number, uuid: string): Promise<null> {
+    return invokeOrThrow<null>("delete_log_by_id", { id, uuid });
 }
 
 export async function get_logs(): Promise<Log[]> {
@@ -61,8 +61,8 @@ export async function get_logs_for_time_block(request: GetLogsForTimeBlockReques
     return invokeOrThrow<MergedLog[]>("get_logs_for_time_block", { request });
 }
 
-export async function delete_logs_by_ids(ids: number[]): Promise<null> {
-    return invokeOrThrow<null>("delete_logs_by_ids", { ids });
+export async function delete_logs_by_ids(ids: number[], uuid: string): Promise<null> {
+    return invokeOrThrow<null>("delete_logs_by_ids", { ids, uuid });
 }
 
 export async function get_logs_by_category(request: GetLogsByCategoryRequest): Promise<MergedLog[]> {
@@ -71,7 +71,7 @@ export async function get_logs_by_category(request: GetLogsByCategoryRequest): P
 
 export type AppTimeRangeLog = {
     id: number;
-    device_uuid: string;
+    device_uuid: string | null;
     app: string;
     timestamp: number;
     duration: number;
