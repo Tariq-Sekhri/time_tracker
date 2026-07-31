@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "version": "1.11.0-beta.0",
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/Tariq-Sekhri/time_tracker/releases/download/app-beta-latest/latest.json"
+      ]
+    }
+  }
+}
