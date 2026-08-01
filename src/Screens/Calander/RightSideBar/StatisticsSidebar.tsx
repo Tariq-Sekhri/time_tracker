@@ -81,7 +81,7 @@ export default function StatisticsSidebar({
     const [displayMode, setDisplayMode] = useState<DisplayMode>("percentage");
     const [showAllApps, setShowAllApps] = useState(false);
     const { categorySidebarCount, calendarStartHour, uiMinAppDuration } = useBackendSettings();
-    const { openFromContextMenu, categorizeLayers } = useAppCategorizeMenu();
+    const { openFromContextMenuMany, categorizeLayers } = useAppCategorizeMenu();
     const calendarAppFilterActive = useCalendarAppFilterActive();
 
     const { week_start, week_end } = getWeekRange(weekDate, calendarStartHour);
@@ -516,7 +516,7 @@ export default function StatisticsSidebar({
                             key={`${app.app}-${idx}`}
                             data-tt-app-context
                             onClick={(e) => logRowLeftClickCalendarFilter(e, app.app)}
-                            onContextMenu={(e) => openFromContextMenu(e, app.app)}
+                            onContextMenu={(e) => openFromContextMenuMany(e, app.app_names)}
                             className={`flex items-center justify-between rounded px-2 cursor-pointer select-text ${calendarAppFilterActive === app.app
                                 ? "bg-gray-800 ring-1 ring-blue-500 ring-inset"
                                 : "hover:bg-gray-900/80"

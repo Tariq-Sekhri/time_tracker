@@ -1,4 +1,5 @@
 pub mod app_metadata_kv;
+pub mod app_group;
 pub mod cat_regex;
 pub mod category;
 pub mod device;

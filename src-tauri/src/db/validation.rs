@@ -204,6 +204,29 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
             ],
         },
         ExpectedTable {
+            name: "app_groups",
+            columns: vec![
+                ExpectedColumn {
+                    name: "id",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "name",
+                    sql_type: "TEXT",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "regex",
+                    sql_type: "TEXT",
+                    not_null: true,
+                    default_value: None,
+                },
+            ],
+        },
+        ExpectedTable {
             name: "skipped_apps",
             columns: vec![
                 ExpectedColumn {
@@ -514,6 +537,7 @@ async fn create_table_safe(pool: &SqlitePool, table: &ExpectedTable) -> Result<(
         "devices" => tables::device::create_table(pool).await?,
         "category" => tables::category::create_table(pool).await?,
         "category_regex" => tables::cat_regex::create_table(pool).await?,
+        "app_groups" => tables::app_group::create_table(pool).await?,
         "skipped_apps" => tables::skipped_app::create_table(pool).await?,
         "google_oauth" => tables::google_calendar::create_table(pool).await?,
         "google_calendar_v2" => tables::google_calendar::create_table(pool).await?,

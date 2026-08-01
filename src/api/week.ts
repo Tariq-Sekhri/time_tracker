@@ -5,7 +5,7 @@ type TimeBlockBackend = {
     category: string;
     start_time: number; // Unix timestamp in seconds
     end_time: number; // Unix timestamp in seconds
-    apps: { app: string; total_duration: number }[];
+    apps: { app: string; app_names: string[]; total_duration: number }[];
 };
 
 export type TimeBlock = {
@@ -13,7 +13,7 @@ export type TimeBlock = {
     category: string;
     startTime: number; // Unix timestamp in seconds
     endTime: number; // Unix timestamp in seconds
-    apps: { app: string; totalDuration: number }[];
+    apps: { app: string; appNames: string[]; totalDuration: number }[];
 };
 
 function transformTimeBlock(block: TimeBlockBackend): TimeBlock {
@@ -24,6 +24,7 @@ function transformTimeBlock(block: TimeBlockBackend): TimeBlock {
         endTime: block.end_time,
         apps: block.apps.map(app => ({
             app: app.app,
+            appNames: app.app_names,
             totalDuration: app.total_duration,
         })),
     };

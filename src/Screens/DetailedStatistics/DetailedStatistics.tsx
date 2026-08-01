@@ -168,7 +168,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
     // Hook: right-click app → categorize dialog; invalidates stats when categorization changes
-    const {openFromContextMenu, categorizeLayers} = useAppCategorizeMenu({
+    const {openFromContextMenuMany, categorizeLayers} = useAppCategorizeMenu({
         // After recategorize, refetch these query keys so bars/percentages update
         extraInvalidateQueryKeys: [["total_statistics"], ["range_statistics"]],
     });
@@ -366,13 +366,20 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                 min_log_duration: minLogDuration,
             });
             // Same app can appear in many log rows — aggregate to one row per app name
-            const logMap = new Map<string, { app: string; totalDuration: number }>();
+            const logMap = new Map<string, { app: string; appNames: string[]; totalDuration: number }>();
             result.forEach((log) => {
                 const existing = logMap.get(log.app);
                 if (existing) {
                     existing.totalDuration += log.duration;
+                    for (const appName of log.app_names) {
+                        if (!existing.appNames.includes(appName)) existing.appNames.push(appName);
+                    }
                 } else {
-                    logMap.set(log.app, {app: log.app, totalDuration: log.duration});
+                    logMap.set(log.app, {
+                        app: log.app,
+                        appNames: [...log.app_names],
+                        totalDuration: log.duration,
+                    });
                 }
             });
             return Array.from(logMap.values()).sort((a, b) => b.totalDuration - a.totalDuration);
@@ -433,7 +440,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
     );
 
     const selectedCategoryTotalDuration = selectedCategoryStat?.total_duration ?? 0;
-    type DisplayApp = { app: string; totalDuration: number };
+    type DisplayApp = { app: string; appNames: string[]; totalDuration: number };
 
     const filteredScaledCategoryAppList = useMemo(
         () => scaledCategoryAppList.filter((a) => a.totalDuration >= uiMinAppDuration),
@@ -448,6 +455,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                     .filter((app) => app.total_duration >= uiMinAppDuration)
                     .map((app) => ({
                         app: app.app,
+                        appNames: app.app_names,
                         totalDuration: app.total_duration,
                     })),
         [selectedCategory, filteredScaledCategoryAppList, stats?.all_apps, uiMinAppDuration]
@@ -914,7 +922,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                                         key={app.app}
                                         data-tt-app-context
                                         onClick={(e) => logRowLeftClickCalendarFilter(e, app.app)}
-                                        onContextMenu={(e) => openFromContextMenu(e, app.app)}
+                                        onContextMenu={(e) => openFromContextMenuMany(e, app.appNames)}
                                         className={`rounded px-2 py-1 cursor-pointer select-text ${calendarAppFilterActive === app.app
                                             ? "bg-gray-800 ring-1 ring-blue-500 ring-inset"
                                             : "hover:bg-gray-900/80"

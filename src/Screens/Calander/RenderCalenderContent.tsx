@@ -627,8 +627,8 @@ export default function RenderCalendarContent({
                             const eventType = info.event.extendedProps?.type as string | undefined;
                             if (eventType !== "timeblock") return;
                             const handler = (e: globalThis.MouseEvent) => {
-                                const apps = (info.event.extendedProps?.apps ?? []) as { app: string; totalDuration: number }[];
-                                const appNames = Array.from(new Set(apps.map((a) => a.app)));
+                                const apps = (info.event.extendedProps?.apps ?? []) as { app: string; appNames: string[]; totalDuration: number }[];
+                                const appNames = Array.from(new Set(apps.flatMap((a) => a.appNames)));
                                 if (appNames.length === 0) return;
                                 onTimeBlockContextMenu?.(e, appNames);
                             };

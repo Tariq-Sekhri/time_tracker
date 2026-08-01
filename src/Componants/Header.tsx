@@ -115,6 +115,15 @@ export default function Header({currentView, setCurrentView}: {
                     Regex
                 </button>
                 <button
+                    onClick={() => setCurrentView("appGroups")}
+                    className={`shrink-0 px-6 py-3 font-medium transition-colors ${currentView === "appGroups"
+                        ? "bg-gray-800 text-white border-b-2 border-blue-500"
+                        : "text-gray-400 hover:text-white hover:bg-gray-900"
+                    }`}
+                >
+                    App Groups
+                </button>
+                <button
                     onClick={() => setCurrentView("settings")}
                     className={`shrink-0 px-6 py-3 font-medium transition-colors ${currentView === "settings"
                         ? "bg-gray-800 text-white border-b-2 border-blue-500"

@@ -1,5 +1,8 @@
 use crate::db;
 use crate::db::error::Error;
+use crate::db::tables::app_group::{
+    build_app_group_matchers, get_app_groups, resolve_app_group, CachedAppGroup,
+};
 use crate::db::tables::cat_regex::{get_cat_regex, CategoryRegex};
 use crate::db::tables::category::{get_categories, Category};
 use crate::db::tables::log::{get_logs, mark_log_deleted, Log};
@@ -14,6 +17,7 @@ use std::collections::HashMap;
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct TimeBlockLogs {
     pub app: String,
+    pub app_names: Vec<String>,
     pub total_duration: i64,
 }
 
@@ -36,13 +40,14 @@ pub struct TimeBlockSettings {
 }
 
 impl TimeBlock {
-    fn new(log: &Log, id: i32, log_cat: String) -> Self {
+    fn new(log: &Log, id: i32, log_cat: String, app_groups: &[CachedAppGroup]) -> Self {
         TimeBlock {
             id,
             category: log_cat,
             start_time: log.timestamp,
             apps: vec![TimeBlockLogs {
-                app: log.app.clone(),
+                app: resolve_app_group(&log.app, app_groups).to_string(),
+                app_names: vec![log.app.clone()],
                 total_duration: log.duration,
             }],
             end_time: log.timestamp + log.duration,
@@ -83,6 +88,11 @@ impl TimeBlock {
         for other_app in other.apps {
             if let Some(existing_app) = self.apps.iter_mut().find(|a| a.app == other_app.app) {
                 existing_app.total_duration += other_app.total_duration;
+                for app_name in other_app.app_names {
+                    if !existing_app.app_names.contains(&app_name) {
+                        existing_app.app_names.push(app_name);
+                    }
+                }
             } else {
                 self.apps.push(other_app);
             }
@@ -139,6 +149,7 @@ fn build_regex_table(
 fn get_time_blocks(
     logs: &[Log],
     regex: &[CachedCategoryRegex],
+    app_groups: &[CachedAppGroup],
     time_block_settings: &TimeBlockSettings,
 ) -> Result<Vec<TimeBlock>, Error> {
     if logs.is_empty() {
@@ -171,6 +182,7 @@ fn get_time_blocks(
         first,
         0,
         derive_category(&first.app, regex)?,
+        app_groups,
     ));
 
     let mut time_block_index = 0;
@@ -183,25 +195,40 @@ fn get_time_blocks(
                 if log.timestamp <= current_time_block.end_time {
                     current_time_block.start_time = current_time_block.start_time.min(log.timestamp);
                     current_time_block.end_time = current_time_block.end_time.max(log_end_time);
+                    let grouped_app = resolve_app_group(&log.app, app_groups);
                     if let Some(matching_app) = current_time_block
                         .apps
                         .iter_mut()
-                        .find(|s| s.app == log.app)
+                        .find(|s| s.app == grouped_app)
                     {
                         matching_app.total_duration += log.duration;
+                        if !matching_app.app_names.contains(&log.app) {
+                            matching_app.app_names.push(log.app.clone());
+                        }
                     } else {
                         current_time_block.apps.push(TimeBlockLogs {
-                            app: log.app.clone(),
+                            app: grouped_app.to_string(),
+                            app_names: vec![log.app.clone()],
                             total_duration: log.duration,
                         })
                     }
                 } else {
                     time_block_index += 1;
-                    time_blocks.push(TimeBlock::new(log, time_block_index as i32, log_cat));
+                    time_blocks.push(TimeBlock::new(
+                        log,
+                        time_block_index as i32,
+                        log_cat,
+                        app_groups,
+                    ));
                 }
             } else {
                 time_block_index += 1;
-                time_blocks.push(TimeBlock::new(log, time_block_index as i32, log_cat));
+                time_blocks.push(TimeBlock::new(
+                    log,
+                    time_block_index as i32,
+                    log_cat,
+                    app_groups,
+                ));
             }
         }
     }
@@ -239,11 +266,16 @@ fn get_time_blocks(
 
         if let Some(idx) = best_match {
             if let Some(block) = time_blocks.get_mut(idx) {
-                if let Some(matching_app) = block.apps.iter_mut().find(|a| a.app == short_log.app) {
+                let grouped_app = resolve_app_group(&short_log.app, app_groups);
+                if let Some(matching_app) = block.apps.iter_mut().find(|a| a.app == grouped_app) {
                     matching_app.total_duration += short_log.duration;
+                    if !matching_app.app_names.contains(&short_log.app) {
+                        matching_app.app_names.push(short_log.app.clone());
+                    }
                 } else {
                     block.apps.push(TimeBlockLogs {
-                        app: short_log.app.clone(),
+                        app: grouped_app.to_string(),
+                        app_names: vec![short_log.app.clone()],
                         total_duration: short_log.duration,
                     });
                 }
@@ -320,6 +352,7 @@ pub async fn get_week(
     let cat_regex = get_cat_regex().await?;
     let categories = get_categories().await?;
     let regex = build_regex_table(&categories, &cat_regex)?;
+    let app_groups = build_app_group_matchers(&get_app_groups().await?)?;
 
     let logs: Vec<Log> = logs
         .into_iter()
@@ -331,7 +364,7 @@ pub async fn get_week(
     }
 
     transform_time_blocks(
-        get_time_blocks(&logs, &regex, &time_block_settings)?,
+        get_time_blocks(&logs, &regex, &app_groups, &time_block_settings)?,
         &time_block_settings,
     )
 }
@@ -363,11 +396,14 @@ pub async fn get_week_for_app_filter(
     let cat_regex = get_cat_regex().await?;
     let categories = get_categories().await?;
     let regex = build_regex_table(&categories, &cat_regex)?;
+    let app_groups = build_app_group_matchers(&get_app_groups().await?)?;
 
     let logs: Vec<Log> = logs
         .into_iter()
         .filter(|log| {
-            log.app == app_name && log.timestamp >= week_start && log.timestamp <= week_end
+            resolve_app_group(&log.app, &app_groups) == app_name
+                && log.timestamp >= week_start
+                && log.timestamp <= week_end
         })
         .collect();
 
@@ -376,7 +412,7 @@ pub async fn get_week_for_app_filter(
     }
 
     transform_time_blocks(
-        get_time_blocks(&logs, &regex, &time_block_settings)?,
+        get_time_blocks(&logs, &regex, &app_groups, &time_block_settings)?,
         &time_block_settings,
     )
 }
@@ -399,6 +435,11 @@ fn ensure_non_overlapping(mut blocks: Vec<TimeBlock>) -> Vec<TimeBlock> {
                 if let Some(existing_app) = current.apps.iter_mut().find(|a| a.app == next_app.app)
                 {
                     existing_app.total_duration += next_app.total_duration;
+                    for app_name in next_app.app_names {
+                        if !existing_app.app_names.contains(&app_name) {
+                            existing_app.app_names.push(app_name);
+                        }
+                    }
                 } else {
                     current.apps.push(next_app);
                 }
@@ -461,6 +502,11 @@ fn transform_time_blocks(
                             result[i].apps.iter_mut().find(|a| a.app == future_app.app)
                         {
                             existing_app.total_duration += future_app.total_duration;
+                            for app_name in future_app.app_names {
+                                if !existing_app.app_names.contains(&app_name) {
+                                    existing_app.app_names.push(app_name);
+                                }
+                            }
                         } else {
                             result[i].apps.push(future_app);
                         }

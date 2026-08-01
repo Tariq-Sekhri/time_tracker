@@ -1,4 +1,7 @@
 use crate::db;
+use crate::db::tables::app_group::{
+    build_app_group_matchers, get_app_groups, resolve_app_group, CachedAppGroup,
+};
 use cat_regex::{get_cat_regex, CategoryRegex};
 use category::{get_categories, Category};
 use chrono::{Datelike, Timelike};
@@ -9,7 +12,7 @@ use log::Log;
 use regex::Regex;
 use serde::Serialize;
 use skipped_app::get_skipped_apps;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 #[derive(Serialize, Debug, Clone)]
 pub struct CategoryStat {
@@ -23,6 +26,7 @@ pub struct CategoryStat {
 #[derive(Serialize, Debug, Clone)]
 pub struct AppStat {
     pub app: String,
+    pub app_names: Vec<String>,
     pub total_duration: i64,
     pub percentage_change: Option<f64>,
 }
@@ -71,6 +75,42 @@ struct CachedCategoryRegex {
     regex: Regex,
     category: String,
     priority: i32,
+}
+
+fn build_app_stats(logs: &[Log], app_groups: &[CachedAppGroup]) -> Vec<AppStat> {
+    let mut app_durations: HashMap<String, (i64, BTreeSet<String>)> = HashMap::new();
+    for log in logs {
+        let app = resolve_app_group(&log.app, app_groups).to_string();
+        let entry = app_durations.entry(app).or_default();
+        entry.0 += log.duration;
+        entry.1.insert(log.app.clone());
+    }
+
+    let mut app_stats: Vec<AppStat> = app_durations
+        .into_iter()
+        .map(|(app, (total_duration, app_names))| AppStat {
+            app,
+            app_names: app_names.into_iter().collect(),
+            total_duration,
+            percentage_change: None,
+        })
+        .collect();
+    app_stats.sort_by(|left, right| {
+        right
+            .total_duration
+            .cmp(&left.total_duration)
+            .then_with(|| left.app.cmp(&right.app))
+    });
+    app_stats
+}
+
+fn app_duration_map(logs: &[Log], app_groups: &[CachedAppGroup]) -> HashMap<String, i64> {
+    let mut durations = HashMap::new();
+    for log in logs {
+        let app = resolve_app_group(&log.app, app_groups).to_string();
+        *durations.entry(app).or_insert(0) += log.duration;
+    }
+    durations
 }
 
 fn derive_category(app: &str, regexes: &[CachedCategoryRegex]) -> String {
@@ -206,6 +246,7 @@ pub async fn get_week_statistics(
     let cat_regex = get_cat_regex().await?;
     let categories = get_categories().await?;
     let regex = build_regex_table(&categories, &cat_regex)?;
+    let app_groups = build_app_group_matchers(&get_app_groups().await?)?;
 
     let now = Local::now().timestamp();
     let compare_end = week_end.min(now);
@@ -255,21 +296,7 @@ pub async fn get_week_statistics(
 
     category_stats.sort_by(|a, b| b.total_duration.cmp(&a.total_duration));
 
-    let mut app_durations: HashMap<String, i64> = HashMap::new();
-    for log in &period_logs {
-        *app_durations.entry(log.app.clone()).or_insert(0) += log.duration;
-    }
-
-    let mut app_stats: Vec<AppStat> = app_durations
-        .into_iter()
-        .map(|(app, total_duration)| AppStat {
-            app,
-            total_duration,
-            percentage_change: None,
-        })
-        .collect();
-
-    app_stats.sort_by(|a, b| b.total_duration.cmp(&a.total_duration));
+    let app_stats = build_app_stats(&period_logs, &app_groups);
     let mut all_apps = app_stats.clone();
     let mut top_apps: Vec<AppStat> = app_stats.into_iter().take(5).collect();
 
@@ -380,10 +407,7 @@ pub async fn get_week_statistics(
         }
     }
 
-    let mut prev_app_durations: HashMap<String, i64> = HashMap::new();
-    for log in &prev_week_logs {
-        *prev_app_durations.entry(log.app.clone()).or_insert(0) += log.duration;
-    }
+    let prev_app_durations = app_duration_map(&prev_week_logs, &app_groups);
 
     for app_stat in &mut top_apps {
         let prev_duration = *prev_app_durations.get(&app_stat.app).unwrap_or(&0i64);
@@ -447,6 +471,7 @@ pub async fn get_total_statistics() -> Result<WeekStatistics, Error> {
     let cat_regex = get_cat_regex().await?;
     let categories = get_categories().await?;
     let regex = build_regex_table(&categories, &cat_regex)?;
+    let app_groups = build_app_group_matchers(&get_app_groups().await?)?;
 
     let mut category_durations: HashMap<String, i64> = HashMap::new();
     let mut category_colors: HashMap<String, Option<String>> = HashMap::new();
@@ -455,7 +480,6 @@ pub async fn get_total_statistics() -> Result<WeekStatistics, Error> {
         category_colors.insert(cat.name.clone(), cat.color.clone());
     }
 
-    let mut app_durations: HashMap<String, i64> = HashMap::new();
     let mut hourly_durations: HashMap<i32, i64> = HashMap::new();
     let mut day_category_durations: HashMap<(i32, String), i64> = HashMap::new();
     let mut day_totals: HashMap<i64, i64> = HashMap::new();
@@ -464,8 +488,6 @@ pub async fn get_total_statistics() -> Result<WeekStatistics, Error> {
     for log in &logs {
         let category = derive_category_cached(&log.app, &regex, &mut app_category_cache);
         *category_durations.entry(category.clone()).or_insert(0) += log.duration;
-        *app_durations.entry(log.app.clone()).or_insert(0) += log.duration;
-
         let hour = get_hour(log.timestamp);
         *hourly_durations.entry(hour).or_insert(0) += log.duration;
 
@@ -500,16 +522,7 @@ pub async fn get_total_statistics() -> Result<WeekStatistics, Error> {
 
     category_stats.sort_by(|a, b| b.total_duration.cmp(&a.total_duration));
 
-    let mut app_stats: Vec<AppStat> = app_durations
-        .into_iter()
-        .map(|(app, total_duration)| AppStat {
-            app,
-            total_duration,
-            percentage_change: None,
-        })
-        .collect();
-
-    app_stats.sort_by(|a, b| b.total_duration.cmp(&a.total_duration));
+    let app_stats = build_app_stats(&logs, &app_groups);
     let all_apps = app_stats.clone();
     let top_apps: Vec<AppStat> = app_stats.into_iter().take(5).collect();
 
@@ -603,6 +616,7 @@ pub async fn get_day_statistics(
     let cat_regex = get_cat_regex().await?;
     let categories = get_categories().await?;
     let regex = build_regex_table(&categories, &cat_regex)?;
+    let app_groups = build_app_group_matchers(&get_app_groups().await?)?;
 
     let day_logs: Vec<Log> = logs
         .into_iter()
@@ -643,21 +657,7 @@ pub async fn get_day_statistics(
 
     category_stats.sort_by(|a, b| b.total_duration.cmp(&a.total_duration));
 
-    let mut app_durations: HashMap<String, i64> = HashMap::new();
-    for log in &day_logs {
-        *app_durations.entry(log.app.clone()).or_insert(0) += log.duration;
-    }
-
-    let mut app_stats: Vec<AppStat> = app_durations
-        .into_iter()
-        .map(|(app, total_duration)| AppStat {
-            app,
-            total_duration,
-            percentage_change: None,
-        })
-        .collect();
-
-    app_stats.sort_by(|a, b| b.total_duration.cmp(&a.total_duration));
+    let app_stats = build_app_stats(&day_logs, &app_groups);
     let top_apps = app_stats.into_iter().take(5).collect();
 
     let mut hourly_durations: HashMap<i32, i64> = HashMap::new();
@@ -679,4 +679,44 @@ pub async fn get_day_statistics(
         top_apps,
         hourly_distribution,
     })
+}
+
+#[cfg(test)]
+mod app_group_statistics_tests {
+    use super::*;
+    use crate::db::tables::app_group::{build_app_group_matchers, AppGroup};
+
+    #[test]
+    fn changing_window_titles_can_reach_top_apps_as_one_group() {
+        let matchers = build_app_group_matchers(&[AppGroup {
+            id: 1,
+            name: "YouTube".into(),
+            regex: "(?i)youtube".into(),
+        }])
+        .unwrap();
+
+        let mut logs: Vec<Log> = (0..6)
+            .map(|index| Log {
+                id: index,
+                device_uuid: Some("desktop".into()),
+                app: format!("Video {index} - YouTube - Vivaldi"),
+                timestamp: 100 + index,
+                duration: 10,
+                is_deleted: false,
+            })
+            .collect();
+        logs.push(Log {
+            id: 10,
+            device_uuid: Some("desktop".into()),
+            app: "Visual Studio Code".into(),
+            timestamp: 200,
+            duration: 50,
+            is_deleted: false,
+        });
+
+        let stats = build_app_stats(&logs, &matchers);
+        assert_eq!(stats[0].app, "YouTube");
+        assert_eq!(stats[0].total_duration, 60);
+        assert_eq!(stats[0].app_names.len(), 6);
+    }
 }

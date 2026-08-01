@@ -67,6 +67,12 @@ type RegexRow = {
     regex: string;
 };
 
+type AppGroupRow = {
+    id: number;
+    name: string;
+    regex: string;
+};
+
 type SkippedRow = {
     id: number;
     regex: string;
@@ -150,12 +156,14 @@ let appMetadata: Record<string, string> = {};
 let googleLoggedIn = true;
 let nextCatId = 100;
 let nextRegexId = 100;
+let nextAppGroupId = 1;
 let nextSkipId = 100;
 let nextGCalId = 100;
 let nextEventSeq = 1;
 
 let categories: CategoryRow[] = [];
 let catRegex: RegexRow[] = [];
+let appGroups: AppGroupRow[] = [];
 let rawLogs: RawLog[] = [];
 let skippedApps: SkippedRow[] = [];
 let googleCalendars: GoogleCal[] = [];
@@ -331,6 +339,8 @@ function seed() {
     appMetadata = { ...DEMO_APP_METADATA_DEFAULTS };
     categories = DEMO_DEFAULT_CATEGORIES.map((c) => toDemoCategory({ ...c }));
     catRegex = DEMO_DEFAULT_CAT_REGEX.map((r) => ({ ...r }));
+    appGroups = [];
+    nextAppGroupId = 1;
     nextCatId = Math.max(0, ...categories.map((c) => c.id)) + 1;
     nextRegexId = Math.max(0, ...catRegex.map((r) => r.id)) + 1;
 
@@ -780,6 +790,40 @@ function seed() {
 }
 
 
+function resolveDemoAppGroup(app: string): string {
+    const matches = appGroups
+        .map((group) => ({
+            group,
+            specificity: [...group.regex].filter((character) => /[a-z0-9]/i.test(character)).length,
+        }))
+        .sort((left, right) => right.specificity - left.specificity || left.group.id - right.group.id);
+    for (const {group} of matches) {
+        try {
+            const caseInsensitive = group.regex.startsWith("(?i)");
+            const pattern = caseInsensitive ? group.regex.slice(4) : group.regex;
+            if (new RegExp(pattern, caseInsensitive ? "i" : undefined).test(app)) return group.name;
+        } catch {
+            // App group regexes are validated on write.
+        }
+    }
+    return app;
+}
+
+function groupDemoApps(apps: {app: string; total_duration: number}[]) {
+    const grouped = new Map<string, {app: string; app_names: string[]; total_duration: number}>();
+    for (const row of apps) {
+        const app = resolveDemoAppGroup(row.app);
+        const existing = grouped.get(app);
+        if (existing) {
+            existing.total_duration += row.total_duration;
+            if (!existing.app_names.includes(row.app)) existing.app_names.push(row.app);
+        } else {
+            grouped.set(app, {app, app_names: [row.app], total_duration: row.total_duration});
+        }
+    }
+    return Array.from(grouped.values());
+}
+
 function buildCategoryStats(
     blocks: TimeBlockRow[],
     ws: number,
@@ -815,7 +859,8 @@ function buildCategoryStats(
         const appSum = sumApps(b);
         for (const ap of b.apps) {
             const share = appSum > 0 ? ap.total_duration / appSum : 0;
-            apps.set(ap.app, (apps.get(ap.app) ?? 0) + od * share);
+            const groupedApp = resolveDemoAppGroup(ap.app);
+            apps.set(groupedApp, (apps.get(groupedApp) ?? 0) + od * share);
         }
 
         const mid = (Math.max(b.start_time, ws) + Math.min(b.end_time, we)) / 2;
@@ -895,6 +940,7 @@ function weekStatistics(ws: number, we: number) {
             }
             return {
                 app,
+                app_names: [app],
                 total_duration: Math.round(total_duration),
                 percentage_change: pch,
             };
@@ -967,6 +1013,7 @@ function dayStatistics(ds: number, de: number) {
     const appArr = Array.from(apps.entries())
         .map(([app, total_duration]) => ({
             app,
+            app_names: [app],
             total_duration: Math.round(total_duration),
             percentage_change: null as number | null,
         }))
@@ -1078,6 +1125,45 @@ export async function invoke<T>(
             catRegex = catRegex.filter((r) => r.id !== id);
             return null as T;
         }
+        case "get_app_groups":
+            return [...appGroups].sort((left, right) => right.id - left.id) as unknown as T;
+        case "insert_app_group": {
+            const row = (a as {newAppGroup?: {name?: string; regex?: string}}).newAppGroup;
+            const name = row?.name?.trim() ?? "";
+            const regex = row?.regex?.trim() ?? "";
+            if (!name) throw new DemoInvokeError(cmd, "Group name cannot be empty");
+            try {
+                const caseInsensitive = regex.startsWith("(?i)");
+                new RegExp(caseInsensitive ? regex.slice(4) : regex, caseInsensitive ? "i" : undefined);
+            } catch (error) {
+                throw new DemoInvokeError(cmd, `Invalid regex: ${String(error)}`);
+            }
+            if (appGroups.some((group) => group.regex === regex)) {
+                throw new DemoInvokeError(cmd, "That regex already has an app group");
+            }
+            const id = nextAppGroupId++;
+            appGroups.push({id, name, regex});
+            return id as unknown as T;
+        }
+        case "update_app_group": {
+            const row = (a as {appGroup?: AppGroupRow}).appGroup;
+            if (!row?.name.trim()) throw new DemoInvokeError(cmd, "Group name cannot be empty");
+            try {
+                const caseInsensitive = row.regex.startsWith("(?i)");
+                new RegExp(caseInsensitive ? row.regex.slice(4) : row.regex, caseInsensitive ? "i" : undefined);
+            } catch (error) {
+                throw new DemoInvokeError(cmd, `Invalid regex: ${String(error)}`);
+            }
+            const index = appGroups.findIndex((group) => group.id === row.id);
+            if (index < 0) throw new DemoInvokeError(cmd, "App group not found");
+            appGroups[index] = {...row, name: row.name.trim(), regex: row.regex.trim()};
+            return null as T;
+        }
+        case "delete_app_group": {
+            const id = Number((a as {id?: number}).id);
+            appGroups = appGroups.filter((group) => group.id !== id);
+            return null as T;
+        }
         case "get_logs":
             return activeRawLogs().map((r) => ({
                 ...r,
@@ -1102,7 +1188,7 @@ export async function invoke<T>(
             );
             const rows = activeRawLogs().filter(
                 (r) =>
-                    r.app === app &&
+                    resolveDemoAppGroup(r.app) === app &&
                     r.timestamp >= rangeStart &&
                     r.timestamp <= rangeEnd &&
                     r.duration >= minLogDuration
@@ -1137,7 +1223,11 @@ export async function invoke<T>(
                 catRegex,
                 skippedApps
             );
-            return mergeLogsInTimeBlock(rows).sort((a, b) => b.duration - a.duration) as unknown as T;
+            return mergeLogsInTimeBlock(rows).map((row) => ({
+                ...row,
+                app: resolveDemoAppGroup(row.app),
+                app_names: [row.app],
+            })).sort((a, b) => b.duration - a.duration) as unknown as T;
         }
         case "get_logs_for_time_block": {
             const req = (a as {
@@ -1158,7 +1248,11 @@ export async function invoke<T>(
                 req.end_time,
                 minD
             );
-            return mergeLogsInTimeBlock(rows).sort((a, b) => b.duration - a.duration) as unknown as T;
+            return mergeLogsInTimeBlock(rows).map((row) => ({
+                ...row,
+                app: resolveDemoAppGroup(row.app),
+                app_names: [row.app],
+            })).sort((a, b) => b.duration - a.duration) as unknown as T;
         }
         case "count_logs_for_time_block": {
             const req = (a as {
@@ -1215,10 +1309,7 @@ export async function invoke<T>(
                 category: b.category,
                 start_time: b.start_time,
                 end_time: b.end_time,
-                apps: b.apps.map((x) => ({
-                    app: x.app,
-                    total_duration: x.total_duration,
-                })),
+                apps: groupDemoApps(b.apps),
             }));
             return out as unknown as T;
         }
@@ -1226,16 +1317,13 @@ export async function invoke<T>(
             const { week_start: weekStart, week_end: weekEnd } = resolveWeekBounds(a);
             const appName = String((a as { appName?: string }).appName ?? "");
             const out = blocksInRangeEffective(weekStart, weekEnd)
-                .filter((b) => b.apps.some((ap) => ap.app === appName))
+                .filter((b) => b.apps.some((ap) => resolveDemoAppGroup(ap.app) === appName))
                 .map((b) => ({
                     id: b.id,
                     category: b.category,
                     start_time: b.start_time,
                     end_time: b.end_time,
-                    apps: b.apps.map((x) => ({
-                        app: x.app,
-                        total_duration: x.total_duration,
-                    })),
+                    apps: groupDemoApps(b.apps),
                 }));
             return out as unknown as T;
         }

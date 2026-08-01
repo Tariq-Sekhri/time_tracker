@@ -14,6 +14,9 @@ use db::queries::{
     get_week_statistics,
 };
 use db::tables::app_metadata_kv::{get_server_ip, set_server_ip};
+use db::tables::app_group::{
+    delete_app_group, get_app_groups, insert_app_group, update_app_group,
+};
 use db::tables::cat_regex::{
     delete_cat_regex_by_id, get_cat_regex, get_cat_regex_by_id, insert_cat_regex,
     update_cat_regex_by_id,
@@ -292,6 +295,10 @@ pub fn run() {
             delete_cat_regex_by_id,
             insert_cat_regex,
             update_cat_regex_by_id,
+            get_app_groups,
+            insert_app_group,
+            update_app_group,
+            delete_app_group,
             get_logs,
             get_log_by_id,
             delete_log_by_id,

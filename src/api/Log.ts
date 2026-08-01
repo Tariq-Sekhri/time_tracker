@@ -13,6 +13,7 @@ export type MergedLog = {
     ids: number[];
     device_uuid: string | null;
     app: string;
+    app_names: string[];
     timestamp: number;
     duration: number;
 };

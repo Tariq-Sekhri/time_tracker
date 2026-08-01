@@ -294,6 +294,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                         ids: number[],
                         device_uuid: string | null,
                         app: string,
+                        app_names: string[],
                         timestamp: Date,
                         duration: number
                     }>();
@@ -304,6 +305,9 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                         if (existing) {
                             existing.ids.push(...log.ids);
                             existing.duration += log.duration;
+                            for (const appName of log.app_names) {
+                                if (!existing.app_names.includes(appName)) existing.app_names.push(appName);
+                            }
                             const logTimestamp = new Date(log.timestamp * 1000);
                             if (logTimestamp < existing.timestamp) {
                                 existing.timestamp = logTimestamp;
@@ -313,6 +317,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                                 ids: [...log.ids],
                                 device_uuid: log.device_uuid,
                                 app: log.app,
+                                app_names: [...log.app_names],
                                 timestamp: new Date(log.timestamp * 1000),
                                 duration: log.duration,
                             });
@@ -328,6 +333,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                         end: new Date(endTime * 1000),
                         apps: logs.map(log => ({
                             app: log.app,
+                            appNames: log.app_names,
                             totalDuration: log.duration,
                         })),
                     };
@@ -389,7 +395,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                     title: clickInfo.event.title,
                     start: clickInfo.event.start,
                     end: clickInfo.event.end,
-                    apps: (clickInfo.event.extendedProps?.apps || []) as { app: string; totalDuration: number }[],
+                    apps: (clickInfo.event.extendedProps?.apps || []) as { app: string; appNames: string[]; totalDuration: number }[],
                     ...(category != null && category !== "" ? {category} : {}),
                     ...(timeBlockId != null ? {timeBlockId} : {}),
                 };
@@ -411,6 +417,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                                 ids: [row.id],
                                 device_uuid: row.device_uuid,
                                 app: row.app,
+                                app_names: [row.app],
                                 timestamp: new Date(tsSec * 1000),
                                 duration: row.duration,
                             };
@@ -420,7 +427,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                 } else {
                     const startTime = Math.floor(event.start.getTime() / 1000);
                     const endTime = Math.floor(event.end.getTime() / 1000);
-                    const appNames = event.apps.map((a) => a.app);
+                    const appNames = Array.from(new Set(event.apps.flatMap((a) => a.appNames)));
 
                     const result = await get_logs_for_time_block({
                         app_names: appNames,
@@ -433,6 +440,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                         ids: log.ids,
                         device_uuid: log.device_uuid,
                         app: log.app,
+                        app_names: log.app_names,
                         timestamp: new Date(log.timestamp * 1000),
                         duration: log.duration,
                     }));

@@ -25,6 +25,7 @@ pub struct MergedLog {
     pub ids: Vec<i64>,
     pub device_uuid: Option<String>,
     pub app: String,
+    pub app_names: Vec<String>,
     pub timestamp: i64,
     pub duration: i64,
 }
@@ -355,16 +356,26 @@ pub async fn get_logs_for_time_block(
         .filter(|log| request.app_names.contains(&log.app))
         .collect();
 
-    Ok(merge_logs_in_time_block(filtered_logs))
+    let groups = crate::db::tables::app_group::get_app_groups().await?;
+    let matchers = crate::db::tables::app_group::build_app_group_matchers(&groups)?;
+    Ok(merge_logs_in_time_block(filtered_logs, &matchers))
 }
 
-fn merge_logs_in_time_block(logs: Vec<Log>) -> Vec<MergedLog> {
+fn merge_logs_in_time_block(
+    logs: Vec<Log>,
+    app_groups: &[crate::db::tables::app_group::CachedAppGroup],
+) -> Vec<MergedLog> {
     let mut app_map: HashMap<(Option<String>, String), MergedLog> = HashMap::new();
     for log in logs {
-        let key = (log.device_uuid.clone(), log.app.clone());
+        let grouped_app =
+            crate::db::tables::app_group::resolve_app_group(&log.app, app_groups).to_string();
+        let key = (log.device_uuid.clone(), grouped_app.clone());
         if let Some(existing) = app_map.get_mut(&key) {
             existing.duration += log.duration;
             existing.ids.push(log.id);
+            if !existing.app_names.contains(&log.app) {
+                existing.app_names.push(log.app.clone());
+            }
             if log.timestamp < existing.timestamp {
                 existing.timestamp = log.timestamp;
             }
@@ -374,7 +385,8 @@ fn merge_logs_in_time_block(logs: Vec<Log>) -> Vec<MergedLog> {
                 MergedLog {
                     ids: vec![log.id],
                     device_uuid: log.device_uuid,
-                    app: log.app,
+                    app: grouped_app,
+                    app_names: vec![log.app],
                     timestamp: log.timestamp,
                     duration: log.duration,
                 },
@@ -407,7 +419,7 @@ mod merge_logs_tests {
                 duration: 45,
                 is_deleted: false,
             },
-        ]);
+        ], &[]);
 
         assert_eq!(merged.len(), 2);
         assert!(merged.iter().any(|log| {
@@ -416,6 +428,42 @@ mod merge_logs_tests {
         assert!(merged.iter().any(|log| {
             log.device_uuid.as_deref() == Some("device-b") && log.ids == vec![2]
         }));
+    }
+
+    #[test]
+    fn combines_titles_that_share_an_app_group() {
+        let groups = vec![crate::db::tables::app_group::AppGroup {
+            id: 1,
+            name: "YouTube".into(),
+            regex: "(?i)youtube".into(),
+        }];
+        let matchers = crate::db::tables::app_group::build_app_group_matchers(&groups).unwrap();
+        let merged = merge_logs_in_time_block(
+            vec![
+                Log {
+                    id: 1,
+                    device_uuid: Some("device-a".into()),
+                    app: "First video - YouTube".into(),
+                    timestamp: 100,
+                    duration: 30,
+                    is_deleted: false,
+                },
+                Log {
+                    id: 2,
+                    device_uuid: Some("device-a".into()),
+                    app: "Second video - YouTube".into(),
+                    timestamp: 140,
+                    duration: 45,
+                    is_deleted: false,
+                },
+            ],
+            &matchers,
+        );
+
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].app, "YouTube");
+        assert_eq!(merged[0].duration, 75);
+        assert_eq!(merged[0].app_names.len(), 2);
     }
 }
 
@@ -495,7 +543,9 @@ pub async fn get_logs_by_category(
         })
         .collect();
 
-    Ok(merge_logs_in_time_block(filtered_logs))
+    let groups = crate::db::tables::app_group::get_app_groups().await?;
+    let matchers = crate::db::tables::app_group::build_app_group_matchers(&groups)?;
+    Ok(merge_logs_in_time_block(filtered_logs, &matchers))
 }
 
 #[tauri::command]
@@ -518,24 +568,24 @@ pub async fn get_logs_for_app_in_time_range(
     let is_skipped =
         |name: &str| -> bool { skipped_regexes.iter().any(|regex| regex.is_match(name)) };
 
-    if is_skipped(&app) {
-        return Ok(Vec::new());
-    }
-
     let min_d = min_log_duration.max(1);
     let logs = sqlx::query_as::<_, Log>(
-        "SELECT id, device_uuid, app, timestamp, duration, is_deleted FROM logs WHERE app = ?1 AND timestamp >= ?2 AND timestamp <= ?3 AND duration >= ?4 AND is_deleted = 0 ORDER BY timestamp ASC",
+        "SELECT id, device_uuid, app, timestamp, duration, is_deleted FROM logs WHERE timestamp >= ?1 AND timestamp <= ?2 AND duration >= ?3 AND is_deleted = 0 ORDER BY timestamp ASC",
     )
-    .bind(&app)
     .bind(range_start)
     .bind(range_end)
     .bind(min_d)
     .fetch_all(&pool)
     .await?;
 
+    let groups = crate::db::tables::app_group::get_app_groups().await?;
+    let matchers = crate::db::tables::app_group::build_app_group_matchers(&groups)?;
     let logs: Vec<Log> = logs
         .into_iter()
-        .filter(|log| !is_skipped(&log.app))
+        .filter(|log| {
+            !is_skipped(&log.app)
+                && crate::db::tables::app_group::resolve_app_group(&log.app, &matchers) == app
+        })
         .collect();
 
     Ok(logs)

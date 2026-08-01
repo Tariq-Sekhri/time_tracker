@@ -18,11 +18,13 @@ import {get_total_statistics} from "./api/statistics.ts";
 import {toErrorString} from "./types/common.ts";
 import {useSyncTimer} from "./hooks/useSyncTimer.ts";
 import Sync from "./Screens/Sync.tsx";
+import AppGroupsView from "./Screens/AppGroupsView.tsx";
 
 export type View =
     | "calendar"
     | "categories"
     | "regex"
+    | "appGroups"
     | "skipped"
     | "detailed"
     | "googleCalendars"
@@ -33,7 +35,7 @@ function AppInner() {
     const queryClient = useQueryClient();
     const {showToast, updateToast, removeToast} = useToast();
     const syncTimer = useSyncTimer();
-    const [currentView, setCurrentView] = useState<View>("sync");
+    const [currentView, setCurrentView] = useState<View>("calendar");
     const [updateAvailable, setUpdateAvailable] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
     const [updateError, setUpdateError] = useState<string | null>(null);
@@ -290,6 +292,7 @@ function AppInner() {
                 {currentView === "calendar" && <Calendar setCurrentView={setCurrentView}/>}
                 {currentView === "categories" && <CategoriesView/>}
                 {currentView === "regex" && <CategoryRegexView/>}
+                {currentView === "appGroups" && <AppGroupsView/>}
                 {currentView === "skipped" && <SkippedAppsView/>}
                 {currentView === "detailed" && (<DetailedStatistics
                         onBack={() => setCurrentView("calendar")}

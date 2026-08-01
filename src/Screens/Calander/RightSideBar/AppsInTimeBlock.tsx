@@ -19,6 +19,7 @@ export type SelectedEvent = {
     end: Date
     apps: {
         app: string
+        appNames: string[]
         totalDuration: number
     }[]
 }
@@ -48,7 +49,7 @@ export default function AppsInTimeBlock({
     const [isCountingLogs, setIsCountingLogs] = useState(false);
     const [selectedApps, setSelectedApps] = useState<Set<string>>(new Set());
     const { showToast } = useToast();
-    const { openFromContextMenu, openFromContextMenuMany, categorizeLayers } = useAppCategorizeMenu();
+    const { openFromContextMenuMany, categorizeLayers } = useAppCategorizeMenu();
     const calendarAppFilterActive = useCalendarAppFilterActive();
 
     const handleDeleteClick = async () => {
@@ -57,7 +58,7 @@ export default function AppsInTimeBlock({
         setIsCountingLogs(true);
         const startTime = Math.floor(selectedEvent.start.getTime() / 1000);
         const endTime = Math.floor(selectedEvent.end.getTime() / 1000);
-        const appNames = selectedEvent.apps.map(a => a.app);
+        const appNames = Array.from(new Set(selectedEvent.apps.flatMap(a => a.appNames)));
 
         const result = await count_logs_for_time_block({
             app_names: appNames,
@@ -93,7 +94,7 @@ export default function AppsInTimeBlock({
 
         const startTime = Math.floor(selectedEvent.start.getTime() / 1000);
         const endTime = Math.floor(selectedEvent.end.getTime() / 1000);
-        const appNames = selectedEvent.apps.map(a => a.app);
+        const appNames = Array.from(new Set(selectedEvent.apps.flatMap(a => a.appNames)));
 
         deleteTimeBlockMutation.mutate({
             appNames,
@@ -119,6 +120,7 @@ export default function AppsInTimeBlock({
             if (selectedEvent) {
                 const updatedApps = updatedLogs.map(log => ({
                     app: log.app,
+                    appNames: log.app_names,
                     totalDuration: log.duration
                 }));
 
@@ -172,9 +174,11 @@ export default function AppsInTimeBlock({
 
     const displayedLogs = [...selectedEventLogs].sort((a, b) => b.duration - a.duration);
     const totalDuration = displayedLogs.reduce((sum, log) => sum + log.duration, 0);
-    const allTimeBlockApps = Array.from(new Set(displayedLogs.map((log) => log.app)));
+    const allTimeBlockApps = Array.from(new Set(displayedLogs.flatMap((log) => log.app_names)));
     const allDisplayedAppNames = displayedLogs.map((log) => log.app);
-    const selectedAppNames = allDisplayedAppNames.filter((name) => selectedApps.has(name));
+    const selectedAppNames = displayedLogs
+        .filter((log) => selectedApps.has(log.app))
+        .flatMap((log) => log.app_names);
 
     useEffect(() => {
         setSelectedApps((prev) => {
@@ -291,7 +295,7 @@ export default function AppsInTimeBlock({
                             <div
                                 key={log.ids.join("-")}
                                 onClick={(e) => logRowLeftClickCalendarFilter(e, log.app)}
-                                onContextMenu={(e) => openFromContextMenu(e, log.app)}
+                                onContextMenu={(e) => openFromContextMenuMany(e, log.app_names)}
                                 className={`h-15 rounded-lg p-3 transition-colors select-text cursor-pointer ${calendarAppFilterActive === log.app
                                     ? "bg-gray-800 ring-2 ring-blue-500 ring-offset-2 ring-offset-black"
                                     : "bg-gray-900 hover:bg-gray-800"

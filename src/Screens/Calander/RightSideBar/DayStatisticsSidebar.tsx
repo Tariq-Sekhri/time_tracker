@@ -51,7 +51,7 @@ export default function DayStatisticsSidebar({
         [googleCalendars]
     );
     const { calendarStartHour, categorySidebarCount } = useBackendSettings();
-    const { openFromContextMenu, categorizeLayers } = useAppCategorizeMenu();
+    const { openFromContextMenuMany, categorizeLayers } = useAppCategorizeMenu();
     const calendarAppFilterActive = useCalendarAppFilterActive();
 
     const { day_start: dayStart, day_end: dayEnd } = useMemo(
@@ -392,7 +392,7 @@ export default function DayStatisticsSidebar({
                             key={`${app.app}-${idx}`}
                             data-tt-app-context
                             onClick={(e) => logRowLeftClickCalendarFilter(e, app.app)}
-                            onContextMenu={(e) => openFromContextMenu(e, app.app)}
+                            onContextMenu={(e) => openFromContextMenuMany(e, app.app_names)}
                             className={`flex items-center justify-between rounded px-2 cursor-pointer select-text ${calendarAppFilterActive === app.app
                                 ? "bg-gray-800 ring-1 ring-blue-500 ring-inset"
                                 : "hover:bg-gray-900/80"

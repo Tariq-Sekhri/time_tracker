@@ -10,6 +10,7 @@ export type CategoryStat = {
 
 export type AppStat = {
     app: string;
+    app_names: string[];
     total_duration: number;
     percentage_change: number | null;
 };
