@@ -223,10 +223,14 @@ pub async fn update_category_by_id(cat: Category) -> Result<(), Error> {
 #[tauri::command]
 pub async fn delete_category_by_id(id: i32, cascade: bool) -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    let current = get_category_by_id(id).await.ok();
+    let mut tx = pool.begin().await?;
+    let current: Option<String> = sqlx::query_scalar("SELECT name FROM category WHERE id = ?1")
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?;
 
-    if let Some(ref c) = current {
-        if c.name == "Miscellaneous" {
+    if let Some(ref name) = current {
+        if name == "Miscellaneous" {
             return Err(anyhow::anyhow!("The Miscellaneous category cannot be deleted.").into());
         }
     }
@@ -234,27 +238,29 @@ pub async fn delete_category_by_id(id: i32, cascade: bool) -> Result<(), Error> 
     if cascade {
         sqlx::query("DELETE FROM category_regex WHERE cat_id = ?1")
             .bind(id)
-            .execute(&pool)
+            .execute(&mut *tx)
             .await?;
     } else {
         let misc_id: Option<i32> =
             sqlx::query_scalar("SELECT id FROM category WHERE name = 'Miscellaneous'")
-                .fetch_optional(&pool)
+                .fetch_optional(&mut *tx)
                 .await?;
 
         if let Some(misc_id) = misc_id {
             sqlx::query("UPDATE category_regex SET cat_id = ?1 WHERE cat_id = ?2")
                 .bind(misc_id)
                 .bind(id)
-                .execute(&pool)
+                .execute(&mut *tx)
                 .await?;
         }
     }
 
     sqlx::query("DELETE FROM category WHERE id = ?1")
         .bind(id)
-        .execute(&pool)
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
 
     Ok(())
 }

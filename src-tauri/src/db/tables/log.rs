@@ -202,15 +202,17 @@ pub async fn delete_log_by_id(id: i64, uuid: String) -> Result<(), Error> {
 #[tauri::command]
 pub async fn delete_logs_by_ids(ids: Vec<i64>, uuid: String) -> Result<(), Error> {
     let pool = db::get_pool().await?;
+    let mut tx = pool.begin().await?;
     for id in ids {
         sqlx::query!(
             "UPDATE logs SET is_deleted = 1 WHERE id = ?1 AND device_uuid = ?2 AND is_deleted = 0",
             id,
             uuid
         )
-        .execute(&pool)
+        .execute(&mut *tx)
         .await?;
     }
+    tx.commit().await?;
     Ok(())
 }
 
@@ -279,6 +281,7 @@ pub struct GetLogsForTimeBlockRequest {
 #[tauri::command]
 pub async fn delete_logs_for_time_block(request: DeleteTimeBlockRequest) -> Result<i64, Error> {
     let pool = db::get_pool().await?;
+    let mut tx = pool.begin().await?;
 
     let logs = sqlx::query_as!(
         Log,
@@ -286,7 +289,7 @@ pub async fn delete_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resu
         request.start_time,
         request.end_time
     )
-    .fetch_all(&pool)
+    .fetch_all(&mut *tx)
     .await?;
 
     let mut deleted_count = 0i64;
@@ -298,12 +301,14 @@ pub async fn delete_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resu
                     log.id,
                     uuid
                 )
-                .execute(&pool)
+                .execute(&mut *tx)
                 .await?;
                 deleted_count += 1;
             }
         }
     }
+
+    tx.commit().await?;
 
     Ok(deleted_count)
 }
@@ -665,9 +670,21 @@ pub async fn delete_local_deleted_logs() -> Result<(), Error> {
 }
 
 pub async fn delete_logs_for_device(device_uuid: &str) -> Result<(), Error> {
+    let pool = get_pool().await?;
+    delete_logs_for_device_with_executor(&pool, device_uuid).await?;
+    Ok(())
+}
+
+pub(crate) async fn delete_logs_for_device_with_executor<'e, E>(
+    executor: E,
+    device_uuid: &str,
+) -> Result<(), sqlx::Error>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     sqlx::query("DELETE FROM logs WHERE device_uuid = ?1")
         .bind(device_uuid)
-        .execute(&get_pool().await?)
+        .execute(executor)
         .await?;
     Ok(())
 }

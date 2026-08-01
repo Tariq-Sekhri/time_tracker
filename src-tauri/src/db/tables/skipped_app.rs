@@ -76,23 +76,20 @@ pub async fn insert_skipped_app_and_delete_logs(new_app: NewSkippedApp) -> Resul
         })
         .collect();
 
-    if !matching.is_empty() {
-        let mut tx = (&pool).begin().await?;
-        for (log_id, uuid) in matching {
-            sqlx::query!(
-                "UPDATE logs SET is_deleted = 1 WHERE id = ?1 AND device_uuid = ?2 AND is_deleted = 0",
-                log_id,
-                uuid
-            )
-            .execute(&mut *tx)
-            .await?;
-        }
-        tx.commit().await?;
-    }
-
-    let result = sqlx::query!("INSERT INTO skipped_apps (regex) VALUES (?1)", new_app.regex)
-        .execute(&pool)
+    let mut tx = (&pool).begin().await?;
+    for (log_id, uuid) in matching {
+        sqlx::query!(
+            "UPDATE logs SET is_deleted = 1 WHERE id = ?1 AND device_uuid = ?2 AND is_deleted = 0",
+            log_id,
+            uuid
+        )
+        .execute(&mut *tx)
         .await?;
+    }
+    let result = sqlx::query!("INSERT INTO skipped_apps (regex) VALUES (?1)", new_app.regex)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
     let id = result.last_insert_rowid();
 
     Ok(id)
@@ -144,11 +141,13 @@ pub async fn is_skipped_app(app_name: &str) -> Result<bool, Error> {
 #[tauri::command]
 pub async fn restore_default_skipped_apps() -> Result<(), Error> {
     let pool = db::get_pool().await?;
+    let mut tx = pool.begin().await?;
     for regex_pattern in DEFAULT_SKIPPED_APPS.iter() {
         sqlx::query!("INSERT OR IGNORE INTO skipped_apps (regex) VALUES (?1)", *regex_pattern)
-            .execute(&pool)
+            .execute(&mut *tx)
             .await?;
     }
+    tx.commit().await?;
 
     Ok(())
 }

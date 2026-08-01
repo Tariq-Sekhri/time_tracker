@@ -42,7 +42,7 @@ import {useCalendarAppFilterActive} from "../../stores/calendarAppFilterStore.ts
 // Date range UI control; calendarDateFromUnix converts backend unix → Date for picker
 import StatisticsDateRangePicker, {calendarDateFromUnix} from "./StatisticsDateRangePicker.tsx";
 // Trend tab chart component (this file passes it weeks + fetched stats)
-import CategoryWeekTrendChart, {type TrendValueMode} from "./CategoryWeekTrendChart.tsx";
+import CategoryWeekTrendChart, {type TrendSeriesMode, type TrendValueMode} from "./CategoryWeekTrendChart.tsx";
 import TrendChartOptionsBar, {STATS_TOOLBAR_CONTROL_HEIGHT} from "./TrendChartOptionsBar.tsx";
 
 const STATS_TOOLBAR_BUTTON = `${STATS_TOOLBAR_CONTROL_HEIGHT} px-3 bg-gray-800 border border-gray-700 rounded text-sm text-white gap-2`;
@@ -63,6 +63,8 @@ const TREND_CHART_PREFS_KEY = "time-tracker:detailed-stats:trend-prefs";
 type TrendChartPrefs = {
     valueMode: TrendValueMode;
     showTotalLine: boolean;
+    seriesMode: TrendSeriesMode;
+    topAppCount: number;
 };
 
 function parseTrendChartPrefs(raw: string | null): Partial<TrendChartPrefs> {
@@ -75,6 +77,12 @@ function parseTrendChartPrefs(raw: string | null): Partial<TrendChartPrefs> {
         }
         if (typeof o.showTotalLine === "boolean") {
             out.showTotalLine = o.showTotalLine;
+        }
+        if (o.seriesMode === "categories" || o.seriesMode === "topApps") {
+            out.seriesMode = o.seriesMode;
+        }
+        if ([3, 5, 10, 15, 20].includes(Number(o.topAppCount))) {
+            out.topAppCount = Number(o.topAppCount);
         }
         return out;
     } catch {
@@ -151,6 +159,8 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
     const [activeTab, setActiveTab] = useState<Tab>("dailyAvg");
     const [trendValueMode, setTrendValueMode] = useState<TrendValueMode>("total");
     const [trendShowTotalLine, setTrendShowTotalLine] = useState(true);
+    const [trendSeriesMode, setTrendSeriesMode] = useState<TrendSeriesMode>("categories");
+    const [trendTopAppCount, setTrendTopAppCount] = useState(5);
     const trendPrefsHydrated = useRef(false);
     // How category/sidebar rows show values: % or duration (type includes "count" but UI only has % and Time)
     const [displayMode, setDisplayMode] = useState<"percentage" | "time" | "count">("time");
@@ -206,6 +216,8 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                 const prefs = parseTrendChartPrefs(raw);
                 if (prefs.valueMode) setTrendValueMode(prefs.valueMode);
                 if (prefs.showTotalLine !== undefined) setTrendShowTotalLine(prefs.showTotalLine);
+                if (prefs.seriesMode) setTrendSeriesMode(prefs.seriesMode);
+                if (prefs.topAppCount) setTrendTopAppCount(prefs.topAppCount);
             })
             .catch(() => {})
             .finally(() => {
@@ -218,15 +230,17 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
         const prefs: TrendChartPrefs = {
             valueMode: trendValueMode,
             showTotalLine: trendShowTotalLine,
+            seriesMode: trendSeriesMode,
+            topAppCount: trendTopAppCount,
         };
         setAppMetadata(TREND_CHART_PREFS_KEY, JSON.stringify(prefs)).catch(() => {});
-    }, [trendValueMode, trendShowTotalLine]);
+    }, [trendValueMode, trendShowTotalLine, trendSeriesMode, trendTopAppCount]);
 
     useEffect(() => {
-        if (activeTab !== "trend") {
+        if (activeTab !== "trend" || trendSeriesMode !== "categories") {
             setIsCategoryFilterOpen(false);
         }
-    }, [activeTab]);
+    }, [activeTab, trendSeriesMode]);
 
     const maxSelectableDate = useMemo(
         () => adjustInstantToCalendarDayBoundary(new Date(), calendarStartHour),
@@ -535,18 +549,24 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                     onValueModeChange={setTrendValueMode}
                     showTotalLine={trendShowTotalLine}
                     onShowTotalLineChange={setTrendShowTotalLine}
+                    seriesMode={trendSeriesMode}
+                    onSeriesModeChange={setTrendSeriesMode}
+                    topAppCount={trendTopAppCount}
+                    onTopAppCountChange={setTrendTopAppCount}
                 />
-                <FilterCategories
-                    enabledField="regex_enabled"
-                    categories={categories}
-                    categoriesByPriority={categoriesByPriority}
-                    isOpen={isCategoryFilterOpen}
-                    onOpenChange={setIsCategoryFilterOpen}
-                    onToggle={toggleVisibleCategory}
-                    onCheckAll={checkAllCategories}
-                    onUncheckAll={uncheckAllCategories}
-                    triggerClassName={`${STATS_TOOLBAR_BUTTON} hover:bg-gray-700`}
-                />
+                {trendSeriesMode === "categories" && (
+                    <FilterCategories
+                        enabledField="regex_enabled"
+                        categories={categories}
+                        categoriesByPriority={categoriesByPriority}
+                        isOpen={isCategoryFilterOpen}
+                        onOpenChange={setIsCategoryFilterOpen}
+                        onToggle={toggleVisibleCategory}
+                        onCheckAll={checkAllCategories}
+                        onUncheckAll={uncheckAllCategories}
+                        triggerClassName={`${STATS_TOOLBAR_BUTTON} hover:bg-gray-700`}
+                    />
+                )}
             </>
         ) : null;
 
@@ -644,6 +664,8 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                             weekStats={trendWeekStats}
                             isLoading={isTrendLoading}
                             visibleCategoryNames={visibleCategoryNames}
+                            seriesMode={trendSeriesMode}
+                            topAppCount={trendTopAppCount}
                             calendarStartHour={calendarStartHour}
                             valueMode={trendValueMode}
                             showTotalLine={trendShowTotalLine}

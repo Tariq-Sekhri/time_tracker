@@ -106,9 +106,10 @@ pub async fn get_google_oauth() -> Result<Option<GoogleOAuth>, Error> {
 
 pub async fn save_google_oauth(oauth: NewGoogleOAuth) -> Result<i64, Error> {
     let pool = db::get_pool().await?;
+    let mut tx = pool.begin().await?;
 
     sqlx::query!("DELETE FROM google_oauth")
-        .execute(&pool)
+        .execute(&mut *tx)
         .await?;
 
     let result = sqlx::query!(
@@ -118,8 +119,9 @@ pub async fn save_google_oauth(oauth: NewGoogleOAuth) -> Result<i64, Error> {
         oauth.refresh_token,
         oauth.expires_at
     )
-    .execute(&pool)
+    .execute(&mut *tx)
     .await?;
+    tx.commit().await?;
 
     Ok(result.last_insert_rowid())
 }
@@ -138,14 +140,16 @@ pub async fn update_google_oauth_tokens(access_token: &str, expires_at: i64) -> 
 
 pub async fn delete_google_oauth() -> Result<(), Error> {
     let pool = db::get_pool().await?;
+    let mut tx = pool.begin().await?;
 
     sqlx::query!("DELETE FROM google_calendar_v2")
-        .execute(&pool)
+        .execute(&mut *tx)
         .await?;
 
     sqlx::query!("DELETE FROM google_oauth")
-        .execute(&pool)
+        .execute(&mut *tx)
         .await?;
+    tx.commit().await?;
 
     Ok(())
 }

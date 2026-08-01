@@ -20,15 +20,28 @@ export type WeekTrendColumn = {
 export type CategoryWeekSeries = {
     category: string;
     color: string;
-    values: number[];
+    values: Array<number | null>;
 };
 
 export type TrendValueMode = "avg" | "total";
+export type TrendSeriesMode = "categories" | "topApps";
 
 const PX_PER_WEEK = 52;
 const TOTAL_WEEK_DATA_KEY = "__week_total__";
 const TOTAL_LINE_COLOR = "#f3f4f6";
 const TOTAL_LINE_NAME = "Total";
+const APP_LINE_COLORS = [
+    "#60a5fa",
+    "#f472b6",
+    "#34d399",
+    "#fbbf24",
+    "#a78bfa",
+    "#fb923c",
+    "#22d3ee",
+    "#f87171",
+    "#a3e635",
+    "#c084fc",
+];
 
 function countDaysInTrackedWeekPeriod(
     weekStartUnix: number,
@@ -64,6 +77,14 @@ function formatWeekLabel(weekStartUnix: number): string {
         month: "short",
         day: "numeric",
     });
+}
+
+function colorForApp(app: string): string {
+    let hash = 0;
+    for (let i = 0; i < app.length; i++) {
+        hash = (hash * 31 + app.charCodeAt(i)) | 0;
+    }
+    return APP_LINE_COLORS[Math.abs(hash) % APP_LINE_COLORS.length];
 }
 
 function buildSeries(
@@ -126,8 +147,8 @@ function buildSeries(
         }))
         .filter((s) => s.values.some((v) => v > 0))
         .sort((a, b) => {
-            const sumA = a.values.reduce((x, y) => x + y, 0);
-            const sumB = b.values.reduce((x, y) => x + y, 0);
+            const sumA = a.values.reduce((x, y) => x + (y ?? 0), 0);
+            const sumB = b.values.reduce((x, y) => x + (y ?? 0), 0);
             return sumB - sumA;
         });
 
@@ -145,13 +166,86 @@ function buildSeries(
     return {columns, series, totalLineValues};
 }
 
-type ChartRow = { label: string; week_start: number } & Record<string, number | string>;
+function buildTopAppSeries(
+    weeks: { week_start: number; week_end: number }[],
+    weekStats: (WeekStatistics | undefined)[],
+    mode: TrendValueMode,
+    calendarStartHour: number,
+    topAppCount: number
+): { columns: WeekTrendColumn[]; series: CategoryWeekSeries[]; totalLineValues: number[] } {
+    const columns: WeekTrendColumn[] = weeks.map((w) => ({
+        week_start: w.week_start,
+        label: formatWeekLabel(w.week_start),
+    }));
+    const appValues = new Map<string, Array<number | null>>();
+
+    weeks.forEach((weekRange, weekIdx) => {
+        const dayCount =
+            mode === "avg"
+                ? countDaysInTrackedWeekPeriod(
+                      weekRange.week_start,
+                      weekRange.week_end,
+                      calendarStartHour
+                  )
+                : 1;
+
+        const topAppsThisWeek = [...(weekStats[weekIdx]?.all_apps ?? [])]
+            .sort((a, b) => b.total_duration - a.total_duration)
+            .slice(0, topAppCount);
+
+        for (const app of topAppsThisWeek) {
+            // Null means this app was not in this week's top list. The chart keeps
+            // the point absent but connects repeat appearances with a dotted line.
+            const values = appValues.get(app.app) ?? new Array(weeks.length).fill(null);
+            values[weekIdx] =
+                mode === "avg" ? Math.floor(app.total_duration / dayCount) : app.total_duration;
+            appValues.set(app.app, values);
+        }
+    });
+
+    const series = Array.from(appValues.entries())
+        .map(([category, values]) => ({category, color: colorForApp(category), values}))
+        .filter((s) => s.values.some((v) => (v ?? 0) > 0))
+        .sort(
+            (a, b) =>
+                b.values.reduce<number>((sum, value) => sum + (value ?? 0), 0) -
+                a.values.reduce<number>((sum, value) => sum + (value ?? 0), 0)
+        );
+
+    const totalLineValues = weeks.map((weekRange, weekIdx) => {
+        const weekTotal = weekStats[weekIdx]?.total_time ?? 0;
+        if (mode === "total") return weekTotal;
+        return Math.floor(
+            weekTotal /
+                countDaysInTrackedWeekPeriod(
+                    weekRange.week_start,
+                    weekRange.week_end,
+                    calendarStartHour
+                )
+        );
+    });
+
+    return {columns, series, totalLineValues};
+}
+
+type ChartRow = { label: string; week_start: number } & Record<string, number | string | null>;
+
+type TrendGapBridge = {
+    dataKey: string;
+    fromIndex: number;
+    fromValue: number;
+    toIndex: number;
+    toValue: number;
+    color: string;
+};
 
 type CategoryWeekTrendChartProps = {
     weeks: { week_start: number; week_end: number }[];
     weekStats: (WeekStatistics | undefined)[];
     isLoading: boolean;
     visibleCategoryNames: Set<string>;
+    seriesMode: TrendSeriesMode;
+    topAppCount: number;
     calendarStartHour: number;
     valueMode: TrendValueMode;
     showTotalLine: boolean;
@@ -162,21 +256,55 @@ export default function CategoryWeekTrendChart({
                                                    weekStats,
                                                    isLoading,
                                                    visibleCategoryNames,
+                                                   seriesMode,
+                                                   topAppCount,
                                                    calendarStartHour,
                                                    valueMode,
                                                    showTotalLine,
                                                }: CategoryWeekTrendChartProps) {
     const {columns, series: allSeries, totalLineValues} = useMemo(
-        () => buildSeries(weeks, weekStats, valueMode, calendarStartHour),
-        [weeks, weekStats, valueMode, calendarStartHour]
+        () =>
+            seriesMode === "topApps"
+                ? buildTopAppSeries(weeks, weekStats, valueMode, calendarStartHour, topAppCount)
+                : buildSeries(weeks, weekStats, valueMode, calendarStartHour),
+        [weeks, weekStats, valueMode, calendarStartHour, seriesMode, topAppCount]
     );
 
     const series = useMemo(
-        () => allSeries.filter((s) => visibleCategoryNames.has(s.category)),
-        [allSeries, visibleCategoryNames]
+        () =>
+            seriesMode === "topApps"
+                ? allSeries
+                : allSeries.filter((s) => visibleCategoryNames.has(s.category)),
+        [allSeries, visibleCategoryNames, seriesMode]
     );
 
     const hasTotalLineData = totalLineValues.some((v) => v > 0);
+
+    const topAppGapBridges = useMemo<TrendGapBridge[]>(() => {
+        if (seriesMode !== "topApps") return [];
+
+        return series.flatMap((s) => {
+            const bridges: TrendGapBridge[] = [];
+            let previousIndex: number | null = null;
+
+            s.values.forEach((value, index) => {
+                if (value == null) return;
+                if (previousIndex !== null && index - previousIndex > 1) {
+                    bridges.push({
+                        dataKey: `__top_app_gap__${s.category}:${previousIndex}:${index}`,
+                        fromIndex: previousIndex,
+                        fromValue: s.values[previousIndex]!,
+                        toIndex: index,
+                        toValue: value,
+                        color: s.color,
+                    });
+                }
+                previousIndex = index;
+            });
+
+            return bridges;
+        });
+    }, [series, seriesMode]);
 
     const chartData: ChartRow[] = useMemo(() => {
         return columns.map((col, i) => {
@@ -185,11 +313,15 @@ export default function CategoryWeekTrendChart({
                 row[TOTAL_WEEK_DATA_KEY] = totalLineValues[i] ?? 0;
             }
             for (const s of series) {
-                row[s.category] = s.values[i] ?? 0;
+                row[s.category] = seriesMode === "topApps" ? s.values[i] : s.values[i] ?? 0;
+            }
+            for (const bridge of topAppGapBridges) {
+                if (i === bridge.fromIndex) row[bridge.dataKey] = bridge.fromValue;
+                if (i === bridge.toIndex) row[bridge.dataKey] = bridge.toValue;
             }
             return row;
         });
-    }, [columns, series, totalLineValues, showTotalLine]);
+    }, [columns, series, totalLineValues, showTotalLine, seriesMode, topAppGapBridges]);
 
     const showTotalLineOnChart = showTotalLine && hasTotalLineData;
 
@@ -201,6 +333,10 @@ export default function CategoryWeekTrendChart({
             : showTotalLine
               ? "Full week totals. Total line = all categories combined."
               : "Full week totals.";
+    const seriesDescription =
+        seriesMode === "topApps"
+            ? ` Showing the top ${topAppCount} apps in each week; solid lines join consecutive appearances, while dotted lines bridge weeks where an app was outside the top ${topAppCount}.`
+            : "";
 
     if (isLoading) {
         return (
@@ -223,16 +359,16 @@ export default function CategoryWeekTrendChart({
         return (
             <div
                 className="flex-1 flex items-center justify-center min-h-[320px] text-gray-500 text-sm text-center px-4">
-                {visibleCategoryNames.size === 0
+                {seriesMode === "categories" && visibleCategoryNames.size === 0
                     ? "Select at least one category in the filter."
-                    : "No category data for the selected weeks."}
+                    : `No ${seriesMode === "topApps" ? "app" : "category"} data for the selected weeks.`}
             </div>
         );
     }
 
     return (
         <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-gray-900 rounded p-4">
-            <p className="text-sm text-gray-400 shrink-0 mb-3">{modeDescription}</p>
+            <p className="text-sm text-gray-400 shrink-0 mb-3">{modeDescription}{seriesDescription}</p>
             <div
                 className="flex flex-wrap gap-x-4 gap-y-2 mb-4 pb-4 border-b border-gray-800 shrink-0 max-h-28 overflow-y-auto nice-scrollbar">
                 {showTotalLineOnChart && (
@@ -321,6 +457,22 @@ export default function CategoryWeekTrendChart({
                                     isAnimationActive={false}
                                 />
                             )}
+                            {topAppGapBridges.map((bridge) => (
+                                <Line
+                                    key={bridge.dataKey}
+                                    type="monotone"
+                                    dataKey={bridge.dataKey}
+                                    stroke={bridge.color}
+                                    strokeWidth={2}
+                                    strokeDasharray="4 4"
+                                    dot={false}
+                                    activeDot={false}
+                                    connectNulls
+                                    tooltipType="none"
+                                    legendType="none"
+                                    isAnimationActive={false}
+                                />
+                            ))}
                             {series.map((s) => (
                                 <Line
                                     key={s.category}
@@ -329,9 +481,13 @@ export default function CategoryWeekTrendChart({
                                     name={s.category}
                                     stroke={s.color}
                                     strokeWidth={2}
-                                    dot={false}
+                                    dot={
+                                        seriesMode === "topApps"
+                                            ? {r: 3, fill: s.color, strokeWidth: 0}
+                                            : false
+                                    }
                                     activeDot={{r: 5}}
-                                    connectNulls
+                                    connectNulls={false}
                                     isAnimationActive={false}
                                 />
                             ))}
