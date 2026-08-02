@@ -52,12 +52,6 @@ jobs:
           - os: windows-latest
             bundles: --bundles nsis
             rust_target: ""
-          - os: macos-latest
-            bundles: --target aarch64-apple-darwin --bundles dmg
-            rust_target: aarch64-apple-darwin
-          - os: macos-latest
-            bundles: --target x86_64-apple-darwin --bundles dmg
-            rust_target: x86_64-apple-darwin
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -106,7 +100,7 @@ jobs:
         with:
           tagName: ${{ github.event_name == 'workflow_dispatch' && inputs.beta && format('app-v__VERSION__-beta.{0}', github.run_number) || 'app-v__VERSION__' }}
           releaseName: ${{ github.event_name == 'workflow_dispatch' && inputs.beta && format('Time Tracker v__VERSION__ Beta {0}', github.run_number) || 'Time Tracker v__VERSION__' }}
-          releaseBody: "Installers for Windows (.exe), Linux (.deb), Apple Silicon macOS (.dmg), and Intel macOS (.dmg) are in Assets. macOS beta builds are unsigned, so macOS may require explicit approval before opening them. Ignore .sig and latest.json where present; they are used for automatic updates."
+          releaseBody: "Installers for Windows (.exe) and Linux (.deb) are in Assets. Ignore .sig and latest.json where present; they are used for automatic updates."
           releaseDraft: false
           prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.beta }}
           args: ${{ matrix.bundles }}

@@ -24,6 +24,7 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - run: npm run test:demo
       - run: npx vite build --config demo/vite.config.ts
       - uses: actions/upload-pages-artifact@v3
         with:

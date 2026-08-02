@@ -46,7 +46,6 @@ type CategoryRow = {
     priority: number;
     color: string | null;
     regex_enabled: boolean;
-    regex_enabled: boolean;
     is_visible: boolean;
     in_stats: boolean;
     is_collapsed: boolean;
@@ -96,6 +95,23 @@ type GoogleEv = {
     end: number;
     description?: string;
     location?: string;
+};
+
+type ManualTimeBlock = {
+    id: number;
+    title: string;
+    notes: string | null;
+    start_time: number;
+    end_time: number;
+    created_at: number;
+    updated_at: number;
+};
+
+type RunningManualTimer = {
+    title: string;
+    notes: string | null;
+    start_time: number;
+    end_time: number | null;
 };
 
 type DemoGoogleCalendarCatalogRow = {
@@ -160,6 +176,7 @@ let nextAppGroupId = 1;
 let nextSkipId = 100;
 let nextGCalId = 100;
 let nextEventSeq = 1;
+let nextManualTimeBlockId = 1;
 
 let categories: CategoryRow[] = [];
 let catRegex: RegexRow[] = [];
@@ -168,6 +185,8 @@ let rawLogs: RawLog[] = [];
 let skippedApps: SkippedRow[] = [];
 let googleCalendars: GoogleCal[] = [];
 let googleEvents: GoogleEv[] = [];
+let manualTimeBlocks: ManualTimeBlock[] = [];
+let runningManualTimer: RunningManualTimer | null = null;
 
 let oauthClientId = DEMO_CLIENT_ID;
 let oauthClientSecret = DEMO_CLIENT_SECRET;
@@ -336,6 +355,9 @@ function seed() {
     const h = DEMO_CALENDAR_START_HOUR;
 
     settings = DEMO_DEFAULT_SETTINGS.map((s) => ({ ...s }));
+    manualTimeBlocks = [];
+    runningManualTimer = null;
+    nextManualTimeBlockId = 1;
     appMetadata = { ...DEMO_APP_METADATA_DEFAULTS };
     categories = DEMO_DEFAULT_CATEGORIES.map((c) => toDemoCategory({ ...c }));
     catRegex = DEMO_DEFAULT_CAT_REGEX.map((r) => ({ ...r }));
@@ -1038,6 +1060,85 @@ export async function invoke<T>(
 
     try {
     switch (cmd) {
+        case "get_manual_time_blocks": {
+            const rangeStart = Number((a as { rangeStart?: number }).rangeStart);
+            const rangeEnd = Number((a as { rangeEnd?: number }).rangeEnd);
+            if (!Number.isFinite(rangeStart) || !Number.isFinite(rangeEnd) || rangeEnd <= rangeStart) {
+                throw new DemoInvokeError(cmd, "Range end must be after range start");
+            }
+            return manualTimeBlocks
+                .filter((block) => block.end_time > rangeStart && block.start_time < rangeEnd)
+                .sort((left, right) => left.start_time - right.start_time || left.id - right.id) as T;
+        }
+        case "insert_manual_time_block": {
+            const block = (a as {
+                newManualTimeBlock?: { title?: string; notes?: string | null; start_time?: number; end_time?: number };
+            }).newManualTimeBlock;
+            const title = block?.title?.trim() ?? "";
+            const startTime = Number(block?.start_time);
+            const endTime = Number(block?.end_time);
+            if (!title || !Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) {
+                throw new DemoInvokeError(cmd, "Manual time block requires a title and a valid time range");
+            }
+            const now = Math.floor(Date.now() / 1000);
+            const id = nextManualTimeBlockId++;
+            manualTimeBlocks.push({ id, title, notes: block?.notes?.trim() || null, start_time: startTime, end_time: endTime, created_at: now, updated_at: now });
+            return id as T;
+        }
+        case "update_manual_time_block": {
+            const block = (a as {
+                manualTimeBlock?: { id?: number; title?: string; notes?: string | null; start_time?: number; end_time?: number };
+            }).manualTimeBlock;
+            const id = Number(block?.id);
+            const title = block?.title?.trim() ?? "";
+            const startTime = Number(block?.start_time);
+            const endTime = Number(block?.end_time);
+            if (!title || !Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) {
+                throw new DemoInvokeError(cmd, "Manual time block requires a title and a valid time range");
+            }
+            const existing = manualTimeBlocks.find((item) => item.id === id);
+            if (!existing) throw new DemoInvokeError(cmd, `Manual time block ${id} does not exist`);
+            Object.assign(existing, { title, notes: block?.notes?.trim() || null, start_time: startTime, end_time: endTime, updated_at: Math.floor(Date.now() / 1000) });
+            return null as T;
+        }
+        case "delete_manual_time_block": {
+            const id = Number((a as { id?: number }).id);
+            const index = manualTimeBlocks.findIndex((item) => item.id === id);
+            if (index < 0) throw new DemoInvokeError(cmd, `Manual time block ${id} does not exist`);
+            manualTimeBlocks.splice(index, 1);
+            return null as T;
+        }
+        case "get_running_manual_timer":
+            return runningManualTimer as T;
+        case "start_manual_timer": {
+            if (runningManualTimer) throw new DemoInvokeError(cmd, "A manual timer is already running");
+            runningManualTimer = { title: "", notes: null, start_time: Math.floor(Date.now() / 1000), end_time: null };
+            return runningManualTimer as T;
+        }
+        case "update_manual_timer_title": {
+            const title = String((a as { title?: string }).title ?? "").trim();
+            if (!title) throw new DemoInvokeError(cmd, "A title is required");
+            if (!runningManualTimer) throw new DemoInvokeError(cmd, "No manual timer is running");
+            runningManualTimer = { ...runningManualTimer, title };
+            return runningManualTimer as T;
+        }
+        case "stop_manual_timer": {
+            if (!runningManualTimer) throw new DemoInvokeError(cmd, "No manual timer is running");
+            if (runningManualTimer.end_time == null) {
+                runningManualTimer = { ...runningManualTimer, end_time: Math.max(Math.floor(Date.now() / 1000), runningManualTimer.start_time + 1) };
+            }
+            return runningManualTimer as T;
+        }
+        case "finish_manual_timer": {
+            if (!runningManualTimer) throw new DemoInvokeError(cmd, "No manual timer is running");
+            if (!runningManualTimer.title.trim()) throw new DemoInvokeError(cmd, "Add a name before recording this timer");
+            if (runningManualTimer.end_time == null) throw new DemoInvokeError(cmd, "Stop the timer before recording it");
+            const now = Math.floor(Date.now() / 1000);
+            const id = nextManualTimeBlockId++;
+            manualTimeBlocks.push({ id, title: runningManualTimer.title, notes: runningManualTimer.notes, start_time: runningManualTimer.start_time, end_time: runningManualTimer.end_time, created_at: now, updated_at: now });
+            runningManualTimer = null;
+            return id as T;
+        }
         case "get_categories":
             return categories as unknown as T;
         case "get_category_by_id": {

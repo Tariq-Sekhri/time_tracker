@@ -42,7 +42,6 @@ Manual time tracking is tedious and inconsistent. Time Tracker runs in the backg
 - **Platform APIs**:
   - **Windows**: `windows` crate for foreground window detection
   - **Linux**: Foreground window title via GNOME session DBus, AT-SPI, and fallbacks (xdotool, compositor tools, etc.); tested on Ubuntu 24.04.4 Desktop amd64
-  - **macOS**: `NSWorkspace` and Core Graphics for frontmost application and window detection
 - **Time handling**: `chrono` for timestamp formatting
 - **Async runtime**: Tokio for background process
 - **Regex**: Pattern matching for skipped apps and category rules
@@ -56,7 +55,6 @@ Manual time tracking is tedious and inconsistent. Time Tracker runs in the backg
 - Platform requirements:
   - **Windows**: No additional requirements
   - **Linux**: Ubuntu 24.04.4 Desktop amd64 (`ubuntu-24.04.4-desktop-amd64.iso`)
-  - **macOS**: Intel (`x86_64`) or Apple Silicon (`aarch64`); Screen Recording permission enables window titles
 
 ### Development
 
@@ -102,8 +100,7 @@ Commit updated `.sqlx/` after running `sqlx prepare`. For CI or builds without a
 - Default Ubuntu Desktop (GNOME) uses session DBus and AT-SPI; other desktops may rely on optional tools (xdotool, hyprctl, swaymsg, etc.)
 
 ### macOS
-- Uses the same native implementation on Intel and Apple Silicon Macs
-- Without Screen Recording permission, tracking falls back to the frontmost application name when macOS withholds the window title
+- Not currently supported or released.
 
 ## Contributing
 
