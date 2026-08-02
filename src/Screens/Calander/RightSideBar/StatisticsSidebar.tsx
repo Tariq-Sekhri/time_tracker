@@ -15,6 +15,12 @@ import { useAppCategorizeMenu } from "../../../hooks/useAppCategorizeMenu.tsx";
 import { logRowLeftClickCalendarFilter } from "../../../utils/calendarAppFilterRowClick.ts";
 import { useCalendarAppFilterActive } from "../../../stores/calendarAppFilterStore.ts";
 import { useBackendSettings } from "../../../hooks/useBackendSettings.ts";
+import {
+    get_manual_time_blocks,
+    MANUAL_TIME_COLOR,
+    MANUAL_TIME_LABEL,
+    manualTimeDurationInRange,
+} from "../../../api/ManualTimeBlock.ts";
 
 type DisplayMode = "percentage" | "time";
 
@@ -42,7 +48,7 @@ function inferPreviousTrackingTotal(current: number, pctChange: number | null): 
 }
 
 type CombinedCategory = CategoryStat & {
-    source: "tracking" | "google";
+    source: "tracking" | "google" | "manual";
 };
 
 function filterGoogleEventsForStats(
@@ -61,6 +67,7 @@ interface StatisticsSidebarProps {
     googleCalendars: GoogleCalendar[];
     statsCategoryNames: Set<string>;
     statsDeviceUuids: string[] | null;
+    manualTimeInStats: boolean;
     trailingToolbar?: ReactNode;
 }
 
@@ -72,6 +79,7 @@ export default function StatisticsSidebar({
     googleCalendars,
     statsCategoryNames,
     statsDeviceUuids,
+    manualTimeInStats,
     trailingToolbar,
 }: StatisticsSidebarProps) {
     const statsCalendarIds = useMemo(
@@ -130,6 +138,18 @@ export default function StatisticsSidebar({
         queryKey: ["google_calendar_events", prevWeekStart, prevWeekEnd, calendarStartHour],
         queryFn: async () => await get_all_google_calendar_events(prevWeekStart, prevWeekEnd),
         enabled: includeGoogleInStats && statsCalendarIds.size > 0,
+    });
+
+    const {data: manualTimeBlocks = [], isLoading: isLoadingManualTime} = useQuery({
+        queryKey: ["manualTimeBlocks", week_start, week_end],
+        queryFn: () => get_manual_time_blocks(week_start, week_end + 1),
+        enabled: manualTimeInStats,
+    });
+
+    const {data: prevManualTimeBlocks = [], isLoading: isLoadingPrevManualTime} = useQuery({
+        queryKey: ["manualTimeBlocks", prevWeekStart, prevWeekEnd],
+        queryFn: () => get_manual_time_blocks(prevWeekStart, prevWeekEnd + 1),
+        enabled: manualTimeInStats,
     });
 
     const calendarMap = useMemo(() => {
@@ -228,6 +248,32 @@ export default function StatisticsSidebar({
         week_end,
     ]);
 
+    const manualTotalDuration = useMemo(
+        () => manualTimeInStats
+            ? manualTimeBlocks.reduce((sum, block) => sum + manualTimeDurationInRange(block, week_start, week_end + 1), 0)
+            : 0,
+        [manualTimeBlocks, manualTimeInStats, week_start, week_end],
+    );
+
+    const prevManualTotalDuration = useMemo(
+        () => manualTimeInStats
+            ? prevManualTimeBlocks.reduce((sum, block) => sum + manualTimeDurationInRange(block, prevWeekStart, prevWeekEnd + 1), 0)
+            : 0,
+        [prevManualTimeBlocks, manualTimeInStats, prevWeekStart, prevWeekEnd],
+    );
+
+    const manualCategory = useMemo<CombinedCategory | null>(() => {
+        if (!manualTimeInStats || manualTotalDuration <= 0) return null;
+        return {
+            category: MANUAL_TIME_LABEL,
+            total_duration: manualTotalDuration,
+            percentage: 0,
+            percentage_change: percentageChangeVsPrevious(manualTotalDuration, prevManualTotalDuration),
+            color: MANUAL_TIME_COLOR,
+            source: "manual",
+        };
+    }, [manualTimeInStats, manualTotalDuration, prevManualTotalDuration]);
+
     const topCategories = useMemo<CombinedCategory[]>(() => {
         if (!weekStats) return [] as CombinedCategory[];
 
@@ -238,14 +284,14 @@ export default function StatisticsSidebar({
             source: "tracking" as const,
         }));
 
-        if (!includeGoogleInStats) {
-            return trackingCategories.slice(0, categorySidebarCount);
-        }
-
-        const combined = [...trackingCategories, ...googleCategories];
+        const combined = [
+            ...trackingCategories,
+            ...(manualCategory ? [manualCategory] : []),
+            ...(includeGoogleInStats ? googleCategories : []),
+        ];
         combined.sort((a, b) => b.total_duration - a.total_duration);
         return combined.slice(0, categorySidebarCount);
-    }, [weekStats, includeGoogleInStats, googleCategories, categorySidebarCount, statsCategoryNames]);
+    }, [weekStats, includeGoogleInStats, googleCategories, manualCategory, categorySidebarCount, statsCategoryNames]);
 
     const maxCategoryDuration = topCategories.length > 0 ? topCategories[0].total_duration : 1;
 
@@ -275,34 +321,41 @@ export default function StatisticsSidebar({
         const trackingTotal = weekStats.categories
             .filter((c) => statsCategoryNames.has(c.category))
             .reduce((sum, c) => sum + c.total_duration, 0);
-        if (!includeGoogleInStats) return trackingTotal;
-        return trackingTotal + googleTotalDuration;
-    }, [weekStats, includeGoogleInStats, googleTotalDuration, statsCategoryNames]);
+        return trackingTotal + manualTotalDuration + googleTotalDuration;
+    }, [weekStats, manualTotalDuration, googleTotalDuration, statsCategoryNames]);
 
     const combinedTotalTimeChange = useMemo((): number | null => {
-        if (!weekStats || !includeGoogleInStats) return null;
-        if (isLoadingGoogleEvents || isLoadingPrevGoogleEvents || isGoogleEventsError || isPrevGoogleEventsError) {
+        if (!weekStats || (!includeGoogleInStats && !manualTimeInStats)) return null;
+        if (
+            (includeGoogleInStats && (isLoadingGoogleEvents || isLoadingPrevGoogleEvents || isGoogleEventsError || isPrevGoogleEventsError)) ||
+            (manualTimeInStats && (isLoadingManualTime || isLoadingPrevManualTime))
+        ) {
             return null;
         }
         const prevTrack = inferPreviousTrackingTotal(weekStats.total_time, weekStats.total_time_change);
         if (prevTrack === null) return null;
-        const prevCombined = prevTrack + prevGoogleTotalDuration;
-        const currCombined = weekStats.total_time + googleTotalDuration;
+        const prevCombined = prevTrack + prevGoogleTotalDuration + prevManualTotalDuration;
+        const currCombined = weekStats.total_time + googleTotalDuration + manualTotalDuration;
         return percentageChangeVsPrevious(currCombined, prevCombined);
     }, [
         weekStats,
         includeGoogleInStats,
+        manualTimeInStats,
         prevGoogleTotalDuration,
         googleTotalDuration,
+        prevManualTotalDuration,
+        manualTotalDuration,
         isLoadingGoogleEvents,
         isLoadingPrevGoogleEvents,
         isGoogleEventsError,
         isPrevGoogleEventsError,
+        isLoadingManualTime,
+        isLoadingPrevManualTime,
     ]);
 
     const displayTotalTimeChange =
-        includeGoogleInStats
-            ? isLoadingGoogleEvents || isLoadingPrevGoogleEvents
+        includeGoogleInStats || manualTimeInStats
+            ? isLoadingGoogleEvents || isLoadingPrevGoogleEvents || isLoadingManualTime || isLoadingPrevManualTime
                 ? null
                 : combinedTotalTimeChange
             : (weekStats?.total_time_change ?? null);

@@ -24,6 +24,7 @@ import { useCalendarAppFilterActive } from "../../stores/calendarAppFilterStore.
 import { useBackendSettings } from "../../hooks/useBackendSettings.ts";
 import CalendarSourceToggles, { CalendarTogglePills } from "./CalendarSourceToggles.tsx";
 import { Device } from "../../api/sync.ts";
+import {get_manual_time_blocks, MANUAL_TIME_COLOR, MANUAL_TIME_LABEL} from "../../api/ManualTimeBlock.ts";
 
 const LEFT_SIDEBAR_COLLAPSED_KEY = "time-tracker:left-sidebar-collapsed";
 
@@ -51,6 +52,10 @@ interface RenderCalendarContentProps {
     toggleCalendarInStats: (calendarId: number) => void;
     includeGoogleInStats: boolean;
     setIncludeGoogleInStats: (v: boolean) => void;
+    manualTimeInCal: boolean;
+    manualTimeInStats: boolean;
+    toggleManualTimeInCal: () => void;
+    toggleManualTimeInStats: () => void;
     onTimeBlockContextMenu?: (e: globalThis.MouseEvent, appNames: string[]) => void;
 }
 
@@ -78,6 +83,10 @@ export default function RenderCalendarContent({
     toggleCalendarInStats,
     includeGoogleInStats,
     setIncludeGoogleInStats,
+    manualTimeInCal,
+    manualTimeInStats,
+    toggleManualTimeInCal,
+    toggleManualTimeInStats,
     onTimeBlockContextMenu,
 }: RenderCalendarContentProps) {
     const queryClient = useQueryClient();
@@ -183,6 +192,17 @@ export default function RenderCalendarContent({
         () => getWeekRange(date, calendarStartHour),
         [date, calendarStartHour]
     );
+
+    const {
+        data: manualTimeBlocks = [],
+        isLoading: isLoadingManualTime,
+        error: manualTimeError,
+    } = useQuery({
+        queryKey: ["manualTimeBlocks", weekRange.week_start, weekRange.week_end],
+        queryFn: () => get_manual_time_blocks(weekRange.week_start, weekRange.week_end + 1),
+        enabled: weekQueryEnabled,
+        refetchOnWindowFocus: true,
+    });
 
     const calendarIds = useMemo(() => googleCalendars.map(cal => cal.id).sort().join(','), [googleCalendars]);
     
@@ -361,7 +381,28 @@ export default function RenderCalendarContent({
             })
             .filter((e): e is NonNullable<typeof e> => e !== null);
 
-        return [...timeBlockEvents, ...googleEvents];
+        const manualEvents = calendarAppFilter || !manualTimeInCal
+            ? []
+            : manualTimeBlocks.map((block) => {
+                const durationSec = block.end_time - block.start_time;
+                return {
+                    id: `manual-${block.id}`,
+                    title: `${block.title} (${formatDuration(durationSec)})`,
+                    start: new Date(block.start_time * 1000).toISOString(),
+                    end: new Date(block.end_time * 1000).toISOString(),
+                    backgroundColor: MANUAL_TIME_COLOR,
+                    borderColor: MANUAL_TIME_COLOR,
+                    textColor: "#ffffff",
+                    extendedProps: {
+                        type: "manual_time",
+                        manualTimeBlockId: block.id,
+                        manualTitle: block.title,
+                        notes: block.notes,
+                    },
+                };
+            });
+
+        return [...timeBlockEvents, ...manualEvents, ...googleEvents];
     }, [
         displayedTimeBlocks,
         categoryColorMap,
@@ -370,6 +411,8 @@ export default function RenderCalendarContent({
         isCalendarVisible,
         googleCalendarMap,
         calendarAppFilter,
+        manualTimeBlocks,
+        manualTimeInCal,
     ]);
 
     const showFullCalendarGrid = useMemo(() => {
@@ -381,7 +424,8 @@ export default function RenderCalendarContent({
             !calendarAppFilter &&
             displayGoogleEvents.length > 0 &&
             displayGoogleEvents.some((event: GoogleCalendarEvent) => isCalendarVisible(event.calendar_id));
-        return !!(hasTimeBlocks || hasGoogleEvents);
+        const hasManualTime = !calendarAppFilter && manualTimeInCal && manualTimeBlocks.length > 0;
+        return !!(hasTimeBlocks || hasManualTime || hasGoogleEvents);
     }, [
         isLoading,
         isLoadingGoogleEvents,
@@ -391,6 +435,8 @@ export default function RenderCalendarContent({
         displayedTimeBlocks,
         displayGoogleEvents,
         isCalendarVisible,
+        manualTimeBlocks,
+        manualTimeInCal,
         calendarAppFilter,
         isLoadingFilteredData,
     ]);
@@ -556,6 +602,23 @@ export default function RenderCalendarContent({
                     <div className="border-t border-gray-700 my-4" />
 
                     <div className="mb-4">
+                        <h4 className={`text-sm font-semibold text-gray-300 mb-2 ${isLeftCollapsed ? "hidden" : ""}`}>
+                            Manual tracking
+                        </h4>
+                        <CalendarSourceToggles
+                            name={MANUAL_TIME_LABEL}
+                            color={MANUAL_TIME_COLOR}
+                            inCal={manualTimeInCal}
+                            inStats={manualTimeInStats}
+                            onToggleCal={toggleManualTimeInCal}
+                            onToggleStats={toggleManualTimeInStats}
+                            isLeftCollapsed={isLeftCollapsed}
+                        />
+                    </div>
+
+                    <div className="border-t border-gray-700 my-4" />
+
+                    <div className="mb-4">
                         <div className="flex items-center justify-between mb-2">
                             <h4 className={`text-sm font-semibold text-gray-300 ${isLeftCollapsed ? "hidden" : ""}`}>
                                 Google Calendars
@@ -599,13 +662,13 @@ export default function RenderCalendarContent({
                     className="calendar-fc-host flex-1 h-full min-h-0 min-w-0 overflow-hidden"
                     style={{ ["--tt-slot-min-height" as any]: `${slotMinHeightPx}px` }}
                 >
-                    {isPageLoading ? (
+                    {isPageLoading || isLoadingManualTime ? (
                         <CalendarSkeleton />
-                    ) : pageError ? (
+                    ) : pageError || manualTimeError ? (
                         <div className="flex items-center justify-center h-full w-full">
                             <div className="text-center">
                                 <div className="text-red-400 text-xl mb-2">Error loading data</div>
-                                <div className="text-gray-500">{toErrorString(pageError)}</div>
+                                <div className="text-gray-500">{toErrorString(pageError || manualTimeError)}</div>
                             </div>
                         </div>
                     ) : showFullCalendarGrid ? (

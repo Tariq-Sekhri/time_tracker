@@ -15,6 +15,12 @@ import { useAppCategorizeMenu } from "../../../hooks/useAppCategorizeMenu.tsx";
 import { logRowLeftClickCalendarFilter } from "../../../utils/calendarAppFilterRowClick.ts";
 import { useCalendarAppFilterActive } from "../../../stores/calendarAppFilterStore.ts";
 import { useBackendSettings } from "../../../hooks/useBackendSettings.ts";
+import {
+    get_manual_time_blocks,
+    MANUAL_TIME_COLOR,
+    MANUAL_TIME_LABEL,
+    manualTimeDurationInRange,
+} from "../../../api/ManualTimeBlock.ts";
 
 interface DayStatisticsSidebarProps {
     selectedDate: Date;
@@ -25,6 +31,7 @@ interface DayStatisticsSidebarProps {
     googleCalendars: GoogleCalendar[];
     statsCategoryNames: Set<string>;
     statsDeviceUuids: string[] | null;
+    manualTimeInStats: boolean;
     trailingToolbar?: ReactNode;
 }
 
@@ -32,7 +39,7 @@ type CombinedCategory = {
     category: string;
     total_duration: number;
     color: string | null;
-    source: "tracking" | "google";
+    source: "tracking" | "google" | "manual";
 };
 
 export default function DayStatisticsSidebar({
@@ -44,6 +51,7 @@ export default function DayStatisticsSidebar({
     googleCalendars,
     statsCategoryNames,
     statsDeviceUuids,
+    manualTimeInStats,
     trailingToolbar,
 }: DayStatisticsSidebarProps) {
     const statsCalendarIds = useMemo(
@@ -91,6 +99,12 @@ export default function DayStatisticsSidebar({
         enabled: includeGoogleInStats && statsCalendarIds.size > 0,
     });
 
+    const {data: manualTimeBlocks = [], isLoading: isLoadingManualTime} = useQuery({
+        queryKey: ["manualTimeBlocks", dayStart, dayEnd],
+        queryFn: async () => get_manual_time_blocks(dayStart, dayEnd + 1),
+        enabled: dayStatsEnabled && manualTimeInStats,
+    });
+
     const calendarMap = useMemo(() => {
         const map = new Map<number, GoogleCalendar>();
         googleCalendars.forEach((c) => map.set(c.id, c));
@@ -133,6 +147,23 @@ export default function DayStatisticsSidebar({
         });
     }, [includeGoogleInStats, isLoadingGoogleEvents, isGoogleEventsError, filteredGoogleEvents, calendarMap]);
 
+    const manualTotalDuration = useMemo(
+        () => manualTimeInStats
+            ? manualTimeBlocks.reduce((sum, block) => sum + manualTimeDurationInRange(block, dayStart, dayEnd + 1), 0)
+            : 0,
+        [manualTimeBlocks, manualTimeInStats, dayStart, dayEnd],
+    );
+
+    const manualCategory = useMemo<CombinedCategory | null>(() => {
+        if (!manualTimeInStats || manualTotalDuration <= 0) return null;
+        return {
+            category: MANUAL_TIME_LABEL,
+            total_duration: manualTotalDuration,
+            color: MANUAL_TIME_COLOR,
+            source: "manual",
+        };
+    }, [manualTimeInStats, manualTotalDuration]);
+
     const topCategories = useMemo(() => {
         if (!dayStats) return [] as CombinedCategory[];
 
@@ -145,14 +176,14 @@ export default function DayStatisticsSidebar({
             source: "tracking",
         }));
 
-        if (!includeGoogleInStats) {
-            return trackingCategories.slice(0, categorySidebarCount);
-        }
-
-        const combined = [...trackingCategories, ...googleCategories];
+        const combined = [
+            ...trackingCategories,
+            ...(manualCategory ? [manualCategory] : []),
+            ...(includeGoogleInStats ? googleCategories : []),
+        ];
         combined.sort((a, b) => b.total_duration - a.total_duration);
         return combined.slice(0, categorySidebarCount);
-    }, [dayStats, includeGoogleInStats, googleCategories, categorySidebarCount, statsCategoryNames]);
+    }, [dayStats, includeGoogleInStats, googleCategories, manualCategory, categorySidebarCount, statsCategoryNames]);
 
     const maxCategoryDuration = topCategories.length > 0 ? topCategories[0].total_duration : 1;
 
@@ -182,9 +213,8 @@ export default function DayStatisticsSidebar({
         const trackingTotal = dayStats.categories
             .filter((c) => statsCategoryNames.has(c.category))
             .reduce((sum, c) => sum + c.total_duration, 0);
-        if (!includeGoogleInStats) return trackingTotal;
-        return trackingTotal + googleTotalDuration;
-    }, [dayStats, includeGoogleInStats, googleTotalDuration, statsCategoryNames]);
+        return trackingTotal + googleTotalDuration + manualTotalDuration;
+    }, [dayStats, googleTotalDuration, manualTotalDuration, statsCategoryNames]);
 
     const filteredDayTopApps = useMemo(() => {
         if (!dayStats?.top_apps) {
@@ -193,7 +223,7 @@ export default function DayStatisticsSidebar({
         return dayStats.top_apps;
     }, [dayStats]);
 
-    if (isLoading || (!dayStats && !isError)) {
+    if (isLoading || isLoadingManualTime || (!dayStats && !isError)) {
         return (
             <div className=" border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
                 <div className="flex-1">

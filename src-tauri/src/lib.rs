@@ -13,10 +13,8 @@ use db::queries::{
     get_day_statistics, get_total_statistics, get_week, get_week_for_app_filter,
     get_week_statistics,
 };
+use db::tables::app_group::{delete_app_group, get_app_groups, insert_app_group, update_app_group};
 use db::tables::app_metadata_kv::{get_server_ip, set_server_ip};
-use db::tables::app_group::{
-    delete_app_group, get_app_groups, insert_app_group, update_app_group,
-};
 use db::tables::cat_regex::{
     delete_cat_regex_by_id, get_cat_regex, get_cat_regex_by_id, insert_cat_regex,
     update_cat_regex_by_id,
@@ -34,6 +32,11 @@ use db::tables::log::{
     count_logs_for_time_block, delete_log_by_id, delete_logs_by_ids, delete_logs_for_time_block,
     get_log_by_id, get_logs, get_logs_by_category, get_logs_for_app_in_time_range,
     get_logs_for_time_block,
+};
+use db::tables::manual_time_block::{
+    delete_manual_time_block, finish_manual_timer, get_manual_time_blocks,
+    get_running_manual_timer, insert_manual_time_block, start_manual_timer,
+    stop_manual_timer, update_manual_time_block, update_manual_timer_title,
 };
 use db::tables::settings::{flip_lock_by_key, get_settings, reset_val_by_key, update_val_by_key};
 use db::tables::skipped_app::{
@@ -64,8 +67,7 @@ use google_oauth::{
 use sync::{
     check, check_device_activation, device_logs, get_devices, get_sync_countdown, register,
     reupload_all_logs, run_auto_sync_cycle, set_sync_countdown_remaining,
-    sync_countdown_reset_notify, sync_now, unsubscribe_device, upload_all_logs,
-    SYNC_INTERVAL_SECS,
+    sync_countdown_reset_notify, sync_now, unsubscribe_device, upload_all_logs, SYNC_INTERVAL_SECS,
 };
 use tauri::{Emitter, Manager};
 use tray::refresh_tray_menu;
@@ -177,8 +179,7 @@ pub fn run() {
                     'countdown: loop {
                         for remaining in (1..=sync_interval_secs).rev() {
                             set_sync_countdown_remaining(remaining as i64);
-                            let _ =
-                                app_handle.emit("count_down_to_sync", remaining as i64);
+                            let _ = app_handle.emit("count_down_to_sync", remaining as i64);
                             tokio::select! {
                                 _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
                                 _ = reset_notify.notified() => {
@@ -308,6 +309,15 @@ pub fn run() {
             get_logs_for_time_block,
             get_logs_by_category,
             get_logs_for_app_in_time_range,
+            get_manual_time_blocks,
+            insert_manual_time_block,
+            update_manual_time_block,
+            delete_manual_time_block,
+            get_running_manual_timer,
+            start_manual_timer,
+            update_manual_timer_title,
+            stop_manual_timer,
+            finish_manual_timer,
             get_skipped_apps,
             insert_skipped_app_and_delete_logs,
             update_skipped_app_by_id,

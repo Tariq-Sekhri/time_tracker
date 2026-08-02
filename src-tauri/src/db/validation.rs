@@ -332,6 +332,53 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
             ],
         },
         ExpectedTable {
+            name: "manual_time_blocks",
+            columns: vec![
+                ExpectedColumn {
+                    name: "id",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "title",
+                    sql_type: "TEXT",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "notes",
+                    sql_type: "TEXT",
+                    not_null: false,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "start_time",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "end_time",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "created_at",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "updated_at",
+                    sql_type: "INTEGER",
+                    not_null: true,
+                    default_value: None,
+                },
+            ],
+        },
+        ExpectedTable {
             name: "app_metadata",
             columns: vec![
                 ExpectedColumn {
@@ -521,11 +568,9 @@ async fn migrate_legacy_category_prefs(pool: &SqlitePool) -> Result<(), Error> {
     if !table_has_column(pool, "category", "is_visible").await? {
         return Ok(());
     }
-    sqlx::query(
-        "UPDATE category SET is_visible = calendar_enabled, in_stats = calendar_enabled",
-    )
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE category SET is_visible = calendar_enabled, in_stats = calendar_enabled")
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
@@ -541,6 +586,7 @@ async fn create_table_safe(pool: &SqlitePool, table: &ExpectedTable) -> Result<(
         "skipped_apps" => tables::skipped_app::create_table(pool).await?,
         "google_oauth" => tables::google_calendar::create_table(pool).await?,
         "google_calendar_v2" => tables::google_calendar::create_table(pool).await?,
+        "manual_time_blocks" => tables::manual_time_block::create_table(pool).await?,
         "app_metadata" => {
             sqlx::query(
                 "CREATE TABLE IF NOT EXISTS app_metadata (

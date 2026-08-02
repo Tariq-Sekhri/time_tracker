@@ -10,6 +10,7 @@ import { GoogleCalendar } from "../../../api/GoogleCalendar.ts";
 import { useEffect, useState } from "react";
 import { getAppMetadata, setAppMetadata } from "../../../api/appMetadata.ts";
 import { useBackendSettings } from "../../../hooks/useBackendSettings.ts";
+import ManualTimeBlockView from "./ManualTimeBlockView.tsx";
 
 const RIGHT_SIDEBAR_COLLAPSED_KEY = "time-tracker:right-sidebar-collapsed";
 
@@ -32,6 +33,7 @@ export function RightSideBar({
     googleCalendars,
     statsCategoryNames,
     statsDeviceUuids,
+    manualTimeInStats,
 }: {
     view: SideBarView,
     setView: (newView: SideBarView) => void,
@@ -49,6 +51,7 @@ export function RightSideBar({
     googleCalendars: GoogleCalendar[],
     statsCategoryNames: Set<string>,
     statsDeviceUuids: string[] | null,
+    manualTimeInStats: boolean,
 }) {
     const { date } = useDateStore();
     const { rightSidebarWidth } = useBackendSettings();
@@ -104,6 +107,7 @@ export function RightSideBar({
                         googleCalendars={googleCalendars}
                         statsCategoryNames={statsCategoryNames}
                         statsDeviceUuids={statsDeviceUuids}
+                        manualTimeInStats={manualTimeInStats}
                         trailingToolbar={collapseSidebarButton}
                     />}
                     {view === "Day" && selectedDate && <DayStatisticsSidebar
@@ -121,10 +125,18 @@ export function RightSideBar({
                         googleCalendars={googleCalendars}
                         statsCategoryNames={statsCategoryNames}
                         statsDeviceUuids={statsDeviceUuids}
+                        manualTimeInStats={manualTimeInStats}
                         trailingToolbar={collapseSidebarButton}
                     />}
                     {view === "Event" && selectedEvent && (
-                        selectedEvent.googleCalendarEventId ? (
+                        selectedEvent.manualTimeBlockId != null ? (
+                            <ManualTimeBlockView
+                                selectedEvent={selectedEvent}
+                                setSelectedEvent={setSelectedEvent}
+                                setRightSideBarView={setView}
+                                trailingToolbar={collapseSidebarButton}
+                            />
+                        ) : selectedEvent.googleCalendarEventId ? (
                             <GoogleCalendarEventView
                                 selectedEvent={selectedEvent}
                                 setSelectedEvent={setSelectedEvent}

@@ -6,7 +6,7 @@ import {adjustInstantToCalendarDayBoundary, getCalendarDayRangeUnix, getWeekRang
 import {useState, useMemo, useEffect, useRef, useCallback} from "react";
 import {EventClickArg, DatesSetArg} from "@fullcalendar/core";
 import RenderCalendarContent from "./RenderCalenderContent.tsx";
-import {formatLocalDateYMD, getWeekStart} from "./utils.ts";
+import {formatLocalDateYMD, getWeekStart, isCurrentWeek} from "./utils.ts";
 import {useDateStore} from "../../stores/dateStore.ts";
 import {View} from "../../App.tsx";
 import CalenderHeader from "./RightSideBar/CalanderHeader.tsx";
@@ -21,8 +21,13 @@ import {useAppCategorizeMenu} from "../../hooks/useAppCategorizeMenu.tsx";
 import {getDevices, getCalendarDevices, buildDeviceUuidsForFilter, updateDevice, getServerIp, type Device} from "../../api/sync.ts";
 import {useBackendSettings} from "../../hooks/useBackendSettings.ts";
 import {getAppMetadata, setAppMetadata} from "../../api/appMetadata.ts";
+import ManualTimeBlockDialog from "./ManualTimeBlockDialog.tsx";
+import {get_running_manual_timer} from "../../api/ManualTimeBlock.ts";
+import {ManualTimerControl} from "./ManualTimer.tsx";
 
 const INCLUDE_GOOGLE_IN_STATS_KEY = "time-tracker:include-google-in-stats";
+const MANUAL_TIME_IN_CAL_KEY = "time-tracker:manual-time-in-calendar";
+const MANUAL_TIME_IN_STATS_KEY = "time-tracker:manual-time-in-stats";
 
 export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View) => void }) {
     const [rightSideBarView, setRightSideBarView] = useState<SideBarView>("Week")
@@ -30,6 +35,9 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const {calendarStartHour, timeBlockSettings} = useBackendSettings();
     const calendarAppFilterActive = useCalendarAppFilterActive();
     const [includeGoogleInStats, setIncludeGoogleInStats] = useState(true);
+    const [manualTimeInCal, setManualTimeInCal] = useState(true);
+    const [manualTimeInStats, setManualTimeInStats] = useState(true);
+    const [showManualTimeDialog, setShowManualTimeDialog] = useState(false);
     const includeGoogleInStatsLoadedRef = useRef(false);
     const [appFilterPrevWeek, setAppFilterPrevWeek] = useState<Date | null>(null);
     const [appFilterNextWeek, setAppFilterNextWeek] = useState<Date | null>(null);
@@ -53,6 +61,11 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const {data: categories = []} = useQuery({
         queryKey: ["categories"],
         queryFn: get_categories,
+    });
+
+    const {data: runningManualTimer = null} = useQuery({
+        queryKey: ["runningManualTimer"],
+        queryFn: get_running_manual_timer,
     });
 
     const visibleCategoryNames = useMemo(() => {
@@ -112,6 +125,32 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     }, [includeGoogleInStats]);
 
     useEffect(() => {
+        Promise.all([
+            getAppMetadata(MANUAL_TIME_IN_CAL_KEY),
+            getAppMetadata(MANUAL_TIME_IN_STATS_KEY),
+        ]).then(([inCal, inStats]) => {
+            if (inCal === "0") setManualTimeInCal(false);
+            if (inStats === "0") setManualTimeInStats(false);
+        }).catch(() => {});
+    }, []);
+
+    const toggleManualTimeInCal = useCallback(() => {
+        setManualTimeInCal((current) => {
+            const next = !current;
+            setAppMetadata(MANUAL_TIME_IN_CAL_KEY, next ? "1" : "0").catch(() => {});
+            return next;
+        });
+    }, []);
+
+    const toggleManualTimeInStats = useCallback(() => {
+        setManualTimeInStats((current) => {
+            const next = !current;
+            setAppMetadata(MANUAL_TIME_IN_STATS_KEY, next ? "1" : "0").catch(() => {});
+            return next;
+        });
+    }, []);
+
+    useEffect(() => {
         if (didAlignInitialWeekToBoundary.current) return;
         didAlignInitialWeekToBoundary.current = true;
         setDate(adjustInstantToCalendarDayBoundary(new Date(), calendarStartHour));
@@ -128,6 +167,13 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
             el.classList.remove("fc-event-selected");
         });
     }, [visibleCategoryNames]);
+
+    useEffect(() => {
+        if (manualTimeInCal || selectedEvent?.manualTimeBlockId == null) return;
+        setSelectedEvent(null);
+        setSelectedEventLogs([]);
+        setRightSideBarView("Week");
+    }, [manualTimeInCal, selectedEvent]);
 
     useEffect(() => {
         if (!selectedEvent?.category || selectedEvent.googleCalendarEventId != null) return;
@@ -240,6 +286,10 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         }
 
         if (selectedEvent?.googleCalendarEventId) {
+            return;
+        }
+
+        if (selectedEvent?.manualTimeBlockId != null) {
             return;
         }
 
@@ -385,6 +435,18 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                     location: clickInfo.event.extendedProps?.location as string | undefined,
                 };
                 setSelectedEvent(event);
+                setSelectedDate(null);
+                setSelectedEventLogs([]);
+                setRightSideBarView("Event");
+            } else if (eventType === "manual_time") {
+                setSelectedEvent({
+                    title: clickInfo.event.extendedProps?.manualTitle as string,
+                    start: clickInfo.event.start,
+                    end: clickInfo.event.end,
+                    apps: [],
+                    manualTimeBlockId: clickInfo.event.extendedProps?.manualTimeBlockId as number,
+                    notes: clickInfo.event.extendedProps?.notes as string | undefined,
+                });
                 setSelectedDate(null);
                 setSelectedEventLogs([]);
                 setRightSideBarView("Event");
@@ -870,7 +932,11 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
             <CalenderHeader headerTitle={headerTitle} onClick={goToPrevWeek} d={date} onClick1={goToNextWeek}
                             onClick2={goToToday} calendarStartHour={calendarStartHour}
                             appJumpPrev={jumpToPrevAppWeek} appJumpNext={jumpToNextAppWeek}
-                            appJumpPrevDisabled={appJumpPrevDisabled} appJumpNextDisabled={appJumpNextDisabled}/>
+                            appJumpPrevDisabled={appJumpPrevDisabled} appJumpNextDisabled={appJumpNextDisabled}
+                            timerControl={<ManualTimerControl
+                                timer={runningManualTimer}
+                                onAddPastTime={() => setShowManualTimeDialog(true)}
+                            />}/>
 
             <div className="flex flex-1 overflow-hidden min-h-0">
                 <div className="flex-1 overflow-hidden min-h-0">
@@ -899,6 +965,10 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             toggleCalendarInStats={toggleCalendarInStats}
                             includeGoogleInStats={includeGoogleInStats}
                             setIncludeGoogleInStats={setIncludeGoogleInStats}
+                            manualTimeInCal={manualTimeInCal}
+                            manualTimeInStats={manualTimeInStats}
+                            toggleManualTimeInCal={toggleManualTimeInCal}
+                            toggleManualTimeInStats={toggleManualTimeInStats}
                             onTimeBlockContextMenu={openFromContextMenuMany}
                         />
                     </div>
@@ -913,9 +983,16 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                               googleCalendars={displayCalendars}
                               statsCategoryNames={statsCategoryNames}
                               statsDeviceUuids={statsDeviceUuids}
+                              manualTimeInStats={manualTimeInStats}
                 />
             </div>
             {categorizeLayers}
+
+            <ManualTimeBlockDialog
+                open={showManualTimeDialog}
+                initialStart={isCurrentWeek(date, calendarStartHour) ? new Date() : getWeekStart(date, calendarStartHour)}
+                onClose={() => setShowManualTimeDialog(false)}
+            />
 
 
         </div>
