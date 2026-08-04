@@ -1,7 +1,10 @@
 use sqlx::migrate::MigrateError;
-use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
+use sqlx::SqlitePool;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Mutex;
+use std::time::Duration;
 
 use crate::db::backup;
 use crate::db::validation;
@@ -22,9 +25,61 @@ fn default_db_path() -> PathBuf {
     let db_filename = if cfg!(debug_assertions) {
         "apptest.db"
     } else {
-        "dev.db"
+        "app.db"
     };
     app_data_time_tracker_dir().join(db_filename)
+}
+
+fn db_file_has_data(path: &Path) -> bool {
+    path.exists()
+        && std::fs::metadata(path)
+            .map(|m| m.len() > 0)
+            .unwrap_or(false)
+}
+
+fn migrate_dev_db_to_app_db_once() -> std::io::Result<()> {
+    if cfg!(debug_assertions) || is_custom_db_path() {
+        return Ok(());
+    }
+
+    let dir = app_data_time_tracker_dir();
+    let marker = dir.join(".dev_db_promoted");
+    if marker.exists() {
+        return Ok(());
+    }
+
+    let app_db = dir.join("app.db");
+    let dev_db = dir.join("dev.db");
+
+    if !db_file_has_data(&dev_db) {
+        std::fs::write(&marker, b"1")?;
+        return Ok(());
+    }
+
+    let should_promote = if !db_file_has_data(&app_db) {
+        true
+    } else {
+        let dev_modified = std::fs::metadata(&dev_db)?.modified()?;
+        let app_modified = std::fs::metadata(&app_db)?.modified()?;
+        dev_modified > app_modified
+    };
+
+    if should_promote {
+        if db_file_has_data(&app_db) {
+            let backup = dir.join(format!(
+                "app.db.pre_dev_promote_{}",
+                chrono::Local::now().format("%Y%m%d_%H%M%S")
+            ));
+            std::fs::copy(&app_db, &backup)?;
+        }
+        if let Some(parent) = app_db.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::copy(&dev_db, &app_db)?;
+    }
+
+    std::fs::write(&marker, b"1")?;
+    Ok(())
 }
 
 fn read_custom_db_path() -> Option<PathBuf> {
@@ -76,20 +131,12 @@ fn is_valid_sqlite_file(path: &Path) -> bool {
 }
 
 fn seed_database_from_app_db_once(target_path: &PathBuf) -> std::io::Result<()> {
-    if target_path.exists()
-        && std::fs::metadata(target_path)
-            .map(|m| m.len() > 0)
-            .unwrap_or(false)
-    {
+    if db_file_has_data(target_path) {
         return Ok(());
     }
 
     let prod = app_data_time_tracker_dir().join("app.db");
-    if prod.exists()
-        && std::fs::metadata(&prod)
-            .map(|m| m.len() > 0)
-            .unwrap_or(false)
-    {
+    if db_file_has_data(&prod) {
         if let Some(parent) = target_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -255,24 +302,30 @@ fn ensure_db_path(db_path: &PathBuf) -> Result<(), sqlx::Error> {
 }
 
 async fn create_pool() -> Result<SqlitePool, sqlx::Error> {
-    let db_path = get_db_path();
     if !is_custom_db_path() {
-        seed_database_from_app_db_once(&db_path).map_err(sqlx::Error::Io)?;
+        migrate_dev_db_to_app_db_once().map_err(sqlx::Error::Io)?;
+        if cfg!(debug_assertions) {
+            let db_path = get_db_path();
+            seed_database_from_app_db_once(&db_path).map_err(sqlx::Error::Io)?;
+        }
     }
+
+    let db_path = get_db_path();
     ensure_db_path(&db_path)?;
 
-    if db_path.exists()
-        && std::fs::metadata(&db_path)
-            .map(|m| m.len() > 0)
-            .unwrap_or(false)
-    {
+    if db_file_has_data(&db_path) {
         backup::create_daily_backup().map_err(sqlx::Error::Io)?;
     }
 
     let connection_string = format!("sqlite://{}", db_path.display());
+    let connect_options = SqliteConnectOptions::from_str(&connection_string)
+        .map_err(|e| sqlx::Error::Configuration(e.into()))?
+        .create_if_missing(true)
+        .journal_mode(SqliteJournalMode::Wal)
+        .busy_timeout(Duration::from_secs(10));
     let pool = SqlitePoolOptions::new()
         .max_connections(10)
-        .connect(&connection_string)
+        .connect_with(connect_options)
         .await?;
 
     run_migrations(&pool).await?;
