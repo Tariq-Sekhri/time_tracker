@@ -182,13 +182,8 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 !endif
 
 ; 4. Choose install directory page
-!define MUI_DIRECTORYPAGE_TEXT_TOP "Choose where to install the program files. On the next page you will choose the data folder for the database and settings."
-!define MUI_DIRECTORYPAGE_TEXT_DESTINATION "Installation folder"
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
-!define MUI_PAGE_CUSTOMFUNCTION_LEAVE DirectoryPageLeave
 !insertmacro MUI_PAGE_DIRECTORY
-
-Page custom DataDirPage DataDirPageLeave
 
 ; 5. Custom page to ask user if he wants to reinstall/uninstall
 ; only if a previous installation was detected
@@ -501,24 +496,24 @@ Function .onInit
 
  !insertmacro SetContext
 
- Call FindNextInstanceId
+ Call InitFixedInstance
 
  ${If} $INSTDIR == "${PLACEHOLDER_INSTALL_DIR}"
  ; Set default install location
  !if "${INSTALLMODE}" == "perMachine"
  ${If} ${RunningX64}
  !if "${ARCH}" == "x64"
- StrCpy $INSTDIR "$PROGRAMFILES64\$InstanceId"
+ StrCpy $INSTDIR "$PROGRAMFILES64\${PRODUCTNAME}"
  !else if "${ARCH}" == "arm64"
- StrCpy $INSTDIR "$PROGRAMFILES64\$InstanceId"
+ StrCpy $INSTDIR "$PROGRAMFILES64\${PRODUCTNAME}"
  !else
- StrCpy $INSTDIR "$PROGRAMFILES\$InstanceId"
+ StrCpy $INSTDIR "$PROGRAMFILES\${PRODUCTNAME}"
  !endif
  ${Else}
- StrCpy $INSTDIR "$PROGRAMFILES\$InstanceId"
+ StrCpy $INSTDIR "$PROGRAMFILES\${PRODUCTNAME}"
  ${EndIf}
  !else if "${INSTALLMODE}" == "currentUser"
- StrCpy $INSTDIR "$LOCALAPPDATA\Programs\$InstanceId"
+ StrCpy $INSTDIR "$LOCALAPPDATA\Programs\${PRODUCTNAME}"
  !endif
  ${EndIf}
 
@@ -705,9 +700,6 @@ Section Install
  WriteRegStr SHCTX "$InstanceUninstKey" "Publisher" "${MANUFACTURER}"
  WriteRegStr SHCTX "$InstanceUninstKey" "InstallLocation" "$\"$INSTDIR$\""
  WriteRegStr SHCTX "$InstanceUninstKey" "UninstallString" "$\"$INSTDIR\uninstall.exe$\""
- WriteRegStr SHCTX "$InstanceUninstKey" "InstanceId" "$InstanceId"
- WriteRegStr SHCTX "$InstanceUninstKey" "DataDirName" "$InstanceId"
- WriteRegStr SHCTX "$InstanceUninstKey" "DataDirPath" "$DataDir"
  WriteRegDWORD SHCTX "$InstanceUninstKey" "NoModify" "1"
  WriteRegDWORD SHCTX "$InstanceUninstKey" "NoRepair" "1"
 
@@ -776,10 +768,10 @@ Function un.onInit
  StrCpy $UpdateMode 1
  ${EndIf}
 
- Call un.SetInstanceFromInstDir
+ Call un.InitFixedInstance
  ReadRegStr $InstanceDisplayName SHCTX "$InstanceUninstKey" "DisplayName"
  ${If} $InstanceDisplayName == ""
-   Call un.SetInstanceDisplayName
+   StrCpy $InstanceDisplayName "Time Tracker"
  ${EndIf}
 FunctionEnd
 
@@ -789,13 +781,7 @@ Section Uninstall
  !insertmacro NSIS_HOOK_PREUNINSTALL
  !endif
 
- StrCpy $R5 ""
- IfFileExists "$INSTDIR\data_dir.txt" 0 +6
-   ClearErrors
-   FileOpen $R0 "$INSTDIR\data_dir.txt" r
-   IfErrors +4
-   FileRead $R0 $R5
-   FileClose $R0
+ StrCpy $R5 "$APPDATA\${PRODUCTNAME}"
 
  ; Delete the app directory and its content from disk
  ; Copy main executable
@@ -873,7 +859,7 @@ Section Uninstall
  !endif
 
  ${If} $UpdateMode <> 1
- DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "$InstanceId"
+ DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCTNAME}"
  ${EndIf}
 
  ; Delete app data if the checkbox is selected
@@ -888,17 +874,7 @@ Section Uninstall
  DeleteRegKey /ifempty HKCU "${MANUKEY}"
 
  SetShellVarContext current
- ${If} $R5 != ""
-   RmDir /r "$R5"
- ${Else}
-   ReadRegStr $R5 SHCTX "$InstanceUninstKey" "DataDirPath"
-   ${If} $R5 != ""
-     RmDir /r "$R5"
-   ${Else}
-     RmDir /r "$APPDATA\$InstanceId"
-     RmDir /r "$LOCALAPPDATA\$InstanceId"
-   ${EndIf}
- ${EndIf}
+ RmDir /r "$R5"
  RmDir /r "$APPDATA\${BUNDLEID}"
  RmDir /r "$LOCALAPPDATA\${BUNDLEID}"
  ${EndIf}

@@ -38,7 +38,6 @@ jobs:
         run: cargo test --lib
 
   build:
-    needs: rust-lib-tests
     if: github.event_name == 'release' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
     permissions:
       contents: write
