@@ -9,6 +9,7 @@ import {
     type DatabaseLocationInfo,
 } from "../api/databaseLocation.ts";
 import { toErrorString } from "../types/common.ts";
+import { useNotesState } from "../hooks/useNotesState.ts";
 
 type FieldDef = { key: string; label: string };
 type CategoryDef = { title: string; fields: FieldDef[] };
@@ -347,6 +348,7 @@ function DatabaseLocationSetting() {
 export default function Settings() {
     const { showToast } = useToast();
     const { fields, allLocked, setVal, toggleLock, resetField, resetSettings } = useBackendSettings();
+    const { enabled: notesEnabled, setEnabled: setNotesEnabled } = useNotesState();
 
     const hasFields = useMemo(() => Object.keys(fields).length > 0, [fields]);
 
@@ -366,6 +368,23 @@ export default function Settings() {
             </div>
 
             <div className="space-y-6">
+                <div className="bg-gray-900 p-4 rounded flex items-center justify-between gap-4">
+                    <div>
+                        <h2 className="text-lg font-semibold">Notes</h2>
+                        <p className="mt-1 text-sm text-gray-400">Show the Notes page in the top navigation.</p>
+                    </div>
+                    <input
+                        type="checkbox"
+                        checked={notesEnabled}
+                        onChange={(event) => {
+                            void setNotesEnabled(event.target.checked).catch((error) => {
+                                showToast("Could not update Notes", "error", 5000, toErrorString(error));
+                            });
+                        }}
+                        className="h-5 w-5 accent-blue-500"
+                        aria-label="Enable Notes"
+                    />
+                </div>
                 <DatabaseLocationSetting />
                 {SETTINGS_LAYOUT.map((category) => (
                     <div key={category.title} className="bg-gray-900 p-4 rounded">

@@ -1,6 +1,7 @@
 import "./App.css";
 import {useState, useEffect} from "react";
 import {useQueryClient} from "@tanstack/react-query";
+import {useQuery} from "@tanstack/react-query";
 import {listen} from "@tauri-apps/api/event";
 import {invoke} from "@tauri-apps/api/core";
 import {useRef} from "react";
@@ -19,6 +20,8 @@ import {toErrorString} from "./types/common.ts";
 import {useSyncTimer} from "./hooks/useSyncTimer.ts";
 import Sync from "./Screens/Sync.tsx";
 import AppGroupsView from "./Screens/AppGroupsView.tsx";
+import Notes from "./Screens/Notes.tsx";
+import {getNotesState} from "./api/notes.ts";
 
 export type View =
     | "calendar"
@@ -29,12 +32,14 @@ export type View =
     | "detailed"
     | "googleCalendars"
     | "settings"
-    | "sync";
+    | "sync"
+    | "notes";
 
 function AppInner() {
     const queryClient = useQueryClient();
     const {showToast, updateToast, removeToast} = useToast();
     const syncTimer = useSyncTimer();
+    const {data: notesState} = useQuery({queryKey: ["notes"], queryFn: getNotesState});
     const [currentView, setCurrentView] = useState<View>("calendar");
     const [updateAvailable, setUpdateAvailable] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
@@ -212,6 +217,12 @@ function AppInner() {
     }, [queryClient]);
 
     useEffect(() => {
+        if (!notesState?.enabled && currentView === "notes") {
+            setCurrentView("calendar");
+        }
+    }, [currentView, notesState?.enabled]);
+
+    useEffect(() => {
         const onError = (e: Event) => {
             const anyE = e as any;
             const msg = anyE?.error ? toErrorString(anyE.error) : anyE?.message ? String(anyE.message) : "Unknown error";
@@ -255,7 +266,7 @@ function AppInner() {
 
     return (
         <main className="bg-black text-white h-screen flex flex-col">
-            <Header currentView={currentView} setCurrentView={handleSetCurrentView}/>
+            <Header currentView={currentView} setCurrentView={handleSetCurrentView} notesEnabled={notesState?.enabled ?? false}/>
 
             {updateAvailable && (
                 <div className="border-b border-gray-700 bg-gray-900 px-4 py-3 flex items-center gap-3">
@@ -301,6 +312,7 @@ function AppInner() {
                 {currentView === "settings" && <Settings/>}
                 {currentView === "googleCalendars" && <GoogleCalendarsView/>}
                 {currentView === "sync" && <Sync syncTimer={syncTimer} />}
+                {currentView === "notes" && <Notes/>}
             </div>
         </main>
     );

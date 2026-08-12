@@ -4,9 +4,10 @@ import {listen} from "@tauri-apps/api/event";
 import {View} from "../App.tsx"
 
 
-export default function Header({currentView, setCurrentView}: {
+export default function Header({currentView, setCurrentView, notesEnabled}: {
     currentView: View,
     setCurrentView: (newView: View) => void,
+    notesEnabled: boolean,
 }) {
     const [isTracking, setIsTracking] = useState(true);
     const [appVersion, setAppVersion] = useState<string | null>(null);
@@ -159,6 +160,17 @@ export default function Header({currentView, setCurrentView}: {
                 >
                     Sync
                 </button>
+                {notesEnabled && (
+                    <button
+                        onClick={() => setCurrentView("notes")}
+                        className={`shrink-0 px-6 py-3 font-medium transition-colors ${currentView === "notes"
+                            ? "bg-gray-800 text-white border-b-2 border-blue-500"
+                            : "text-gray-400 hover:text-white hover:bg-gray-900"
+                        }`}
+                    >
+                        Notes
+                    </button>
+                )}
             </div>
             <div className="flex-1"/>
             <div className="px-4 flex items-center gap-3 shrink-0">

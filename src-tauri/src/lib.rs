@@ -14,7 +14,9 @@ use db::queries::{
     get_week_statistics,
 };
 use db::tables::app_group::{delete_app_group, get_app_groups, insert_app_group, update_app_group};
-use db::tables::app_metadata_kv::{get_server_ip, set_server_ip};
+use db::tables::app_metadata_kv::{
+    get_notes_state, get_server_ip, set_notes_enabled, set_notes_text, set_server_ip,
+};
 use db::tables::cat_regex::{
     delete_cat_regex_by_id, get_cat_regex, get_cat_regex_by_id, insert_cat_regex,
     update_cat_regex_by_id,
@@ -35,8 +37,8 @@ use db::tables::log::{
 };
 use db::tables::manual_time_block::{
     delete_manual_time_block, finish_manual_timer, get_manual_time_blocks,
-    get_running_manual_timer, insert_manual_time_block, start_manual_timer,
-    stop_manual_timer, update_manual_time_block, update_manual_timer_title,
+    get_running_manual_timer, insert_manual_time_block, start_manual_timer, stop_manual_timer,
+    update_manual_time_block, update_manual_timer_title,
 };
 use db::tables::settings::{flip_lock_by_key, get_settings, reset_val_by_key, update_val_by_key};
 use db::tables::skipped_app::{
@@ -146,6 +148,13 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .setup(|app| {
             app.manage(UpdateState {
                 update: Mutex::new(None),
@@ -353,6 +362,9 @@ pub fn run() {
             get_app_metadata,
             set_app_metadata,
             delete_app_metadata,
+            get_notes_state,
+            set_notes_enabled,
+            set_notes_text,
             get_settings,
             flip_lock_by_key,
             reset_val_by_key,
