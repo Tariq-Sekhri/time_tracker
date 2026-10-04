@@ -77,3 +77,15 @@ export function manualTimeDurationInRange(
 ): number {
     return Math.max(0, Math.min(block.end_time, rangeEnd) - Math.max(block.start_time, rangeStart));
 }
+
+export function manualTimeAppStats(blocks: ManualTimeBlock[], start: number, end: number) {
+    const durations = new Map<string, number>();
+    for (const block of blocks) {
+        const duration = manualTimeDurationInRange(block, start, end);
+        if (duration > 0) {
+            const app = `Manual time: ${block.title}`;
+            durations.set(app, (durations.get(app) ?? 0) + duration);
+        }
+    }
+    return [...durations].map(([app, total_duration]) => ({app, app_names: [] as string[], total_duration, percentage_change: null}));
+}

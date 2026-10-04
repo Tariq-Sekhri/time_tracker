@@ -868,7 +868,7 @@ function buildCategoryStats(
     const dayTotals = new Map<number, number>();
 
     const catColor = (name: string) =>
-        categories.find((c) => c.name === name)?.color ?? null;
+        name === "Manual time" ? "#0ea5e9" : categories.find((c) => c.name === name)?.color ?? null;
 
     for (const b of blocks) {
         const od = overlapSec(b, ws, we);
@@ -881,7 +881,7 @@ function buildCategoryStats(
         const appSum = sumApps(b);
         for (const ap of b.apps) {
             const share = appSum > 0 ? ap.total_duration / appSum : 0;
-            const groupedApp = resolveDemoAppGroup(ap.app);
+            const groupedApp = b.category === "Manual time" ? ap.app : resolveDemoAppGroup(ap.app);
             apps.set(groupedApp, (apps.get(groupedApp) ?? 0) + od * share);
         }
 
@@ -905,13 +905,29 @@ function buildCategoryStats(
     return { total, cats, apps, hourly, dayCat, activeDayStarts, dayTotals };
 }
 
-function weekStatistics(ws: number, we: number) {
+function manualStatsBlocks(start: number, end: number): TimeBlockRow[] {
+    const blocks: TimeBlockRow[] = [];
+    for (const block of manualTimeBlocks) {
+        let cursor = Math.max(start, block.start_time);
+        const stop = Math.min(end, block.end_time);
+        while (cursor < stop) {
+            const date = new Date(cursor * 1000);
+            const next = Math.min(stop, cursor + 3600 - date.getMinutes() * 60 - date.getSeconds());
+            blocks.push({id: block.id, category: "Manual time", start_time: cursor, end_time: next,
+                apps: [{app: `Manual time: ${block.title}`, total_duration: next - cursor}]});
+            cursor = next;
+        }
+    }
+    return blocks;
+}
+
+function weekStatistics(ws: number, we: number, includeManual = true) {
     seed();
     const daySec = 86400;
-    const blocks = blocksInRangeEffective(ws, we);
+    const blocks = [...blocksInRangeEffective(ws, we), ...(includeManual ? manualStatsBlocks(ws, we + 1) : [])];
     const prevWs = ws - 7 * daySec;
     const prevWe = we - 7 * daySec;
-    const prevBlocks = blocksInRangeEffective(prevWs, prevWe);
+    const prevBlocks = [...blocksInRangeEffective(prevWs, prevWe), ...(includeManual ? manualStatsBlocks(prevWs, prevWe + 1) : [])];
 
     const built = buildCategoryStats(blocks, ws, we);
     const prevBuilt = buildCategoryStats(prevBlocks, prevWs, prevWe);
@@ -962,7 +978,7 @@ function weekStatistics(ws: number, we: number) {
             }
             return {
                 app,
-                app_names: [app],
+                app_names: app.startsWith("Manual time: ") ? [] : [app],
                 total_duration: Math.round(total_duration),
                 percentage_change: pch,
             };
@@ -992,7 +1008,7 @@ function weekStatistics(ws: number, we: number) {
         .filter((r) => r.timestamp >= todayStart && r.timestamp < todayStart + daySec)
         .reduce((s, r) => s + r.duration, 0);
 
-    const totalTimeAllTime = rawLogs.reduce((s, r) => s + r.duration, 0);
+    const totalTimeAllTime = rawLogs.reduce((s, r) => s + r.duration, 0) + (includeManual ? manualTimeBlocks.reduce((sum, block) => sum + block.end_time - block.start_time, 0) : 0);
 
     const numActive = activeDayStarts.size;
     const average_time_active_days =
@@ -1012,7 +1028,7 @@ function weekStatistics(ws: number, we: number) {
         first_active_day,
         number_of_active_days: numActive,
         total_number_of_days: 7,
-        all_time_today: Math.round(allTimeToday),
+        all_time_today: Math.round(allTimeToday + (includeManual ? manualStatsBlocks(todayStart, todayStart + daySec).reduce((sum, block) => sum + block.end_time - block.start_time, 0) : 0)),
         total_time_all_time: Math.round(totalTimeAllTime),
         average_time_active_days,
         most_active_day,
@@ -1020,9 +1036,9 @@ function weekStatistics(ws: number, we: number) {
     };
 }
 
-function dayStatistics(ds: number, de: number) {
+function dayStatistics(ds: number, de: number, includeManual = true) {
     seed();
-    const blocks = blocksInRangeEffective(ds, de);
+    const blocks = [...blocksInRangeEffective(ds, de), ...(includeManual ? manualStatsBlocks(ds, de + 1) : [])];
     const { total, cats, apps, hourly } = buildCategoryStats(blocks, ds, de);
     const catList = Array.from(cats.entries()).map(([category, v]) => ({
         category,
@@ -1035,7 +1051,7 @@ function dayStatistics(ds: number, de: number) {
     const appArr = Array.from(apps.entries())
         .map(([app, total_duration]) => ({
             app,
-            app_names: [app],
+            app_names: app.startsWith("Manual time: ") ? [] : [app],
             total_duration: Math.round(total_duration),
             percentage_change: null as number | null,
         }))
@@ -1439,13 +1455,12 @@ export async function invoke<T>(
                     (a as { week_end?: number }).week_end ??
                     0
             );
-            return weekStatistics(weekStart, weekEnd) as unknown as T;
+            return weekStatistics(weekStart, weekEnd, (a as {includeManual?: boolean}).includeManual !== false) as unknown as T;
         }
         case "get_total_statistics": {
-            if (rawLogs.length === 0) return weekStatistics(0, 1) as unknown as T;
-            const mn = Math.min(...rawLogs.map((b) => b.timestamp));
-            const mx = Math.max(...rawLogs.map((b) => b.timestamp + b.duration));
-            return weekStatistics(mn, mx) as unknown as T;
+            const starts = [...rawLogs.map((b) => b.timestamp), ...manualTimeBlocks.map((b) => b.start_time)];
+            const ends = [...rawLogs.map((b) => b.timestamp + b.duration), ...manualTimeBlocks.map((b) => b.end_time)];
+            return weekStatistics(starts.length ? Math.min(...starts) : 0, ends.length ? Math.max(...ends) : 1, (a as {includeManual?: boolean}).includeManual !== false) as unknown as T;
         }
         case "get_day_statistics": {
             const dayStart = Number(
@@ -1458,7 +1473,7 @@ export async function invoke<T>(
                     (a as { day_end?: number }).day_end ??
                     0
             );
-            return dayStatistics(dayStart, dayEnd) as unknown as T;
+            return dayStatistics(dayStart, dayEnd, (a as {includeManual?: boolean}).includeManual !== false) as unknown as T;
         }
         case "get_settings":
             return settings as unknown as T;

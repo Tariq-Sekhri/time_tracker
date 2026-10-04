@@ -42,7 +42,7 @@ export default function ManualTimeBlockView({
     const updateMutation = useMutation({
         mutationFn: update_manual_time_block,
         onSuccess: async () => {
-            await queryClient.invalidateQueries({queryKey: ["manualTimeBlocks"]});
+            await Promise.all(["manualTimeBlocks","week_statistics","day_statistics","range_statistics","total_statistics","category_app_logs"].map((key) => queryClient.invalidateQueries({queryKey: [key]})));
             const startDate = new Date(start);
             const endDate = new Date(end);
             setSelectedEvent({...selectedEvent, title: title.trim(), notes: notes.trim() || undefined, start: startDate, end: endDate});
@@ -58,7 +58,7 @@ export default function ManualTimeBlockView({
             return delete_manual_time_block(id);
         },
         onSuccess: async () => {
-            await queryClient.invalidateQueries({queryKey: ["manualTimeBlocks"]});
+            await Promise.all(["manualTimeBlocks","week_statistics","day_statistics","range_statistics","total_statistics","category_app_logs"].map((key) => queryClient.invalidateQueries({queryKey: [key]})));
             setSelectedEvent(null);
             setRightSideBarView("Week");
             showToast("Manual time deleted", "success");

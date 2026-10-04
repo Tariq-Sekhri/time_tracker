@@ -20,6 +20,7 @@ import {
     MANUAL_TIME_COLOR,
     MANUAL_TIME_LABEL,
     manualTimeDurationInRange,
+    manualTimeAppStats,
 } from "../../../api/ManualTimeBlock.ts";
 
 type DisplayMode = "percentage" | "time";
@@ -109,7 +110,7 @@ export default function StatisticsSidebar({
         queryKey: ["week_statistics", week_start, week_end, calendarStartHour, statsDeviceUuids],
         queryFn: async () => {
             try {
-                const stats = await get_week_statistics(week_start, week_end, statsDeviceUuids);
+                const stats = await get_week_statistics(week_start, week_end, statsDeviceUuids, false);
                 return stats;
             } catch (e) {
                 console.error("[WeekStats] queryFn threw:", e);
@@ -384,8 +385,10 @@ export default function StatisticsSidebar({
 
     const filteredAllApps = useMemo(() => {
         if (!weekStats) return [];
-        return weekStats.all_apps.filter((app) => app.total_duration >= uiMinAppDuration);
-    }, [weekStats, uiMinAppDuration]);
+        return [...weekStats.all_apps, ...(manualTimeInStats ? manualTimeAppStats(manualTimeBlocks, week_start, week_end + 1) : [])]
+            .filter((app) => app.total_duration >= uiMinAppDuration)
+            .sort((a, b) => b.total_duration - a.total_duration);
+    }, [weekStats, uiMinAppDuration, manualTimeInStats, manualTimeBlocks, week_start, week_end]);
 
     const displayedApps = showAllApps ? filteredAllApps : filteredAllApps.slice(0, 5);
     const canShowMoreApps = filteredAllApps.length > 5;
@@ -568,8 +571,8 @@ export default function StatisticsSidebar({
                         <div
                             key={`${app.app}-${idx}`}
                             data-tt-app-context
-                            onClick={(e) => logRowLeftClickCalendarFilter(e, app.app)}
-                            onContextMenu={(e) => openFromContextMenuMany(e, app.app_names)}
+                            onClick={(e) => { if (app.app_names.length) logRowLeftClickCalendarFilter(e, app.app); }}
+                            onContextMenu={(e) => { if (app.app_names.length) openFromContextMenuMany(e, app.app_names); }}
                             className={`flex items-center justify-between rounded px-2 cursor-pointer select-text ${calendarAppFilterActive === app.app
                                 ? "bg-gray-800 ring-1 ring-blue-500 ring-inset"
                                 : "hover:bg-gray-900/80"

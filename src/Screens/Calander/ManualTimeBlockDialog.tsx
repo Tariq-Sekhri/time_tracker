@@ -41,7 +41,7 @@ export default function ManualTimeBlockDialog({
     const createMutation = useMutation({
         mutationFn: insert_manual_time_block,
         onSuccess: async () => {
-            await queryClient.invalidateQueries({queryKey: ["manualTimeBlocks"]});
+            await Promise.all(["manualTimeBlocks","week_statistics","day_statistics","range_statistics","total_statistics","category_app_logs"].map((key) => queryClient.invalidateQueries({queryKey: [key]})));
             showToast("Manual time added", "success");
             onClose();
         },

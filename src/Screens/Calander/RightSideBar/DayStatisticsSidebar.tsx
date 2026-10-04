@@ -20,6 +20,7 @@ import {
     MANUAL_TIME_COLOR,
     MANUAL_TIME_LABEL,
     manualTimeDurationInRange,
+    manualTimeAppStats,
 } from "../../../api/ManualTimeBlock.ts";
 
 interface DayStatisticsSidebarProps {
@@ -78,7 +79,7 @@ export default function DayStatisticsSidebar({
         queryFn: async () => {
             if (!dayStart || !dayEnd) return null;
             try {
-                const stats = await get_day_statistics(dayStart, dayEnd, statsDeviceUuids);
+                const stats = await get_day_statistics(dayStart, dayEnd, statsDeviceUuids, false);
                 return stats;
             } catch (e) {
                 console.error("[DayStats] queryFn threw:", e);
@@ -220,8 +221,9 @@ export default function DayStatisticsSidebar({
         if (!dayStats?.top_apps) {
             return [];
         }
-        return dayStats.top_apps;
-    }, [dayStats]);
+        return [...dayStats.top_apps, ...(manualTimeInStats ? manualTimeAppStats(manualTimeBlocks, dayStart, dayEnd + 1) : [])]
+            .sort((a, b) => b.total_duration - a.total_duration).slice(0, 5);
+    }, [dayStats, manualTimeInStats, manualTimeBlocks, dayStart, dayEnd]);
 
     if (isLoading || isLoadingManualTime || (!dayStats && !isError)) {
         return (
@@ -421,8 +423,8 @@ export default function DayStatisticsSidebar({
                         <div
                             key={`${app.app}-${idx}`}
                             data-tt-app-context
-                            onClick={(e) => logRowLeftClickCalendarFilter(e, app.app)}
-                            onContextMenu={(e) => openFromContextMenuMany(e, app.app_names)}
+                            onClick={(e) => { if (app.app_names.length) logRowLeftClickCalendarFilter(e, app.app); }}
+                            onContextMenu={(e) => { if (app.app_names.length) openFromContextMenuMany(e, app.app_names); }}
                             className={`flex items-center justify-between rounded px-2 cursor-pointer select-text ${calendarAppFilterActive === app.app
                                 ? "bg-gray-800 ring-1 ring-blue-500 ring-inset"
                                 : "hover:bg-gray-900/80"

@@ -71,6 +71,64 @@ pub struct DayStatistics {
     pub hourly_distribution: Vec<HourlyStat>,
 }
 
+const MANUAL_DEVICE: &str = "manual-time-statistics";
+const MANUAL_CATEGORY: &str = "Manual time";
+
+fn is_manual(log: &Log) -> bool {
+    log.device_uuid.as_deref() == Some(MANUAL_DEVICE)
+}
+
+fn log_category(log: &Log, regexes: &[CachedCategoryRegex]) -> String {
+    if is_manual(log) {
+        MANUAL_CATEGORY.to_string()
+    } else {
+        derive_category(&log.app, regexes)
+    }
+}
+
+// Aggregation-only segments preserve the original block and its notes.
+fn manual_segments(
+    blocks: &[crate::db::tables::manual_time_block::ManualTimeBlock],
+    start: i64,
+    end: i64,
+) -> Vec<Log> {
+    use chrono::{Local, TimeZone};
+    let mut segments = Vec::new();
+    for block in blocks {
+        let mut cursor = block.start_time.max(start);
+        let stop = block.end_time.min(end);
+        while cursor < stop {
+            let Some(local) = Local.timestamp_opt(cursor, 0).single() else {
+                break;
+            };
+            let next_hour = cursor + 3600 - i64::from(local.minute()) * 60 - i64::from(local.second());
+            let segment_end = next_hour.min(stop);
+            segments.push(Log {
+                id: block.id,
+                device_uuid: Some(MANUAL_DEVICE.into()),
+                app: format!("Manual time: {}", block.title),
+                timestamp: cursor,
+                duration: segment_end - cursor,
+                is_deleted: false,
+            });
+            cursor = segment_end;
+        }
+    }
+    segments
+}
+
+async fn manual_statistics_logs(
+    start: i64,
+    end: i64,
+    include: Option<bool>,
+) -> Result<Vec<Log>, Error> {
+    if include == Some(false) || end <= start {
+        return Ok(Vec::new());
+    }
+    let blocks = crate::db::tables::manual_time_block::get_manual_time_blocks(start, end).await?;
+    Ok(manual_segments(&blocks, start, end))
+}
+
 struct CachedCategoryRegex {
     regex: Regex,
     category: String,
@@ -80,10 +138,16 @@ struct CachedCategoryRegex {
 fn build_app_stats(logs: &[Log], app_groups: &[CachedAppGroup]) -> Vec<AppStat> {
     let mut app_durations: HashMap<String, (i64, BTreeSet<String>)> = HashMap::new();
     for log in logs {
-        let app = resolve_app_group(&log.app, app_groups).to_string();
+        let app = if is_manual(log) {
+            log.app.clone()
+        } else {
+            resolve_app_group(&log.app, app_groups).to_string()
+        };
         let entry = app_durations.entry(app).or_default();
         entry.0 += log.duration;
-        entry.1.insert(log.app.clone());
+        if !is_manual(log) {
+            entry.1.insert(log.app.clone());
+        }
     }
 
     let mut app_stats: Vec<AppStat> = app_durations
@@ -107,7 +171,11 @@ fn build_app_stats(logs: &[Log], app_groups: &[CachedAppGroup]) -> Vec<AppStat> 
 fn app_duration_map(logs: &[Log], app_groups: &[CachedAppGroup]) -> HashMap<String, i64> {
     let mut durations = HashMap::new();
     for log in logs {
-        let app = resolve_app_group(&log.app, app_groups).to_string();
+        let app = if is_manual(log) {
+            log.app.clone()
+        } else {
+            resolve_app_group(&log.app, app_groups).to_string()
+        };
         *durations.entry(app).or_insert(0) += log.duration;
     }
     durations
@@ -224,6 +292,7 @@ pub async fn get_week_statistics(
     week_start: i64,
     week_end: i64,
     device_uuids: Option<Vec<String>>,
+    include_manual: Option<bool>,
 ) -> Result<WeekStatistics, Error> {
     use chrono::{Local, TimeZone};
 
@@ -251,6 +320,8 @@ pub async fn get_week_statistics(
     let now = Local::now().timestamp();
     let compare_end = week_end.min(now);
 
+    logs.extend(manual_statistics_logs(week_start, compare_end.saturating_add(1), include_manual).await?);
+
     let week_logs: Vec<Log> = logs
         .into_iter()
         .filter(|log| log.timestamp >= week_start && log.timestamp <= week_end)
@@ -268,9 +339,10 @@ pub async fn get_week_statistics(
     for cat in &categories {
         category_colors.insert(cat.name.clone(), cat.color.clone());
     }
+    category_colors.insert(MANUAL_CATEGORY.into(), Some("#0ea5e9".into()));
 
     for log in &period_logs {
-        let category = derive_category(&log.app, &regex);
+        let category = log_category(log, &regex);
         *category_durations.entry(category).or_insert(0) += log.duration;
     }
 
@@ -316,7 +388,7 @@ pub async fn get_week_statistics(
     let mut day_category_durations: HashMap<(i32, String), i64> = HashMap::new();
     for log in &period_logs {
         let day = get_day_of_week(log.timestamp);
-        let category = derive_category(&log.app, &regex);
+        let category = log_category(log, &regex);
         *day_category_durations.entry((day, category)).or_insert(0) += log.duration;
     }
 
@@ -349,10 +421,12 @@ pub async fn get_week_statistics(
         .map(|(&timestamp, &duration)| (timestamp, duration));
 
     let all_logs = get_logs().await?;
-    let all_logs_filtered: Vec<Log> = all_logs
+    let mut all_logs_filtered: Vec<Log> = all_logs
         .into_iter()
         .filter(|log| !is_skipped(&log.app))
         .collect();
+
+    all_logs_filtered.extend(manual_statistics_logs(i64::MIN, i64::MAX, include_manual).await?);
 
     let total_time_all_time: i64 = all_logs_filtered.iter().map(|log| log.duration).sum();
 
@@ -372,10 +446,12 @@ pub async fn get_week_statistics(
 
     let prev_week_start = week_start - 7 * 86400;
     let prev_compare_end = prev_week_start + (compare_end - week_start);
-    let prev_week_logs: Vec<Log> = all_logs_filtered
+    let mut prev_week_logs: Vec<Log> = all_logs_filtered
         .into_iter()
-        .filter(|log| log.timestamp >= prev_week_start && log.timestamp <= prev_compare_end)
+        .filter(|log| !is_manual(log) && log.timestamp >= prev_week_start && log.timestamp <= prev_compare_end)
         .collect();
+
+    prev_week_logs.extend(manual_statistics_logs(prev_week_start, prev_compare_end.saturating_add(1), include_manual).await?);
 
     let prev_week_total: i64 = prev_week_logs.iter().map(|log| log.duration).sum();
     let total_time_change = if prev_week_total > 0 {
@@ -388,7 +464,7 @@ pub async fn get_week_statistics(
 
     let mut prev_category_durations: HashMap<String, i64> = HashMap::new();
     for log in &prev_week_logs {
-        let category = derive_category(&log.app, &regex);
+        let category = log_category(log, &regex);
         *prev_category_durations.entry(category).or_insert(0) += log.duration;
     }
 
@@ -453,7 +529,7 @@ pub async fn get_week_statistics(
 }
 
 #[tauri::command]
-pub async fn get_total_statistics() -> Result<WeekStatistics, Error> {
+pub async fn get_total_statistics(include_manual: Option<bool>) -> Result<WeekStatistics, Error> {
     use chrono::{Local, TimeZone};
 
     let mut logs = get_logs().await?;
@@ -467,6 +543,7 @@ pub async fn get_total_statistics() -> Result<WeekStatistics, Error> {
     let is_skipped = |app_name: &str| -> bool { skipped_regexes.iter().any(|regex| regex.is_match(app_name)) };
 
     logs.retain(|log| !is_skipped(&log.app));
+    logs.extend(manual_statistics_logs(i64::MIN, i64::MAX, include_manual).await?);
 
     let cat_regex = get_cat_regex().await?;
     let categories = get_categories().await?;
@@ -479,6 +556,7 @@ pub async fn get_total_statistics() -> Result<WeekStatistics, Error> {
     for cat in &categories {
         category_colors.insert(cat.name.clone(), cat.color.clone());
     }
+    category_colors.insert(MANUAL_CATEGORY.into(), Some("#0ea5e9".into()));
 
     let mut hourly_durations: HashMap<i32, i64> = HashMap::new();
     let mut day_category_durations: HashMap<(i32, String), i64> = HashMap::new();
@@ -486,7 +564,11 @@ pub async fn get_total_statistics() -> Result<WeekStatistics, Error> {
     let mut app_category_cache: HashMap<String, String> = HashMap::new();
 
     for log in &logs {
-        let category = derive_category_cached(&log.app, &regex, &mut app_category_cache);
+        let category = if is_manual(log) {
+            MANUAL_CATEGORY.to_string()
+        } else {
+            derive_category_cached(&log.app, &regex, &mut app_category_cache)
+        };
         *category_durations.entry(category.clone()).or_insert(0) += log.duration;
         let hour = get_hour(log.timestamp);
         *hourly_durations.entry(hour).or_insert(0) += log.duration;
@@ -596,6 +678,7 @@ pub async fn get_day_statistics(
     day_start: i64,
     day_end: i64,
     device_uuids: Option<Vec<String>>,
+    include_manual: Option<bool>,
 ) -> Result<DayStatistics, Error> {
     let local_uuid = crate::db::tables::device::get_local_log_device_uuid().await?;
     let mut logs = get_logs().await?;
@@ -618,6 +701,8 @@ pub async fn get_day_statistics(
     let regex = build_regex_table(&categories, &cat_regex)?;
     let app_groups = build_app_group_matchers(&get_app_groups().await?)?;
 
+    logs.extend(manual_statistics_logs(day_start, day_end.saturating_add(1), include_manual).await?);
+
     let day_logs: Vec<Log> = logs
         .into_iter()
         .filter(|log| log.timestamp >= day_start && log.timestamp <= day_end)
@@ -629,9 +714,10 @@ pub async fn get_day_statistics(
     for cat in &categories {
         category_colors.insert(cat.name.clone(), cat.color.clone());
     }
+    category_colors.insert(MANUAL_CATEGORY.into(), Some("#0ea5e9".into()));
 
     for log in &day_logs {
-        let category = derive_category(&log.app, &regex);
+        let category = log_category(log, &regex);
         *category_durations.entry(category).or_insert(0) += log.duration;
     }
 
@@ -718,5 +804,33 @@ mod app_group_statistics_tests {
         assert_eq!(stats[0].app, "YouTube");
         assert_eq!(stats[0].total_duration, 60);
         assert_eq!(stats[0].app_names.len(), 6);
+    }
+}
+
+#[cfg(test)]
+mod manual_statistics_tests {
+    use super::*;
+    use crate::db::tables::manual_time_block::ManualTimeBlock;
+    use chrono::{Local, TimeZone};
+
+    #[test]
+    fn manual_blocks_clip_split_and_count_overlaps_independently() {
+        let start = Local.with_ymd_and_hms(2026, 9, 28, 23, 30, 0).unwrap().timestamp();
+        let block = ManualTimeBlock { id: 1, title: "Planning".into(), notes: Some("Keep notes".into()),
+            start_time: start, end_time: start + 7200, created_at: start, updated_at: start };
+        let blocks = [block.clone(), block.clone()];
+        let logs = manual_segments(&blocks, start + 900, start + 6300);
+        assert_eq!(logs.iter().map(|l| l.duration).sum::<i64>(), 10800);
+        assert_eq!(logs.len(), 6);
+        assert_eq!(logs[0].timestamp, start + 900);
+        assert_eq!(logs[0].duration, 900);
+        assert_eq!(get_day_start(logs[1].timestamp) - get_day_start(logs[0].timestamp), 86400);
+        assert!(logs.iter().all(|l| log_category(l, &[]) == MANUAL_CATEGORY));
+        let stats = build_app_stats(&logs, &[]);
+        assert_eq!(stats.len(), 1);
+        assert_eq!(stats[0].total_duration, 10800);
+        assert!(stats[0].app_names.is_empty());
+        assert_eq!(block.notes.as_deref(), Some("Keep notes"));
+        assert!(manual_segments(&blocks, start + 7200, start + 8000).is_empty());
     }
 }

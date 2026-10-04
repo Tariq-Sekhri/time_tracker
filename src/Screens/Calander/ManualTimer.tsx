@@ -93,7 +93,7 @@ function FinishManualTimerDialog({open, initialTitle, onClose}: {open: boolean; 
     const mutation = useMutation({
         mutationFn: async () => { await update_manual_timer_title(title.trim()); return finish_manual_timer(); },
         onSuccess: async () => {
-            await Promise.all([queryClient.invalidateQueries({queryKey: ["runningManualTimer"]}), queryClient.invalidateQueries({queryKey: ["manualTimeBlocks"]})]);
+            await Promise.all([queryClient.invalidateQueries({queryKey: ["runningManualTimer"]}), Promise.all(["manualTimeBlocks","week_statistics","day_statistics","range_statistics","total_statistics","category_app_logs"].map((key) => queryClient.invalidateQueries({queryKey: [key]})))]);
             showToast("Timer recorded", "success");
             onClose();
         },

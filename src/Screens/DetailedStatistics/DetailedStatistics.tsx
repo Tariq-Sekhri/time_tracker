@@ -49,6 +49,7 @@ const STATS_TOOLBAR_BUTTON = `${STATS_TOOLBAR_CONTROL_HEIGHT} px-3 bg-gray-800 b
 // Checkbox dropdown to show/hide category lines on trend chart
 import FilterCategories, {useFilterCategories} from "../../Componants/FilterCategories.tsx";
 import {getAppMetadata, setAppMetadata} from "../../api/appMetadata.ts";
+import {get_manual_time_blocks, manualTimeAppStats, MANUAL_TIME_LABEL} from "../../api/ManualTimeBlock.ts";
 import {get_categories} from "../../api/Category.ts";
 import {
     adjustInstantToCalendarDayBoundary, // snap "now" to which calendar day we're in
@@ -359,6 +360,12 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
         enabled: !!selectedCategory, // no fetch until user picks a category row
         queryFn: async () => {
             if (!selectedCategory) return [];
+            if (selectedCategory === MANUAL_TIME_LABEL) {
+                const blocks = await get_manual_time_blocks(categoryStartTime, categoryEndTime + 1);
+                return manualTimeAppStats(blocks, categoryStartTime, Math.min(categoryEndTime + 1, Math.floor(Date.now() / 1000) + 1))
+                    .map((row) => ({app: row.app, appNames: row.app_names, totalDuration: row.total_duration}))
+                    .sort((a, b) => b.totalDuration - a.totalDuration);
+            }
             const result: MergedLog[] = await get_logs_by_category({
                 category: selectedCategory,
                 start_time: categoryStartTime,
@@ -671,7 +678,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                             weeks={trendWeeks}
                             weekStats={trendWeekStats}
                             isLoading={isTrendLoading}
-                            visibleCategoryNames={visibleCategoryNames}
+                            visibleCategoryNames={new Set([...visibleCategoryNames, MANUAL_TIME_LABEL])}
                             seriesMode={trendSeriesMode}
                             topAppCount={trendTopAppCount}
                             calendarStartHour={calendarStartHour}
@@ -921,8 +928,8 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                                     <div
                                         key={app.app}
                                         data-tt-app-context
-                                        onClick={(e) => logRowLeftClickCalendarFilter(e, app.app)}
-                                        onContextMenu={(e) => openFromContextMenuMany(e, app.appNames)}
+                                        onClick={(e) => { if (app.appNames.length) logRowLeftClickCalendarFilter(e, app.app); }}
+                                        onContextMenu={(e) => { if (app.appNames.length) openFromContextMenuMany(e, app.appNames); }}
                                         className={`rounded px-2 py-1 cursor-pointer select-text ${calendarAppFilterActive === app.app
                                             ? "bg-gray-800 ring-1 ring-blue-500 ring-inset"
                                             : "hover:bg-gray-900/80"
