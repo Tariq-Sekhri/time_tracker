@@ -223,22 +223,35 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
 
     useEffect(() => {
         let unlistenFn: (() => void) | null = null;
+        let disposed = false;
+        let lastFocusRefresh = -Infinity;
+
+        const refreshOnReturn = () => {
+            if (disposed || document.visibilityState === "hidden") return;
+            // Native focus and webview focus/visibility can describe the same return.
+            const now = performance.now();
+            if (now - lastFocusRefresh < 500) return;
+            lastFocusRefresh = now;
+            void queryClient.invalidateQueries({
+                predicate: (query) => query.queryKey[0] === "week"
+                    || query.queryKey[0] === "week_app_filter"
+                    || query.queryKey[0] === "googleCalendarEvents",
+                refetchType: "active",
+            }, {cancelRefetch: false});
+        };
+
+        const refreshWhenVisible = () => {
+            if (document.visibilityState === "visible") refreshOnReturn();
+        };
+        window.addEventListener("focus", refreshOnReturn);
+        document.addEventListener("visibilitychange", refreshWhenVisible);
 
         const setupFocusListener = async () => {
             try {
-                const window = getCurrentWindow();
-
-                const unlisten = await window.listen("tauri://focus", () => {
-                    queryClient.invalidateQueries({
-                        predicate: (query) => query.queryKey[0] === "week" || query.queryKey[0] === "week_app_filter"
-                    });
-
-                    queryClient.invalidateQueries({
-                        predicate: (query) => query.queryKey[0] === "googleCalendarEvents"
-                    });
-                });
-
-                unlistenFn = unlisten;
+                const unlisten = await getCurrentWindow().listen("tauri://focus", refreshOnReturn);
+                // Listener registration can finish after unmount (including StrictMode cleanup).
+                if (disposed) unlisten();
+                else unlistenFn = unlisten;
             } catch (error) {
                 console.error("Failed to setup window focus listener:", error);
             }
@@ -247,6 +260,9 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         setupFocusListener();
 
         return () => {
+            disposed = true;
+            window.removeEventListener("focus", refreshOnReturn);
+            document.removeEventListener("visibilitychange", refreshWhenVisible);
             if (unlistenFn) {
                 unlistenFn();
             }
@@ -278,7 +294,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
             }
         },
         enabled: weekDataQueryEnabled,
-        refetchInterval: () => isCurrentWeek(date, calendarStartHour) ? 10_000 : false,
+        refetchOnWindowFocus: false,
     });
 
     useEffect(() => {
