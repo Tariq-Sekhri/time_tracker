@@ -27,6 +27,7 @@ function formatCountdown(seconds: number) {
 }
 
 export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncTimer>}) {
+    const isDemo = import.meta.env.VITE_DEMO === "true";
     const queryClient = useQueryClient();
     const {showToast} = useToast();
     const {countdownSeconds, isSyncing, setIsSyncing, setCountdownSeconds} = syncTimer;
@@ -303,13 +304,14 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
         <div className="p-6 text-white h-full overflow-y-auto nice-scrollbar">
             <div className="max-w-3xl mx-auto space-y-5">
                 <h1 className="text-2xl font-bold">Sync</h1>
+                {isDemo && <p className="text-sm text-amber-200 bg-amber-900/20 border border-amber-800 rounded-lg p-4">Simulated sync: these devices and their activity are fictional. Try subscriptions and Sync Now. Changes last until you reload; no server is contacted.</p>}
 
                 {!showServerConfig ? (
                     <section className="bg-gray-900 rounded-lg border border-gray-800 p-5 space-y-4">
                         <div>
                             <h2 className="text-lg font-semibold">Connect to server</h2>
                             <p className="text-sm text-gray-400 mt-1">
-                                Enter your sync server IP to upload logs and pull from other devices.
+                                {isDemo ? "The demo server address is fixed. You can try the form, then cancel to return." : "Enter your sync server IP to upload logs and pull from other devices."}
                             </p>
                         </div>
                         <div className="flex gap-2">
@@ -328,6 +330,7 @@ export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncT
                             >
                                 {isChecking ? "Checking..." : "Connect"}
                             </button>
+                            {isDemo && serverIp && <button type="button" onClick={() => {setIsChangingServer(false); setServerError(null); setIpInput("");}} className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600">Cancel</button>}
                         </div>
                     </section>
                 ) : (

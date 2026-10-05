@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "dev": "vite",
     "test": "vitest run",
-    "test:demo": "vitest run demo/mock/core.test.ts src/Screens/Calander/ManualTimer.demo.test.tsx src/Screens/Settings.demo.test.tsx",
+    "test:demo": "vitest run demo/mock/core.test.ts demo/mock/sync.test.ts demo/network-guard.test.ts src/Screens/Calander/ManualTimer.demo.test.tsx src/Screens/Settings.demo.test.tsx src/Screens/Sync.demo.test.tsx",
     "test:watch": "vitest",
     "bump": "node scripts/bump.mjs"
   },

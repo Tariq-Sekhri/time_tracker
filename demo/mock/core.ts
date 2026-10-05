@@ -36,8 +36,67 @@ import {
     realisticYoutubeTab,
     realisticZoomTitle,
 } from "./realisticAppTitles";
+import type {Device} from "../../src/api/sync";
+import {emit} from "./event";
 
-type RawLog = DemoLog;
+type RawLog = DemoLog & {device_uuid?: string};
+export const DEMO_SERVER_IP = "https://demo-sync.invalid (simulated server)";
+const LOCAL_DEVICE_UUID = "demo-desktop";
+let devices: Device[] = [];
+const serverLogs = new Map<string, RawLog[]>();
+let nextSyncAt = Date.now() + 60000;
+
+function deviceByUuid(uuid: string): Device {
+    const device = devices.find((row) => row.uuid === uuid);
+    if (!device) throw new Error("Demo device not found");
+    return device;
+}
+
+function importDeviceLogs(uuid?: string | null): number {
+    let count = 0;
+    for (const device of devices) {
+        if (!("Remote" in device.state) || !device.state.Remote.is_tracking || (uuid && device.uuid !== uuid)) continue;
+        const existing = new Set(rawLogs.map((row) => row.id));
+        const added = (serverLogs.get(device.uuid) ?? []).filter((row) => row.id > device.last_sync_id && !existing.has(row.id));
+        rawLogs.push(...added.map((row) => ({...row})));
+        device.has_local_logs = rawLogs.some((row) => row.device_uuid === device.uuid);
+        device.last_sync_id = Math.max(0, ...(serverLogs.get(device.uuid) ?? []).map((row) => row.id));
+        count += added.length;
+    }
+    return count;
+}
+
+function seedDevices(nextId: number) {
+    devices = [
+        {uuid: LOCAL_DEVICE_UUID, name: "Demo desktop", state: {Local: {token: "demo-only-token"}}, last_sync_id: nextId - 1, is_active: true, in_cal: true, in_stats: true, available_on_server: true, has_local_logs: true},
+        ...["laptop", "phone", "tablet"].map((kind): Device => ({uuid: `demo-${kind}`, name: `Demo ${kind}`, state: {Remote: {is_tracking: kind !== "tablet"}}, last_sync_id: 0, is_active: true, in_cal: true, in_stats: true, available_on_server: true, has_local_logs: false})),
+    ];
+    const dayStart = getLocalDayStartSec(Math.floor(Date.now() / 1000));
+    const apps = [["Visual Studio Code", "Google Chrome"], ["YouTube", "Discord"], ["Google Chrome", "Spotify"]];
+    for (const [index, device] of devices.slice(1).entries()) {
+        const rows: RawLog[] = [];
+        for (let daysAgo = 1; daysAgo <= 14; daysAgo++) {
+            for (let slot = 0; slot < 2; slot++) rows.push({id: nextId++, device_uuid: device.uuid, app: apps[index][slot], timestamp: dayStart - daysAgo * 86400 + (9 + index * 3 + slot) * 3600, duration: 1800});
+        }
+        serverLogs.set(device.uuid, rows);
+    }
+    importDeviceLogs();
+    if (typeof window !== "undefined") {
+        window.setInterval(() => {
+            const seconds = Math.max(0, Math.ceil((nextSyncAt - Date.now()) / 1000));
+            if (seconds === 0) {
+                nextSyncAt = Date.now() + 60000;
+                void invoke("sync_now");
+            } else void emit("count_down_to_sync", seconds);
+        }, 1000);
+    }
+}
+
+function logsForDevices(uuids?: string[] | null): RawLog[] {
+    if (uuids == null) return rawLogs;
+    const allowed = new Set(uuids);
+    return rawLogs.filter((row) => allowed.has(row.device_uuid ?? LOCAL_DEVICE_UUID));
+}
 type TimeBlockRow = DemoTimeBlock;
 
 type CategoryRow = {
@@ -331,9 +390,9 @@ function isAppSkippedByRules(appName: string): boolean {
     return false;
 }
 
-function blocksInRangeEffective(ws: number, we: number): TimeBlockRow[] {
+function blocksInRangeEffective(ws: number, we: number, deviceUuids?: string[] | null): TimeBlockRow[] {
     return buildTimeBlocksFromLogs(
-        rawLogs,
+        logsForDevices(deviceUuids),
         ws,
         we,
         categories,
@@ -781,6 +840,7 @@ function seed() {
     }
 
     rawLogs = raws.sort((a, b) => a.timestamp - b.timestamp || a.id - b.id);
+    seedDevices(lid);
 
     googleCalendars = [
         {
@@ -923,13 +983,13 @@ function manualStatsBlocks(start: number, end: number): TimeBlockRow[] {
     return blocks;
 }
 
-function weekStatistics(ws: number, we: number, includeManual = true) {
+function weekStatistics(ws: number, we: number, includeManual = true, deviceUuids?: string[] | null) {
     seed();
     const daySec = 86400;
-    const blocks = [...blocksInRangeEffective(ws, we), ...(includeManual ? manualStatsBlocks(ws, we + 1) : [])];
+    const blocks = [...blocksInRangeEffective(ws, we, deviceUuids), ...(includeManual ? manualStatsBlocks(ws, we + 1) : [])];
     const prevWs = ws - 7 * daySec;
     const prevWe = we - 7 * daySec;
-    const prevBlocks = [...blocksInRangeEffective(prevWs, prevWe), ...(includeManual ? manualStatsBlocks(prevWs, prevWe + 1) : [])];
+    const prevBlocks = [...blocksInRangeEffective(prevWs, prevWe, deviceUuids), ...(includeManual ? manualStatsBlocks(prevWs, prevWe + 1) : [])];
 
     const built = buildCategoryStats(blocks, ws, we);
     const prevBuilt = buildCategoryStats(prevBlocks, prevWs, prevWe);
@@ -1006,11 +1066,11 @@ function weekStatistics(ws: number, we: number, includeManual = true) {
 
     const nowSec = Math.floor(Date.now() / 1000);
     const todayStart = getLocalDayStartSec(nowSec);
-    const allTimeToday = rawLogs
+    const allTimeToday = logsForDevices(deviceUuids)
         .filter((r) => r.timestamp >= todayStart && r.timestamp < todayStart + daySec)
         .reduce((s, r) => s + r.duration, 0);
 
-    const totalTimeAllTime = rawLogs.reduce((s, r) => s + r.duration, 0) + (includeManual ? manualTimeBlocks.reduce((sum, block) => sum + block.end_time - block.start_time, 0) : 0);
+    const totalTimeAllTime = logsForDevices(deviceUuids).reduce((s, r) => s + r.duration, 0) + (includeManual ? manualTimeBlocks.reduce((sum, block) => sum + block.end_time - block.start_time, 0) : 0);
 
     const numActive = activeDayStarts.size;
     const average_time_active_days =
@@ -1038,9 +1098,9 @@ function weekStatistics(ws: number, we: number, includeManual = true) {
     };
 }
 
-function dayStatistics(ds: number, de: number, includeManual = true) {
+function dayStatistics(ds: number, de: number, includeManual = true, deviceUuids?: string[] | null) {
     seed();
-    const blocks = [...blocksInRangeEffective(ds, de), ...(includeManual ? manualStatsBlocks(ds, de + 1) : [])];
+    const blocks = [...blocksInRangeEffective(ds, de, deviceUuids), ...(includeManual ? manualStatsBlocks(ds, de + 1) : [])];
     const { total, cats, apps, hourly } = buildCategoryStats(blocks, ds, de);
     const catList = Array.from(cats.entries()).map(([category, v]) => ({
         category,
@@ -1078,6 +1138,61 @@ export async function invoke<T>(
 
     try {
     switch (cmd) {
+        case "get_server_ip":
+            return DEMO_SERVER_IP as T;
+        case "set_server_ip":
+        case "check": {
+            const ip = String(a.serverIp ?? a.ip ?? "");
+            if (ip !== DEMO_SERVER_IP) throw new DemoInvokeError(cmd, "The demo server address is fixed. No connection was made. Cancel to return to the simulated server.");
+            return (cmd === "check" ? DEMO_SERVER_IP : null) as T;
+        }
+        case "get_local_device_name":
+            return "Demo desktop" as T;
+        case "get_devices":
+            return devices.map((device) => ({...device, state: "Local" in device.state ? {Local: {...device.state.Local}} : {Remote: {...device.state.Remote}}})) as T;
+        case "register":
+            deviceByUuid(LOCAL_DEVICE_UUID).name = String(a.name ?? "Demo desktop").trim() || "Demo desktop";
+            return null as T;
+        case "check_device_activation":
+            return true as T;
+        case "upload_all_logs":
+        case "reupload_all_logs":
+            return rawLogs.filter((row) => !row.device_uuid || row.device_uuid === LOCAL_DEVICE_UUID).length as T;
+        case "get_sync_countdown":
+            return Math.max(0, Math.ceil((nextSyncAt - Date.now()) / 1000)) as T;
+        case "device_logs":
+            return importDeviceLogs(a.deviceUuid as string | null | undefined) as T;
+        case "set_is_tracking": {
+            const device = deviceByUuid(String(a.uuid));
+            if (!("Remote" in device.state)) throw new Error("Only remote devices can be subscribed to");
+            device.state.Remote.is_tracking = Boolean(a.new);
+            return null as T;
+        }
+        case "unsubscribe_device": {
+            const device = deviceByUuid(String(a.uuid));
+            if (!("Remote" in device.state)) throw new Error("The local device cannot be unsubscribed");
+            device.state.Remote.is_tracking = false;
+            device.has_local_logs = false;
+            device.last_sync_id = 0;
+            rawLogs = rawLogs.filter((row) => row.device_uuid !== device.uuid);
+            return null as T;
+        }
+        case "update_device": {
+            const update = a.update as {uuid: string; in_cal?: boolean; in_stats?: boolean};
+            const device = deviceByUuid(update.uuid);
+            if (typeof update.in_cal === "boolean") device.in_cal = update.in_cal;
+            if (typeof update.in_stats === "boolean") device.in_stats = update.in_stats;
+            return null as T;
+        }
+        case "sync":
+        case "sync_now":
+            await emit("sync_started");
+            await new Promise((resolve) => setTimeout(resolve, 350));
+            importDeviceLogs();
+            nextSyncAt = Date.now() + 60000;
+            await emit("sync-successful");
+            await emit("count_down_to_sync", 60);
+            return null as T;
         case "get_manual_time_blocks": {
             const rangeStart = Number((a as { rangeStart?: number }).rangeStart);
             const rangeEnd = Number((a as { rangeEnd?: number }).rangeEnd);
@@ -1423,7 +1538,7 @@ export async function invoke<T>(
         }
         case "get_week": {
             const { week_start: weekStart, week_end: weekEnd } = resolveWeekBounds(a);
-            const out = blocksInRangeEffective(weekStart, weekEnd).map((b) => ({
+            const out = blocksInRangeEffective(weekStart, weekEnd, a.deviceUuids as string[] | null).map((b) => ({
                 id: b.id,
                 category: b.category,
                 start_time: b.start_time,
@@ -1435,7 +1550,7 @@ export async function invoke<T>(
         case "get_week_for_app_filter": {
             const { week_start: weekStart, week_end: weekEnd } = resolveWeekBounds(a);
             const appName = String((a as { appName?: string }).appName ?? "");
-            const out = blocksInRangeEffective(weekStart, weekEnd)
+            const out = blocksInRangeEffective(weekStart, weekEnd, a.deviceUuids as string[] | null)
                 .filter((b) => b.apps.some((ap) => resolveDemoAppGroup(ap.app) === appName))
                 .map((b) => ({
                     id: b.id,
@@ -1457,12 +1572,12 @@ export async function invoke<T>(
                     (a as { week_end?: number }).week_end ??
                     0
             );
-            return weekStatistics(weekStart, weekEnd, (a as {includeManual?: boolean}).includeManual !== false) as unknown as T;
+            return weekStatistics(weekStart, weekEnd, (a as {includeManual?: boolean}).includeManual !== false, a.deviceUuids as string[] | null) as unknown as T;
         }
         case "get_total_statistics": {
             const starts = [...rawLogs.map((b) => b.timestamp), ...manualTimeBlocks.map((b) => b.start_time)];
             const ends = [...rawLogs.map((b) => b.timestamp + b.duration), ...manualTimeBlocks.map((b) => b.end_time)];
-            return weekStatistics(starts.length ? Math.min(...starts) : 0, ends.length ? Math.max(...ends) : 1, (a as {includeManual?: boolean}).includeManual !== false) as unknown as T;
+            return weekStatistics(starts.length ? Math.min(...starts) : 0, ends.length ? Math.max(...ends) : 1, (a as {includeManual?: boolean}).includeManual !== false, a.deviceUuids as string[] | null) as unknown as T;
         }
         case "get_day_statistics": {
             const dayStart = Number(
@@ -1475,7 +1590,7 @@ export async function invoke<T>(
                     (a as { day_end?: number }).day_end ??
                     0
             );
-            return dayStatistics(dayStart, dayEnd, (a as {includeManual?: boolean}).includeManual !== false) as unknown as T;
+            return dayStatistics(dayStart, dayEnd, (a as {includeManual?: boolean}).includeManual !== false, a.deviceUuids as string[] | null) as unknown as T;
         }
         case "get_notes_state":
             return {...notesState} as unknown as T;

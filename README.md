@@ -9,6 +9,8 @@ Linux is supported and tested on **Ubuntu 24.04.4 Desktop amd64** ([`ubuntu-24.0
 
 ## Demo
 
+The web demo includes a simulated sync server at `demo-sync.invalid`, a local desktop, subscribed laptop and phone, and a tablet you can subscribe to. Subscriptions, downloaded activity, device filters, and Sync Now work in memory until the page reloads. Server edits are rejected; use Cancel to return. Sync never contacts a server. The demo build blocks external requests with a browser content security policy and guards for fetch, XHR, beacons, sockets, and event streams.
+
 [https://tariq-sekhri.github.io/time_tracker/](https://tariq-sekhri.github.io/time_tracker/)
 
 ## Why
