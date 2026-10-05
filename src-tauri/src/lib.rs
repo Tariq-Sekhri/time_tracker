@@ -4,6 +4,7 @@ mod core;
 mod db;
 mod google_oauth;
 mod instance;
+mod logger;
 mod sync;
 mod tray;
 
@@ -66,6 +67,7 @@ use google_oauth::{
     get_google_auth_status, get_google_oauth_app_credentials, google_oauth_login,
     google_oauth_logout, set_google_oauth_app_credentials,
 };
+use logger::Log;
 use sync::{
     check, check_device_activation, device_logs, get_devices, get_sync_countdown, register,
     reupload_all_logs, run_auto_sync_cycle, set_sync_countdown_remaining,
@@ -113,7 +115,10 @@ fn local_storage_leveldb_has_data(default_dir: &std::path::Path) -> bool {
     if leveldb.join("CURRENT").exists() {
         return true;
     }
-    let Ok(read) = std::fs::read_dir(&leveldb) else {
+    let Ok(read) = Log::result(
+        "Read legacy WebView storage directory",
+        std::fs::read_dir(&leveldb),
+    ) else {
         return false;
     };
     for entry in read.flatten() {
@@ -139,6 +144,7 @@ fn get_app_version(app: tauri::AppHandle) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    logger::init();
     instance::init_env();
 
     #[cfg(debug_assertions)]
@@ -147,8 +153,17 @@ pub fn run() {
     }
 
     tauri::Builder::default()
+        .append_invoke_initialization_script(include_str!("logger-bootstrap.js"))
+        .on_page_load(|webview, payload| {
+            Log::debug(format!(
+                "Webview page load window={} event={:?}",
+                webview.label(),
+                payload.event()
+            ));
+        })
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            Log::info("Second launch received; focusing existing window");
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
                 let _ = window.show();
@@ -156,6 +171,7 @@ pub fn run() {
             }
         }))
         .setup(|app| {
+            Log::info("Tauri setup started");
             app.manage(UpdateState {
                 update: Mutex::new(None),
                 window_visible: AtomicBool::new(false),
@@ -163,7 +179,10 @@ pub fn run() {
             });
 
             if let Some(window) = app.get_webview_window("main") {
-                let _ = window.set_title(instance::display_name());
+                let _ = crate::logger::Log::result(
+                    "Native set_title",
+                    window.set_title(instance::display_name()),
+                );
 
                 #[cfg(debug_assertions)]
                 let _ = window.show();
@@ -173,6 +192,7 @@ pub fn run() {
             }
 
             tray::setup_tray(app.handle())?;
+            Log::info("System tray ready");
             let app_handle = app.handle().clone();
 
             tauri::async_runtime::spawn(async move {
@@ -188,7 +208,10 @@ pub fn run() {
                     'countdown: loop {
                         for remaining in (1..=sync_interval_secs).rev() {
                             set_sync_countdown_remaining(remaining as i64);
-                            let _ = app_handle.emit("count_down_to_sync", remaining as i64);
+                            let _ = crate::logger::Log::result(
+                                "Native emit",
+                                app_handle.emit("count_down_to_sync", remaining as i64),
+                            );
                             tokio::select! {
                                 _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
                                 _ = reset_notify.notified() => {
@@ -199,7 +222,10 @@ pub fn run() {
                         break;
                     }
 
-                    let _ = app_handle.emit("sync_started", ());
+                    let _ = crate::logger::Log::result(
+                        "Native emit",
+                        app_handle.emit("sync_started", ()),
+                    );
                     match run_auto_sync_cycle().await {
                         sync::AutoSyncResult::Skipped => {
                             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -207,12 +233,18 @@ pub fn run() {
                         }
                         sync::AutoSyncResult::Completed { errors } => {
                             if errors.is_empty() {
-                                let _ = app_handle.emit("sync-successful", ());
-                                println!("sync successful");
+                                let _ = crate::logger::Log::result(
+                                    "Native emit",
+                                    app_handle.emit("sync-successful", ()),
+                                );
+                                Log::info("Automatic sync completed");
                             } else {
                                 let msg = errors.join("; ");
-                                let _ = app_handle.emit("sync-error", &msg);
-                                println!("sync failed: {}", msg);
+                                let _ = crate::logger::Log::result(
+                                    "Native emit",
+                                    app_handle.emit("sync-error", &msg),
+                                );
+                                Log::error(format!("Automatic sync failed: {msg}"));
                             }
                         }
                     }
@@ -224,36 +256,47 @@ pub fn run() {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 use tauri_plugin_updater::UpdaterExt;
+                Log::info("Startup update check started");
 
                 let update = match handle.updater_builder().build() {
                     Ok(builder) => match builder.check().await {
                         Ok(update) => update,
                         Err(e) => {
+                            Log::error(format!("Startup update check failed: {e}"));
                             if let Some(w) = handle.get_webview_window("main") {
-                                let _ = w.emit("update-error", e.to_string());
+                                let _ = crate::logger::Log::result(
+                                    "Native emit",
+                                    w.emit("update-error", e.to_string()),
+                                );
                             }
-                            None
+                            return;
                         }
                     },
                     Err(e) => {
+                        Log::error(format!("Startup updater initialization failed: {e}"));
                         if let Some(w) = handle.get_webview_window("main") {
-                            let _ = w.emit("update-error", e.to_string());
+                            let _ = crate::logger::Log::result(
+                                "Native emit",
+                                w.emit("update-error", e.to_string()),
+                            );
                         }
-                        None
+                        return;
                     }
                 };
 
                 let state = handle.state::<UpdateState>();
-                if let Ok(mut lock) = state.update.lock() {
+                if let Some(update) = &update {
+                    Log::info(format!("Update available version={}", update.version));
+                } else {
+                    Log::info("Startup update check completed; no update available");
+                }
+                if let Ok(mut lock) = Log::result("Store startup update", state.update.lock()) {
                     if update.is_some() {
                         *lock = update;
                     }
                 }
 
-                let has_update = handle
-                    .state::<UpdateState>()
-                    .update
-                    .lock()
+                let has_update = Log::result("Read pending startup update", state.update.lock())
                     .ok()
                     .and_then(|g| g.as_ref().map(|_| ()))
                     .is_some();
@@ -269,7 +312,7 @@ pub fn run() {
                 let _window_visible = state.window_visible.load(Ordering::Relaxed)
                     || handle
                         .get_webview_window("main")
-                        .and_then(|w| w.is_visible().ok())
+                        .and_then(|w| Log::result("Read window visibility", w.is_visible()).ok())
                         .unwrap_or(false);
 
                 if state
@@ -278,10 +321,14 @@ pub fn run() {
                     .is_ok()
                 {
                     if let Some(w) = handle.get_webview_window("main") {
-                        let _ = w.emit("update-available", ());
+                        let _ = crate::logger::Log::result(
+                            "Native emit",
+                            w.emit("update-available", ()),
+                        );
                     }
                 }
             });
+            Log::info("Tauri setup completed");
             Ok(())
         })
         .on_window_event(|_window, event| {
@@ -289,114 +336,142 @@ pub fn run() {
         })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .invoke_handler(tauri::generate_handler![
-            get_categories,
-            get_week,
-            get_week_for_app_filter,
-            get_week_statistics,
-            get_total_statistics,
-            get_day_statistics,
-            delete_category_by_id,
-            get_category_by_id,
-            insert_category,
-            update_category_by_id,
-            get_cat_regex,
-            get_cat_regex_by_id,
-            delete_cat_regex_by_id,
-            insert_cat_regex,
-            update_cat_regex_by_id,
-            get_app_groups,
-            insert_app_group,
-            update_app_group,
-            delete_app_group,
-            get_logs,
-            get_log_by_id,
-            delete_log_by_id,
-            delete_logs_by_ids,
-            delete_logs_for_time_block,
-            count_logs_for_time_block,
-            get_logs_for_time_block,
-            get_logs_by_category,
-            get_logs_for_app_in_time_range,
-            get_manual_time_blocks,
-            insert_manual_time_block,
-            update_manual_time_block,
-            delete_manual_time_block,
-            get_running_manual_timer,
-            start_manual_timer,
-            update_manual_timer_title,
-            stop_manual_timer,
-            finish_manual_timer,
-            get_skipped_apps,
-            insert_skipped_app_and_delete_logs,
-            update_skipped_app_by_id,
-            delete_skipped_app_by_id,
-            count_matching_logs,
-            restore_default_skipped_apps,
-            get_db_path_cmd,
-            get_database_location,
-            probe_database_location,
-            set_database_location,
-            reset_database_location,
-            get_tracking_status,
-            set_tracking_status,
-            refresh_tray_menu,
-            get_google_calendars,
-            get_google_calendar_by_id,
-            insert_google_calendar,
-            update_google_calendar,
-            delete_google_calendar,
-            get_google_calendar_events,
-            get_all_google_calendar_events,
-            create_google_calendar_event,
-            update_google_calendar_event,
-            delete_google_calendar_event,
-            list_available_google_calendars,
-            google_oauth_login,
-            google_oauth_logout,
-            get_google_auth_status,
-            get_google_oauth_app_credentials,
-            set_google_oauth_app_credentials,
-            get_calendar_view_prefs,
-            set_calendar_view_prefs,
-            get_app_metadata,
-            set_app_metadata,
-            delete_app_metadata,
-            get_notes_state,
-            set_notes_enabled,
-            set_notes_text,
-            get_settings,
-            flip_lock_by_key,
-            reset_val_by_key,
-            update_val_by_key,
-            list_backups,
-            create_manual_backup,
-            restore_backup,
-            get_backup_dir,
-            create_safety_backup,
-            get_db_schema_version,
-            apply_update_cmd,
-            check_update_cmd,
-            get_app_version,
-            instance::get_instance_info,
-            set_is_tracking,
-            unsubscribe_device,
-            update_device,
-            insert_devices,
-            check,
-            register,
-            check_device_activation,
-            get_local_device_name,
-            upload_all_logs,
-            reupload_all_logs,
-            sync::sync,
-            sync_now,
-            get_sync_countdown,
-            get_devices,
-            device_logs,
-            get_server_ip,
-            set_server_ip,
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .invoke_handler({
+            let handler: Box<dyn Fn(tauri::ipc::Invoke) -> bool + Send + Sync> =
+                Box::new(tauri::generate_handler![
+                    logger::log_frontend,
+                    logger::get_support_log_info,
+                    logger::open_support_log_folder,
+                    get_categories,
+                    get_week,
+                    get_week_for_app_filter,
+                    get_week_statistics,
+                    get_total_statistics,
+                    get_day_statistics,
+                    delete_category_by_id,
+                    get_category_by_id,
+                    insert_category,
+                    update_category_by_id,
+                    get_cat_regex,
+                    get_cat_regex_by_id,
+                    delete_cat_regex_by_id,
+                    insert_cat_regex,
+                    update_cat_regex_by_id,
+                    get_app_groups,
+                    insert_app_group,
+                    update_app_group,
+                    delete_app_group,
+                    get_logs,
+                    get_log_by_id,
+                    delete_log_by_id,
+                    delete_logs_by_ids,
+                    delete_logs_for_time_block,
+                    count_logs_for_time_block,
+                    get_logs_for_time_block,
+                    get_logs_by_category,
+                    get_logs_for_app_in_time_range,
+                    get_manual_time_blocks,
+                    insert_manual_time_block,
+                    update_manual_time_block,
+                    delete_manual_time_block,
+                    get_running_manual_timer,
+                    start_manual_timer,
+                    update_manual_timer_title,
+                    stop_manual_timer,
+                    finish_manual_timer,
+                    get_skipped_apps,
+                    insert_skipped_app_and_delete_logs,
+                    update_skipped_app_by_id,
+                    delete_skipped_app_by_id,
+                    count_matching_logs,
+                    restore_default_skipped_apps,
+                    get_db_path_cmd,
+                    get_database_location,
+                    probe_database_location,
+                    set_database_location,
+                    reset_database_location,
+                    get_tracking_status,
+                    set_tracking_status,
+                    refresh_tray_menu,
+                    get_google_calendars,
+                    get_google_calendar_by_id,
+                    insert_google_calendar,
+                    update_google_calendar,
+                    delete_google_calendar,
+                    get_google_calendar_events,
+                    get_all_google_calendar_events,
+                    create_google_calendar_event,
+                    update_google_calendar_event,
+                    delete_google_calendar_event,
+                    list_available_google_calendars,
+                    google_oauth_login,
+                    google_oauth_logout,
+                    get_google_auth_status,
+                    get_google_oauth_app_credentials,
+                    set_google_oauth_app_credentials,
+                    get_calendar_view_prefs,
+                    set_calendar_view_prefs,
+                    get_app_metadata,
+                    set_app_metadata,
+                    delete_app_metadata,
+                    get_notes_state,
+                    set_notes_enabled,
+                    set_notes_text,
+                    get_settings,
+                    flip_lock_by_key,
+                    reset_val_by_key,
+                    update_val_by_key,
+                    list_backups,
+                    create_manual_backup,
+                    restore_backup,
+                    get_backup_dir,
+                    create_safety_backup,
+                    get_db_schema_version,
+                    apply_update_cmd,
+                    check_update_cmd,
+                    get_app_version,
+                    instance::get_instance_info,
+                    set_is_tracking,
+                    unsubscribe_device,
+                    update_device,
+                    insert_devices,
+                    check,
+                    register,
+                    check_device_activation,
+                    get_local_device_name,
+                    upload_all_logs,
+                    reupload_all_logs,
+                    sync::sync,
+                    sync_now,
+                    get_sync_countdown,
+                    get_devices,
+                    device_logs,
+                    get_server_ip,
+                    set_server_ip,
+                ]);
+            move |invoke: tauri::ipc::Invoke| {
+                let command = invoke.message.command().to_string();
+                if command != "log_frontend" {
+                    Log::debug(format!("Command received: {command}"));
+                }
+                let handled = handler(invoke);
+                if !handled {
+                    Log::error(format!("Unknown app command: {command}"));
+                }
+                handled
+            }
+        })
+        .build(tauri::generate_context!())
+        .unwrap_or_else(|error| {
+            Log::error(format!("Tauri startup failed: {error}"));
+            panic!("error while building tauri application: {error}");
+        })
+        .run(|_app, event| match event {
+            tauri::RunEvent::Ready => Log::info("Application ready"),
+            tauri::RunEvent::ExitRequested { code, .. } => {
+                Log::info(format!("Application exit requested code={code:?}"))
+            }
+            tauri::RunEvent::Exit => Log::info("Application exited normally"),
+            _ => {}
+        });
 }

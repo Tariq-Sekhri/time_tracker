@@ -6,8 +6,8 @@ use crate::db::tables::app_group::{
 use crate::db::tables::cat_regex::{get_cat_regex, CategoryRegex};
 use crate::db::tables::category::{get_categories, Category};
 use crate::db::tables::log::{get_logs, mark_log_deleted, Log};
-use crate::db::tables::skipped_app::get_skipped_apps;
 use crate::db::tables::settings::get_settings;
+use crate::db::tables::skipped_app::get_skipped_apps;
 
 use chrono::{Datelike, Duration, Local, NaiveDateTime, TimeZone, Timelike};
 use regex::Regex;
@@ -193,7 +193,8 @@ fn get_time_blocks(
         if let Some(current_time_block) = time_blocks.get_mut(time_block_index) {
             if current_time_block.category == log_cat {
                 if log.timestamp <= current_time_block.end_time {
-                    current_time_block.start_time = current_time_block.start_time.min(log.timestamp);
+                    current_time_block.start_time =
+                        current_time_block.start_time.min(log.timestamp);
                     current_time_block.end_time = current_time_block.end_time.max(log_end_time);
                     let grouped_app = resolve_app_group(&log.app, app_groups);
                     if let Some(matching_app) = current_time_block
@@ -308,7 +309,11 @@ fn local_timestamp(naive: NaiveDateTime) -> i64 {
     naive
         .and_local_timezone(Local)
         .earliest()
-        .or_else(|| (naive + Duration::hours(1)).and_local_timezone(Local).earliest())
+        .or_else(|| {
+            (naive + Duration::hours(1))
+                .and_local_timezone(Local)
+                .earliest()
+        })
         .map(|dt| dt.timestamp())
         .unwrap_or_else(|| naive.and_utc().timestamp())
 }
@@ -321,9 +326,13 @@ fn week_bounds_from_anchor(anchor_unix: i64, calendar_start_hour: i64) -> (i64, 
         .single()
         .unwrap_or_else(Local::now);
     let start_of_day = if dt.hour() as i64 >= calendar_start_hour {
-        dt.date_naive().and_hms_opt(calendar_start_hour as u32, 0, 0).unwrap()
+        dt.date_naive()
+            .and_hms_opt(calendar_start_hour as u32, 0, 0)
+            .unwrap()
     } else {
-        (dt.date_naive() - Duration::days(1)).and_hms_opt(calendar_start_hour as u32, 0, 0).unwrap()
+        (dt.date_naive() - Duration::days(1))
+            .and_hms_opt(calendar_start_hour as u32, 0, 0)
+            .unwrap()
     };
     let weekday = start_of_day.weekday().num_days_from_monday() as i64;
     let week_start = start_of_day - Duration::days(weekday);
@@ -347,7 +356,9 @@ pub async fn get_week(
 
     let skipped_regexes: Vec<Regex> = skipped_apps
         .iter()
-        .filter_map(|app| Regex::new(&app.regex).ok())
+        .filter_map(|app| {
+            crate::logger::Log::result("Invalid skipped-app regex", Regex::new(&app.regex)).ok()
+        })
         .collect();
 
     let is_skipped =
@@ -360,7 +371,10 @@ pub async fn get_week(
         .collect();
 
     for log_id in logs_to_delete {
-        let _ = mark_log_deleted(log_id).await;
+        let _ = crate::logger::Log::result(
+            "Mark skipped activity deleted",
+            mark_log_deleted(log_id).await,
+        );
     }
 
     logs.retain(|log| !is_skipped(&log.app));
@@ -401,7 +415,9 @@ pub async fn get_week_for_app_filter(
 
     let skipped_regexes: Vec<Regex> = skipped_apps
         .iter()
-        .filter_map(|app| Regex::new(&app.regex).ok())
+        .filter_map(|app| {
+            crate::logger::Log::result("Invalid skipped-app regex", Regex::new(&app.regex)).ok()
+        })
         .collect();
 
     let is_skipped =
@@ -561,7 +577,12 @@ mod week_bounds_tests {
     use chrono::NaiveDate;
 
     fn local(y: i32, m: u32, d: u32, h: u32) -> i64 {
-        local_timestamp(NaiveDate::from_ymd_opt(y, m, d).unwrap().and_hms_opt(h, 0, 0).unwrap())
+        local_timestamp(
+            NaiveDate::from_ymd_opt(y, m, d)
+                .unwrap()
+                .and_hms_opt(h, 0, 0)
+                .unwrap(),
+        )
     }
 
     #[test]

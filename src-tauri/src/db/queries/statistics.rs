@@ -101,7 +101,8 @@ fn manual_segments(
             let Some(local) = Local.timestamp_opt(cursor, 0).single() else {
                 break;
             };
-            let next_hour = cursor + 3600 - i64::from(local.minute()) * 60 - i64::from(local.second());
+            let next_hour =
+                cursor + 3600 - i64::from(local.minute()) * 60 - i64::from(local.second());
             let segment_end = next_hour.min(stop);
             segments.push(Log {
                 id: block.id,
@@ -302,7 +303,9 @@ pub async fn get_week_statistics(
 
     let skipped_regexes: Vec<Regex> = skipped_apps
         .iter()
-        .filter_map(|app| Regex::new(&app.regex).ok())
+        .filter_map(|app| {
+            crate::logger::Log::result("Invalid skipped-app regex", Regex::new(&app.regex)).ok()
+        })
         .collect();
 
     let is_skipped =
@@ -320,7 +323,9 @@ pub async fn get_week_statistics(
     let now = Local::now().timestamp();
     let compare_end = week_end.min(now);
 
-    logs.extend(manual_statistics_logs(week_start, compare_end.saturating_add(1), include_manual).await?);
+    logs.extend(
+        manual_statistics_logs(week_start, compare_end.saturating_add(1), include_manual).await?,
+    );
 
     let week_logs: Vec<Log> = logs
         .into_iter()
@@ -448,10 +453,19 @@ pub async fn get_week_statistics(
     let prev_compare_end = prev_week_start + (compare_end - week_start);
     let mut prev_week_logs: Vec<Log> = all_logs_filtered
         .into_iter()
-        .filter(|log| !is_manual(log) && log.timestamp >= prev_week_start && log.timestamp <= prev_compare_end)
+        .filter(|log| {
+            !is_manual(log) && log.timestamp >= prev_week_start && log.timestamp <= prev_compare_end
+        })
         .collect();
 
-    prev_week_logs.extend(manual_statistics_logs(prev_week_start, prev_compare_end.saturating_add(1), include_manual).await?);
+    prev_week_logs.extend(
+        manual_statistics_logs(
+            prev_week_start,
+            prev_compare_end.saturating_add(1),
+            include_manual,
+        )
+        .await?,
+    );
 
     let prev_week_total: i64 = prev_week_logs.iter().map(|log| log.duration).sum();
     let total_time_change = if prev_week_total > 0 {
@@ -537,10 +551,13 @@ pub async fn get_total_statistics(include_manual: Option<bool>) -> Result<WeekSt
 
     let skipped_regexes: Vec<Regex> = skipped_apps
         .iter()
-        .filter_map(|app| Regex::new(&app.regex).ok())
+        .filter_map(|app| {
+            crate::logger::Log::result("Invalid skipped-app regex", Regex::new(&app.regex)).ok()
+        })
         .collect();
 
-    let is_skipped = |app_name: &str| -> bool { skipped_regexes.iter().any(|regex| regex.is_match(app_name)) };
+    let is_skipped =
+        |app_name: &str| -> bool { skipped_regexes.iter().any(|regex| regex.is_match(app_name)) };
 
     logs.retain(|log| !is_skipped(&log.app));
     logs.extend(manual_statistics_logs(i64::MIN, i64::MAX, include_manual).await?);
@@ -635,7 +652,10 @@ pub async fn get_total_statistics(include_manual: Option<bool>) -> Result<WeekSt
         .map(|(&timestamp, &duration)| (timestamp, duration));
 
     let number_of_active_days = day_totals.len() as i32;
-    let total_number_of_days = match (day_totals.keys().min().copied(), day_totals.keys().max().copied()) {
+    let total_number_of_days = match (
+        day_totals.keys().min().copied(),
+        day_totals.keys().max().copied(),
+    ) {
         (Some(min_ts), Some(max_ts)) => ((max_ts - min_ts) / 86400 + 1) as i32,
         _ => 0,
     };
@@ -686,7 +706,9 @@ pub async fn get_day_statistics(
 
     let skipped_regexes: Vec<Regex> = skipped_apps
         .iter()
-        .filter_map(|app| Regex::new(&app.regex).ok())
+        .filter_map(|app| {
+            crate::logger::Log::result("Invalid skipped-app regex", Regex::new(&app.regex)).ok()
+        })
         .collect();
 
     let is_skipped =
@@ -701,7 +723,9 @@ pub async fn get_day_statistics(
     let regex = build_regex_table(&categories, &cat_regex)?;
     let app_groups = build_app_group_matchers(&get_app_groups().await?)?;
 
-    logs.extend(manual_statistics_logs(day_start, day_end.saturating_add(1), include_manual).await?);
+    logs.extend(
+        manual_statistics_logs(day_start, day_end.saturating_add(1), include_manual).await?,
+    );
 
     let day_logs: Vec<Log> = logs
         .into_iter()
@@ -815,16 +839,29 @@ mod manual_statistics_tests {
 
     #[test]
     fn manual_blocks_clip_split_and_count_overlaps_independently() {
-        let start = Local.with_ymd_and_hms(2026, 9, 28, 23, 30, 0).unwrap().timestamp();
-        let block = ManualTimeBlock { id: 1, title: "Planning".into(), notes: Some("Keep notes".into()),
-            start_time: start, end_time: start + 7200, created_at: start, updated_at: start };
+        let start = Local
+            .with_ymd_and_hms(2026, 9, 28, 23, 30, 0)
+            .unwrap()
+            .timestamp();
+        let block = ManualTimeBlock {
+            id: 1,
+            title: "Planning".into(),
+            notes: Some("Keep notes".into()),
+            start_time: start,
+            end_time: start + 7200,
+            created_at: start,
+            updated_at: start,
+        };
         let blocks = [block.clone(), block.clone()];
         let logs = manual_segments(&blocks, start + 900, start + 6300);
         assert_eq!(logs.iter().map(|l| l.duration).sum::<i64>(), 10800);
         assert_eq!(logs.len(), 6);
         assert_eq!(logs[0].timestamp, start + 900);
         assert_eq!(logs[0].duration, 900);
-        assert_eq!(get_day_start(logs[1].timestamp) - get_day_start(logs[0].timestamp), 86400);
+        assert_eq!(
+            get_day_start(logs[1].timestamp) - get_day_start(logs[0].timestamp),
+            86400
+        );
         assert!(logs.iter().all(|l| log_category(l, &[]) == MANUAL_CATEGORY));
         let stats = build_app_stats(&logs, &[]);
         assert_eq!(stats.len(), 1);

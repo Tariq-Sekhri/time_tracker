@@ -16,16 +16,18 @@ impl Serialize for Error {
 }
 
 impl From<anyhow::Error> for Error {
+    #[track_caller]
     fn from(e: anyhow::Error) -> Self {
-        Self(e)
+        Self::new(e)
     }
 }
 
 macro_rules! impl_from {
     ($($t:ty),*) => {
         $(impl From<$t> for Error {
+            #[track_caller]
             fn from(e: $t) -> Self {
-                Self(e.into())
+                Self::new(e.into())
             }
         })*
     };
@@ -41,6 +43,16 @@ impl_from!(
 );
 
 impl Error {
+    #[track_caller]
+    pub fn new(error: anyhow::Error) -> Self {
+        let caller = std::panic::Location::caller();
+        crate::logger::Log::error(format!(
+            "Backend error at {}:{}: {error:#}",
+            caller.file(),
+            caller.line()
+        ));
+        Self(error)
+    }
     pub fn is_auth_expired(&self) -> bool {
         self.0.downcast_ref::<AuthExpiredError>().is_some()
     }

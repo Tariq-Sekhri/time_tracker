@@ -146,26 +146,20 @@ pub async fn insert_log(log: NewLog) -> Result<i64, sqlx::Error> {
         .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
     let uuid = local_uuid
         .filter(|u| !u.is_empty())
-        .or_else(|| {
-            log.device_uuid
-                .filter(|u| u == PENDING_LOCAL_DEVICE_UUID)
-        })
+        .or_else(|| log.device_uuid.filter(|u| u == PENDING_LOCAL_DEVICE_UUID))
         .unwrap_or_else(|| PENDING_LOCAL_DEVICE_UUID.to_string());
-    let next_id: i64 = sqlx::query_scalar(
-        "SELECT COALESCE(MAX(id), 0) + 1 FROM logs WHERE device_uuid = ?1",
-    )
-    .bind(&uuid)
-    .fetch_one(&pool)
-    .await?;
-    sqlx::query(
-        "INSERT INTO logs (id, device_uuid, app, timestamp) VALUES (?1, ?2, ?3, ?4)",
-    )
-    .bind(next_id)
-    .bind(&uuid)
-    .bind(&log.app)
-    .bind(log.timestamp)
-    .execute(&pool)
-    .await?;
+    let next_id: i64 =
+        sqlx::query_scalar("SELECT COALESCE(MAX(id), 0) + 1 FROM logs WHERE device_uuid = ?1")
+            .bind(&uuid)
+            .fetch_one(&pool)
+            .await?;
+    sqlx::query("INSERT INTO logs (id, device_uuid, app, timestamp) VALUES (?1, ?2, ?3, ?4)")
+        .bind(next_id)
+        .bind(&uuid)
+        .bind(&log.app)
+        .bind(log.timestamp)
+        .execute(&pool)
+        .await?;
     Ok(next_id)
 }
 
@@ -402,32 +396,35 @@ mod merge_logs_tests {
 
     #[test]
     fn keeps_same_app_logs_separate_by_device_uuid() {
-        let merged = merge_logs_in_time_block(vec![
-            Log {
-                id: 1,
-                device_uuid: Some("device-a".into()),
-                app: "Editor".into(),
-                timestamp: 100,
-                duration: 30,
-                is_deleted: false,
-            },
-            Log {
-                id: 2,
-                device_uuid: Some("device-b".into()),
-                app: "Editor".into(),
-                timestamp: 110,
-                duration: 45,
-                is_deleted: false,
-            },
-        ], &[]);
+        let merged = merge_logs_in_time_block(
+            vec![
+                Log {
+                    id: 1,
+                    device_uuid: Some("device-a".into()),
+                    app: "Editor".into(),
+                    timestamp: 100,
+                    duration: 30,
+                    is_deleted: false,
+                },
+                Log {
+                    id: 2,
+                    device_uuid: Some("device-b".into()),
+                    app: "Editor".into(),
+                    timestamp: 110,
+                    duration: 45,
+                    is_deleted: false,
+                },
+            ],
+            &[],
+        );
 
         assert_eq!(merged.len(), 2);
-        assert!(merged.iter().any(|log| {
-            log.device_uuid.as_deref() == Some("device-a") && log.ids == vec![1]
-        }));
-        assert!(merged.iter().any(|log| {
-            log.device_uuid.as_deref() == Some("device-b") && log.ids == vec![2]
-        }));
+        assert!(merged
+            .iter()
+            .any(|log| { log.device_uuid.as_deref() == Some("device-a") && log.ids == vec![1] }));
+        assert!(merged
+            .iter()
+            .any(|log| { log.device_uuid.as_deref() == Some("device-b") && log.ids == vec![2] }));
     }
 
     #[test]
@@ -563,7 +560,9 @@ pub async fn get_logs_for_app_in_time_range(
     let skipped_apps = get_skipped_apps().await?;
     let skipped_regexes: Vec<Regex> = skipped_apps
         .iter()
-        .filter_map(|a| Regex::new(&a.regex).ok())
+        .filter_map(|a| {
+            crate::logger::Log::result("Invalid skipped-app regex", Regex::new(&a.regex)).ok()
+        })
         .collect();
     let is_skipped =
         |name: &str| -> bool { skipped_regexes.iter().any(|regex| regex.is_match(name)) };

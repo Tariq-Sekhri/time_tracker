@@ -111,7 +111,12 @@ pub fn init_env() {
     #[cfg(target_os = "windows")]
     {
         let webview_dir = webview_data_dir();
-        if std::fs::create_dir_all(&webview_dir).is_ok() {
+        if crate::logger::Log::result(
+            "Create WebView profile directory",
+            std::fs::create_dir_all(&webview_dir),
+        )
+        .is_ok()
+        {
             std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", &webview_dir);
         }
     }

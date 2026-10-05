@@ -84,7 +84,17 @@ fn migrate_dev_db_to_app_db_once() -> std::io::Result<()> {
 
 fn read_custom_db_path() -> Option<PathBuf> {
     let config = database_location_config_path();
-    let contents = std::fs::read_to_string(config).ok()?;
+    let contents = match std::fs::read_to_string(&config) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(error) => {
+            crate::logger::Log::error(format!(
+                "Read database location config {}: {error}",
+                config.display()
+            ));
+            return None;
+        }
+    };
     let trimmed = contents.trim();
     if trimmed.is_empty() {
         return None;
@@ -199,6 +209,10 @@ pub async fn set_database_location(
     overwrite: bool,
 ) -> Result<SetDatabaseLocationResult, Error> {
     let path = resolve_location_path(&path)?;
+    crate::logger::Log::info(format!(
+        "Database location change requested path={} overwrite={overwrite}",
+        path.display()
+    ));
     let default_path = default_db_path();
 
     if paths_equal(&path, &default_path) {
@@ -211,7 +225,7 @@ pub async fn set_database_location(
 
     if path.exists() {
         if path.is_dir() {
-            return Err(Error(anyhow::anyhow!(
+            return Err(Error::new(anyhow::anyhow!(
                 "Database location must be a file path, not a directory"
             )));
         }
@@ -242,6 +256,7 @@ pub async fn set_database_location(
 
 #[tauri::command]
 pub async fn reset_database_location() -> Result<DatabaseLocationInfo, Error> {
+    crate::logger::Log::info("Resetting database location to default");
     clear_custom_db_path()?;
     reopen_pool().await?;
     Ok(get_database_location())
@@ -250,7 +265,9 @@ pub async fn reset_database_location() -> Result<DatabaseLocationInfo, Error> {
 fn resolve_location_path(path: &str) -> Result<PathBuf, Error> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
-        return Err(Error(anyhow::anyhow!("Database location cannot be empty")));
+        return Err(Error::new(anyhow::anyhow!(
+            "Database location cannot be empty"
+        )));
     }
     Ok(PathBuf::from(trimmed))
 }
@@ -302,6 +319,7 @@ fn ensure_db_path(db_path: &PathBuf) -> Result<(), sqlx::Error> {
 }
 
 async fn create_pool() -> Result<SqlitePool, sqlx::Error> {
+    crate::logger::Log::info(format!("Opening database path={}", get_db_path().display()));
     if !is_custom_db_path() {
         migrate_dev_db_to_app_db_once().map_err(sqlx::Error::Io)?;
         if cfg!(debug_assertions) {
@@ -332,13 +350,17 @@ async fn create_pool() -> Result<SqlitePool, sqlx::Error> {
 
     run_schema_repair(&pool).await?;
 
+    crate::logger::Log::info("Database ready; migrations and schema validation completed");
+
     Ok(pool)
 }
 
 async fn run_schema_repair(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     validation::validate_and_repair_database(pool)
         .await
-        .map(|_| ())
+        .map(|result| {
+            crate::logger::Log::info(format!("Database validation: {}", result.summary()));
+        })
         .map_err(|e| {
             sqlx::Error::Io(std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -350,7 +372,12 @@ async fn run_schema_repair(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     match sqlx::migrate!("./migrations").run(pool).await {
         Ok(()) => Ok(()),
-        Err(e) if migration_checksum_mismatch(&e) => Ok(()),
+        Err(e) if migration_checksum_mismatch(&e) => {
+            crate::logger::Log::warn(format!(
+                "Migration checksum mismatch; continuing with schema repair: {e}"
+            ));
+            Ok(())
+        }
         Err(e) => Err(sqlx::Error::Io(std::io::Error::new(
             std::io::ErrorKind::Other,
             e.to_string(),

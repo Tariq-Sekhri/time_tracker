@@ -10,6 +10,7 @@ import {
 } from "../api/databaseLocation.ts";
 import { toErrorString } from "../types/common.ts";
 import { useNotesState } from "../hooks/useNotesState.ts";
+import {getSupportLogInfo, openSupportLogFolder, isDesktopApp, type SupportLogInfo} from "../diagnostics.ts";
 
 type FieldDef = { key: string; label: string };
 type CategoryDef = { title: string; fields: FieldDef[] };
@@ -227,6 +228,29 @@ function NumberSettingField({
     );
 }
 
+function SupportLogsSetting() {
+    const {showToast} = useToast();
+    const toastRef = useRef(showToast);
+    toastRef.current = showToast;
+    const [info, setInfo] = useState<SupportLogInfo | null>(null);
+    useEffect(() => {
+        let active = true;
+        getSupportLogInfo().then((result) => { if (active) setInfo(result); }).catch((error) => {
+            if (active) toastRef.current("Could not load log location", "error", 5000, toErrorString(error));
+        });
+        return () => { active = false; };
+    }, []);
+    return <div className="bg-gray-900 p-4 rounded space-y-3">
+        <h2 className="text-lg font-semibold">Support logs</h2>
+        <p className="text-sm text-gray-400">If the app crashes, send the most recent log file from the time of the crash. Each launch creates one file with all activity and errors.</p>
+        {info?.available === false && <p className="text-sm text-red-400">Logging could not start. Check that the log folder is writable.</p>}
+        {info?.path && <p className="text-xs text-gray-400 font-mono break-all">Current log: {info.path}</p>}
+        <button type="button" className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded text-sm" onClick={() => {
+            void openSupportLogFolder().catch((error) => showToast("Could not open log folder", "error", 5000, toErrorString(error)));
+        }}>Open log folder</button>
+    </div>;
+}
+
 function DatabaseLocationSetting() {
     const { showToast } = useToast();
     const queryClient = useQueryClient();
@@ -385,7 +409,8 @@ export default function Settings() {
                         aria-label="Enable Notes"
                     />
                 </div>
-                <DatabaseLocationSetting />
+                {isDesktopApp() && <DatabaseLocationSetting />}
+                {isDesktopApp() && <SupportLogsSetting />}
                 {SETTINGS_LAYOUT.map((category) => (
                     <div key={category.title} className="bg-gray-900 p-4 rounded">
                         <h2 className="text-lg font-semibold mb-4">{category.title}</h2>

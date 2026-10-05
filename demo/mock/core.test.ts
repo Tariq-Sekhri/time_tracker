@@ -1,6 +1,17 @@
 import {describe, expect, it} from "vitest";
 import {invoke} from "./core";
 
+describe("demo Settings and Notes commands", () => {
+    it("keeps note preferences and content within the demo session", async () => {
+        await invoke("set_notes_enabled", {enabled: true});
+        await invoke("set_notes_text", {text: "Demo note"});
+        await expect(invoke("get_notes_state")).resolves.toEqual({enabled: true, text: "Demo note"});
+        await invoke("set_notes_enabled", {enabled: false});
+        await expect(invoke("get_notes_state")).resolves.toEqual({enabled: false, text: "Demo note"});
+        await invoke("set_notes_text", {text: ""});
+    });
+});
+
 type ManualTimeBlock = {
     id: number;
     title: string;

@@ -1,6 +1,6 @@
 [package]
 name = "time-tracker"
-version = "1.11.5"
+version = "1.11.6"
 description = "A Windows Auto Time Tracking App"
 authors = ["Tariq Sekhri"]
 edition = "2021"
@@ -31,6 +31,7 @@ tokio = { version = "1", features = ["full"] }
 chrono = { version = "0.4", features = ["clock"] }
 regex = "1"
 anyhow = "1"
+log = "0.4"
 tauri-plugin-clipboard-manager = "2.3.2"
 reqwest = { version = "0.13.4", features = ["json", "query", "form"] }
 oauth2 = "5.0.0"

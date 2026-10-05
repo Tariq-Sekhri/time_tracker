@@ -16,7 +16,7 @@ use crate::db::Error;
 pub(crate) fn get_foreground_app() -> Result<String, Error> {
     let workspace = unsafe { NSWorkspace::sharedWorkspace() };
     let application = unsafe { workspace.frontmostApplication() }.ok_or_else(|| {
-        Error(anyhow::anyhow!(
+        Error::new(anyhow::anyhow!(
             "macOS did not report a frontmost application"
         ))
     })?;

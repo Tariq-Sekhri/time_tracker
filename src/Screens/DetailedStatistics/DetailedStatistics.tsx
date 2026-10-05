@@ -26,6 +26,7 @@
  */
 
 import {useQueries, useQuery} from "@tanstack/react-query";
+import {reportError} from "../../diagnostics.ts";
 import {useEffect, useMemo, useRef, useState} from "react";
 // WeekStatistics is the shape returned for a time range (categories, apps, hourly, etc.)
 import {get_total_statistics, get_week_statistics, WeekStatistics} from "../../api/statistics.ts";
@@ -86,7 +87,8 @@ function parseTrendChartPrefs(raw: string | null): Partial<TrendChartPrefs> {
             out.topAppCount = Number(o.topAppCount);
         }
         return out;
-    } catch {
+    } catch (error) {
+        void reportError("Parse trend chart preferences", error);
         return {};
     }
 }

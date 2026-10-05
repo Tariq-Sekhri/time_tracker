@@ -3,7 +3,8 @@ import {useState, useEffect} from "react";
 import {useQueryClient} from "@tanstack/react-query";
 import {useQuery} from "@tanstack/react-query";
 import {listen} from "@tauri-apps/api/event";
-import {invoke} from "@tauri-apps/api/core";
+import {invokeOrThrow as invoke} from "./utils.ts";
+import {logMessage} from "./diagnostics.ts";
 import {useRef} from "react";
 
 import Calendar from "./Screens/Calander/Calendar.tsx";
@@ -41,6 +42,10 @@ function AppInner() {
     const syncTimer = useSyncTimer();
     const {data: notesState} = useQuery({queryKey: ["notes"], queryFn: getNotesState});
     const [currentView, setCurrentView] = useState<View>("calendar");
+    useEffect(() => {
+        void logMessage("info", `Screen opened: ${currentView}`);
+        return () => { void logMessage("debug", `Screen leaving: ${currentView}`); };
+    }, [currentView]);
     const [updateAvailable, setUpdateAvailable] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
     const [updateError, setUpdateError] = useState<string | null>(null);

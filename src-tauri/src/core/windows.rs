@@ -82,20 +82,24 @@ fn format_window_output(title: &str, task_manager_name: &str, exe_name: &str) ->
 }
 
 unsafe fn query_process_path(pid: u32) -> Option<String> {
-    let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+    let process = crate::logger::Log::result(
+        "Open foreground process",
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid),
+    )
+    .ok()?;
 
     let mut buf = [0u16; 2048];
     let mut size = buf.len() as u32;
 
-    QueryFullProcessImageNameW(
+    let result = QueryFullProcessImageNameW(
         process,
         PROCESS_NAME_FORMAT(0),
         PWSTR(buf.as_mut_ptr()),
         &mut size,
-    )
-    .ok()?;
+    );
 
-    let _ = CloseHandle(process);
+    let _ = crate::logger::Log::result("Close foreground process handle", CloseHandle(process));
+    crate::logger::Log::result("Read foreground process path", result).ok()?;
 
     Some(String::from_utf16_lossy(&buf[..size as usize]))
 }
@@ -112,11 +116,14 @@ unsafe fn version_blob(path: &str) -> Option<Vec<u8>> {
 
     let mut data = vec![0u8; size as usize];
 
-    GetFileVersionInfoW(
-        PCWSTR(path_w.as_ptr()),
-        Some(0),
-        size,
-        data.as_mut_ptr().cast::<c_void>(),
+    crate::logger::Log::result(
+        "Read foreground app version info",
+        GetFileVersionInfoW(
+            PCWSTR(path_w.as_ptr()),
+            Some(0),
+            size,
+            data.as_mut_ptr().cast::<c_void>(),
+        ),
     )
     .ok()?;
 

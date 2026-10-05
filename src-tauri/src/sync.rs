@@ -3,12 +3,13 @@ use crate::db::tables::app_metadata_kv::get_server_ip;
 use crate::db::tables::device::{
     device_has_logs, get_devices as get_devices_from_db, get_local_device, get_local_device_uuid,
     insert_devices, invalidate_local_device_registration, register_local_device, set_last_sync_id,
-    set_local_device_active, untrack_remote_devices_not_on_server, unsubscribe_remote_device,
+    set_local_device_active, unsubscribe_remote_device, untrack_remote_devices_not_on_server,
     update_remote_device_names, Device, DeviceState,
 };
 use crate::db::tables::log::{
-    consolidate_local_logs_for_reupload, delete_local_deleted_logs, get_all_local_logs_for_reupload,
-    get_local_deleted_logs, get_local_logs, get_logs_for_sync, insert_logs, Log,
+    consolidate_local_logs_for_reupload, delete_local_deleted_logs,
+    get_all_local_logs_for_reupload, get_local_deleted_logs, get_local_logs, get_logs_for_sync,
+    insert_logs, Log,
 };
 use anyhow::{anyhow, Result};
 use db::Error;
@@ -49,7 +50,11 @@ pub fn set_sync_countdown_remaining(secs: i64) {
 
 pub fn get_sync_countdown_remaining() -> Option<i64> {
     let secs = SYNC_COUNTDOWN_REMAINING.load(Ordering::Relaxed);
-    if secs >= 0 { Some(secs) } else { None }
+    if secs >= 0 {
+        Some(secs)
+    } else {
+        None
+    }
 }
 
 pub fn sync_countdown_reset_notify() -> Arc<Notify> {
@@ -88,7 +93,7 @@ fn sync_server_url(server_ip: &str, path: &str) -> String {
 pub async fn check(ip: String) -> Result<String, Error> {
     let normalized_ip = normalize_server_ip(&ip);
     if normalized_ip.is_empty() {
-        return Err(Error(anyhow!("Server IP cannot be empty")));
+        return Err(Error::new(anyhow!("Server IP cannot be empty")));
     }
     let url = sync_server_url(&normalized_ip, "check");
     let res = sync_http_client()
@@ -114,13 +119,13 @@ async fn require_authenticated_success(
 ) -> Result<reqwest::Response, Error> {
     if response.status() == reqwest::StatusCode::UNAUTHORIZED {
         invalidate_local_device_registration(device_uuid).await?;
-        return Err(Error(anyhow!(
+        return Err(Error::new(anyhow!(
             "This device is no longer registered on the sync server. Register it again to resume syncing."
         )));
     }
     if response.status() == reqwest::StatusCode::FORBIDDEN {
         set_local_device_active(device_uuid, false).await?;
-        return Err(Error(anyhow!(
+        return Err(Error::new(anyhow!(
             "This device is waiting for admin approval."
         )));
     }
@@ -138,7 +143,7 @@ pub async fn register(name: String) -> Result<(), Error> {
     check(server_ip.clone()).await?;
     let name = name.trim().to_string();
     if name.is_empty() {
-        return Err(Error(anyhow!("Device name cannot be empty")));
+        return Err(Error::new(anyhow!("Device name cannot be empty")));
     }
     let body = json!({
         "name": name
@@ -195,11 +200,12 @@ async fn post_logs_to_server(
 
 #[tauri::command]
 pub async fn upload_all_logs() -> Result<usize, Error> {
+    crate::logger::Log::info("Initial sync upload started");
     let device = get_local_device()
         .await?
         .ok_or(anyhow!("Local device not found"))?;
     if !device.is_active {
-        return Err(Error(anyhow!("Device is waiting for admin approval")));
+        return Err(Error::new(anyhow!("Device is waiting for admin approval")));
     }
     let logs = get_local_logs().await?;
     if logs.is_empty() {
@@ -217,12 +223,13 @@ pub async fn upload_all_logs() -> Result<usize, Error> {
 
 #[tauri::command]
 pub async fn reupload_all_logs() -> Result<usize, Error> {
+    crate::logger::Log::info("Full sync reupload started");
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
     let device = get_local_device()
         .await?
         .ok_or(anyhow!("Local device not found"))?;
     if !device.is_active {
-        return Err(Error(anyhow!("Device is waiting for admin approval")));
+        return Err(Error::new(anyhow!("Device is waiting for admin approval")));
     }
     let token = match device.state {
         DeviceState::Local { token } => token,
@@ -265,7 +272,9 @@ pub async fn check_device_activation() -> Result<bool, Error> {
         .ok_or(anyhow!("Local device not found"))?;
     let token = match &device.state {
         DeviceState::Local { token } => token,
-        DeviceState::Remote { .. } => return Err(Error(anyhow!("Local device state is invalid"))),
+        DeviceState::Remote { .. } => {
+            return Err(Error::new(anyhow!("Local device state is invalid")))
+        }
     };
     let response = sync_http_client()
         .post(sync_server_url(&server_ip, "status"))
@@ -274,7 +283,7 @@ pub async fn check_device_activation() -> Result<bool, Error> {
         .await?;
     if response.status() == reqwest::StatusCode::UNAUTHORIZED {
         invalidate_local_device_registration(&device.uuid).await?;
-        return Err(Error(anyhow!(
+        return Err(Error::new(anyhow!(
             "This registration was removed from the server. Register the device again."
         )));
     }
@@ -283,7 +292,9 @@ pub async fn check_device_activation() -> Result<bool, Error> {
         .json::<DeviceStatusResponse>()
         .await?;
     if status.uuid != device.uuid {
-        return Err(Error(anyhow!("Server returned status for a different device")));
+        return Err(Error::new(anyhow!(
+            "Server returned status for a different device"
+        )));
     }
     set_local_device_active(&device.uuid, status.is_active).await?;
     if status.is_active {
@@ -313,6 +324,7 @@ pub async fn run_auto_sync_cycle() -> AutoSyncResult {
         return AutoSyncResult::Skipped;
     }
 
+    crate::logger::Log::info("Sync cycle started");
     let mut errors = Vec::new();
     if let Err(e) = sync_impl().await {
         errors.push(format!("sync: {}", e));
@@ -320,30 +332,38 @@ pub async fn run_auto_sync_cycle() -> AutoSyncResult {
     if let Err(e) = device_logs(None).await {
         errors.push(format!("pull logs: {}", e));
     }
+    if errors.is_empty() {
+        crate::logger::Log::info("Sync cycle completed");
+    } else {
+        crate::logger::Log::error(format!("Sync cycle failed: {}", errors.join("; ")));
+    }
     AutoSyncResult::Completed { errors }
 }
 
 #[tauri::command]
 pub async fn sync_now(app: AppHandle) -> Result<(), Error> {
     if !is_sync_ready().await? {
-        return Err(Error(anyhow!("Initial log upload still in progress")));
+        return Err(Error::new(anyhow!("Initial log upload still in progress")));
     }
-    let _ = app.emit("sync_started", ());
+    let _ = crate::logger::Log::result("Native emit", app.emit("sync_started", ()));
     match run_auto_sync_cycle().await {
         AutoSyncResult::Skipped => {
-            return Err(Error(anyhow!("Device not registered")));
+            return Err(Error::new(anyhow!("Device not registered")));
         }
         AutoSyncResult::Completed { errors } => {
             if errors.is_empty() {
-                let _ = app.emit("sync-successful", ());
+                let _ = crate::logger::Log::result("Native emit", app.emit("sync-successful", ()));
             } else {
-                return Err(Error(anyhow!(errors.join("; "))));
+                return Err(Error::new(anyhow!(errors.join("; "))));
             }
         }
     }
     request_sync_countdown_reset();
     set_sync_countdown_remaining(SYNC_INTERVAL_SECS as i64);
-    let _ = app.emit("count_down_to_sync", SYNC_INTERVAL_SECS as i64);
+    let _ = crate::logger::Log::result(
+        "Native emit",
+        app.emit("count_down_to_sync", SYNC_INTERVAL_SECS as i64),
+    );
     Ok(())
 }
 
@@ -362,6 +382,7 @@ pub async fn sync() -> Result<(), Error> {
 }
 
 async fn sync_impl() -> Result<(), Error> {
+    crate::logger::Log::debug("Sync upload phase started");
     if !is_registered_for_sync().await? {
         return Ok(());
     }
@@ -371,7 +392,7 @@ async fn sync_impl() -> Result<(), Error> {
         .await?
         .ok_or(anyhow!("Local device not found"))?;
     if !device.is_active {
-        return Err(Error(anyhow!("Device is waiting for admin approval")));
+        return Err(Error::new(anyhow!("Device is waiting for admin approval")));
     }
     let token = match device.state {
         DeviceState::Local { token } => token,
@@ -435,16 +456,19 @@ impl From<ServerLog> for Log {
 }
 
 async fn sync_devices_with_server() -> Result<HashSet<String>, Error> {
+    crate::logger::Log::debug("Sync device-list phase started");
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
     let local = get_local_device()
         .await?
         .ok_or(anyhow!("Local device not registered"))?;
     if !local.is_active {
-        return Err(Error(anyhow!("Device is waiting for admin approval")));
+        return Err(Error::new(anyhow!("Device is waiting for admin approval")));
     }
     let token = match &local.state {
         DeviceState::Local { token } => token,
-        DeviceState::Remote { .. } => return Err(Error(anyhow!("Local device state is invalid"))),
+        DeviceState::Remote { .. } => {
+            return Err(Error::new(anyhow!("Local device state is invalid")))
+        }
     };
     let response = sync_http_client()
         .get(sync_server_url(&server_ip, "devices"))
@@ -502,7 +526,10 @@ async fn annotate_devices_with_local_logs(mut devices: Vec<Device>) -> Result<Ve
     Ok(devices)
 }
 
-fn annotate_devices_with_server(mut devices: Vec<Device>, server_uuids: &HashSet<String>) -> Vec<Device> {
+fn annotate_devices_with_server(
+    mut devices: Vec<Device>,
+    server_uuids: &HashSet<String>,
+) -> Vec<Device> {
     for device in &mut devices {
         device.available_on_server = match &device.state {
             DeviceState::Local { .. } => true,
@@ -520,7 +547,11 @@ pub async fn unsubscribe_device(uuid: String) -> Result<(), Error> {
 #[tauri::command]
 pub async fn get_devices(app_handle: tauri::AppHandle) -> Result<Vec<Device>, Error> {
     let local = get_local_device().await?;
-    if !local.as_ref().map(|device| device.is_active).unwrap_or(false) {
+    if !local
+        .as_ref()
+        .map(|device| device.is_active)
+        .unwrap_or(false)
+    {
         return Ok(get_devices_from_db()
             .await?
             .into_iter()
@@ -530,7 +561,7 @@ pub async fn get_devices(app_handle: tauri::AppHandle) -> Result<Vec<Device>, Er
     let server_uuids = match sync_devices_with_server().await {
         Ok(uuids) => Some(uuids),
         Err(e) => {
-            let _ = app_handle.emit("Server Error", &e);
+            let _ = crate::logger::Log::result("Native emit", app_handle.emit("Server Error", &e));
             None
         }
     };
@@ -543,21 +574,25 @@ pub async fn get_devices(app_handle: tauri::AppHandle) -> Result<Vec<Device>, Er
 }
 #[tauri::command]
 pub async fn device_logs(device_uuid: Option<String>) -> Result<usize, Error> {
+    crate::logger::Log::debug("Sync download phase started");
     if device_uuid.is_none() && !is_registered_for_sync().await? {
         return Ok(0);
     }
-    let _ = sync_devices_with_server().await;
+    let _ =
+        crate::logger::Log::result("Sync device list refresh", sync_devices_with_server().await);
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
     let local = get_local_device()
         .await?
         .ok_or(anyhow!("Local device not registered"))?;
     if !local.is_active {
-        return Err(Error(anyhow!("Device is waiting for admin approval")));
+        return Err(Error::new(anyhow!("Device is waiting for admin approval")));
     }
     let local_uuid = local.uuid.clone();
     let token = match local.state {
         DeviceState::Local { token } => token,
-        DeviceState::Remote { .. } => return Err(Error(anyhow!("Local device state is invalid"))),
+        DeviceState::Remote { .. } => {
+            return Err(Error::new(anyhow!("Local device state is invalid")))
+        }
     };
     let mut devices: Vec<Device> = get_devices_from_db()
         .await?

@@ -1,7 +1,7 @@
-use crate::db::Error;
 use crate::db::tables::google_calendar::{
     get_google_calendar_by_id, get_google_calendars, GoogleCalendar, GoogleCalendarInfo,
 };
+use crate::db::Error;
 use crate::google_oauth::get_valid_access_token;
 use anyhow::Context;
 use chrono::{DateTime, Timelike, Utc};
@@ -107,7 +107,7 @@ pub async fn list_available_google_calendars() -> Result<Vec<GoogleCalendarInfo>
     let (client_id, client_secret) =
         crate::google_oauth::resolve_google_oauth_app_credentials().await?;
     let access_token = get_valid_access_token(&client_id, &client_secret).await?;
-    
+
     let selected_calendars = get_google_calendars().await?;
     let selected_ids: std::collections::HashSet<String> = selected_calendars
         .iter()
@@ -116,7 +116,7 @@ pub async fn list_available_google_calendars() -> Result<Vec<GoogleCalendarInfo>
 
     let client = reqwest::Client::new();
     let url = format!("{}/users/me/calendarList", GOOGLE_API_BASE);
-    
+
     let response = client
         .get(&url)
         .bearer_auth(&access_token)
@@ -126,8 +126,16 @@ pub async fn list_available_google_calendars() -> Result<Vec<GoogleCalendarInfo>
 
     let status = response.status();
     if !status.is_success() {
-        let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-        return Err(anyhow::anyhow!("Calendar list API returned error {}: {}", status, error_text).into());
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Unknown error".to_string());
+        return Err(anyhow::anyhow!(
+            "Calendar list API returned error {}: {}",
+            status,
+            error_text
+        )
+        .into());
     }
 
     let calendar_list: GoogleApiCalendarListResponse = response
@@ -142,7 +150,9 @@ pub async fn list_available_google_calendars() -> Result<Vec<GoogleCalendarInfo>
         .map(|item| GoogleCalendarInfo {
             google_calendar_id: item.id.clone(),
             name: item.summary,
-            color: item.background_color.unwrap_or_else(|| "#4285f4".to_string()),
+            color: item
+                .background_color
+                .unwrap_or_else(|| "#4285f4".to_string()),
             access_role: item.access_role,
             selected: selected_ids.contains(&item.id),
         })
@@ -189,15 +199,20 @@ async fn fetch_google_calendar_events_internal(
 
     let status = response.status();
     if !status.is_success() {
-        let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Unknown error".to_string());
         return Err(anyhow::anyhow!("Events API error {}: {}", status, error_text).into());
     }
 
-    let response_text = response.text().await
+    let response_text = response
+        .text()
+        .await
         .context("Failed to read events response")?;
 
-    let events_response: GoogleApiEventsResponse = serde_json::from_str(&response_text)
-        .context("Failed to parse events")?;
+    let events_response: GoogleApiEventsResponse =
+        serde_json::from_str(&response_text).context("Failed to parse events")?;
 
     let events: Vec<GoogleCalendarEvent> = events_response
         .items
@@ -206,7 +221,7 @@ async fn fetch_google_calendar_events_internal(
         .filter_map(|event| {
             let is_all_day = event.start.date_time.is_none() && event.start.date.is_some()
                 || event.end.date_time.is_none() && event.end.date.is_some();
-            
+
             if is_all_day {
                 return None;
             }
@@ -227,10 +242,12 @@ async fn fetch_google_calendar_events_internal(
             let end_time = end.time();
             let start_date = start.date_naive();
             let end_date = end.date_naive();
-            
-            let is_midnight_start = start_time.hour() == 0 && start_time.minute() == 0 && start_time.second() == 0;
-            let is_midnight_end = end_time.hour() == 0 && end_time.minute() == 0 && end_time.second() == 0;
-            
+
+            let is_midnight_start =
+                start_time.hour() == 0 && start_time.minute() == 0 && start_time.second() == 0;
+            let is_midnight_end =
+                end_time.hour() == 0 && end_time.minute() == 0 && end_time.second() == 0;
+
             if is_midnight_start && is_midnight_end {
                 let duration = end_date.signed_duration_since(start_date);
                 if duration.num_days() == 0 || duration.num_days() == 1 {
@@ -255,13 +272,19 @@ async fn fetch_google_calendar_events_internal(
 
 fn parse_event_time(time: &GoogleApiEventTime) -> Option<DateTime<Utc>> {
     if let Some(date_time) = &time.date_time {
-        DateTime::parse_from_rfc3339(date_time)
-            .ok()
-            .map(|dt| dt.with_timezone(&Utc))
+        crate::logger::Log::result(
+            "Parse Google Calendar event date-time",
+            DateTime::parse_from_rfc3339(date_time),
+        )
+        .ok()
+        .map(|dt| dt.with_timezone(&Utc))
     } else if let Some(date) = &time.date {
-        DateTime::parse_from_rfc3339(&format!("{}T00:00:00Z", date))
-            .ok()
-            .map(|dt| dt.with_timezone(&Utc))
+        crate::logger::Log::result(
+            "Parse Google Calendar event date",
+            DateTime::parse_from_rfc3339(&format!("{}T00:00:00Z", date)),
+        )
+        .ok()
+        .map(|dt| dt.with_timezone(&Utc))
     } else {
         None
     }
@@ -317,7 +340,10 @@ pub async fn get_all_google_calendar_events(
                 all_events.append(&mut events);
             }
             Err(e) => {
-                eprintln!("[GCal] failed to fetch calendar '{}': {}", calendar.name, e);
+                crate::logger::Log::error(format!(
+                    "Google Calendar fetch failed calendar_id={}: {e}",
+                    calendar.id
+                ));
                 if e.is_auth_expired() {
                     last_auth_error = Some(e);
                 }

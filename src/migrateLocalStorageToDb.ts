@@ -1,4 +1,5 @@
 import { getAppMetadata, setAppMetadata } from "./api/appMetadata.ts";
+import {reportError} from "./diagnostics.ts";
 
 const KEYS = [
     "time-tracker:right-sidebar-collapsed",
@@ -14,7 +15,8 @@ export async function migrateLocalStorageToDb(): Promise<void> {
         let raw: string | null = null;
         try {
             raw = localStorage.getItem(key) ?? localStorage.getItem(`dev:${key}`);
-        } catch {
+        } catch (error) {
+            void reportError(`Read legacy preference ${key}`, error);
             raw = null;
         }
         if (raw == null) continue;
@@ -24,13 +26,15 @@ export async function migrateLocalStorageToDb(): Promise<void> {
             if (existing == null) {
                 await setAppMetadata(key, raw);
             }
-        } catch {
+        } catch (error) {
+            void reportError(`Migrate legacy preference ${key}`, error);
         }
 
         try {
             localStorage.removeItem(key);
             localStorage.removeItem(`dev:${key}`);
-        } catch {
+        } catch (error) {
+            void reportError(`Remove legacy preference ${key}`, error);
         }
     }
 }

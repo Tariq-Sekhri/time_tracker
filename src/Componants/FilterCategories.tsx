@@ -1,3 +1,4 @@
+import {reportError} from "../diagnostics.ts";
 import {
     useCallback,
     useEffect,
@@ -98,7 +99,8 @@ export function useFilterCategories(categories: Category[], enabledField: Catego
         async (updated: Category[]) => {
             try {
                 await Promise.all(updated.map((cat) => update_category_by_id(cat)));
-            } catch {
+            } catch (error) {
+                void reportError("Save category filters", error);
                 await queryClient.invalidateQueries({queryKey: ["categories"]});
             }
         },

@@ -23,7 +23,8 @@ export function pickBestMatchingRegex<T extends RegexMatchCandidate>(
             if (new RegExp(row.regexStr).test(appName)) {
                 matches.push(row);
             }
-        } catch {
+        } catch (error) {
+            console.error("Invalid category regex while matching:", error);
             continue;
         }
     }

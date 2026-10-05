@@ -1,15 +1,15 @@
+use crate::db::error::{AuthExpiredError, Error};
 use crate::db::get_pool;
 use crate::db::tables::app_metadata_kv::{self, META_GOOGLE_CLIENT_ID, META_GOOGLE_CLIENT_SECRET};
 use crate::db::tables::google_calendar::{
     delete_google_oauth, get_google_oauth, save_google_oauth, update_google_oauth_tokens,
     NewGoogleOAuth,
 };
-use crate::db::error::{AuthExpiredError, Error};
 use anyhow::Context;
 use axum::{extract::Query, response::Html, routing::get, Router};
 use oauth2::{
-    basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
-    RedirectUrl, Scope, TokenResponse, TokenUrl,
+    basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, RedirectUrl,
+    Scope, TokenResponse, TokenUrl,
 };
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
@@ -116,18 +116,12 @@ pub async fn google_oauth_login() -> Result<AuthStatus, Error> {
     let (client_id, client_secret) = resolve_google_oauth_app_credentials().await?;
     let client = BasicClient::new(ClientId::new(client_id))
         .set_client_secret(ClientSecret::new(client_secret))
-        .set_auth_uri(
-            AuthUrl::new(GOOGLE_AUTH_URL.to_string())
-                .context("Invalid auth URL")?,
-        )
-        .set_token_uri(
-            TokenUrl::new(GOOGLE_TOKEN_URL.to_string())
-                .context("Invalid token URL")?,
-        )
-    .set_redirect_uri(
-        RedirectUrl::new(format!("http://localhost:{}/oauth/callback", REDIRECT_PORT))
-            .context("Invalid redirect URL")?,
-    );
+        .set_auth_uri(AuthUrl::new(GOOGLE_AUTH_URL.to_string()).context("Invalid auth URL")?)
+        .set_token_uri(TokenUrl::new(GOOGLE_TOKEN_URL.to_string()).context("Invalid token URL")?)
+        .set_redirect_uri(
+            RedirectUrl::new(format!("http://localhost:{}/oauth/callback", REDIRECT_PORT))
+                .context("Invalid redirect URL")?,
+        );
 
     let (auth_url, _csrf_token) = client
         .authorize_url(CsrfToken::new_random)
@@ -149,6 +143,7 @@ pub async fn google_oauth_login() -> Result<AuthStatus, Error> {
     let server_state = state.clone();
     let server_handle = tokio::spawn(async move {
         if let Err(e) = start_callback_server(server_state.clone()).await {
+            crate::logger::Log::error(format!("Google OAuth callback server failed: {e}"));
             let mut lock = server_state.lock().await;
             lock.error = Some(e.to_string());
         }
@@ -161,7 +156,7 @@ pub async fn google_oauth_login() -> Result<AuthStatus, Error> {
 
     let start = std::time::Instant::now();
     let timeout = std::time::Duration::from_secs(120);
-    
+
     let code = loop {
         {
             let state_lock = state.lock().await;
@@ -174,14 +169,14 @@ pub async fn google_oauth_login() -> Result<AuthStatus, Error> {
                 break code;
             }
         }
-        
+
         if start.elapsed() > timeout {
             return Err(anyhow::anyhow!("OAuth timeout - no response received. Please make sure the redirect URI http://localhost:8742/oauth/callback is added in Google Cloud Console.").into());
         }
-        
+
         if server_handle.is_finished() {
             tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-            
+
             let state_lock = state.lock().await;
             if let Some(code) = &state_lock.code {
                 let code = code.clone();
@@ -190,11 +185,12 @@ pub async fn google_oauth_login() -> Result<AuthStatus, Error> {
             }
             if state_lock.code.is_none() && state_lock.error.is_none() {
                 drop(state_lock);
-                let _ = server_handle.await;
+                let _ =
+                    crate::logger::Log::result("Google OAuth callback task", server_handle.await);
                 return Err(anyhow::anyhow!("No authorization code received. Please check that the redirect URI http://localhost:8742/oauth/callback is correctly configured in Google Cloud Console.").into());
             }
         }
-        
+
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     };
 
@@ -217,7 +213,12 @@ pub async fn google_oauth_login() -> Result<AuthStatus, Error> {
                     .error_uri()
                     .map(|u| format!(" ({})", u))
                     .unwrap_or_default();
-                anyhow::anyhow!("Failed to exchange code for token: {}{}{}", err.error(), desc, uri)
+                anyhow::anyhow!(
+                    "Failed to exchange code for token: {}{}{}",
+                    err.error(),
+                    desc,
+                    uri
+                )
             }
             oauth2::RequestTokenError::Request(err) => {
                 anyhow::anyhow!("Failed to exchange code for token: request failed: {}", err)
@@ -306,7 +307,10 @@ pub async fn get_valid_access_token(client_id: &str, client_secret: &str) -> Res
         .send()
         .await
         .map_err(|e| {
-            Error::from(AuthExpiredError(format!("Failed to reach Google token endpoint: {}", e)))
+            Error::from(AuthExpiredError(format!(
+                "Failed to reach Google token endpoint: {}",
+                e
+            )))
         })?;
 
     let status = refresh_response.status();
@@ -316,18 +320,23 @@ pub async fn get_valid_access_token(client_id: &str, client_secret: &str) -> Res
         return Err(AuthExpiredError(format!(
             "Google token refresh failed ({}): {}. Please re-login to Google Calendar.",
             status, response_body
-        )).into());
+        ))
+        .into());
     }
 
-    let token_data: serde_json::Value = serde_json::from_str(&response_body)
-        .map_err(|e| {
-            Error::from(AuthExpiredError(format!("Failed to parse token refresh response: {}", e)))
-        })?;
+    let token_data: serde_json::Value = serde_json::from_str(&response_body).map_err(|e| {
+        Error::from(AuthExpiredError(format!(
+            "Failed to parse token refresh response: {}",
+            e
+        )))
+    })?;
 
     let new_access_token = token_data["access_token"]
         .as_str()
         .ok_or_else(|| {
-            Error::from(AuthExpiredError("No access_token in refresh response".to_string()))
+            Error::from(AuthExpiredError(
+                "No access_token in refresh response".to_string(),
+            ))
         })?
         .to_string();
 
@@ -342,28 +351,40 @@ pub async fn get_valid_access_token(client_id: &str, client_secret: &str) -> Res
 async fn start_callback_server(state: Arc<Mutex<OAuthState>>) -> Result<(), anyhow::Error> {
     let app_state = state.clone();
     let app = Router::new()
-        .route("/oauth/callback", get({
-            let state = app_state.clone();
-            move |query| oauth_callback(query, state.clone())
-        }))
-        .route("/", get(|| async { 
-            Html(r#"
+        .route(
+            "/oauth/callback",
+            get({
+                let state = app_state.clone();
+                move |query| oauth_callback(query, state.clone())
+            }),
+        )
+        .route(
+            "/",
+            get(|| async {
+                Html(
+                    r#"
                 <html>
                     <body style="font-family: sans-serif; padding: 40px; text-align: center;">
                         <h1>OAuth Callback Server</h1>
                         <p>Server is running and ready to receive OAuth callbacks.</p>
                     </body>
                 </html>
-            "#.to_string())
-        }));
+            "#
+                    .to_string(),
+                )
+            }),
+        );
 
     let addr = SocketAddr::from(([127, 0, 0, 1], REDIRECT_PORT));
 
     let server_state = state.clone();
-    
-    let listener = tokio::net::TcpListener::bind(addr)
-        .await
-        .with_context(|| format!("Port {} is already in use. Please close any other applications using this port.", REDIRECT_PORT))?;
+
+    let listener = tokio::net::TcpListener::bind(addr).await.with_context(|| {
+        format!(
+            "Port {} is already in use. Please close any other applications using this port.",
+            REDIRECT_PORT
+        )
+    })?;
 
     axum::serve(listener, app.into_make_service())
         .with_graceful_shutdown(async move {
@@ -387,7 +408,7 @@ async fn oauth_callback(
         let mut state = state.lock().await;
         state.error = Some(error.clone());
         drop(state);
-        
+
         return Html(format!(
             r#"
             <html>
@@ -407,9 +428,9 @@ async fn oauth_callback(
             let mut state = state.lock().await;
             state.code = Some(code.clone());
         }
-        
+
         tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-        
+
         return Html(
             r#"
             <html>
@@ -450,24 +471,38 @@ async fn get_user_email(access_token: &str) -> Result<String, Error> {
         .context("Failed to get user info")?;
 
     let status = response.status();
-    let response_text = response.text().await
+    let response_text = response
+        .text()
+        .await
         .context("Failed to read user info response")?;
-    
+
     if !status.is_success() {
-        return Err(anyhow::anyhow!("Userinfo API returned error: {} - {}", status, response_text).into());
+        return Err(anyhow::anyhow!(
+            "Userinfo API returned error: {} - {}",
+            status,
+            response_text
+        )
+        .into());
     }
 
-    let user_info: serde_json::Value = serde_json::from_str(&response_text)
-        .context("Failed to parse user info JSON")?;
+    let user_info: serde_json::Value =
+        serde_json::from_str(&response_text).context("Failed to parse user info JSON")?;
 
-    let email = user_info.get("email")
+    let email = user_info
+        .get("email")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
         .or_else(|| {
-            user_info.get("sub").and_then(|v| v.as_str()).map(|s| format!("{}@gmail.com", s))
+            user_info
+                .get("sub")
+                .and_then(|v| v.as_str())
+                .map(|s| format!("{}@gmail.com", s))
         })
         .ok_or_else(|| {
-            anyhow::anyhow!("No email in user info. Available fields: {:?}", user_info.as_object().map(|o| o.keys().collect::<Vec<_>>()))
+            anyhow::anyhow!(
+                "No email in user info. Available fields: {:?}",
+                user_info.as_object().map(|o| o.keys().collect::<Vec<_>>())
+            )
         })?;
 
     Ok(email)

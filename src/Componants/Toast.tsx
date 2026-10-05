@@ -1,4 +1,5 @@
 import { createContext, useContext, useMemo, useState } from "react";
+import {logMessage} from "../diagnostics.ts";
 
 export type ToastType = "success" | "error" | "info" | "loading";
 
@@ -106,12 +107,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     };
 
     const updateToast = (id: string, message: string, type: ToastType, errorDetails?: string) => {
+        if (type === "error") void logMessage("error", `Toast updated: ${message}${errorDetails ? `; ${errorDetails}` : ""}`);
         setToasts((prev) =>
             prev.map((t) => (t.id === id ? { ...t, message, type, errorDetails: errorDetails ?? t.errorDetails } : t))
         );
     };
 
     const showToast = (message: string, type: ToastType = "info", duration: number = 3000, errorDetails?: string) => {
+        void logMessage(type === "error" ? "error" : "info", `Toast: ${message}${errorDetails ? `; ${errorDetails}` : ""}`);
         if (type === "error" && duration === 3000) {
             duration = 5000;
         }

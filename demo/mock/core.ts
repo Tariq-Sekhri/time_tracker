@@ -187,6 +187,7 @@ let googleCalendars: GoogleCal[] = [];
 let googleEvents: GoogleEv[] = [];
 let manualTimeBlocks: ManualTimeBlock[] = [];
 let runningManualTimer: RunningManualTimer | null = null;
+let notesState = {enabled: false, text: ""};
 
 let oauthClientId = DEMO_CLIENT_ID;
 let oauthClientSecret = DEMO_CLIENT_SECRET;
@@ -357,6 +358,7 @@ function seed() {
     settings = DEMO_DEFAULT_SETTINGS.map((s) => ({ ...s }));
     manualTimeBlocks = [];
     runningManualTimer = null;
+    notesState = {enabled: false, text: ""};
     nextManualTimeBlockId = 1;
     appMetadata = { ...DEMO_APP_METADATA_DEFAULTS };
     categories = DEMO_DEFAULT_CATEGORIES.map((c) => toDemoCategory({ ...c }));
@@ -1475,8 +1477,17 @@ export async function invoke<T>(
             );
             return dayStatistics(dayStart, dayEnd, (a as {includeManual?: boolean}).includeManual !== false) as unknown as T;
         }
+        case "get_notes_state":
+            return {...notesState} as unknown as T;
+        case "set_notes_enabled":
+            notesState.enabled = Boolean((a as {enabled?: boolean}).enabled);
+            return null as T;
+        case "set_notes_text":
+            notesState.text = String((a as {text?: string}).text ?? "");
+            return null as T;
         case "get_settings":
-            return settings as unknown as T;
+            // Return a snapshot so React Query observes subsequent setting/lock changes.
+            return settings.map((setting) => ({...setting})) as unknown as T;
         case "update_val_by_key": {
             const key = String((a as { key?: string }).key ?? "");
             const newVal = Number((a as { newVal?: number }).newVal);
@@ -1740,7 +1751,7 @@ export async function invoke<T>(
                 ),
             })) as unknown as T;
         case "get_app_version":
-            return "1.11.5-demo" as unknown as T;
+            return "1.11.6-demo" as unknown as T;
         case "refresh_tray_menu":
             return null as T;
         case "check_update_cmd":

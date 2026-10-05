@@ -34,6 +34,18 @@ Manual time tracking is tedious and inconsistent. Time Tracker runs in the backg
 - No cloud, no telemetry, no third‑party services
 - Offline by design. The app does not make network requests
 
+## Support logs
+
+Open **Settings → Support logs → Open log folder**. If the app crashes, send the log file from the launch that crashed; restarting creates a newer file, so the crashed launch may be the second-newest file.
+
+- Windows: `%APPDATA%\time-tracker\logs`
+- Linux: `~/.local/share/time-tracker/logs` (or your XDG data directory)
+- Files are named `time-tracker-YYYY-MM-DD_HH-MM-SS.mmm-PID.log`. The ten most recent launches are retained.
+- Each launch has **one shared chronological file** for frontend and Rust backend entries at every level. There are no separate error, critical, debug, or tracking diagnostic files.
+- Records include app version, OS, launch/setup/exit, screen navigation, command starts/results/timings, settings changes, tracking status, database setup/backups, sync, Google Calendar failures, updates, JavaScript errors, rejected promises, React errors, and Rust panics with stacks/backtraces. Errors are written even when recovered or intentionally ignored; native errors are synced to disk before returning.
+- These logs are separate from your tracked time records. They stay on your machine. Credentials and URL query strings are redacted; note bodies and calendar content are not copied into operation logs. Logs may still contain paths and error details, so review them before sharing.
+- An abrupt OS/process termination or native WebView crash may leave only the operations immediately preceding it, rather than an exception entry. The log still provides the app version and what it was doing.
+
 ## Tech Stack
 
 - **Tauri 2**: Rust backend with system WebView

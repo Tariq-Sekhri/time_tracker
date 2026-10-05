@@ -16,9 +16,7 @@ use crate::core::macos::get_foreground_app;
 #[cfg(target_os = "windows")]
 use crate::core::windows::get_foreground_app;
 use crate::db::tables::device::get_local_device_uuid;
-use std::fs::OpenOptions;
-use std::io::Write;
-use std::path::PathBuf;
+use crate::logger::Log;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
@@ -36,6 +34,7 @@ pub fn get_tracking_status() -> bool {
 
 #[tauri::command]
 pub fn set_tracking_status(is_tracking: bool) {
+    Log::info(format!("Tracking status requested enabled={is_tracking}"));
     #[cfg(debug_assertions)]
     {
         let _ = is_tracking;
@@ -101,46 +100,18 @@ fn log_device_uuid(local_device_uuid: Option<String>) -> String {
     local_device_uuid.unwrap_or_else(|| PENDING_LOCAL_DEVICE_UUID.to_string())
 }
 
-fn tracking_log_path() -> PathBuf {
-    crate::instance::data_dir().join("tracking.log")
-}
-
-fn write_tracking_diagnostic(level: &str, message: &str) {
-    let path = tracking_log_path();
-    let result = (|| -> std::io::Result<()> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let mut file = OpenOptions::new().create(true).append(true).open(&path)?;
-        writeln!(
-            file,
-            "{} [{level}] {message}",
-            chrono::Local::now().to_rfc3339()
-        )
-    })();
-
-    if let Err(error) = result {
-        eprintln!(
-            "failed to write tracking diagnostic {}: {error}",
-            path.display()
-        );
-    }
-}
-
 pub async fn supervisor(app: AppHandle) {
-    write_tracking_diagnostic(
-        "INFO",
-        &format!(
-            "tracking supervisor started on {} (diagnostics: {})",
-            std::env::consts::OS,
-            tracking_log_path().display()
-        ),
-    );
+    Log::info(format!(
+        "Tracking supervisor started on {}",
+        std::env::consts::OS
+    ));
     tokio::time::sleep(Duration::from_secs(10)).await;
     let mut last_error: Option<(String, Instant)> = None;
     loop {
         if let Err(e) = background_process().await {
             let message = e.to_string();
+            // Persist every failure; only the GUI notification is throttled.
+            Log::error(format!("Tracking failed: {message}"));
             let should_report = last_error
                 .as_ref()
                 .map(|(previous, reported_at)| {
@@ -154,12 +125,14 @@ pub async fn supervisor(app: AppHandle) {
 
             let user_message = format!(
                 "{message}\n\nDiagnostic log: {}",
-                tracking_log_path().display()
+                crate::logger::current_path().display()
             );
-            write_tracking_diagnostic("ERROR", &message);
-            eprintln!("tracking failed: {message}");
-            let _ = app.emit("tracking-error", &user_message);
-            let _ = app.emit("BackgroundProcessError", &e);
+            let _ = crate::logger::Log::result(
+                "Native emit",
+                app.emit("tracking-error", &user_message),
+            );
+            let _ =
+                crate::logger::Log::result("Native emit", app.emit("BackgroundProcessError", &e));
             last_error = Some((message, Instant::now()));
         }
     }
@@ -181,32 +154,24 @@ async fn background_process() -> Result<(), Error> {
         }
 
         if last_log_id == -1 {
-            let app_name = new_log.app.clone();
             let is_pending_device =
                 new_log.device_uuid.as_deref() == Some(PENDING_LOCAL_DEVICE_UUID);
             last_log_id = log::insert_log(new_log).await?;
-            write_tracking_diagnostic(
-                "INFO",
-                &format!(
-                    "created log id {last_log_id} for {app_name}{}",
-                    if is_pending_device {
-                        " using pending local device identity"
-                    } else {
-                        ""
-                    }
-                ),
-            );
+            Log::debug(format!(
+                "Tracking segment created id={last_log_id}{}",
+                if is_pending_device {
+                    " using pending local device identity"
+                } else {
+                    ""
+                }
+            ));
         } else {
             let last_log = log::get_log_by_id(last_log_id).await?;
             if last_log.app == new_log.app {
                 increase_duration(last_log.id).await?;
             } else {
-                let app_name = new_log.app.clone();
                 last_log_id = log::insert_log(new_log).await?;
-                write_tracking_diagnostic(
-                    "INFO",
-                    &format!("created log id {last_log_id} for {app_name}"),
-                );
+                Log::debug(format!("Tracking segment created id={last_log_id}"));
             }
         }
     }

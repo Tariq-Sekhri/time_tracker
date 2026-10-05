@@ -86,6 +86,7 @@ pub async fn get_settings() -> Result<Vec<Setting>, Error> {
 
 #[tauri::command]
 pub async fn flip_lock_by_key(key: String) -> Result<(), Error> {
+    crate::logger::Log::info(format!("Setting lock toggle requested key={key}"));
     let pool = db::get_pool().await?;
 
     sqlx::query(
@@ -100,6 +101,7 @@ pub async fn flip_lock_by_key(key: String) -> Result<(), Error> {
 
 #[tauri::command]
 pub async fn reset_val_by_key(key: String) -> Result<(), Error> {
+    crate::logger::Log::info(format!("Setting reset requested key={key}"));
     let pool = db::get_pool().await?;
 
     sqlx::query("UPDATE settings SET val = default_val WHERE key = ?1 AND is_locked = 0")
@@ -112,6 +114,9 @@ pub async fn reset_val_by_key(key: String) -> Result<(), Error> {
 
 #[tauri::command]
 pub async fn update_val_by_key(key: String, new_val: i32) -> Result<(), Error> {
+    crate::logger::Log::info(format!(
+        "Setting change requested key={key} value={new_val}"
+    ));
     let pool = db::get_pool().await?;
 
     let bounds = sqlx::query_as::<_, (Option<i32>, Option<i32>, bool)>(
@@ -123,10 +128,14 @@ pub async fn update_val_by_key(key: String, new_val: i32) -> Result<(), Error> {
 
     let (min_val, max_val, is_locked) = match bounds {
         Some(row) => row,
-        None => return Ok(()),
+        None => {
+            crate::logger::Log::warn(format!("Setting change ignored; unknown key={key}"));
+            return Ok(());
+        }
     };
 
     if is_locked {
+        crate::logger::Log::warn(format!("Setting change ignored; key={key} is locked"));
         return Ok(());
     }
 
@@ -144,5 +153,6 @@ pub async fn update_val_by_key(key: String, new_val: i32) -> Result<(), Error> {
         .execute(&pool)
         .await?;
 
+    crate::logger::Log::info(format!("Setting saved key={key} value={val}"));
     Ok(())
 }

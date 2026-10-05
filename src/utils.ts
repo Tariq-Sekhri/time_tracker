@@ -1,10 +1,10 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeLogged } from "./diagnostics.ts";
 
 export async function invokeOrThrow<T>(
     command: string,
     args?: Record<string, any>
 ): Promise<T> {
-    return await invoke<T>(command, args);
+    return await invokeLogged<T>(command, args);
 }
 
 /**

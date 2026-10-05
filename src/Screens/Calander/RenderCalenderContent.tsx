@@ -1,4 +1,5 @@
 import { toErrorString } from "../../types/common.ts";
+import {reportError} from "../../diagnostics.ts";
 import { get_week, get_week_for_app_filter, TimeBlock } from "../../api/week.ts";
 import CalendarSkeleton from "./CalanderSkeletion.tsx";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -452,7 +453,8 @@ export default function RenderCalendarContent({
             raf = requestAnimationFrame(() => {
                 try {
                     ref?.current?.getApi?.()?.updateSize?.();
-                } catch {
+                } catch (error) {
+                    void reportError("Resize calendar", error);
                 }
             });
         };
@@ -475,7 +477,8 @@ export default function RenderCalendarContent({
                 const api = ref?.current?.getApi?.();
                 api?.render?.();
                 api?.updateSize?.();
-            } catch {
+            } catch (error) {
+                void reportError("Render/update calendar size", error);
             }
         };
         sync();
