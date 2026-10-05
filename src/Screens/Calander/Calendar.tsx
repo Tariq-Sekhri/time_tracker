@@ -230,7 +230,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
 
                 const unlisten = await window.listen("tauri://focus", () => {
                     queryClient.invalidateQueries({
-                        predicate: (query) => query.queryKey[0] === "week"
+                        predicate: (query) => query.queryKey[0] === "week" || query.queryKey[0] === "week_app_filter"
                     });
 
                     queryClient.invalidateQueries({
@@ -278,6 +278,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
             }
         },
         enabled: weekDataQueryEnabled,
+        refetchInterval: () => isCurrentWeek(date, calendarStartHour) ? 10_000 : false,
     });
 
     useEffect(() => {

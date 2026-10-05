@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
-import { getCategoryColor, getWeekStart, formatDuration, formatLocalDateYMD } from "./utils.ts";
+import { getCategoryColor, getWeekStart, formatDuration, formatLocalDateYMD, isCurrentWeek } from "./utils.ts";
 import { Category } from "../../api/Category.ts";
 import { EventClickArg, DatesSetArg } from "@fullcalendar/core";
 import interactionPlugin from '@fullcalendar/interaction';
@@ -160,6 +160,8 @@ export default function RenderCalendarContent({
         },
         enabled: weekQueryEnabled,
         refetchOnWindowFocus: true,
+        // Tracking writes continue while this screen is open, without a focus event.
+        refetchInterval: () => isCurrentWeek(date, calendarStartHour) ? 10_000 : false,
     });
 
     const {
@@ -186,6 +188,7 @@ export default function RenderCalendarContent({
         },
         enabled: weekQueryEnabled && Boolean(calendarAppFilter),
         refetchOnWindowFocus: true,
+        refetchInterval: () => isCurrentWeek(date, calendarStartHour) ? 10_000 : false,
     });
 
     const weekRange = useMemo(
