@@ -9,7 +9,7 @@ use crate::db::tables::log::{get_logs, mark_log_deleted, Log};
 use crate::db::tables::skipped_app::get_skipped_apps;
 use crate::db::tables::settings::get_settings;
 
-use chrono::{Datelike, Duration, TimeZone, Timelike, Utc};
+use chrono::{Datelike, Duration, Local, NaiveDateTime, TimeZone, Timelike};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -303,8 +303,23 @@ async fn load_runtime_settings() -> Result<(i64, TimeBlockSettings), Error> {
     Ok((calendar_start_hour, time_block_settings))
 }
 
+fn local_timestamp(naive: NaiveDateTime) -> i64 {
+    // A wall-clock time can be skipped by a DST jump; fall back to the hour after it.
+    naive
+        .and_local_timezone(Local)
+        .earliest()
+        .or_else(|| (naive + Duration::hours(1)).and_local_timezone(Local).earliest())
+        .map(|dt| dt.timestamp())
+        .unwrap_or_else(|| naive.and_utc().timestamp())
+}
+
+// Week bounds must use local time: the calendar UI draws days from calendarStartHour
+// local, so UTC bounds cut off the last (or first) hours of the week by the UTC offset.
 fn week_bounds_from_anchor(anchor_unix: i64, calendar_start_hour: i64) -> (i64, i64) {
-    let dt = Utc.timestamp_opt(anchor_unix, 0).single().unwrap_or_else(|| Utc::now());
+    let dt = Local
+        .timestamp_opt(anchor_unix, 0)
+        .single()
+        .unwrap_or_else(Local::now);
     let start_of_day = if dt.hour() as i64 >= calendar_start_hour {
         dt.date_naive().and_hms_opt(calendar_start_hour as u32, 0, 0).unwrap()
     } else {
@@ -312,8 +327,11 @@ fn week_bounds_from_anchor(anchor_unix: i64, calendar_start_hour: i64) -> (i64, 
     };
     let weekday = start_of_day.weekday().num_days_from_monday() as i64;
     let week_start = start_of_day - Duration::days(weekday);
-    let week_end = week_start + Duration::days(7) - Duration::seconds(1);
-    (week_start.and_utc().timestamp(), week_end.and_utc().timestamp())
+    let next_week_start = week_start + Duration::days(7);
+    (
+        local_timestamp(week_start),
+        local_timestamp(next_week_start) - 1,
+    )
 }
 
 #[tauri::command]
@@ -535,4 +553,31 @@ fn transform_time_blocks(
         .collect();
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod week_bounds_tests {
+    use super::{local_timestamp, week_bounds_from_anchor};
+    use chrono::NaiveDate;
+
+    fn local(y: i32, m: u32, d: u32, h: u32) -> i64 {
+        local_timestamp(NaiveDate::from_ymd_opt(y, m, d).unwrap().and_hms_opt(h, 0, 0).unwrap())
+    }
+
+    #[test]
+    fn week_bounds_follow_local_calendar_start_hour() {
+        // Frontend anchors on the local week start (Monday at calendarStartHour).
+        let anchor = local(2026, 9, 28, 8);
+        let (start, end) = week_bounds_from_anchor(anchor, 8);
+        assert_eq!(start, local(2026, 9, 28, 8));
+        assert_eq!(end, local(2026, 10, 5, 8) - 1);
+    }
+
+    #[test]
+    fn early_morning_belongs_to_previous_calendar_day() {
+        // Monday 05:00 local with an 08:00 start hour is still the previous week's Sunday.
+        let (start, end) = week_bounds_from_anchor(local(2026, 10, 5, 5), 8);
+        assert_eq!(start, local(2026, 9, 28, 8));
+        assert!(local(2026, 10, 5, 5) <= end);
+    }
 }
