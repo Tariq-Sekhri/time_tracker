@@ -9,6 +9,7 @@ import {
 } from "../api/AppGroup.ts";
 import {useToast} from "../Componants/Toast.tsx";
 import {toErrorString} from "../types/common.ts";
+import AppTitleDetails from "../Componants/AppTitleDetails.tsx";
 
 function validate(name: string, pattern: string): string | null {
     if (!name.trim()) return "Group name cannot be empty";
@@ -39,6 +40,7 @@ export default function AppGroupsView() {
     const invalidateAppViews = async () => {
         await Promise.all([
             queryClient.invalidateQueries({queryKey: ["app_groups"]}),
+            queryClient.invalidateQueries({queryKey: ["app_title_details"]}),
             queryClient.invalidateQueries({queryKey: ["week"]}),
             queryClient.invalidateQueries({queryKey: ["week_statistics"]}),
             queryClient.invalidateQueries({queryKey: ["total_statistics"]}),
@@ -200,7 +202,8 @@ export default function AppGroupsView() {
                             ) : (
                                 <div className="flex items-center gap-4">
                                     <div className="min-w-0 flex-1">
-                                        <div className="font-medium truncate">{group.name}</div>
+                                        <AppTitleDetails app={group.name} start={0} end={Math.floor(Date.now() / 1000)}
+                                            scopeLabel="All recorded time" className="block font-medium truncate max-w-full" />
                                         <div className="font-mono text-sm text-gray-400 truncate" title={group.regex}>
                                             {group.regex}
                                         </div>

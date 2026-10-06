@@ -1,3 +1,4 @@
+import AppTitleDetails from "../../../Componants/AppTitleDetails.tsx";
 import { CalendarEvent, EventLogs } from "../types.ts";
 import { formatTime, formatDuration } from "../utils.ts";
 import {
@@ -302,10 +303,10 @@ export default function AppsInTimeBlock({
                                     }`}
                             >
                                 <div className="flex items-center justify-between mb-1">
-                                    <span
-                                        className="text-sm font-medium text-white truncate flex-1 select-text">
-                                        {log.app}
-                                    </span>
+                                    <AppTitleDetails app={log.app} appNames={log.app_names}
+                                        start={Math.floor(selectedEvent.start.getTime() / 1000)}
+                                        end={Math.floor(selectedEvent.end.getTime() / 1000)} ids={log.ids}
+                                        className="text-sm font-medium text-white truncate flex-1 select-text" />
                                     <input
                                         type="checkbox"
                                         checked={selectedApps.has(log.app)}

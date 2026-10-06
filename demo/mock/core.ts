@@ -916,6 +916,7 @@ function buildCategoryStats(
     total: number;
     cats: Map<string, { dur: number; color: string | null }>;
     apps: Map<string, number>;
+    appNames: Map<string, Set<string>>;
     hourly: number[];
     dayCat: { day: number; category: string; total_duration: number }[];
     activeDayStarts: Set<number>;
@@ -923,6 +924,7 @@ function buildCategoryStats(
 } {
     const cats = new Map<string, { dur: number; color: string | null }>();
     const apps = new Map<string, number>();
+    const appNames = new Map<string, Set<string>>();
     let total = 0;
     const hourly = Array.from({ length: 25 }, () => 0);
     const dayCat: { day: number; category: string; total_duration: number }[] = [];
@@ -945,6 +947,11 @@ function buildCategoryStats(
             const share = appSum > 0 ? ap.total_duration / appSum : 0;
             const groupedApp = b.category === "Manual time" ? ap.app : resolveDemoAppGroup(ap.app);
             apps.set(groupedApp, (apps.get(groupedApp) ?? 0) + od * share);
+            if (b.category !== "Manual time") {
+                const names = appNames.get(groupedApp) ?? new Set<string>();
+                names.add(ap.app);
+                appNames.set(groupedApp, names);
+            }
         }
 
         const mid = (Math.max(b.start_time, ws) + Math.min(b.end_time, we)) / 2;
@@ -964,7 +971,7 @@ function buildCategoryStats(
         dayTotals.set(dayKey, (dayTotals.get(dayKey) ?? 0) + od);
     }
 
-    return { total, cats, apps, hourly, dayCat, activeDayStarts, dayTotals };
+    return { total, cats, apps, appNames, hourly, dayCat, activeDayStarts, dayTotals };
 }
 
 function manualStatsBlocks(start: number, end: number): TimeBlockRow[] {
@@ -1040,7 +1047,7 @@ function weekStatistics(ws: number, we: number, includeManual = true, deviceUuid
             }
             return {
                 app,
-                app_names: app.startsWith("Manual time: ") ? [] : [app],
+                app_names: [...(built.appNames.get(app) ?? [])],
                 total_duration: Math.round(total_duration),
                 percentage_change: pch,
             };
@@ -1101,7 +1108,7 @@ function weekStatistics(ws: number, we: number, includeManual = true, deviceUuid
 function dayStatistics(ds: number, de: number, includeManual = true, deviceUuids?: string[] | null) {
     seed();
     const blocks = [...blocksInRangeEffective(ds, de, deviceUuids), ...(includeManual ? manualStatsBlocks(ds, de + 1) : [])];
-    const { total, cats, apps, hourly } = buildCategoryStats(blocks, ds, de);
+    const { total, cats, apps, appNames, hourly } = buildCategoryStats(blocks, ds, de);
     const catList = Array.from(cats.entries()).map(([category, v]) => ({
         category,
         total_duration: Math.round(v.dur),
@@ -1113,7 +1120,7 @@ function dayStatistics(ds: number, de: number, includeManual = true, deviceUuids
     const appArr = Array.from(apps.entries())
         .map(([app, total_duration]) => ({
             app,
-            app_names: app.startsWith("Manual time: ") ? [] : [app],
+            app_names: [...(appNames.get(app) ?? [])],
             total_duration: Math.round(total_duration),
             percentage_change: null as number | null,
         }))

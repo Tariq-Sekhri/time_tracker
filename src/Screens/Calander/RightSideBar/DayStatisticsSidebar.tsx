@@ -1,3 +1,4 @@
+import AppTitleDetails from "../../../Componants/AppTitleDetails.tsx";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, type ReactNode } from "react";
 import { get_day_statistics } from "../../../api/statistics.ts";
@@ -430,7 +431,9 @@ export default function DayStatisticsSidebar({
                                 : "hover:bg-gray-900/80"
                                 }`}
                         >
-                            <span className="text-sm text-gray-200 truncate min-w-0 pr-2">{app.app}</span>
+                            <AppTitleDetails app={app.app} appNames={app.app_names}
+                                start={dayStart} end={dayEnd} deviceUuids={statsDeviceUuids}
+                                className="text-sm text-gray-200 truncate min-w-0 pr-2" />
                             <span className="text-sm text-gray-400 shrink-0">
                                 {formatDuration(app.total_duration)}
                             </span>

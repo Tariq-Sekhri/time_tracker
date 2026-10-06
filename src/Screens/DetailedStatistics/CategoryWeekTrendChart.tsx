@@ -1,4 +1,5 @@
 import {useMemo} from "react";
+import AppTitleDetails from "../../Componants/AppTitleDetails.tsx";
 import {
     CartesianGrid,
     Line,
@@ -383,7 +384,12 @@ export default function CategoryWeekTrendChart({
                 {series.map((s) => (
                     <div key={s.category} className="flex items-center gap-2 min-w-0">
                         <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{backgroundColor: s.color}}/>
-                        <span className="text-xs text-gray-300 truncate">{s.category}</span>
+                        {seriesMode === "topApps" ? <AppTitleDetails app={s.category}
+                            appNames={[...new Set(weekStats.flatMap((stats) =>
+                                stats?.all_apps.filter((app) => app.app === s.category).flatMap((app) => app.app_names) ?? []))]}
+                            start={weeks[0].week_start} end={weeks[weeks.length - 1].week_end}
+                            className="text-xs text-gray-300 truncate" /> :
+                            <span className="text-xs text-gray-300 truncate">{s.category}</span>}
                     </div>
                 ))}
             </div>

@@ -1,3 +1,4 @@
+import AppTitleDetails from "../../Componants/AppTitleDetails.tsx";
 /**
  * =============================================================================
  * DetailedStatistics.tsx — FULL WALKTHROUGH
@@ -938,7 +939,10 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                                         }`}
                                     >
                                         <div className="flex items-center justify-between mb-1 gap-3">
-                                            <span className="text-sm text-gray-200 truncate flex-1">{app.app}</span>
+                                            <AppTitleDetails app={app.app} appNames={app.appNames}
+                                                start={categoryStartTime} end={categoryEndTime}
+                                                minDuration={selectedCategory ? minLogDuration : 1}
+                                                className="text-sm text-gray-200 truncate flex-1" />
                                             <span className="text-sm text-gray-400 flex-shrink-0">
                                             {displayMode === "percentage" ? `${pct.toFixed(1)}%` : formatDuration(app.totalDuration)}
                                         </span>
