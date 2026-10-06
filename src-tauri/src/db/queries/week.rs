@@ -348,10 +348,14 @@ pub async fn get_week(
     week_anchor: i64,
     device_uuids: Option<Vec<String>>,
 ) -> Result<Vec<TimeBlock>, Error> {
+    let mut perf = crate::perf::Perf::new("get_week");
     let (calendar_start_hour, time_block_settings) = load_runtime_settings().await?;
     let (week_start, week_end) = week_bounds_from_anchor(week_anchor, calendar_start_hour);
     let local_uuid = crate::db::tables::device::get_local_log_device_uuid().await?;
+    perf.stage("settings");
     let mut logs = get_logs().await?;
+    perf.stage("get_logs");
+    perf.note("all_logs", logs.len());
     let skipped_apps = get_skipped_apps().await?;
 
     let skipped_regexes: Vec<Regex> = skipped_apps
@@ -369,6 +373,8 @@ pub async fn get_week(
         .filter(|log| is_skipped(&log.app))
         .map(|log| log.id)
         .collect();
+    perf.stage("skip_scan");
+    perf.note("skipped_deleted", logs_to_delete.len());
 
     for log_id in logs_to_delete {
         let _ = crate::logger::Log::result(
@@ -376,29 +382,39 @@ pub async fn get_week(
             mark_log_deleted(log_id).await,
         );
     }
+    perf.stage("mark_deleted");
 
     logs.retain(|log| !is_skipped(&log.app));
 
     logs = crate::db::tables::device::filter_logs_by_devices(logs, device_uuids, local_uuid);
+    perf.stage("filter");
 
     let cat_regex = get_cat_regex().await?;
     let categories = get_categories().await?;
     let regex = build_regex_table(&categories, &cat_regex)?;
     let app_groups = build_app_group_matchers(&get_app_groups().await?)?;
+    perf.stage("rules");
 
     let logs: Vec<Log> = logs
         .into_iter()
         .filter(|log| log.timestamp >= week_start && log.timestamp <= week_end)
         .collect();
+    perf.stage("week_filter");
+    perf.note("week_logs", logs.len());
 
     if logs.is_empty() {
+        perf.done();
         return Ok(Vec::new());
     }
 
-    transform_time_blocks(
-        get_time_blocks(&logs, &regex, &app_groups, &time_block_settings)?,
-        &time_block_settings,
-    )
+    let blocks = get_time_blocks(&logs, &regex, &app_groups, &time_block_settings)?;
+    perf.stage("build_blocks");
+    perf.note("raw_blocks", blocks.len());
+    let blocks = transform_time_blocks(blocks, &time_block_settings)?;
+    perf.stage("merge_blocks");
+    perf.note("blocks", blocks.len());
+    perf.done();
+    Ok(blocks)
 }
 
 #[tauri::command]
@@ -407,10 +423,14 @@ pub async fn get_week_for_app_filter(
     app_name: String,
     device_uuids: Option<Vec<String>>,
 ) -> Result<Vec<TimeBlock>, Error> {
+    let mut perf = crate::perf::Perf::new("get_week_for_app_filter");
     let (calendar_start_hour, time_block_settings) = load_runtime_settings().await?;
     let (week_start, week_end) = week_bounds_from_anchor(week_anchor, calendar_start_hour);
     let local_uuid = crate::db::tables::device::get_local_log_device_uuid().await?;
+    perf.stage("settings");
     let mut logs = get_logs().await?;
+    perf.stage("get_logs");
+    perf.note("all_logs", logs.len());
     let skipped_apps = get_skipped_apps().await?;
 
     let skipped_regexes: Vec<Regex> = skipped_apps
@@ -426,11 +446,13 @@ pub async fn get_week_for_app_filter(
     logs.retain(|log| !is_skipped(&log.app));
 
     logs = crate::db::tables::device::filter_logs_by_devices(logs, device_uuids, local_uuid);
+    perf.stage("filter");
 
     let cat_regex = get_cat_regex().await?;
     let categories = get_categories().await?;
     let regex = build_regex_table(&categories, &cat_regex)?;
     let app_groups = build_app_group_matchers(&get_app_groups().await?)?;
+    perf.stage("rules");
 
     let logs: Vec<Log> = logs
         .into_iter()
@@ -440,15 +462,21 @@ pub async fn get_week_for_app_filter(
                 && log.timestamp <= week_end
         })
         .collect();
+    perf.stage("week_filter");
+    perf.note("week_logs", logs.len());
 
     if logs.is_empty() {
+        perf.done();
         return Ok(Vec::new());
     }
 
-    transform_time_blocks(
-        get_time_blocks(&logs, &regex, &app_groups, &time_block_settings)?,
-        &time_block_settings,
-    )
+    let blocks = get_time_blocks(&logs, &regex, &app_groups, &time_block_settings)?;
+    perf.stage("build_blocks");
+    let blocks = transform_time_blocks(blocks, &time_block_settings)?;
+    perf.stage("merge_blocks");
+    perf.note("blocks", blocks.len());
+    perf.done();
+    Ok(blocks)
 }
 
 fn ensure_non_overlapping(mut blocks: Vec<TimeBlock>) -> Vec<TimeBlock> {

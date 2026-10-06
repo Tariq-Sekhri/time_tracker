@@ -26,6 +26,21 @@ type RunningManualTimer = {
 };
 
 describe("demo manual time commands", () => {
+    it("renames projects and removes assignments without deleting recorded or running time", async () => {
+        const id = await invoke<number>("create_manual_project", {name: "Project lifecycle"});
+        const start = Math.floor(Date.now() / 1000) - 600;
+        const blockId = await invoke<number>("insert_manual_time_block", {newManualTimeBlock: {title: "Past work", notes: "Keep these notes", project_id: id, start_time: start, end_time: start + 300}});
+        await invoke("start_manual_timer", {title: "Current work", projectId: id});
+        await invoke("update_manual_project", {id, name: "Renamed project"});
+        await expect(invoke("get_manual_projects")).resolves.toContainEqual({id, name: "Renamed project"});
+        await invoke("delete_manual_project", {id});
+        await expect(invoke("get_manual_time_blocks", {rangeStart: start, rangeEnd: start + 600})).resolves.toContainEqual(expect.objectContaining({id: blockId, title: "Past work", notes: "Keep these notes", project_id: null, end_time: start + 300}));
+        await expect(invoke("get_running_manual_timer")).resolves.toMatchObject({title: "Current work", project_id: null, end_time: null});
+        await invoke("stop_manual_timer");
+        const finishedId = await invoke<number>("finish_manual_timer");
+        await invoke("delete_manual_time_block", {id: blockId});
+        await invoke("delete_manual_time_block", {id: finishedId});
+    });
     it("loads manual time data and starts, records, and reloads a timer", async () => {
         const rangeStart = Math.floor(Date.now() / 1000) - 60;
         const rangeEnd = rangeStart + 3600;
@@ -49,6 +64,31 @@ describe("demo manual time commands", () => {
 
 
 describe("manual time statistics", () => {
+    it("splits manual time by project, refreshes renamed categories, and keeps deleted project time", async () => {
+        const first = await invoke<number>("create_manual_project", {name: "Client alpha"});
+        const second = await invoke<number>("create_manual_project", {name: "Client beta"});
+        const start = Math.floor(Date.now() / 1000) - 86400;
+        const args = {weekStart: start, weekEnd: start + 3600};
+        type Stats = {total_time: number; categories: Array<{category: string; total_duration: number}>};
+        const before = await invoke<Stats>("get_week_statistics", args);
+        const ids: number[] = [];
+        for (const [project_id, duration] of [[first, 600], [second, 900], [null, 300]]) ids.push(await invoke<number>("insert_manual_time_block", {newManualTimeBlock: {title: "", project_id, start_time: start, end_time: start + duration!}}));
+        const stats = await invoke<Stats>("get_week_statistics", args);
+        expect(stats.total_time - before.total_time).toBe(1800);
+        expect(stats.categories).toContainEqual(expect.objectContaining({category: "Client alpha", total_duration: 600}));
+        expect(stats.categories).toContainEqual(expect.objectContaining({category: "Client beta", total_duration: 900}));
+        expect(stats.categories.find((row) => row.category === "Manual time")!.total_duration - (before.categories.find((row) => row.category === "Manual time")?.total_duration ?? 0)).toBe(300);
+        await invoke("update_manual_project", {id: first, name: "Renamed alpha"});
+        const renamed = await invoke<Stats>("get_week_statistics", args);
+        expect(renamed.categories).toContainEqual(expect.objectContaining({category: "Renamed alpha", total_duration: 600}));
+        expect(renamed.categories.some((row) => row.category === "Client alpha")).toBe(false);
+        await invoke("delete_manual_project", {id: first});
+        const deleted = await invoke<Stats>("get_week_statistics", args);
+        expect(deleted.total_time).toBe(stats.total_time);
+        expect(deleted.categories.find((row) => row.category === "Manual time")!.total_duration - (before.categories.find((row) => row.category === "Manual time")?.total_duration ?? 0)).toBe(900);
+        for (const id of ids) await invoke("delete_manual_time_block", {id});
+        await invoke("delete_manual_project", {id: second});
+    });
     it("adds overlapping blocks to totals, charts and titles while preserving notes through edits", async () => {
         const start = Math.floor(Date.now() / 1000) - 86400;
         const end = start + 7200;

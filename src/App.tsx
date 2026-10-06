@@ -43,6 +43,51 @@ function AppInner() {
     const {data: notesState} = useQuery({queryKey: ["notes"], queryFn: getNotesState});
     const [currentView, setCurrentView] = useState<View>("calendar");
     useEffect(() => {
+        const storageKey = "time-tracker:ui-zoom";
+        const minZoom = 0.7;
+        const maxZoom = 1.5;
+        let zoom = 1;
+
+        try {
+            const savedZoom = Number(window.localStorage.getItem(storageKey));
+            if (Number.isFinite(savedZoom) && savedZoom >= minZoom && savedZoom <= maxZoom) {
+                zoom = savedZoom;
+            }
+        } catch {
+            // Zoom shortcuts still work if local storage is unavailable.
+        }
+
+        const applyZoom = (nextZoom: number) => {
+            zoom = Math.max(minZoom, Math.min(maxZoom, Math.round(nextZoom * 100) / 100));
+            document.documentElement.style.zoom = `${zoom * 100}%`;
+            try {
+                window.localStorage.setItem(storageKey, String(zoom));
+            } catch {
+                // Keep the current zoom for this session if persistence is unavailable.
+            }
+        };
+
+        applyZoom(zoom);
+
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (!event.ctrlKey || event.metaKey || event.altKey) return;
+
+            const zoomIn = event.key === "+" || event.key === "=" || event.code === "NumpadAdd";
+            const zoomOut = event.key === "-" || event.key === "_" || event.code === "NumpadSubtract";
+            const reset = event.key === "0" || event.code === "Numpad0";
+            if (!zoomIn && !zoomOut && !reset) return;
+
+            event.preventDefault();
+            event.stopPropagation();
+            if (reset) applyZoom(1);
+            else if (zoomIn) applyZoom(zoom + 0.1);
+            else applyZoom(zoom - 0.1);
+        };
+
+        window.addEventListener("keydown", onKeyDown, {capture: true});
+        return () => window.removeEventListener("keydown", onKeyDown, {capture: true});
+    }, []);
+    useEffect(() => {
         void logMessage("info", `Screen opened: ${currentView}`);
         return () => { void logMessage("debug", `Screen leaving: ${currentView}`); };
     }, [currentView]);

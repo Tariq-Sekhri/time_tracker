@@ -1,6 +1,7 @@
 import AppTitleDetails from "../../../Componants/AppTitleDetails.tsx";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, type ReactNode } from "react";
+import { useRenderPerf } from "../../../perf.ts";
 import { get_day_statistics } from "../../../api/statistics.ts";
 import { getCalendarDayRangeUnix } from "../../../utils.ts";
 import { formatDuration } from "../utils.ts";
@@ -18,8 +19,7 @@ import { useCalendarAppFilterActive } from "../../../stores/calendarAppFilterSto
 import { useBackendSettings } from "../../../hooks/useBackendSettings.ts";
 import {
     get_manual_time_blocks,
-    MANUAL_TIME_COLOR,
-    MANUAL_TIME_LABEL,
+    manualTimeCategoryStats,
     manualTimeDurationInRange,
     manualTimeAppStats,
 } from "../../../api/ManualTimeBlock.ts";
@@ -75,6 +75,7 @@ export default function DayStatisticsSidebar({
         isLoading,
         error,
         isError,
+        dataUpdatedAt: dayStatsUpdatedAt,
     } = useQuery({
         queryKey: ["day_statistics", dayStart, dayEnd, statsDeviceUuids],
         queryFn: async () => {
@@ -156,15 +157,9 @@ export default function DayStatisticsSidebar({
         [manualTimeBlocks, manualTimeInStats, dayStart, dayEnd],
     );
 
-    const manualCategory = useMemo<CombinedCategory | null>(() => {
-        if (!manualTimeInStats || manualTotalDuration <= 0) return null;
-        return {
-            category: MANUAL_TIME_LABEL,
-            total_duration: manualTotalDuration,
-            color: MANUAL_TIME_COLOR,
-            source: "manual",
-        };
-    }, [manualTimeInStats, manualTotalDuration]);
+    const manualCategories = useMemo<CombinedCategory[]>(() => manualTimeInStats
+        ? manualTimeCategoryStats(manualTimeBlocks, dayStart, dayEnd + 1).map((row) => ({...row, source: "manual"}))
+        : [], [manualTimeInStats, manualTimeBlocks, dayStart, dayEnd]);
 
     const topCategories = useMemo(() => {
         if (!dayStats) return [] as CombinedCategory[];
@@ -180,12 +175,12 @@ export default function DayStatisticsSidebar({
 
         const combined = [
             ...trackingCategories,
-            ...(manualCategory ? [manualCategory] : []),
+            ...manualCategories,
             ...(includeGoogleInStats ? googleCategories : []),
         ];
         combined.sort((a, b) => b.total_duration - a.total_duration);
         return combined.slice(0, categorySidebarCount);
-    }, [dayStats, includeGoogleInStats, googleCategories, manualCategory, categorySidebarCount, statsCategoryNames]);
+    }, [dayStats, includeGoogleInStats, googleCategories, manualCategories, categorySidebarCount, statsCategoryNames]);
 
     const maxCategoryDuration = topCategories.length > 0 ? topCategories[0].total_duration : 1;
 
@@ -225,6 +220,14 @@ export default function DayStatisticsSidebar({
         return [...dayStats.top_apps, ...(manualTimeInStats ? manualTimeAppStats(manualTimeBlocks, dayStart, dayEnd + 1) : [])]
             .sort((a, b) => b.total_duration - a.total_duration).slice(0, 5);
     }, [dayStats, manualTimeInStats, manualTimeBlocks, dayStart, dayEnd]);
+
+    useRenderPerf(
+        "day_stats_sidebar",
+        `${dayStart}|${statsDeviceUuids?.join(",") ?? "all"}`,
+        !isLoading && !isLoadingManualTime && (!!dayStats || isError),
+        dayStatsUpdatedAt,
+        {categories: dayStats?.categories.length ?? 0},
+    );
 
     if (isLoading || isLoadingManualTime || (!dayStats && !isError)) {
         return (
@@ -455,4 +458,3 @@ export default function DayStatisticsSidebar({
         </div>
     );
 }
-

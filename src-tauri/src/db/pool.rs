@@ -1,6 +1,7 @@
 use sqlx::migrate::MigrateError;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use sqlx::SqlitePool;
+use sqlx::{Connection, SqliteConnection};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Mutex;
@@ -133,7 +134,7 @@ fn paths_equal(a: &Path, b: &Path) -> bool {
 }
 
 fn is_custom_db_path() -> bool {
-    read_custom_db_path().is_some()
+    !cfg!(debug_assertions) && read_custom_db_path().is_some()
 }
 
 fn is_valid_sqlite_file(path: &Path) -> bool {
@@ -156,7 +157,44 @@ fn seed_database_from_app_db_once(target_path: &PathBuf) -> std::io::Result<()> 
 }
 
 pub fn get_db_path() -> PathBuf {
-    read_custom_db_path().unwrap_or_else(default_db_path)
+    if cfg!(debug_assertions) { default_db_path() } else { read_custom_db_path().unwrap_or_else(default_db_path) }
+}
+
+pub async fn refresh_dev_database() -> Result<(), sqlx::Error> {
+    if !cfg!(debug_assertions) { return Ok(()); }
+    let source = app_data_time_tracker_dir().join("app.db");
+    if !db_file_has_data(&source) {
+        crate::logger::Log::info("No production database to copy into dev mode");
+        return Ok(());
+    }
+    refresh_database_copy(&source, &default_db_path()).await?;
+    crate::logger::Log::info("Dev database refreshed from app.db; activity tracking and sync disabled");
+    Ok(())
+}
+
+async fn refresh_database_copy(source: &Path, target: &Path) -> Result<(), sqlx::Error> {
+    let snapshot = target.with_extension(format!("refresh-{}.db", std::process::id()));
+    if snapshot.exists() { std::fs::remove_file(&snapshot)?; }
+    // SQLite reads a consistent snapshot, including committed WAL data, without writing to production.
+    let mut connection = SqliteConnection::connect_with(&SqliteConnectOptions::new()
+        .filename(source).read_only(true).busy_timeout(Duration::from_secs(10))).await?;
+    sqlx::query("VACUUM main INTO ?").bind(snapshot.to_string_lossy().as_ref())
+        .execute(&mut connection).await?;
+    connection.close().await?;
+    let mut copy = SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&snapshot).read_only(true)).await?;
+    let integrity: String = sqlx::query_scalar("PRAGMA integrity_check").fetch_one(&mut copy).await?;
+    copy.close().await?;
+    if integrity != "ok" {
+        return Err(sqlx::Error::Io(std::io::Error::other("Production database snapshot failed integrity check")));
+    }
+    // No dev connections exist yet: discard old journals before installing the complete snapshot.
+    for suffix in ["-wal", "-shm"] {
+        let sidecar = PathBuf::from(format!("{}{suffix}", target.display()));
+        if sidecar.exists() { std::fs::remove_file(sidecar)?; }
+    }
+    std::fs::copy(&snapshot, target)?;
+    std::fs::remove_file(snapshot)?;
+    Ok(())
 }
 
 #[derive(Serialize)]
@@ -208,6 +246,7 @@ pub async fn set_database_location(
     path: String,
     overwrite: bool,
 ) -> Result<SetDatabaseLocationResult, Error> {
+    if cfg!(debug_assertions) { return Err(anyhow::anyhow!("Dev mode always uses apptest.db").into()); }
     let path = resolve_location_path(&path)?;
     crate::logger::Log::info(format!(
         "Database location change requested path={} overwrite={overwrite}",
@@ -256,6 +295,7 @@ pub async fn set_database_location(
 
 #[tauri::command]
 pub async fn reset_database_location() -> Result<DatabaseLocationInfo, Error> {
+    if cfg!(debug_assertions) { return Ok(get_database_location()); }
     crate::logger::Log::info("Resetting database location to default");
     clear_custom_db_path()?;
     reopen_pool().await?;
@@ -273,8 +313,12 @@ fn resolve_location_path(path: &str) -> Result<PathBuf, Error> {
 }
 
 async fn reopen_pool() -> Result<(), Error> {
+    let mut perf = crate::perf::Perf::new("reopen_pool");
     reset_pool().await?;
+    perf.stage("close");
     get_pool().await?;
+    perf.stage("open");
+    perf.done();
     Ok(())
 }
 
@@ -322,10 +366,6 @@ async fn create_pool() -> Result<SqlitePool, sqlx::Error> {
     crate::logger::Log::info(format!("Opening database path={}", get_db_path().display()));
     if !is_custom_db_path() {
         migrate_dev_db_to_app_db_once().map_err(sqlx::Error::Io)?;
-        if cfg!(debug_assertions) {
-            let db_path = get_db_path();
-            seed_database_from_app_db_once(&db_path).map_err(sqlx::Error::Io)?;
-        }
     }
 
     let db_path = get_db_path();

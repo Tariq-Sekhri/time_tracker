@@ -1,5 +1,5 @@
 // Installed by Tauri before the frontend bundle, including failed bundle loads.
-(() => {
+;(() => { // Leading ";" because Tauri concatenates this after its own script.
     const write = (message) => {
         if (window.__TIME_TRACKER_DIAGNOSTICS__) return;
         try {

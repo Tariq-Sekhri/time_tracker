@@ -14,8 +14,8 @@ static APP_HANDLE: OnceLock<AppHandle<tauri::Wry>> = OnceLock::new();
 fn create_menu<R: Runtime>(app: &AppHandle<R>) -> Result<Menu<R>, Box<dyn std::error::Error>> {
     let show = MenuItem::with_id(app, "show", "Show", true, None::<String>)?;
     let is_paused = IS_SUSPENDED.load(Ordering::Relaxed);
-    let toggle_text = if is_paused { "Resume" } else { "Pause" };
-    let toggle = MenuItem::with_id(app, "toggle", toggle_text, true, None::<String>)?;
+    let toggle_text = if cfg!(debug_assertions) { "Tracking disabled (dev)" } else if is_paused { "Resume" } else { "Pause" };
+    let toggle = MenuItem::with_id(app, "toggle", toggle_text, !cfg!(debug_assertions), None::<String>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<String>)?;
     Ok(Menu::with_items(app, &[&show, &toggle, &quit])?)
 }
@@ -44,6 +44,7 @@ pub fn setup_tray(app: &AppHandle<tauri::Wry>) -> Result<(), Box<dyn std::error:
                 app.exit(0);
             }
             "toggle" => {
+                if cfg!(debug_assertions) { return; }
                 let current_state = IS_SUSPENDED.load(Ordering::Relaxed);
                 IS_SUSPENDED.store(!current_state, Ordering::Relaxed);
 

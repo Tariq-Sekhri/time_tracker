@@ -99,18 +99,25 @@ pub fn list_backups() -> Result<Vec<BackupInfoResponse>, Error> {
 
 #[tauri::command]
 pub fn create_manual_backup(name: String) -> Result<String, Error> {
+    let mut perf = crate::perf::Perf::new("create_manual_backup");
     let path = backup::create_manual_backup(&name).context("Failed to create backup")?;
+    perf.done();
 
     Ok(path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
 pub async fn restore_backup(backup_name: String) -> Result<(), Error> {
+    let mut perf = crate::perf::Perf::new("restore_backup");
     reset_pool().await?;
+    perf.stage("close_pool");
 
     backup::restore_backup(&backup_name).context("Failed to restore backup")?;
+    perf.stage("copy");
 
     get_pool().await?;
+    perf.stage("open_pool");
+    perf.done();
 
     Ok(())
 }
@@ -122,7 +129,9 @@ pub fn get_backup_dir() -> String {
 
 #[tauri::command]
 pub fn create_safety_backup(reason: String) -> Result<String, Error> {
+    let mut perf = crate::perf::Perf::new("create_safety_backup");
     let path = backup::create_safety_backup(&reason).context("Failed to create safety backup")?;
+    perf.done();
 
     Ok(path.to_string_lossy().to_string())
 }

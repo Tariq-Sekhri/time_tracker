@@ -52,20 +52,29 @@ pub async fn get_skipped_apps() -> Result<Vec<SkippedApp>, Error> {
 
 #[tauri::command]
 pub async fn count_matching_logs(regex_pattern: String) -> Result<i64, Error> {
+    let mut perf = crate::perf::Perf::new("count_matching_logs");
     let compiled_regex = Regex::new(&regex_pattern)?;
     let logs = get_logs().await?;
+    perf.stage("get_logs");
+    perf.note("all_logs", logs.len());
     let count = logs
         .iter()
         .filter(|log| compiled_regex.is_match(&log.app))
         .count();
+    perf.stage("regex_scan");
+    perf.note("matched", count);
+    perf.done();
     Ok(count as i64)
 }
 
 #[tauri::command]
 pub async fn insert_skipped_app_and_delete_logs(new_app: NewSkippedApp) -> Result<i64, Error> {
+    let mut perf = crate::perf::Perf::new("insert_skipped_app_and_delete_logs");
     let compiled_regex = Regex::new(&new_app.regex)?;
     let pool = db::get_pool().await?;
     let logs = get_logs().await?;
+    perf.stage("get_logs");
+    perf.note("all_logs", logs.len());
     let matching: Vec<(i64, String)> = logs
         .iter()
         .filter(|log| compiled_regex.is_match(&log.app))
@@ -75,6 +84,8 @@ pub async fn insert_skipped_app_and_delete_logs(new_app: NewSkippedApp) -> Resul
                 .map(|uuid| (log.id, uuid.clone()))
         })
         .collect();
+    perf.stage("regex_scan");
+    perf.note("matched", matching.len());
 
     let mut tx = (&pool).begin().await?;
     for (log_id, uuid) in matching {
@@ -86,10 +97,13 @@ pub async fn insert_skipped_app_and_delete_logs(new_app: NewSkippedApp) -> Resul
         .execute(&mut *tx)
         .await?;
     }
+    perf.stage("updates");
     let result = sqlx::query!("INSERT INTO skipped_apps (regex) VALUES (?1)", new_app.regex)
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
+    perf.stage("insert_commit");
+    perf.done();
     let id = result.last_insert_rowid();
 
     Ok(id)

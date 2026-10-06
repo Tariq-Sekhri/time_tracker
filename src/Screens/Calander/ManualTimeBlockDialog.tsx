@@ -2,6 +2,8 @@ import {useEffect, useState} from "react";
 import {useMutation, useQueryClient} from "@tanstack/react-query";
 import {insert_manual_time_block} from "../../api/ManualTimeBlock.ts";
 import {useToast} from "../../Componants/Toast.tsx";
+import ProjectSelector from "../../Componants/ProjectSelector.tsx";
+import ManualPopover from "../../Componants/ManualPopover.tsx";
 
 function toLocalDateTimeInput(date: Date): string {
     return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
@@ -11,15 +13,18 @@ export default function ManualTimeBlockDialog({
     open,
     initialStart,
     onClose,
+    anchor,
 }: {
     open: boolean;
     initialStart: Date;
     onClose: () => void;
+    anchor: HTMLElement | null;
 }) {
     const queryClient = useQueryClient();
     const {showToast} = useToast();
     const [title, setTitle] = useState("");
     const [notes, setNotes] = useState("");
+    const [projectId, setProjectId] = useState<number | null>(null);
     const [start, setStart] = useState("");
     const [end, setEnd] = useState("");
     const [validationError, setValidationError] = useState<string | null>(null);
@@ -33,6 +38,7 @@ export default function ManualTimeBlockDialog({
         const defaultEnd = new Date(roundedStart.getTime() + 60 * 60 * 1000);
         setTitle("");
         setNotes("");
+        setProjectId(null);
         setStart(toLocalDateTimeInput(roundedStart));
         setEnd(toLocalDateTimeInput(defaultEnd));
         setValidationError(null);
@@ -55,10 +61,6 @@ export default function ManualTimeBlockDialog({
     const save = () => {
         const startDate = new Date(start);
         const endDate = new Date(end);
-        if (!title.trim()) {
-            setValidationError("Add a title for this time block.");
-            return;
-        }
         if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
             setValidationError("Choose a valid start and end time.");
             return;
@@ -71,20 +73,15 @@ export default function ManualTimeBlockDialog({
         createMutation.mutate({
             title: title.trim(),
             notes: notes.trim() || null,
+            project_id: projectId,
             start_time: Math.floor(startDate.getTime() / 1000),
             end_time: Math.floor(endDate.getTime() / 1000),
         });
     };
 
     return (
-        <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/75 p-4" onMouseDown={onClose}>
-            <div
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="manual-time-title"
-                className="w-full max-w-lg rounded-xl border border-gray-700 bg-gray-950 p-6 shadow-2xl"
-                onMouseDown={(event) => event.stopPropagation()}
-            >
+        <ManualPopover anchor={anchor} onClose={onClose} labelledBy="manual-time-title" width={480}>
+            <div>
                 <div className="mb-5 flex items-center justify-between gap-4">
                     <div>
                         <h2 id="manual-time-title" className="text-xl font-semibold text-white">Track time manually</h2>
@@ -95,7 +92,7 @@ export default function ManualTimeBlockDialog({
 
                 <div className="space-y-4">
                     <label className="block">
-                        <span className="mb-1 block text-sm font-medium text-gray-300">Title</span>
+                        <span className="mb-1 block text-sm font-medium text-gray-300">Name (optional)</span>
                         <input
                             autoFocus
                             value={title}
@@ -109,6 +106,10 @@ export default function ManualTimeBlockDialog({
                             className="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white outline-none focus:border-sky-500"
                         />
                     </label>
+                    <div>
+                        <span className="mb-1 block text-sm font-medium text-gray-300">Project</span>
+                        <ProjectSelector value={projectId} onChange={setProjectId} disabled={createMutation.isPending} />
+                    </div>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <label className="block">
                             <span className="mb-1 block text-sm font-medium text-gray-300">Start</span>
@@ -133,6 +134,6 @@ export default function ManualTimeBlockDialog({
                     </button>
                 </div>
             </div>
-        </div>
+        </ManualPopover>
     );
 }

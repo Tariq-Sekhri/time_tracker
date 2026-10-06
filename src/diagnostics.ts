@@ -1,4 +1,5 @@
 import {invoke} from "@tauri-apps/api/core";
+import {HEAVY_COMMANDS, logPerf} from "./perf.ts";
 
 export type LogLevel = "info" | "debug" | "warn" | "error";
 const originalConsoleError = console.error.bind(console);
@@ -89,19 +90,35 @@ function operationDetails(args?: Record<string, unknown>): string {
 }
 
 let operationId = 0;
+let heavyInFlight = 0;
 export async function invokeLogged<T>(command: string, args?: Record<string, unknown>): Promise<T> {
     const id = ++operationId;
     const started = performance.now();
     const level = /^(get_|list_|count_|check)/.test(command) ? "debug" : "info";
     await logMessage(level, `Operation #${id} ${command} started${operationDetails(args)}`);
+    const invokeStarted = performance.now();
+    const heavy = HEAVY_COMMANDS.has(command);
+    // Other heavy calls already running when this one starts (parallel trend weeks, etc.).
+    const concurrent = heavy ? heavyInFlight++ : 0;
     try {
         const result = await invoke<T>(command, args);
+        if (heavy) {
+            // prelog = the awaited "started" log round trip before the real call.
+            logPerf(`ipc ${command}`, {prelog: invokeStarted - started, ipc: performance.now() - invokeStarted}, {
+                op: id,
+                concurrent,
+                ...(Array.isArray(result) ? {rows: result.length} : {}),
+                args: operationDetails(args).trim() || "none",
+            });
+        }
         const summary = Array.isArray(result) ? ` rows=${result.length}` : "";
         await logMessage(level, `Operation #${id} ${command} completed elapsed_ms=${Math.round(performance.now() - started)}${summary}`);
         return result;
     } catch (error) {
         await reportError(`Operation #${id} ${command} failed elapsed_ms=${Math.round(performance.now() - started)}`, error);
         throw error;
+    } finally {
+        if (heavy) heavyInFlight--;
     }
 }
 

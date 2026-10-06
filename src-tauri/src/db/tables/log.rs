@@ -196,6 +196,8 @@ pub async fn delete_log_by_id(id: i64, uuid: String) -> Result<(), Error> {
 
 #[tauri::command]
 pub async fn delete_logs_by_ids(ids: Vec<i64>, uuid: String) -> Result<(), Error> {
+    let mut perf = crate::perf::Perf::new("delete_logs_by_ids");
+    perf.note("ids", ids.len());
     let pool = db::get_pool().await?;
     let mut tx = pool.begin().await?;
     for id in ids {
@@ -207,19 +209,29 @@ pub async fn delete_logs_by_ids(ids: Vec<i64>, uuid: String) -> Result<(), Error
         .execute(&mut *tx)
         .await?;
     }
+    perf.stage("updates");
     tx.commit().await?;
+    perf.stage("commit");
+    perf.done();
     Ok(())
 }
 
 #[tauri::command]
 pub async fn get_logs() -> Result<Vec<Log>, Error> {
+    // Full-table read shared by week/stats commands; logged separately to expose pool
+    // contention when several run at once (e.g. the trend tab's per-week queries).
+    let mut perf = crate::perf::Perf::new("db_get_logs");
     let pool = db::get_pool().await?;
+    perf.stage("pool");
     let logs = sqlx::query_as!(
         Log,
         r#"SELECT id, device_uuid, app, timestamp, duration, is_deleted as "is_deleted!: bool" FROM logs WHERE is_deleted = 0"#
     )
     .fetch_all(&pool)
     .await?;
+    perf.stage("query");
+    perf.note("rows", logs.len());
+    perf.done();
     Ok(logs)
 }
 
@@ -275,6 +287,7 @@ pub struct GetLogsForTimeBlockRequest {
 
 #[tauri::command]
 pub async fn delete_logs_for_time_block(request: DeleteTimeBlockRequest) -> Result<i64, Error> {
+    let mut perf = crate::perf::Perf::new("delete_logs_for_time_block");
     let pool = db::get_pool().await?;
     let mut tx = pool.begin().await?;
 
@@ -286,6 +299,8 @@ pub async fn delete_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resu
     )
     .fetch_all(&mut *tx)
     .await?;
+    perf.stage("query");
+    perf.note("range_logs", logs.len());
 
     let mut deleted_count = 0i64;
     for log in logs {
@@ -303,13 +318,18 @@ pub async fn delete_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resu
         }
     }
 
+    perf.stage("updates");
     tx.commit().await?;
+    perf.stage("commit");
+    perf.note("deleted", deleted_count);
+    perf.done();
 
     Ok(deleted_count)
 }
 
 #[tauri::command]
 pub async fn count_logs_for_time_block(request: DeleteTimeBlockRequest) -> Result<i64, Error> {
+    let mut perf = crate::perf::Perf::new("count_logs_for_time_block");
     let pool = db::get_pool().await?;
 
     let logs = sqlx::query_as!(
@@ -321,10 +341,14 @@ pub async fn count_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resul
     .fetch_all(&pool)
     .await?;
 
+    perf.stage("query");
+    perf.note("range_logs", logs.len());
     let count = logs
         .iter()
         .filter(|log| request.app_names.contains(&log.app))
         .count();
+    perf.stage("filter");
+    perf.done();
 
     Ok(count as i64)
 }
@@ -333,6 +357,7 @@ pub async fn count_logs_for_time_block(request: DeleteTimeBlockRequest) -> Resul
 pub async fn get_logs_for_time_block(
     request: GetLogsForTimeBlockRequest,
 ) -> Result<Vec<MergedLog>, Error> {
+    let mut perf = crate::perf::Perf::new("get_logs_for_time_block");
     let pool = db::get_pool().await?;
 
     let min_d = request.min_log_duration.max(1);
@@ -345,6 +370,8 @@ pub async fn get_logs_for_time_block(
     .fetch_all(&pool)
     .await?;
 
+    perf.stage("query");
+    perf.note("range_logs", logs.len());
     let filtered_logs: Vec<Log> = logs
         .into_iter()
         .filter(|log| request.app_names.contains(&log.app))
@@ -352,7 +379,12 @@ pub async fn get_logs_for_time_block(
 
     let groups = crate::db::tables::app_group::get_app_groups().await?;
     let matchers = crate::db::tables::app_group::build_app_group_matchers(&groups)?;
-    Ok(merge_logs_in_time_block(filtered_logs, &matchers))
+    perf.stage("filter_groups");
+    let merged = merge_logs_in_time_block(filtered_logs, &matchers);
+    perf.stage("merge");
+    perf.note("merged", merged.len());
+    perf.done();
+    Ok(merged)
 }
 
 fn merge_logs_in_time_block(
@@ -483,6 +515,7 @@ pub async fn get_logs_by_category(
     use skipped_app::get_skipped_apps;
     use std::collections::HashMap;
 
+    let mut perf = crate::perf::Perf::new("get_logs_by_category");
     let pool = db::get_pool().await?;
 
     let min_d = request.min_log_duration.max(1);
@@ -494,6 +527,8 @@ pub async fn get_logs_by_category(
     .bind(min_d)
     .fetch_all(&pool)
     .await?;
+    perf.stage("query");
+    perf.note("range_logs", logs.len());
 
     let skipped_apps = get_skipped_apps().await?;
     let mut skipped_regexes: Vec<Regex> = Vec::new();
@@ -505,6 +540,8 @@ pub async fn get_logs_by_category(
         |app_name: &str| -> bool { skipped_regexes.iter().any(|regex| regex.is_match(app_name)) };
 
     logs.retain(|log| !is_skipped(&log.app));
+    perf.stage("skip_filter");
+    perf.note("after_skip", logs.len());
 
     let categories = get_categories().await?;
     let cat_regex_list = get_cat_regex().await?;
@@ -539,10 +576,17 @@ pub async fn get_logs_by_category(
             matched_category == request.category
         })
         .collect();
+    perf.stage("rules_categorize");
+    perf.note("category_regexes", regex_list.len());
+    perf.note("category_logs", filtered_logs.len());
 
     let groups = crate::db::tables::app_group::get_app_groups().await?;
     let matchers = crate::db::tables::app_group::build_app_group_matchers(&groups)?;
-    Ok(merge_logs_in_time_block(filtered_logs, &matchers))
+    let merged = merge_logs_in_time_block(filtered_logs, &matchers);
+    perf.stage("merge");
+    perf.note("merged", merged.len());
+    perf.done();
+    Ok(merged)
 }
 
 #[tauri::command]
@@ -555,6 +599,7 @@ pub async fn get_logs_for_app_in_time_range(
     use crate::db::tables::skipped_app::get_skipped_apps;
     use regex::Regex;
 
+    let mut perf = crate::perf::Perf::new("get_logs_for_app_in_time_range");
     let pool = db::get_pool().await?;
 
     let skipped_apps = get_skipped_apps().await?;
@@ -576,6 +621,8 @@ pub async fn get_logs_for_app_in_time_range(
     .bind(min_d)
     .fetch_all(&pool)
     .await?;
+    perf.stage("query");
+    perf.note("range_logs", logs.len());
 
     let groups = crate::db::tables::app_group::get_app_groups().await?;
     let matchers = crate::db::tables::app_group::build_app_group_matchers(&groups)?;
@@ -586,6 +633,9 @@ pub async fn get_logs_for_app_in_time_range(
                 && crate::db::tables::app_group::resolve_app_group(&log.app, &matchers) == app
         })
         .collect();
+    perf.stage("filter");
+    perf.note("app_logs", logs.len());
+    perf.done();
 
     Ok(logs)
 }

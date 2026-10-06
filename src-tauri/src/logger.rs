@@ -154,6 +154,13 @@ fn install_panic_hook() {
 }
 
 pub fn init() {
+    // Dev builds log to the terminal only; support log files belong to the production app.
+    if cfg!(debug_assertions) {
+        log::set_logger(&LIBRARY_LOGGER).ok();
+        log::set_max_level(log::LevelFilter::Warn);
+        install_panic_hook();
+        return;
+    }
     let directory = log_dir();
     let result = (|| -> std::io::Result<SupportLogger> {
         fs::create_dir_all(&directory)?;

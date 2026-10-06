@@ -4,6 +4,7 @@ import {get_logs_for_time_block, get_logs_by_category, get_log_by_id} from "../.
 import {get_week, get_week_for_app_filter} from "../../api/week.ts";
 import {adjustInstantToCalendarDayBoundary, getCalendarDayRangeUnix, getWeekRange} from "../../utils.ts";
 import {useState, useMemo, useEffect, useRef, useCallback} from "react";
+import {afterPaint, logPerf} from "../../perf.ts";
 import {EventClickArg, DatesSetArg} from "@fullcalendar/core";
 import RenderCalendarContent from "./RenderCalenderContent.tsx";
 import {formatLocalDateYMD, getWeekStart, isCurrentWeek} from "./utils.ts";
@@ -38,6 +39,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const [manualTimeInCal, setManualTimeInCal] = useState(true);
     const [manualTimeInStats, setManualTimeInStats] = useState(true);
     const [showManualTimeDialog, setShowManualTimeDialog] = useState(false);
+    const [manualTimeAnchor, setManualTimeAnchor] = useState<HTMLElement | null>(null);
     const includeGoogleInStatsLoadedRef = useRef(false);
     const [appFilterPrevWeek, setAppFilterPrevWeek] = useState<Date | null>(null);
     const [appFilterNextWeek, setAppFilterNextWeek] = useState<Date | null>(null);
@@ -333,6 +335,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         const fetchCategoryLogs = async () => {
             if (selectedCategory && rightSideBarView === "CategoryFilter") {
                 setIsLoadingCategory(true);
+                const perfStartedAt = performance.now();
                 let startTime: number;
                 let endTime: number;
                 let title: string;
@@ -356,6 +359,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                         end_time: endTime,
                         min_log_duration: timeBlockSettings.minLogDuration,
                     });
+                    const perfFetchedAt = performance.now();
 
                     const logMap = new Map<string, {
                         ids: number[],
@@ -405,6 +409,10 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                         })),
                     };
                     setSelectedEvent(categoryEvent);
+                    void afterPaint().then((paintedAt) => logPerf("calendar_category_details", {
+                        fetch: perfFetchedAt - perfStartedAt,
+                        render_paint: paintedAt - perfFetchedAt,
+                    }, {scope: selectedDate ? "day" : "week", apps: logs.length}));
                 } catch (error) {
                     console.error("Error fetching category logs:", error);
                     setSelectedEventLogs([]);
@@ -462,6 +470,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                     end: clickInfo.event.end,
                     apps: [],
                     manualTimeBlockId: clickInfo.event.extendedProps?.manualTimeBlockId as number,
+                    projectId: clickInfo.event.extendedProps?.projectId as number | null | undefined,
                     notes: clickInfo.event.extendedProps?.notes as string | undefined,
                 });
                 setSelectedDate(null);
@@ -481,6 +490,14 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                 setSelectedEvent(event);
                 setSelectedDate(null); // Clear date selection when event is selected
 
+                const perfStartedAt = performance.now();
+                const logPerfAfterPaint = (source: string, count: number) => {
+                    const fetchedAt = performance.now();
+                    void afterPaint().then((paintedAt) => logPerf("calendar_time_block_details", {
+                        fetch: fetchedAt - perfStartedAt,
+                        render_paint: paintedAt - fetchedAt,
+                    }, {source, logs: count}));
+                };
                 const sourceLogIds = clickInfo.event.extendedProps?.sourceLogIds as number[] | undefined;
                 if (sourceLogIds?.length) {
                     const minSec = timeBlockSettings.minLogDuration;
@@ -502,6 +519,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             };
                         });
                     logs.sort((a, b) => b.duration - a.duration);
+                    logPerfAfterPaint("ids", logs.length);
                     setSelectedEventLogs(logs);
                 } else {
                     const startTime = Math.floor(event.start.getTime() / 1000);
@@ -524,6 +542,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                         duration: log.duration,
                     }));
                     logs.sort((a, b) => b.duration - a.duration);
+                    logPerfAfterPaint("range", logs.length);
                     setSelectedEventLogs(logs);
                 }
             }
@@ -952,7 +971,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             appJumpPrevDisabled={appJumpPrevDisabled} appJumpNextDisabled={appJumpNextDisabled}
                             timerControl={<ManualTimerControl
                                 timer={runningManualTimer}
-                                onAddPastTime={() => setShowManualTimeDialog(true)}
+                                onAddPastTime={(anchor) => {setManualTimeAnchor(anchor); setShowManualTimeDialog(true);}}
                             />}/>
 
             <div className="flex flex-1 overflow-hidden min-h-0">
@@ -1007,6 +1026,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
 
             <ManualTimeBlockDialog
                 open={showManualTimeDialog}
+                anchor={manualTimeAnchor}
                 initialStart={isCurrentWeek(date, calendarStartHour) ? new Date() : getWeekStart(date, calendarStartHour)}
                 onClose={() => setShowManualTimeDialog(false)}
             />

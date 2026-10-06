@@ -72,15 +72,25 @@ pub struct DayStatistics {
 }
 
 const MANUAL_DEVICE: &str = "manual-time-statistics";
+const MANUAL_PROJECT_DEVICE_PREFIX: &str = "manual-time-statistics:";
 const MANUAL_CATEGORY: &str = "Manual time";
 
+async fn add_manual_category_colors(colors: &mut HashMap<String, Option<String>>) -> Result<(), Error> {
+    let palette = ["#0ea5e9", "#a78bfa", "#34d399", "#fbbf24", "#fb7185", "#22d3ee"];
+    colors.insert(MANUAL_CATEGORY.into(), Some(palette[0].into()));
+    for project in crate::db::tables::manual_project::get_manual_projects().await? {
+        colors.entry(project.name).or_insert_with(|| Some(palette[(project.id as usize) % palette.len()].into()));
+    }
+    Ok(())
+}
+
 fn is_manual(log: &Log) -> bool {
-    log.device_uuid.as_deref() == Some(MANUAL_DEVICE)
+    log.device_uuid.as_deref().is_some_and(|device| device == MANUAL_DEVICE || device.starts_with(MANUAL_PROJECT_DEVICE_PREFIX))
 }
 
 fn log_category(log: &Log, regexes: &[CachedCategoryRegex]) -> String {
     if is_manual(log) {
-        MANUAL_CATEGORY.to_string()
+        log.device_uuid.as_deref().and_then(|device| device.strip_prefix(MANUAL_PROJECT_DEVICE_PREFIX)).unwrap_or(MANUAL_CATEGORY).to_string()
     } else {
         derive_category(&log.app, regexes)
     }
@@ -106,7 +116,7 @@ fn manual_segments(
             let segment_end = next_hour.min(stop);
             segments.push(Log {
                 id: block.id,
-                device_uuid: Some(MANUAL_DEVICE.into()),
+                device_uuid: Some(block.project_name.as_ref().map(|name| format!("{MANUAL_DEVICE}:{name}")).unwrap_or_else(|| MANUAL_DEVICE.into())),
                 app: format!("Manual time: {}", block.title),
                 timestamp: cursor,
                 duration: segment_end - cursor,
@@ -295,10 +305,28 @@ pub async fn get_week_statistics(
     device_uuids: Option<Vec<String>>,
     include_manual: Option<bool>,
 ) -> Result<WeekStatistics, Error> {
+    let stats = week_statistics(week_start, week_end, device_uuids, include_manual).await?;
+    crate::perf::payload_probe("get_week_statistics_payload", &stats);
+    Ok(stats)
+}
+
+async fn week_statistics(
+    week_start: i64,
+    week_end: i64,
+    device_uuids: Option<Vec<String>>,
+    include_manual: Option<bool>,
+) -> Result<WeekStatistics, Error> {
     use chrono::{Local, TimeZone};
 
+    let mut perf = crate::perf::Perf::new("get_week_statistics");
+    perf.note("range_days", (week_end - week_start + 1) / 86400);
+    perf.note("include_manual", include_manual.unwrap_or(true));
+    perf.note("device_filter", device_uuids.as_ref().map_or(0, |uuids| uuids.len()));
     let local_uuid = crate::db::tables::device::get_local_log_device_uuid().await?;
+    perf.stage("local_uuid");
     let mut logs = get_logs().await?;
+    perf.stage("get_logs");
+    perf.note("all_logs", logs.len());
     let skipped_apps = get_skipped_apps().await?;
 
     let skipped_regexes: Vec<Regex> = skipped_apps
@@ -307,36 +335,58 @@ pub async fn get_week_statistics(
             crate::logger::Log::result("Invalid skipped-app regex", Regex::new(&app.regex)).ok()
         })
         .collect();
+    perf.stage("skip_regex_build");
+    perf.note("skip_regexes", skipped_regexes.len());
 
     let is_skipped =
         |app_name: &str| -> bool { skipped_regexes.iter().any(|regex| regex.is_match(app_name)) };
 
     logs.retain(|log| !is_skipped(&log.app));
+    perf.stage("skip_filter");
+    perf.note("after_skip", logs.len());
 
     logs = crate::db::tables::device::filter_logs_by_devices(logs, device_uuids, local_uuid);
+    perf.stage("device_filter");
+    perf.note("after_devices", logs.len());
 
     let cat_regex = get_cat_regex().await?;
     let categories = get_categories().await?;
+    perf.stage("load_rules");
     let regex = build_regex_table(&categories, &cat_regex)?;
+    perf.stage("compile_rules");
+    perf.note("category_regexes", regex.len());
+    perf.note("categories", categories.len());
     let app_groups = build_app_group_matchers(&get_app_groups().await?)?;
+    perf.stage("app_groups");
+    perf.note("app_groups", app_groups.len());
 
     let now = Local::now().timestamp();
     let compare_end = week_end.min(now);
 
-    logs.extend(
-        manual_statistics_logs(week_start, compare_end.saturating_add(1), include_manual).await?,
-    );
+    let manual_logs =
+        manual_statistics_logs(week_start, compare_end.saturating_add(1), include_manual).await?;
+    perf.stage("manual");
+    perf.note("manual_segments", manual_logs.len());
+    logs.extend(manual_logs);
 
     let week_logs: Vec<Log> = logs
         .into_iter()
         .filter(|log| log.timestamp >= week_start && log.timestamp <= week_end)
         .collect();
+    perf.stage("range_filter");
+    perf.note("week_logs", week_logs.len());
 
     let period_logs: Vec<Log> = week_logs
         .iter()
         .filter(|log| log.timestamp <= compare_end)
         .cloned()
         .collect();
+    perf.stage("period_filter");
+    perf.note("period_logs", period_logs.len());
+    perf.note(
+        "distinct_titles",
+        period_logs.iter().map(|log| log.app.as_str()).collect::<std::collections::HashSet<_>>().len(),
+    );
 
     let mut category_durations: HashMap<String, i64> = HashMap::new();
     let mut category_colors: HashMap<String, Option<String>> = HashMap::new();
@@ -344,12 +394,14 @@ pub async fn get_week_statistics(
     for cat in &categories {
         category_colors.insert(cat.name.clone(), cat.color.clone());
     }
-    category_colors.insert(MANUAL_CATEGORY.into(), Some("#0ea5e9".into()));
+    add_manual_category_colors(&mut category_colors).await?;
+    perf.stage("colors");
 
     for log in &period_logs {
         let category = log_category(log, &regex);
         *category_durations.entry(category).or_insert(0) += log.duration;
     }
+    perf.stage("categorize");
 
     let total_time: i64 = category_durations.values().sum();
 
@@ -372,10 +424,14 @@ pub async fn get_week_statistics(
         .collect();
 
     category_stats.sort_by(|a, b| b.total_duration.cmp(&a.total_duration));
+    perf.stage("category_stats");
 
     let app_stats = build_app_stats(&period_logs, &app_groups);
     let mut all_apps = app_stats.clone();
     let mut top_apps: Vec<AppStat> = app_stats.into_iter().take(5).collect();
+    perf.stage("app_stats");
+    perf.note("apps", all_apps.len());
+    perf.note("app_names_total", all_apps.iter().map(|app| app.app_names.len()).sum::<usize>());
 
     let mut hourly_durations: HashMap<i32, i64> = HashMap::new();
     for log in &period_logs {
@@ -389,6 +445,7 @@ pub async fn get_week_statistics(
             total_duration: hourly_durations.get(&hour).copied().unwrap_or(0),
         })
         .collect();
+    perf.stage("hourly");
 
     let mut day_category_durations: HashMap<(i32, String), i64> = HashMap::new();
     for log in &period_logs {
@@ -396,6 +453,7 @@ pub async fn get_week_statistics(
         let category = log_category(log, &regex);
         *day_category_durations.entry((day, category)).or_insert(0) += log.duration;
     }
+    perf.stage("day_category");
 
     let day_category_breakdown: Vec<DayCategoryStat> = day_category_durations
         .into_iter()
@@ -424,14 +482,21 @@ pub async fn get_week_statistics(
         .iter()
         .min_by_key(|(_, &duration)| duration)
         .map(|(&timestamp, &duration)| (timestamp, duration));
+    perf.stage("day_totals");
+    perf.note("active_days", number_of_active_days);
 
     let all_logs = get_logs().await?;
+    perf.stage("get_logs_again");
     let mut all_logs_filtered: Vec<Log> = all_logs
         .into_iter()
         .filter(|log| !is_skipped(&log.app))
         .collect();
+    perf.stage("all_time_skip_filter");
 
-    all_logs_filtered.extend(manual_statistics_logs(i64::MIN, i64::MAX, include_manual).await?);
+    let all_time_manual = manual_statistics_logs(i64::MIN, i64::MAX, include_manual).await?;
+    perf.stage("all_time_manual");
+    perf.note("all_time_manual_segments", all_time_manual.len());
+    all_logs_filtered.extend(all_time_manual);
 
     let total_time_all_time: i64 = all_logs_filtered.iter().map(|log| log.duration).sum();
 
@@ -449,6 +514,8 @@ pub async fn get_week_statistics(
         0.0
     };
 
+    perf.stage("all_time_sums");
+
     let prev_week_start = week_start - 7 * 86400;
     let prev_compare_end = prev_week_start + (compare_end - week_start);
     let mut prev_week_logs: Vec<Log> = all_logs_filtered
@@ -457,6 +524,7 @@ pub async fn get_week_statistics(
             !is_manual(log) && log.timestamp >= prev_week_start && log.timestamp <= prev_compare_end
         })
         .collect();
+    perf.stage("prev_filter");
 
     prev_week_logs.extend(
         manual_statistics_logs(
@@ -466,6 +534,8 @@ pub async fn get_week_statistics(
         )
         .await?,
     );
+    perf.stage("prev_manual");
+    perf.note("prev_logs", prev_week_logs.len());
 
     let prev_week_total: i64 = prev_week_logs.iter().map(|log| log.duration).sum();
     let total_time_change = if prev_week_total > 0 {
@@ -481,6 +551,7 @@ pub async fn get_week_statistics(
         let category = log_category(log, &regex);
         *prev_category_durations.entry(category).or_insert(0) += log.duration;
     }
+    perf.stage("prev_categorize");
 
     for stat in &mut category_stats {
         let prev_duration = prev_category_durations
@@ -498,6 +569,7 @@ pub async fn get_week_statistics(
     }
 
     let prev_app_durations = app_duration_map(&prev_week_logs, &app_groups);
+    perf.stage("prev_app_map");
 
     for app_stat in &mut top_apps {
         let prev_duration = *prev_app_durations.get(&app_stat.app).unwrap_or(&0i64);
@@ -522,6 +594,8 @@ pub async fn get_week_statistics(
             app_stat.percentage_change = Some(100.0);
         }
     }
+    perf.stage("pct_changes");
+    perf.done();
 
     Ok(WeekStatistics {
         total_time,
@@ -544,9 +618,19 @@ pub async fn get_week_statistics(
 
 #[tauri::command]
 pub async fn get_total_statistics(include_manual: Option<bool>) -> Result<WeekStatistics, Error> {
+    let stats = total_statistics(include_manual).await?;
+    crate::perf::payload_probe("get_total_statistics_payload", &stats);
+    Ok(stats)
+}
+
+async fn total_statistics(include_manual: Option<bool>) -> Result<WeekStatistics, Error> {
     use chrono::{Local, TimeZone};
 
+    let mut perf = crate::perf::Perf::new("get_total_statistics");
+    perf.note("include_manual", include_manual.unwrap_or(true));
     let mut logs = get_logs().await?;
+    perf.stage("get_logs");
+    perf.note("all_logs", logs.len());
     let skipped_apps = get_skipped_apps().await?;
 
     let skipped_regexes: Vec<Regex> = skipped_apps
@@ -559,13 +643,25 @@ pub async fn get_total_statistics(include_manual: Option<bool>) -> Result<WeekSt
     let is_skipped =
         |app_name: &str| -> bool { skipped_regexes.iter().any(|regex| regex.is_match(app_name)) };
 
+    perf.stage("skip_regex_build");
+    perf.note("skip_regexes", skipped_regexes.len());
     logs.retain(|log| !is_skipped(&log.app));
-    logs.extend(manual_statistics_logs(i64::MIN, i64::MAX, include_manual).await?);
+    perf.stage("skip_filter");
+    perf.note("after_skip", logs.len());
+    let manual_logs = manual_statistics_logs(i64::MIN, i64::MAX, include_manual).await?;
+    perf.stage("manual");
+    perf.note("manual_segments", manual_logs.len());
+    logs.extend(manual_logs);
 
     let cat_regex = get_cat_regex().await?;
     let categories = get_categories().await?;
+    perf.stage("load_rules");
     let regex = build_regex_table(&categories, &cat_regex)?;
+    perf.stage("compile_rules");
+    perf.note("category_regexes", regex.len());
     let app_groups = build_app_group_matchers(&get_app_groups().await?)?;
+    perf.stage("app_groups");
+    perf.note("app_groups", app_groups.len());
 
     let mut category_durations: HashMap<String, i64> = HashMap::new();
     let mut category_colors: HashMap<String, Option<String>> = HashMap::new();
@@ -573,7 +669,8 @@ pub async fn get_total_statistics(include_manual: Option<bool>) -> Result<WeekSt
     for cat in &categories {
         category_colors.insert(cat.name.clone(), cat.color.clone());
     }
-    category_colors.insert(MANUAL_CATEGORY.into(), Some("#0ea5e9".into()));
+    add_manual_category_colors(&mut category_colors).await?;
+    perf.stage("colors");
 
     let mut hourly_durations: HashMap<i32, i64> = HashMap::new();
     let mut day_category_durations: HashMap<(i32, String), i64> = HashMap::new();
@@ -582,7 +679,7 @@ pub async fn get_total_statistics(include_manual: Option<bool>) -> Result<WeekSt
 
     for log in &logs {
         let category = if is_manual(log) {
-            MANUAL_CATEGORY.to_string()
+            log_category(log, &regex)
         } else {
             derive_category_cached(&log.app, &regex, &mut app_category_cache)
         };
@@ -598,6 +695,9 @@ pub async fn get_total_statistics(include_manual: Option<bool>) -> Result<WeekSt
         let day_start = get_day_start(log.timestamp);
         *day_totals.entry(day_start).or_insert(0) += log.duration;
     }
+    perf.stage("main_loop");
+    perf.note("distinct_titles", app_category_cache.len());
+    perf.note("active_days", day_totals.len());
 
     let total_time: i64 = category_durations.values().sum();
 
@@ -621,9 +721,13 @@ pub async fn get_total_statistics(include_manual: Option<bool>) -> Result<WeekSt
 
     category_stats.sort_by(|a, b| b.total_duration.cmp(&a.total_duration));
 
+    perf.stage("category_stats");
     let app_stats = build_app_stats(&logs, &app_groups);
     let all_apps = app_stats.clone();
     let top_apps: Vec<AppStat> = app_stats.into_iter().take(5).collect();
+    perf.stage("app_stats");
+    perf.note("apps", all_apps.len());
+    perf.note("app_names_total", all_apps.iter().map(|app| app.app_names.len()).sum::<usize>());
 
     let hourly_distribution: Vec<HourlyStat> = (0..=24)
         .map(|hour| HourlyStat {
@@ -673,6 +777,8 @@ pub async fn get_total_statistics(include_manual: Option<bool>) -> Result<WeekSt
     } else {
         0.0
     };
+    perf.stage("finish");
+    perf.done();
 
     Ok(WeekStatistics {
         total_time,
@@ -700,8 +806,11 @@ pub async fn get_day_statistics(
     device_uuids: Option<Vec<String>>,
     include_manual: Option<bool>,
 ) -> Result<DayStatistics, Error> {
+    let mut perf = crate::perf::Perf::new("get_day_statistics");
     let local_uuid = crate::db::tables::device::get_local_log_device_uuid().await?;
     let mut logs = get_logs().await?;
+    perf.stage("get_logs");
+    perf.note("all_logs", logs.len());
     let skipped_apps = get_skipped_apps().await?;
 
     let skipped_regexes: Vec<Regex> = skipped_apps
@@ -731,6 +840,8 @@ pub async fn get_day_statistics(
         .into_iter()
         .filter(|log| log.timestamp >= day_start && log.timestamp <= day_end)
         .collect();
+    perf.stage("filter_rules_manual");
+    perf.note("day_logs", day_logs.len());
 
     let mut category_durations: HashMap<String, i64> = HashMap::new();
     let mut category_colors: HashMap<String, Option<String>> = HashMap::new();
@@ -738,7 +849,7 @@ pub async fn get_day_statistics(
     for cat in &categories {
         category_colors.insert(cat.name.clone(), cat.color.clone());
     }
-    category_colors.insert(MANUAL_CATEGORY.into(), Some("#0ea5e9".into()));
+    add_manual_category_colors(&mut category_colors).await?;
 
     for log in &day_logs {
         let category = log_category(log, &regex);
@@ -782,6 +893,8 @@ pub async fn get_day_statistics(
             total_duration: hourly_durations.get(&hour).copied().unwrap_or(0),
         })
         .collect();
+    perf.stage("aggregate");
+    perf.done();
 
     Ok(DayStatistics {
         total_time,
@@ -847,6 +960,8 @@ mod manual_statistics_tests {
             id: 1,
             title: "Planning".into(),
             notes: Some("Keep notes".into()),
+            project_id: None,
+            project_name: None,
             start_time: start,
             end_time: start + 7200,
             created_at: start,
@@ -869,5 +984,11 @@ mod manual_statistics_tests {
         assert!(stats[0].app_names.is_empty());
         assert_eq!(block.notes.as_deref(), Some("Keep notes"));
         assert!(manual_segments(&blocks, start + 7200, start + 8000).is_empty());
+        let mut project_block = block.clone();
+        project_block.project_id = Some(1);
+        project_block.project_name = Some("Client work".into());
+        let project_logs = manual_segments(&[project_block], start, start + 7200);
+        assert_eq!(project_logs.iter().map(|log| log.duration).sum::<i64>(), 7200);
+        assert!(project_logs.iter().all(|log| is_manual(log) && log_category(log, &[]) == "Client work"));
     }
 }

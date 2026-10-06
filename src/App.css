@@ -1,5 +1,27 @@
 @import "tailwindcss";
 
+.notes-editor:empty::before {
+    content: attr(data-placeholder);
+    color: #9ca3af;
+    pointer-events: none;
+}
+
+.notes-editor img.notes-image {
+    display: block;
+    max-width: min(100%, 720px);
+    max-height: 480px;
+    margin: 0.75rem 0;
+    border-radius: 0.5rem;
+    object-fit: contain;
+}
+
+.notes-editor blockquote {
+    margin: 0.75rem 0;
+    border-left: 3px solid #60a5fa;
+    padding-left: 0.75rem;
+    color: #d1d5db;
+}
+
 body {
   background: black;
 }

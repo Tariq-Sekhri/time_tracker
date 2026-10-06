@@ -5,6 +5,7 @@ mod db;
 mod google_oauth;
 mod instance;
 mod logger;
+mod perf;
 mod sync;
 mod tray;
 
@@ -39,8 +40,9 @@ use db::tables::log::{
 use db::tables::manual_time_block::{
     delete_manual_time_block, finish_manual_timer, get_manual_time_blocks,
     get_running_manual_timer, insert_manual_time_block, start_manual_timer, stop_manual_timer,
-    update_manual_time_block, update_manual_timer_title,
+    update_manual_time_block, update_manual_timer_title, update_manual_timer_details,
 };
+use db::tables::manual_project::{get_manual_projects, create_manual_project, update_manual_project, delete_manual_project};
 use db::tables::settings::{flip_lock_by_key, get_settings, reset_val_by_key, update_val_by_key};
 use db::tables::skipped_app::{
     count_matching_logs, delete_skipped_app_by_id, get_skipped_apps,
@@ -152,7 +154,7 @@ pub fn run() {
         let _ = dotenv::dotenv();
     }
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .append_invoke_initialization_script(include_str!("logger-bootstrap.js"))
         .on_page_load(|webview, payload| {
             Log::debug(format!(
@@ -161,17 +163,21 @@ pub fn run() {
                 payload.event()
             ));
         })
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_updater::Builder::new().build());
+    // Dev runs alongside the installed app; it neither tracks nor syncs.
+    #[cfg(not(debug_assertions))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             Log::info("Second launch received; focusing existing window");
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
                 let _ = window.show();
                 let _ = window.set_focus();
             }
-        }))
+        }));
+    builder
         .setup(|app| {
             Log::info("Tauri setup started");
+            tauri::async_runtime::block_on(db::pool::refresh_dev_database())?;
             app.manage(UpdateState {
                 update: Mutex::new(None),
                 window_visible: AtomicBool::new(false),
@@ -196,6 +202,10 @@ pub fn run() {
             let app_handle = app.handle().clone();
 
             tauri::async_runtime::spawn(async move {
+                if cfg!(debug_assertions) {
+                    Log::info("Automatic sync disabled in dev mode");
+                    return;
+                }
                 tokio::time::sleep(std::time::Duration::from_secs(3)).await;
                 let reset_notify = sync_countdown_reset_notify();
                 let sync_interval_secs = SYNC_INTERVAL_SECS;
@@ -377,6 +387,11 @@ pub fn run() {
                     get_running_manual_timer,
                     start_manual_timer,
                     update_manual_timer_title,
+                    update_manual_timer_details,
+                    get_manual_projects,
+                    create_manual_project,
+                    update_manual_project,
+                    delete_manual_project,
                     stop_manual_timer,
                     finish_manual_timer,
                     get_skipped_apps,

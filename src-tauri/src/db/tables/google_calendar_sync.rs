@@ -104,9 +104,11 @@ struct GoogleApiCalendarListResponse {
 
 #[tauri::command]
 pub async fn list_available_google_calendars() -> Result<Vec<GoogleCalendarInfo>, Error> {
+    let mut perf = crate::perf::Perf::new("list_available_google_calendars");
     let (client_id, client_secret) =
         crate::google_oauth::resolve_google_oauth_app_credentials().await?;
     let access_token = get_valid_access_token(&client_id, &client_secret).await?;
+    perf.stage("auth");
 
     let selected_calendars = get_google_calendars().await?;
     let selected_ids: std::collections::HashSet<String> = selected_calendars
@@ -123,6 +125,7 @@ pub async fn list_available_google_calendars() -> Result<Vec<GoogleCalendarInfo>
         .send()
         .await
         .context("Failed to fetch calendar list")?;
+    perf.stage("http");
 
     let status = response.status();
     if !status.is_success() {
@@ -157,6 +160,9 @@ pub async fn list_available_google_calendars() -> Result<Vec<GoogleCalendarInfo>
             selected: selected_ids.contains(&item.id),
         })
         .collect();
+    perf.stage("parse");
+    perf.note("calendars", calendars.len());
+    perf.done();
 
     Ok(calendars)
 }
@@ -294,31 +300,41 @@ fn parse_event_time(time: &GoogleApiEventTime) -> Option<DateTime<Utc>> {
 pub async fn get_google_calendar_events(
     params: GetGoogleCalendarEventsParams,
 ) -> Result<Vec<GoogleCalendarEvent>, Error> {
+    let mut perf = crate::perf::Perf::new("get_google_calendar_events");
     let (client_id, client_secret) =
         crate::google_oauth::resolve_google_oauth_app_credentials().await?;
     let calendar = get_google_calendar_by_id(params.calendar_id).await?;
-    fetch_google_calendar_events_internal(
+    perf.stage("setup");
+    let events = fetch_google_calendar_events_internal(
         &calendar,
         params.start_time,
         params.end_time,
         &client_id,
         &client_secret,
     )
-    .await
+    .await?;
+    perf.stage("fetch");
+    perf.note("events", events.len());
+    perf.done();
+    Ok(events)
 }
 
 #[tauri::command]
 pub async fn get_all_google_calendar_events(
     params: GetAllGoogleCalendarEventsParams,
 ) -> Result<Vec<GoogleCalendarEvent>, Error> {
+    let mut perf = crate::perf::Perf::new("get_all_google_calendar_events");
     let calendars = get_google_calendars().await?;
+    perf.note("calendars", calendars.len());
 
     if calendars.is_empty() {
+        perf.done();
         return Ok(Vec::new());
     }
 
     let (client_id, client_secret) =
         crate::google_oauth::resolve_google_oauth_app_credentials().await?;
+    perf.stage("setup");
 
     let mut all_events = Vec::new();
     let mut success_count = 0;
@@ -350,7 +366,11 @@ pub async fn get_all_google_calendar_events(
                 error_count += 1;
             }
         }
+        perf.stage(&format!("cal_{}", calendar.id));
     }
+    perf.note("events", all_events.len());
+    perf.note("errors", error_count);
+    perf.done();
 
     if error_count > 0 && success_count == 0 {
         if let Some(auth_err) = last_auth_error {

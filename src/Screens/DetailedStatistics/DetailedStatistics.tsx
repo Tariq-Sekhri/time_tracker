@@ -29,6 +29,7 @@ import AppTitleDetails from "../../Componants/AppTitleDetails.tsx";
 import {useQueries, useQuery} from "@tanstack/react-query";
 import {reportError} from "../../diagnostics.ts";
 import {useEffect, useMemo, useRef, useState} from "react";
+import {measure, PerfProfiler, useBatchPerf, useRenderPerf} from "../../perf.ts";
 // WeekStatistics is the shape returned for a time range (categories, apps, hourly, etc.)
 import {get_total_statistics, get_week_statistics, WeekStatistics} from "../../api/statistics.ts";
 // MergedLog = one log segment; get_logs_by_category returns many for sidebar drill-down
@@ -52,6 +53,7 @@ const STATS_TOOLBAR_BUTTON = `${STATS_TOOLBAR_CONTROL_HEIGHT} px-3 bg-gray-800 b
 import FilterCategories, {useFilterCategories} from "../../Componants/FilterCategories.tsx";
 import {getAppMetadata, setAppMetadata} from "../../api/appMetadata.ts";
 import {get_manual_time_blocks, manualTimeAppStats, MANUAL_TIME_LABEL} from "../../api/ManualTimeBlock.ts";
+import {getManualProjects, MANUAL_PROJECTS_QUERY_KEY} from "../../api/ManualProject.ts";
 import {get_categories} from "../../api/Category.ts";
 import {
     adjustInstantToCalendarDayBoundary, // snap "now" to which calendar day we're in
@@ -308,7 +310,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
     });
 
     // MEMO: build "daily average" view by dividing every duration field by active day count
-    const dailyAvgStats: WeekStatistics | null = useMemo(() => {
+    const dailyAvgStats: WeekStatistics | null = useMemo(() => measure("detailed.dailyAvgStats", () => {
         if (!rangeStats) return null;
         return {
             ...rangeStats, // keep metadata fields unchanged (most_active_day, etc.)
@@ -343,7 +345,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                     total_duration: 0, // no active days → flat zero line
                 })),
         };
-    }, [rangeStats]);
+    }, (r) => ({apps: r?.all_apps.length ?? 0, categories: r?.categories.length ?? 0})), [rangeStats]);
 
     // Pick which transformed stats object drives UI for non-trend tabs
     const stats: WeekStatistics | null =
@@ -358,17 +360,14 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
         : ["category_app_logs", "none"]; // placeholder key when nothing selected
 
     // QUERY: per-app totals within selected category (sidebar drill-down)
+    const {data: manualProjects = []} = useQuery({queryKey: MANUAL_PROJECTS_QUERY_KEY, queryFn: getManualProjects});
     const {data: categoryAppLogs = [], isLoading: isLoadingCategory} = useQuery({
         queryKey: categoryQueryKey,
         enabled: !!selectedCategory, // no fetch until user picks a category row
         queryFn: async () => {
             if (!selectedCategory) return [];
-            if (selectedCategory === MANUAL_TIME_LABEL) {
-                const blocks = await get_manual_time_blocks(categoryStartTime, categoryEndTime + 1);
-                return manualTimeAppStats(blocks, categoryStartTime, Math.min(categoryEndTime + 1, Math.floor(Date.now() / 1000) + 1))
-                    .map((row) => ({app: row.app, appNames: row.app_names, totalDuration: row.total_duration}))
-                    .sort((a, b) => b.totalDuration - a.totalDuration);
-            }
+            const blocks = await get_manual_time_blocks(categoryStartTime, categoryEndTime + 1);
+            const manualRows = manualTimeAppStats(blocks.filter((block) => (block.project_name || MANUAL_TIME_LABEL) === selectedCategory), categoryStartTime, Math.min(categoryEndTime + 1, Math.floor(Date.now() / 1000) + 1));
             const result: MergedLog[] = await get_logs_by_category({
                 category: selectedCategory,
                 start_time: categoryStartTime,
@@ -392,6 +391,11 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                     });
                 }
             });
+            for (const row of manualRows) {
+                const existing = logMap.get(row.app);
+                if (existing) existing.totalDuration += row.total_duration;
+                else logMap.set(row.app, {app: row.app, appNames: row.app_names, totalDuration: row.total_duration});
+            }
             return Array.from(logMap.values()).sort((a, b) => b.totalDuration - a.totalDuration);
         },
         staleTime: Infinity,
@@ -428,6 +432,45 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
     // Loading gate for Daily Avg/Total before stats exists
     const isStatsLoading = isBoundsLoading || isRangeLoading || !rangeStartDate || !rangeEndDate;
 
+    const isViewReady = activeTab === "trend"
+        ? trendWeeks.length > 0 && !isTrendLoading
+        : !isStatsLoading && !!rangeStats;
+    // Renders since mount — a jump between two perf lines means a re-render storm.
+    const renderCountRef = useRef(0);
+    renderCountRef.current += 1;
+    const trendWeeksDone = trendWeekQueries.filter((q) => q.data !== undefined).length;
+    const perfNotes = {
+        tab: activeTab,
+        renders: renderCountRef.current,
+        range_days: rangeUnix ? Math.round((rangeUnix.end - rangeUnix.start) / 86400) : 0,
+        weeks: trendWeeks.length,
+        weeks_loaded: trendWeeksDone,
+        active_days: rangeStats?.number_of_active_days ?? 0,
+        categories: rangeStats?.categories.length ?? 0,
+        all_apps: rangeStats?.all_apps.length ?? 0,
+        bounds_loading: isBoundsLoading,
+        range_loading: isRangeLoading,
+    };
+    useBatchPerf(
+        "detailed_stats_trend_batch",
+        `${trendWeeks[0]?.week_start}|${trendWeeks[trendWeeks.length - 1]?.week_end}|${calendarStartHour}`,
+        activeTab === "trend",
+        trendWeekQueries.length,
+        trendWeeksDone,
+        {series_mode: trendSeriesMode, value_mode: trendValueMode},
+    );
+    // Screen open → first stats painted (includes total_statistics bounds + range bootstrap).
+    useRenderPerf("detailed_stats_open", "open", isViewReady, 0, perfNotes);
+    // Each tab / range change → painted.
+    useRenderPerf("detailed_stats_view", `${activeTab}|${rangeUnix?.start}|${rangeUnix?.end}`, isViewReady, 0, perfNotes);
+    useRenderPerf(
+        "detailed_stats_category",
+        `${selectedCategory ?? ""}|${categoryStartTime}|${categoryEndTime}`,
+        !!selectedCategory && !isLoadingCategory,
+        0,
+        {apps: categoryAppLogs.length},
+    );
+
     // Is current range picker already at full-history default? (disables Reset button)
 
 
@@ -439,13 +482,13 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
     };
 
     const scaledCategoryAppList = useMemo(
-        () =>
+        () => measure("detailed.scaledCategoryApps", () =>
             categoryAppLogs
                 .map((a) => ({
                     ...a,
                     totalDuration: scaledDuration(a.totalDuration),
                 }))
-                .sort((a, b) => b.totalDuration - a.totalDuration),
+                .sort((a, b) => b.totalDuration - a.totalDuration), (r) => ({apps: r.length})),
         [categoryAppLogs, activeTab, numberOfActiveDays]
     );
 
@@ -458,7 +501,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
     );
 
     const sidebarApps: DisplayApp[] = useMemo(
-        () =>
+        () => measure("detailed.sidebarApps", () =>
             selectedCategory
                 ? filteredScaledCategoryAppList
                 : (stats?.all_apps ?? [])
@@ -467,7 +510,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                         app: app.app,
                         appNames: app.app_names,
                         totalDuration: app.total_duration,
-                    })),
+                    })), (r) => ({rows: r.length, source: selectedCategory ? "category" : "all_apps"})),
         [selectedCategory, filteredScaledCategoryAppList, stats?.all_apps, uiMinAppDuration]
     );
 
@@ -481,7 +524,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
         : (stats?.total_time ?? 0);
 
     // Map clock hour (0–23) → total seconds in that hour (from stats.hourly_distribution)
-    const hourlyByClockHour = useMemo(() => {
+    const hourlyByClockHour = useMemo(() => measure("detailed.hourlyByClockHour", () => {
         const map = new Map<number, number>();
         for (const h of stats?.hourly_distribution ?? []) {
             if (h.hour >= 0 && h.hour <= 23) {
@@ -489,7 +532,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
             }
         }
         return map;
-    }, [stats?.hourly_distribution]);
+    }), [stats?.hourly_distribution]);
 
     // Build 25 points for chart: slots 0–23 = hours starting at calendarStartHour; slot 24 = wrap for fill
     const hourlyPoints = useMemo(() => {
@@ -592,6 +635,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
 
     // --- MAIN RENDER (stats is non-null for dailyAvg/total; trend has dates set) ---
     return (
+        <PerfProfiler id="detailed.screen">
         <div className="flex h-full overflow-hidden">
             {/* LEFT: main content column */}
             <div
@@ -655,6 +699,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                                 >
                                     Reset
                                 </button>
+                                <PerfProfiler id="detailed.date_picker">
                                 <StatisticsDateRangePicker
                                     startDate={rangeStartDate!}
                                     endDate={rangeEndDate!}
@@ -665,6 +710,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                                         setRangeEndDate(end);
                                     }}
                                 />
+                                </PerfProfiler>
                             </>
                         ) : (
                             <span className={`${STATS_TOOLBAR_CONTROL_HEIGHT} text-sm text-gray-500 px-1`}>
@@ -677,17 +723,19 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                 {/* TREND TAB ONLY: chart fills remaining height; no category list / hourly / sidebar */}
                 {activeTab === "trend" && (
                     <div className="flex-1 flex flex-col min-h-0 min-w-0">
+                        <PerfProfiler id="detailed.trend_chart">
                         <CategoryWeekTrendChart
                             weeks={trendWeeks}
                             weekStats={trendWeekStats}
                             isLoading={isTrendLoading}
-                            visibleCategoryNames={new Set([...visibleCategoryNames, MANUAL_TIME_LABEL])}
+                            visibleCategoryNames={new Set([...visibleCategoryNames, MANUAL_TIME_LABEL, ...manualProjects.map((project) => project.name)])}
                             seriesMode={trendSeriesMode}
                             topAppCount={trendTopAppCount}
                             calendarStartHour={calendarStartHour}
                             valueMode={trendValueMode}
                             showTotalLine={trendShowTotalLine}
                         />
+                        </PerfProfiler>
                     </div>
                 )}
 
@@ -742,6 +790,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
 
                 {/* CATEGORY LIST: shown on Daily Avg + Total; click row toggles selectedCategory → sidebar drill-down */}
                 {activeTab !== "trend" && stats && (
+                    <PerfProfiler id="detailed.categories">
                     <div className="mb-6">
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-xl font-bold">Categories</h2>
@@ -807,10 +856,12 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                             ))}
                         </div>
                     </div>
+                    </PerfProfiler>
                 )}
 
                 {/* HOURLY CHART: Daily Avg only; uses stats.hourly_distribution (already per-active-day scaled) */}
                 {activeTab === "dailyAvg" && (
+                    <PerfProfiler id="detailed.hourly_chart">
                     <div className="mb-6">
                         <h2 className="text-xl font-bold mb-4">Hourly Activity Distribution</h2>
                         <div className="bg-gray-900 p-4 rounded">
@@ -883,11 +934,13 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                             </div>
                         </div>
                     </div>
+                    </PerfProfiler>
                 )}
             </div>
 
             {/* RIGHT SIDEBAR: 384px; hidden entirely on Trend tab */}
             {activeTab !== "trend" && stats && (
+                <PerfProfiler id="detailed.apps_sidebar">
                 <div ref={sidebarRef}
                      className="w-96 border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col">
                     <div className="flex items-center justify-between mb-4">
@@ -957,9 +1010,11 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                         )}
                     </div>
                 </div>
+                </PerfProfiler>
             )}
             {/* Portal/modal layers from useAppCategorizeMenu — must render at root of this screen */}
             {categorizeLayers}
         </div>
+        </PerfProfiler>
     );
 }

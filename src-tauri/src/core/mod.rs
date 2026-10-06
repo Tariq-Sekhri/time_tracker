@@ -22,14 +22,14 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
 #[cfg(debug_assertions)]
-pub static IS_SUSPENDED: AtomicBool = AtomicBool::new(false);
+pub static IS_SUSPENDED: AtomicBool = AtomicBool::new(true);
 
 #[cfg(not(debug_assertions))]
 pub static IS_SUSPENDED: AtomicBool = AtomicBool::new(false);
 
 #[tauri::command]
 pub fn get_tracking_status() -> bool {
-    !IS_SUSPENDED.load(Ordering::Relaxed)
+    !cfg!(debug_assertions) && !IS_SUSPENDED.load(Ordering::Relaxed)
 }
 
 #[tauri::command]
@@ -101,6 +101,10 @@ fn log_device_uuid(local_device_uuid: Option<String>) -> String {
 }
 
 pub async fn supervisor(app: AppHandle) {
+    if cfg!(debug_assertions) {
+        Log::info("Activity tracking disabled in dev mode");
+        return;
+    }
     Log::info(format!(
         "Tracking supervisor started on {}",
         std::env::consts::OS

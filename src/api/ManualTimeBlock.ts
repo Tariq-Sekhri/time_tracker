@@ -7,6 +7,8 @@ export type ManualTimeBlock = {
     id: number;
     title: string;
     notes: string | null;
+    project_id?: number | null;
+    project_name?: string | null;
     start_time: number;
     end_time: number;
     created_at: number;
@@ -16,6 +18,7 @@ export type ManualTimeBlock = {
 export type NewManualTimeBlock = {
     title: string;
     notes?: string | null;
+    project_id?: number | null;
     start_time: number;
     end_time: number;
 };
@@ -27,6 +30,7 @@ export type UpdateManualTimeBlock = NewManualTimeBlock & {
 export type RunningManualTimer = {
     title: string;
     notes: string | null;
+    project_id?: number | null;
     start_time: number;
     end_time: number | null;
 };
@@ -54,8 +58,12 @@ export async function get_running_manual_timer(): Promise<RunningManualTimer | n
     return invokeOrThrow<RunningManualTimer | null>("get_running_manual_timer");
 }
 
-export async function start_manual_timer(): Promise<RunningManualTimer> {
-    return invokeOrThrow<RunningManualTimer>("start_manual_timer");
+export async function start_manual_timer(title = "", projectId: number | null = null): Promise<RunningManualTimer> {
+    return invokeOrThrow<RunningManualTimer>("start_manual_timer", {title, projectId});
+}
+
+export async function update_manual_timer_details(title: string, projectId: number | null): Promise<RunningManualTimer> {
+    return invokeOrThrow<RunningManualTimer>("update_manual_timer_details", {title, projectId});
 }
 
 export async function update_manual_timer_title(title: string): Promise<RunningManualTimer> {
@@ -88,4 +96,17 @@ export function manualTimeAppStats(blocks: ManualTimeBlock[], start: number, end
         }
     }
     return [...durations].map(([app, total_duration]) => ({app, app_names: [] as string[], total_duration, percentage_change: null}));
+}
+
+export function manualTimeCategoryStats(blocks: ManualTimeBlock[], start: number, end: number) {
+    const categories = new Map<string, {category: string; total_duration: number; color: string}>();
+    const colors = [MANUAL_TIME_COLOR, "#a78bfa", "#34d399", "#fbbf24", "#fb7185", "#22d3ee"];
+    for (const block of blocks) {
+        const duration = manualTimeDurationInRange(block, start, end);
+        if (!duration) continue;
+        const category = block.project_name || MANUAL_TIME_LABEL;
+        const current = categories.get(category);
+        categories.set(category, {category, total_duration: (current?.total_duration ?? 0) + duration, color: colors[(block.project_id ?? 0) % colors.length]});
+    }
+    return [...categories.values()];
 }

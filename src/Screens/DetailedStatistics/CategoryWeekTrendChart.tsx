@@ -1,4 +1,5 @@
 import {useMemo} from "react";
+import {measure} from "../../perf.ts";
 import AppTitleDetails from "../../Componants/AppTitleDetails.tsx";
 import {
     CartesianGrid,
@@ -264,24 +265,27 @@ export default function CategoryWeekTrendChart({
                                                    showTotalLine,
                                                }: CategoryWeekTrendChartProps) {
     const {columns, series: allSeries, totalLineValues} = useMemo(
-        () =>
+        () => measure(`trend.build_${seriesMode}`, () =>
             seriesMode === "topApps"
                 ? buildTopAppSeries(weeks, weekStats, valueMode, calendarStartHour, topAppCount)
                 : buildSeries(weeks, weekStats, valueMode, calendarStartHour),
+            (r) => ({weeks: weeks.length, loaded: weekStats.filter(Boolean).length, series: r.series.length})),
         [weeks, weekStats, valueMode, calendarStartHour, seriesMode, topAppCount]
     );
 
+    // Note: the parent passes a new visibleCategoryNames Set every render, so this re-runs each render.
     const series = useMemo(
-        () =>
+        () => measure("trend.filter_series", () =>
             seriesMode === "topApps"
                 ? allSeries
                 : allSeries.filter((s) => visibleCategoryNames.has(s.category)),
+            (r) => ({series: r.length})),
         [allSeries, visibleCategoryNames, seriesMode]
     );
 
     const hasTotalLineData = totalLineValues.some((v) => v > 0);
 
-    const topAppGapBridges = useMemo<TrendGapBridge[]>(() => {
+    const topAppGapBridges = useMemo<TrendGapBridge[]>(() => measure("trend.gap_bridges", () => {
         if (seriesMode !== "topApps") return [];
 
         return series.flatMap((s) => {
@@ -305,9 +309,9 @@ export default function CategoryWeekTrendChart({
 
             return bridges;
         });
-    }, [series, seriesMode]);
+    }, (r) => ({bridges: r.length})), [series, seriesMode]);
 
-    const chartData: ChartRow[] = useMemo(() => {
+    const chartData: ChartRow[] = useMemo(() => measure("trend.chart_data", () => {
         return columns.map((col, i) => {
             const row: ChartRow = {label: col.label, week_start: col.week_start};
             if (showTotalLine) {
@@ -322,7 +326,7 @@ export default function CategoryWeekTrendChart({
             }
             return row;
         });
-    }, [columns, series, totalLineValues, showTotalLine, seriesMode, topAppGapBridges]);
+    }, (r) => ({rows: r.length, series: series.length})), [columns, series, totalLineValues, showTotalLine, seriesMode, topAppGapBridges]);
 
     const showTotalLineOnChart = showTotalLine && hasTotalLineData;
 

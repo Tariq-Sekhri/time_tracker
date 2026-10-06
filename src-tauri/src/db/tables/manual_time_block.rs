@@ -3,13 +3,17 @@ use crate::db::Error;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
 
-const RUNNING_TIMER_KEY: &str = "running_manual_time_timer_v1";
+pub(super) const RUNNING_TIMER_KEY: &str = "running_manual_time_timer_v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct ManualTimeBlock {
     pub id: i64,
     pub title: String,
     pub notes: Option<String>,
+    pub project_id: Option<i64>,
+    #[sqlx(default)]
+    #[serde(default)]
+    pub project_name: Option<String>,
     pub start_time: i64,
     pub end_time: i64,
     pub created_at: i64,
@@ -20,6 +24,7 @@ pub struct ManualTimeBlock {
 pub struct NewManualTimeBlock {
     pub title: String,
     pub notes: Option<String>,
+    pub project_id: Option<i64>,
     pub start_time: i64,
     pub end_time: i64,
 }
@@ -29,6 +34,7 @@ pub struct UpdateManualTimeBlock {
     pub id: i64,
     pub title: String,
     pub notes: Option<String>,
+    pub project_id: Option<i64>,
     pub start_time: i64,
     pub end_time: i64,
 }
@@ -37,6 +43,8 @@ pub struct UpdateManualTimeBlock {
 pub struct RunningManualTimer {
     pub title: String,
     pub notes: Option<String>,
+    #[serde(default)]
+    pub project_id: Option<i64>,
     pub start_time: i64,
     #[serde(default)]
     pub end_time: Option<i64>,
@@ -48,6 +56,7 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
             notes TEXT,
+            project_id INTEGER,
             start_time INTEGER NOT NULL,
             end_time INTEGER NOT NULL,
             created_at INTEGER NOT NULL,
@@ -74,9 +83,7 @@ fn validate(
     end_time: i64,
 ) -> Result<(String, Option<String>), Error> {
     let title = title.trim();
-    if title.is_empty() {
-        return Err(anyhow::anyhow!("A title is required").into());
-    }
+    let title = if title.is_empty() { "Unnamed" } else { title };
     if title.chars().count() > 200 {
         return Err(anyhow::anyhow!("Title must be 200 characters or fewer").into());
     }
@@ -101,10 +108,10 @@ pub async fn get_manual_time_blocks(
     }
     let pool = db::get_pool().await?;
     Ok(sqlx::query_as::<_, ManualTimeBlock>(
-        "SELECT id, title, notes, start_time, end_time, created_at, updated_at
-         FROM manual_time_blocks
-         WHERE end_time > ?1 AND start_time < ?2
-         ORDER BY start_time, id",
+        "SELECT b.id, b.title, b.notes, b.project_id, p.name AS project_name, b.start_time, b.end_time, b.created_at, b.updated_at
+         FROM manual_time_blocks b LEFT JOIN manual_projects p ON p.id = b.project_id
+         WHERE b.end_time > ?1 AND b.start_time < ?2
+         ORDER BY b.start_time, b.id",
     )
     .bind(range_start)
     .bind(range_end)
@@ -124,16 +131,18 @@ pub async fn insert_manual_time_block(
     )?;
     let pool = db::get_pool().await?;
     let now = chrono::Utc::now().timestamp();
+    super::manual_project::validate_project_id(&pool, new_manual_time_block.project_id).await?;
     let result = sqlx::query(
         "INSERT INTO manual_time_blocks
-         (title, notes, start_time, end_time, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+         (title, notes, start_time, end_time, created_at, updated_at, project_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6)",
     )
     .bind(title)
     .bind(notes)
     .bind(new_manual_time_block.start_time)
     .bind(new_manual_time_block.end_time)
     .bind(now)
+    .bind(new_manual_time_block.project_id)
     .execute(&pool)
     .await?;
     Ok(result.last_insert_rowid())
@@ -153,14 +162,23 @@ pub async fn get_running_manual_timer() -> Result<Option<RunningManualTimer>, Er
 }
 
 #[tauri::command]
-pub async fn start_manual_timer() -> Result<RunningManualTimer, Error> {
+pub async fn start_manual_timer(
+    title: Option<String>,
+    project_id: Option<i64>,
+) -> Result<RunningManualTimer, Error> {
+    let title = title.unwrap_or_default().trim().to_string();
+    if title.chars().count() > 200 {
+        return Err(anyhow::anyhow!("Title must be 200 characters or fewer").into());
+    }
     let timer = RunningManualTimer {
-        title: String::new(),
+        title,
         notes: None,
+        project_id,
         start_time: chrono::Utc::now().timestamp(),
         end_time: None,
     };
     let pool = db::get_pool().await?;
+    super::manual_project::validate_project_id(&pool, project_id).await?;
     let existing = sqlx::query_scalar::<_, String>("SELECT value FROM app_metadata WHERE key = ?1")
         .bind(RUNNING_TIMER_KEY)
         .fetch_optional(&pool)
@@ -178,11 +196,37 @@ pub async fn start_manual_timer() -> Result<RunningManualTimer, Error> {
 }
 
 #[tauri::command]
+pub async fn update_manual_timer_details(
+    title: String,
+    project_id: Option<i64>,
+) -> Result<RunningManualTimer, Error> {
+    let title = title.trim();
+    if title.chars().count() > 200 {
+        return Err(anyhow::anyhow!("Timer name must be 200 characters or fewer").into());
+    }
+    let pool = db::get_pool().await?;
+    super::manual_project::validate_project_id(&pool, project_id).await?;
+    let mut transaction = pool.begin().await?;
+    let value = sqlx::query_scalar::<_, String>("SELECT value FROM app_metadata WHERE key = ?1")
+        .bind(RUNNING_TIMER_KEY)
+        .fetch_optional(&mut *transaction)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("No manual timer is running"))?;
+    let mut timer: RunningManualTimer = serde_json::from_str(&value).map_err(anyhow::Error::new)?;
+    timer.title = title.to_string();
+    timer.project_id = project_id;
+    sqlx::query("UPDATE app_metadata SET value = ?1 WHERE key = ?2")
+        .bind(serde_json::to_string(&timer).map_err(anyhow::Error::new)?)
+        .bind(RUNNING_TIMER_KEY)
+        .execute(&mut *transaction)
+        .await?;
+    transaction.commit().await?;
+    Ok(timer)
+}
+
+#[tauri::command]
 pub async fn update_manual_timer_title(title: String) -> Result<RunningManualTimer, Error> {
     let title = title.trim();
-    if title.is_empty() {
-        return Err(anyhow::anyhow!("A title is required").into());
-    }
     if title.chars().count() > 200 {
         return Err(anyhow::anyhow!("Title must be 200 characters or fewer").into());
     }
@@ -235,23 +279,21 @@ pub async fn finish_manual_timer() -> Result<i64, Error> {
         .await?
         .ok_or_else(|| anyhow::anyhow!("No manual timer is running"))?;
     let timer: RunningManualTimer = serde_json::from_str(&value).map_err(anyhow::Error::new)?;
-    if timer.title.trim().is_empty() {
-        return Err(anyhow::anyhow!("Add a name before recording this timer").into());
-    }
     let end_time = timer
         .end_time
         .ok_or_else(|| anyhow::anyhow!("Stop the timer before recording it"))?;
     let now = chrono::Utc::now().timestamp();
     let result = sqlx::query(
         "INSERT INTO manual_time_blocks
-         (title, notes, start_time, end_time, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+         (title, notes, start_time, end_time, created_at, updated_at, project_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6)",
     )
-    .bind(timer.title)
+    .bind(if timer.title.trim().is_empty() { "Unnamed" } else { timer.title.trim() })
     .bind(timer.notes)
     .bind(timer.start_time)
     .bind(end_time)
     .bind(now)
+    .bind(timer.project_id)
     .execute(&mut *transaction)
     .await?;
     sqlx::query("DELETE FROM app_metadata WHERE key = ?1")
@@ -273,9 +315,10 @@ pub async fn update_manual_time_block(
         manual_time_block.end_time,
     )?;
     let pool = db::get_pool().await?;
+    super::manual_project::validate_project_id(&pool, manual_time_block.project_id).await?;
     let result = sqlx::query(
         "UPDATE manual_time_blocks
-         SET title = ?1, notes = ?2, start_time = ?3, end_time = ?4, updated_at = ?5
+         SET title = ?1, notes = ?2, start_time = ?3, end_time = ?4, updated_at = ?5, project_id = ?7
          WHERE id = ?6",
     )
     .bind(title)
@@ -284,6 +327,7 @@ pub async fn update_manual_time_block(
     .bind(manual_time_block.end_time)
     .bind(chrono::Utc::now().timestamp())
     .bind(manual_time_block.id)
+    .bind(manual_time_block.project_id)
     .execute(&pool)
     .await?;
 
@@ -315,7 +359,7 @@ mod tests {
 
     #[test]
     fn validates_manual_time_block_fields() {
-        assert!(validate("", None, 10, 20).is_err());
+        assert_eq!(validate("", None, 10, 20).unwrap().0, "Unnamed");
         assert!(validate("Work", None, 20, 20).is_err());
         let (title, notes) = validate("  Focus time  ", Some("  Notes  "), 10, 20).unwrap();
         assert_eq!(title, "Focus time");
@@ -336,7 +380,7 @@ mod tests {
         .unwrap();
 
         let rows = sqlx::query_as::<_, ManualTimeBlock>(
-            "SELECT id, title, notes, start_time, end_time, created_at, updated_at
+            "SELECT id, title, notes, project_id, start_time, end_time, created_at, updated_at
              FROM manual_time_blocks
              WHERE end_time > ?1 AND start_time < ?2",
         )

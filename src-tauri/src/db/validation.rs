@@ -353,6 +353,12 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
                     default_value: None,
                 },
                 ExpectedColumn {
+                    name: "project_id",
+                    sql_type: "INTEGER",
+                    not_null: false,
+                    default_value: None,
+                },
+                ExpectedColumn {
                     name: "start_time",
                     sql_type: "INTEGER",
                     not_null: true,
@@ -376,6 +382,13 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
                     not_null: true,
                     default_value: None,
                 },
+            ],
+        },
+        ExpectedTable {
+            name: "manual_projects",
+            columns: vec![
+                ExpectedColumn { name: "id", sql_type: "INTEGER", not_null: true, default_value: None },
+                ExpectedColumn { name: "name", sql_type: "TEXT", not_null: true, default_value: None },
             ],
         },
         ExpectedTable {
@@ -587,6 +600,7 @@ async fn create_table_safe(pool: &SqlitePool, table: &ExpectedTable) -> Result<(
         "google_oauth" => tables::google_calendar::create_table(pool).await?,
         "google_calendar_v2" => tables::google_calendar::create_table(pool).await?,
         "manual_time_blocks" => tables::manual_time_block::create_table(pool).await?,
+        "manual_projects" => tables::manual_project::create_table(pool).await?,
         "app_metadata" => {
             sqlx::query(
                 "CREATE TABLE IF NOT EXISTS app_metadata (
@@ -692,5 +706,28 @@ impl ValidationResult {
         } else {
             parts.join("\n")
         }
+    }
+}
+
+#[cfg(test)]
+mod manual_project_migration_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn adding_projects_preserves_legacy_manual_entries() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query("CREATE TABLE manual_time_blocks (id INTEGER PRIMARY KEY, title TEXT NOT NULL, notes TEXT, start_time INTEGER NOT NULL, end_time INTEGER NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)").execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO manual_time_blocks VALUES (1, 'Legacy work', 'Keep notes', 100, 200, 1, 1)").execute(&pool).await.unwrap();
+        let tables = get_expected_tables();
+        let blocks = tables.iter().find(|table| table.name == "manual_time_blocks").unwrap();
+        let project_column = blocks.columns.iter().find(|column| column.name == "project_id").unwrap();
+        add_column_safe(&pool, "manual_time_blocks", project_column).await.unwrap();
+        let projects = tables.iter().find(|table| table.name == "manual_projects").unwrap();
+        create_table_safe(&pool, projects).await.unwrap();
+        let block = sqlx::query_as::<_, crate::db::tables::manual_time_block::ManualTimeBlock>("SELECT * FROM manual_time_blocks").fetch_one(&pool).await.unwrap();
+        assert_eq!(block.title, "Legacy work");
+        assert_eq!(block.notes.as_deref(), Some("Keep notes"));
+        assert_eq!(block.project_id, None);
+        assert_eq!((block.start_time, block.end_time), (100, 200));
     }
 }

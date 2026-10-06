@@ -19,6 +19,7 @@ import {
 import {useToast} from "../Componants/Toast.tsx";
 import {toErrorString} from "../types/common.ts";
 import type {useSyncTimer} from "../hooks/useSyncTimer.ts";
+import {invokeOrThrow} from "../utils.ts";
 
 function formatCountdown(seconds: number) {
     const mins = Math.floor(seconds / 60);
@@ -27,6 +28,16 @@ function formatCountdown(seconds: number) {
 }
 
 export default function Sync({syncTimer}: {syncTimer: ReturnType<typeof useSyncTimer>}) {
+    const {data: version, isPending} = useQuery({queryKey: ["app_version"], queryFn: () => invokeOrThrow<string>("get_app_version")});
+    if (isPending) return <div className="p-6 text-gray-400">Loading...</div>;
+    if (version?.endsWith("-dev")) return <div className="p-6 text-white">
+        <h1 className="text-2xl font-bold mb-3">Sync</h1>
+        <p className="text-gray-400">Sync is disabled in dev mode.</p>
+    </div>;
+    return <SyncControls syncTimer={syncTimer} />;
+}
+
+function SyncControls({syncTimer}: {syncTimer: ReturnType<typeof useSyncTimer>}) {
     const isDemo = import.meta.env.VITE_DEMO === "true";
     const queryClient = useQueryClient();
     const {showToast} = useToast();

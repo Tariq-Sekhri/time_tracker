@@ -50,7 +50,6 @@ export type DayStatistics = {
     top_apps: AppStat[];
     hourly_distribution: HourlyStat[];
 };
-
 export async function get_week_statistics(
     weekStart: number,
     weekEnd: number,

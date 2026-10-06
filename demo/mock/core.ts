@@ -160,6 +160,7 @@ type ManualTimeBlock = {
     id: number;
     title: string;
     notes: string | null;
+    project_id?: number | null;
     start_time: number;
     end_time: number;
     created_at: number;
@@ -169,6 +170,7 @@ type ManualTimeBlock = {
 type RunningManualTimer = {
     title: string;
     notes: string | null;
+    project_id?: number | null;
     start_time: number;
     end_time: number | null;
 };
@@ -246,6 +248,8 @@ let googleCalendars: GoogleCal[] = [];
 let googleEvents: GoogleEv[] = [];
 let manualTimeBlocks: ManualTimeBlock[] = [];
 let runningManualTimer: RunningManualTimer | null = null;
+let manualProjects: Array<{id: number; name: string}> = [];
+let nextManualProjectId = 1;
 let notesState = {enabled: false, text: ""};
 
 let oauthClientId = DEMO_CLIENT_ID;
@@ -417,6 +421,8 @@ function seed() {
     settings = DEMO_DEFAULT_SETTINGS.map((s) => ({ ...s }));
     manualTimeBlocks = [];
     runningManualTimer = null;
+    manualProjects = [];
+    nextManualProjectId = 1;
     notesState = {enabled: false, text: ""};
     nextManualTimeBlockId = 1;
     appMetadata = { ...DEMO_APP_METADATA_DEFAULTS };
@@ -932,7 +938,7 @@ function buildCategoryStats(
     const dayTotals = new Map<number, number>();
 
     const catColor = (name: string) =>
-        name === "Manual time" ? "#0ea5e9" : categories.find((c) => c.name === name)?.color ?? null;
+        name === "Manual time" ? "#0ea5e9" : categories.find((c) => c.name === name)?.color ?? (manualProjects.some((p) => p.name === name) ? ["#0ea5e9", "#a78bfa", "#34d399", "#fbbf24", "#fb7185", "#22d3ee"][manualProjects.find((p) => p.name === name)!.id % 6] : null);
 
     for (const b of blocks) {
         const od = overlapSec(b, ws, we);
@@ -945,9 +951,9 @@ function buildCategoryStats(
         const appSum = sumApps(b);
         for (const ap of b.apps) {
             const share = appSum > 0 ? ap.total_duration / appSum : 0;
-            const groupedApp = b.category === "Manual time" ? ap.app : resolveDemoAppGroup(ap.app);
+            const groupedApp = ap.app.startsWith("Manual time: ") ? ap.app : resolveDemoAppGroup(ap.app);
             apps.set(groupedApp, (apps.get(groupedApp) ?? 0) + od * share);
-            if (b.category !== "Manual time") {
+            if (!ap.app.startsWith("Manual time: ")) {
                 const names = appNames.get(groupedApp) ?? new Set<string>();
                 names.add(ap.app);
                 appNames.set(groupedApp, names);
@@ -982,7 +988,7 @@ function manualStatsBlocks(start: number, end: number): TimeBlockRow[] {
         while (cursor < stop) {
             const date = new Date(cursor * 1000);
             const next = Math.min(stop, cursor + 3600 - date.getMinutes() * 60 - date.getSeconds());
-            blocks.push({id: block.id, category: "Manual time", start_time: cursor, end_time: next,
+            blocks.push({id: block.id, category: manualProjects.find((project) => project.id === block.project_id)?.name ?? "Manual time", start_time: cursor, end_time: next,
                 apps: [{app: `Manual time: ${block.title}`, total_duration: next - cursor}]});
             cursor = next;
         }
@@ -1200,6 +1206,31 @@ export async function invoke<T>(
             await emit("sync-successful");
             await emit("count_down_to_sync", 60);
             return null as T;
+        case "get_manual_projects":
+            return [...manualProjects].sort((left, right) => left.name.localeCompare(right.name)) as T;
+        case "create_manual_project":
+        case "update_manual_project": {
+            const name = String((a as {name?: string}).name ?? "").trim();
+            const id = cmd === "create_manual_project" ? nextManualProjectId : Number((a as {id?: number}).id);
+            if (!name || name.length > 100) throw new DemoInvokeError(cmd, "Project name must be between 1 and 100 characters");
+            if (manualProjects.some((project) => project.id !== id && project.name.toLowerCase() === name.toLowerCase())) throw new DemoInvokeError(cmd, "A project with this name already exists");
+            if (cmd === "create_manual_project") {
+                manualProjects.push({id: nextManualProjectId++, name});
+                return id as T;
+            }
+            const project = manualProjects.find((item) => item.id === id);
+            if (!project) throw new DemoInvokeError(cmd, "Project no longer exists");
+            project.name = name;
+            return null as T;
+        }
+        case "delete_manual_project": {
+            const id = Number((a as {id?: number}).id);
+            if (!manualProjects.some((project) => project.id === id)) throw new DemoInvokeError(cmd, "Project no longer exists");
+            manualProjects = manualProjects.filter((project) => project.id !== id);
+            manualTimeBlocks.forEach((block) => {if (block.project_id === id) block.project_id = null;});
+            if (runningManualTimer?.project_id === id) runningManualTimer = {...runningManualTimer, project_id: null};
+            return null as T;
+        }
         case "get_manual_time_blocks": {
             const rangeStart = Number((a as { rangeStart?: number }).rangeStart);
             const rangeEnd = Number((a as { rangeEnd?: number }).rangeEnd);
@@ -1208,13 +1239,14 @@ export async function invoke<T>(
             }
             return manualTimeBlocks
                 .filter((block) => block.end_time > rangeStart && block.start_time < rangeEnd)
+                .map((block) => ({...block, project_name: manualProjects.find((project) => project.id === block.project_id)?.name ?? null}))
                 .sort((left, right) => left.start_time - right.start_time || left.id - right.id) as T;
         }
         case "insert_manual_time_block": {
             const block = (a as {
-                newManualTimeBlock?: { title?: string; notes?: string | null; start_time?: number; end_time?: number };
+                newManualTimeBlock?: { title?: string; notes?: string | null; project_id?: number | null; start_time?: number; end_time?: number };
             }).newManualTimeBlock;
-            const title = block?.title?.trim() ?? "";
+            const title = block?.title?.trim() || "Unnamed";
             const startTime = Number(block?.start_time);
             const endTime = Number(block?.end_time);
             if (!title || !Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) {
@@ -1222,15 +1254,16 @@ export async function invoke<T>(
             }
             const now = Math.floor(Date.now() / 1000);
             const id = nextManualTimeBlockId++;
-            manualTimeBlocks.push({ id, title, notes: block?.notes?.trim() || null, start_time: startTime, end_time: endTime, created_at: now, updated_at: now });
+            if (block?.project_id != null && !manualProjects.some((project) => project.id === block.project_id)) throw new DemoInvokeError(cmd, "Project no longer exists");
+            manualTimeBlocks.push({ id, title, notes: block?.notes?.trim() || null, project_id: block?.project_id ?? null, start_time: startTime, end_time: endTime, created_at: now, updated_at: now });
             return id as T;
         }
         case "update_manual_time_block": {
             const block = (a as {
-                manualTimeBlock?: { id?: number; title?: string; notes?: string | null; start_time?: number; end_time?: number };
+                manualTimeBlock?: { id?: number; title?: string; notes?: string | null; project_id?: number | null; start_time?: number; end_time?: number };
             }).manualTimeBlock;
             const id = Number(block?.id);
-            const title = block?.title?.trim() ?? "";
+            const title = block?.title?.trim() || "Unnamed";
             const startTime = Number(block?.start_time);
             const endTime = Number(block?.end_time);
             if (!title || !Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) {
@@ -1238,7 +1271,8 @@ export async function invoke<T>(
             }
             const existing = manualTimeBlocks.find((item) => item.id === id);
             if (!existing) throw new DemoInvokeError(cmd, `Manual time block ${id} does not exist`);
-            Object.assign(existing, { title, notes: block?.notes?.trim() || null, start_time: startTime, end_time: endTime, updated_at: Math.floor(Date.now() / 1000) });
+            if (block?.project_id != null && !manualProjects.some((project) => project.id === block.project_id)) throw new DemoInvokeError(cmd, "Project no longer exists");
+            Object.assign(existing, { title, notes: block?.notes?.trim() || null, project_id: block?.project_id ?? null, start_time: startTime, end_time: endTime, updated_at: Math.floor(Date.now() / 1000) });
             return null as T;
         }
         case "delete_manual_time_block": {
@@ -1252,12 +1286,24 @@ export async function invoke<T>(
             return runningManualTimer as T;
         case "start_manual_timer": {
             if (runningManualTimer) throw new DemoInvokeError(cmd, "A manual timer is already running");
-            runningManualTimer = { title: "", notes: null, start_time: Math.floor(Date.now() / 1000), end_time: null };
+            const title = String((a as {title?: string}).title ?? "").trim();
+            const projectId = (a as {projectId?: number | null}).projectId ?? null;
+            if (title.length > 200) throw new DemoInvokeError(cmd, "Title must be 200 characters or fewer");
+            if (projectId != null && !manualProjects.some((project) => project.id === projectId)) throw new DemoInvokeError(cmd, "Project no longer exists");
+            runningManualTimer = { title, notes: null, project_id: projectId, start_time: Math.floor(Date.now() / 1000), end_time: null };
+            return runningManualTimer as T;
+        }
+        case "update_manual_timer_details": {
+            const title = String((a as {title?: string}).title ?? "").trim();
+            const projectId = (a as {projectId?: number | null}).projectId ?? null;
+            if (title.length > 200) throw new DemoInvokeError(cmd, "Timer name must be 200 characters or fewer");
+            if (!runningManualTimer) throw new DemoInvokeError(cmd, "No manual timer is running");
+            if (projectId != null && !manualProjects.some((project) => project.id === projectId)) throw new DemoInvokeError(cmd, "Project no longer exists");
+            runningManualTimer = {...runningManualTimer, title, project_id: projectId};
             return runningManualTimer as T;
         }
         case "update_manual_timer_title": {
             const title = String((a as { title?: string }).title ?? "").trim();
-            if (!title) throw new DemoInvokeError(cmd, "A title is required");
             if (!runningManualTimer) throw new DemoInvokeError(cmd, "No manual timer is running");
             runningManualTimer = { ...runningManualTimer, title };
             return runningManualTimer as T;
@@ -1271,11 +1317,10 @@ export async function invoke<T>(
         }
         case "finish_manual_timer": {
             if (!runningManualTimer) throw new DemoInvokeError(cmd, "No manual timer is running");
-            if (!runningManualTimer.title.trim()) throw new DemoInvokeError(cmd, "Add a name before recording this timer");
             if (runningManualTimer.end_time == null) throw new DemoInvokeError(cmd, "Stop the timer before recording it");
             const now = Math.floor(Date.now() / 1000);
             const id = nextManualTimeBlockId++;
-            manualTimeBlocks.push({ id, title: runningManualTimer.title, notes: runningManualTimer.notes, start_time: runningManualTimer.start_time, end_time: runningManualTimer.end_time, created_at: now, updated_at: now });
+            manualTimeBlocks.push({ id, title: runningManualTimer.title.trim() || "Unnamed", notes: runningManualTimer.notes, project_id: runningManualTimer.project_id ?? null, start_time: runningManualTimer.start_time, end_time: runningManualTimer.end_time, created_at: now, updated_at: now });
             runningManualTimer = null;
             return id as T;
         }

@@ -1,9 +1,11 @@
 import {useEffect, useState, type ReactNode} from "react";
-import {useMutation, useQueryClient} from "@tanstack/react-query";
+import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {delete_manual_time_block, update_manual_time_block} from "../../../api/ManualTimeBlock.ts";
 import {useToast} from "../../../Componants/Toast.tsx";
 import {formatDuration} from "../utils.ts";
 import type {CalendarEvent} from "../types.ts";
+import ProjectSelector from "../../../Componants/ProjectSelector.tsx";
+import {getManualProjects, MANUAL_PROJECTS_QUERY_KEY} from "../../../api/ManualProject.ts";
 
 function toLocalDateTimeInput(date: Date): string {
     return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
@@ -27,6 +29,8 @@ export default function ManualTimeBlockView({
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [title, setTitle] = useState(selectedEvent.title);
     const [notes, setNotes] = useState(selectedEvent.notes ?? "");
+    const [projectId, setProjectId] = useState<number | null>(selectedEvent.projectId ?? null);
+    const {data: projects = []} = useQuery({queryKey: MANUAL_PROJECTS_QUERY_KEY, queryFn: getManualProjects});
     const [start, setStart] = useState(toLocalDateTimeInput(selectedEvent.start));
     const [end, setEnd] = useState(toLocalDateTimeInput(selectedEvent.end));
     const [validationError, setValidationError] = useState<string | null>(null);
@@ -34,6 +38,7 @@ export default function ManualTimeBlockView({
     useEffect(() => {
         setTitle(selectedEvent.title);
         setNotes(selectedEvent.notes ?? "");
+        setProjectId(selectedEvent.projectId ?? null);
         setStart(toLocalDateTimeInput(selectedEvent.start));
         setEnd(toLocalDateTimeInput(selectedEvent.end));
         setValidationError(null);
@@ -45,7 +50,7 @@ export default function ManualTimeBlockView({
             await Promise.all(["manualTimeBlocks","week_statistics","day_statistics","range_statistics","total_statistics","category_app_logs"].map((key) => queryClient.invalidateQueries({queryKey: [key]})));
             const startDate = new Date(start);
             const endDate = new Date(end);
-            setSelectedEvent({...selectedEvent, title: title.trim(), notes: notes.trim() || undefined, start: startDate, end: endDate});
+            setSelectedEvent({...selectedEvent, title: title.trim() || "Unnamed", notes: notes.trim() || undefined, projectId, start: startDate, end: endDate});
             setIsEditing(false);
             showToast("Manual time updated", "success");
         },
@@ -76,10 +81,6 @@ export default function ManualTimeBlockView({
     const save = () => {
         const startDate = new Date(start);
         const endDate = new Date(end);
-        if (!title.trim()) {
-            setValidationError("Add a title for this time block.");
-            return;
-        }
         if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate <= startDate) {
             setValidationError("End time must be after start time.");
             return;
@@ -89,6 +90,7 @@ export default function ManualTimeBlockView({
             id,
             title: title.trim(),
             notes: notes.trim() || null,
+            project_id: projectId,
             start_time: Math.floor(startDate.getTime() / 1000),
             end_time: Math.floor(endDate.getTime() / 1000),
         });
@@ -118,6 +120,10 @@ export default function ManualTimeBlockView({
                         <span className="mb-1 block text-sm text-gray-400">End</span>
                         <input type="datetime-local" value={end} onChange={(event) => setEnd(event.target.value)} className="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-white outline-none focus:border-sky-500" />
                     </label>
+                    <div>
+                        <span className="mb-1 block text-sm text-gray-400">Project</span>
+                        <ProjectSelector value={projectId} onChange={setProjectId} disabled={updateMutation.isPending} />
+                    </div>
                     <label className="block">
                         <span className="mb-1 block text-sm text-gray-400">Description or notes</span>
                         <textarea rows={5} value={notes} onChange={(event) => setNotes(event.target.value)} className="w-full resize-y rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-white outline-none focus:border-sky-500" />
@@ -132,6 +138,7 @@ export default function ManualTimeBlockView({
                 <div className="mt-5 flex flex-1 flex-col">
                     <div>
                         <h3 className="break-words text-lg font-semibold text-white">{selectedEvent.title}</h3>
+                        <p className="mt-1 text-sm text-sky-300">{projects.find((project) => project.id === selectedEvent.projectId)?.name ?? "No project"}</p>
                         <p className="mt-2 text-sm text-gray-400">{selectedEvent.start.toLocaleString()} – {selectedEvent.end.toLocaleString()}</p>
                         <p className="mt-1 text-sm font-medium text-sky-400">{formatDuration(Math.floor((selectedEvent.end.getTime() - selectedEvent.start.getTime()) / 1000))}</p>
                         <div className="mt-5 border-t border-gray-800 pt-5">

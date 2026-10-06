@@ -1,4 +1,5 @@
 import {useEffect, useRef, useState} from "react";
+import {useRenderPerf} from "../perf.ts";
 import {createPortal} from "react-dom";
 import {useQuery} from "@tanstack/react-query";
 import {get_log_by_id, get_logs_for_app_in_time_range} from "../api/Log.ts";
@@ -38,6 +39,9 @@ export default function AppTitleDetails({app, appNames, start, end, ids, deviceU
             return [...totals].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
         },
     });
+
+    useRenderPerf("app_title_details", open ? `open|${app}|${start}|${end}` : "closed", open && !isPending, 0,
+        {source: ids ? "ids" : "range", ids: ids?.length ?? 0, titles: titles.length});
 
     useEffect(() => {
         const element = dialog.current;

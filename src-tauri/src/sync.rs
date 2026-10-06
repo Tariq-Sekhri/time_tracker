@@ -30,14 +30,22 @@ static SYNC_COUNTDOWN_REMAINING: AtomicI64 = AtomicI64::new(-1);
 static SYNC_HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 static SYNC_CYCLE_LOCK: OnceLock<AsyncMutex<()>> = OnceLock::new();
 
-fn sync_http_client() -> &'static reqwest::Client {
-    SYNC_HTTP_CLIENT.get_or_init(|| {
+fn ensure_sync_enabled() -> Result<(), Error> {
+    if cfg!(debug_assertions) {
+        return Err(anyhow!("Sync is disabled in dev mode").into());
+    }
+    Ok(())
+}
+
+fn sync_http_client() -> Result<&'static reqwest::Client, Error> {
+    ensure_sync_enabled()?;
+    Ok(SYNC_HTTP_CLIENT.get_or_init(|| {
         reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(30))
             .build()
             .expect("sync HTTP client configuration is valid")
-    })
+    }))
 }
 
 fn sync_cycle_lock() -> &'static AsyncMutex<()> {
@@ -91,12 +99,13 @@ fn sync_server_url(server_ip: &str, path: &str) -> String {
 
 #[tauri::command]
 pub async fn check(ip: String) -> Result<String, Error> {
+    ensure_sync_enabled()?;
     let normalized_ip = normalize_server_ip(&ip);
     if normalized_ip.is_empty() {
         return Err(Error::new(anyhow!("Server IP cannot be empty")));
     }
     let url = sync_server_url(&normalized_ip, "check");
-    let res = sync_http_client()
+    let res = sync_http_client()?
         .get(&url)
         .send()
         .await
@@ -139,6 +148,7 @@ struct RegisterResponse {
 }
 #[tauri::command]
 pub async fn register(name: String) -> Result<(), Error> {
+    ensure_sync_enabled()?;
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
     check(server_ip.clone()).await?;
     let name = name.trim().to_string();
@@ -149,7 +159,7 @@ pub async fn register(name: String) -> Result<(), Error> {
         "name": name
     });
 
-    let res = sync_http_client()
+    let res = sync_http_client()?
         .post(sync_server_url(&server_ip, "register"))
         .json(&body)
         .send()
@@ -178,6 +188,7 @@ async fn post_logs_to_server(
     server_ip: String,
     device_uuid: String,
 ) -> Result<usize, Error> {
+    ensure_sync_enabled()?;
     let count = logs.len();
     if count == 0 {
         return Ok(0);
@@ -186,7 +197,7 @@ async fn post_logs_to_server(
         "token": token,
         "logs": logs,
     });
-    let res = sync_http_client()
+    let res = sync_http_client()?
         .post(sync_server_url(&server_ip, "upload_all_logs"))
         .json(&body)
         .send()
@@ -200,7 +211,9 @@ async fn post_logs_to_server(
 
 #[tauri::command]
 pub async fn upload_all_logs() -> Result<usize, Error> {
+    ensure_sync_enabled()?;
     crate::logger::Log::info("Initial sync upload started");
+    let mut perf = crate::perf::Perf::new("upload_all_logs");
     let device = get_local_device()
         .await?
         .ok_or(anyhow!("Local device not found"))?;
@@ -208,7 +221,10 @@ pub async fn upload_all_logs() -> Result<usize, Error> {
         return Err(Error::new(anyhow!("Device is waiting for admin approval")));
     }
     let logs = get_local_logs().await?;
+    perf.stage("load_logs");
+    perf.note("logs", logs.len());
     if logs.is_empty() {
+        perf.done();
         return Ok(0);
     }
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
@@ -218,12 +234,17 @@ pub async fn upload_all_logs() -> Result<usize, Error> {
             return Err(Error::from(anyhow!("somehow got remote device?")));
         }
     };
-    post_logs_to_server(logs, token, server_ip, device.uuid).await
+    let count = post_logs_to_server(logs, token, server_ip, device.uuid).await?;
+    perf.stage("upload");
+    perf.done();
+    Ok(count)
 }
 
 #[tauri::command]
 pub async fn reupload_all_logs() -> Result<usize, Error> {
+    ensure_sync_enabled()?;
     crate::logger::Log::info("Full sync reupload started");
+    let mut perf = crate::perf::Perf::new("reupload_all_logs");
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
     let device = get_local_device()
         .await?
@@ -237,9 +258,15 @@ pub async fn reupload_all_logs() -> Result<usize, Error> {
             return Err(Error::from(anyhow!("somehow got remote device?")));
         }
     };
+    perf.stage("setup");
     consolidate_local_logs_for_reupload(&device.uuid).await?;
+    perf.stage("consolidate");
     let logs = get_all_local_logs_for_reupload(&device.uuid).await?;
+    perf.stage("load_logs");
+    perf.note("logs", logs.len());
     let count = post_logs_to_server(logs, token, server_ip, device.uuid.clone()).await?;
+    perf.stage("upload");
+    perf.done();
     if count == 0 {
         set_last_sync_id(&device.uuid, 0).await?;
     }
@@ -252,6 +279,7 @@ pub async fn is_registered_for_sync() -> Result<bool, Error> {
 }
 
 pub async fn is_sync_ready() -> Result<bool, Error> {
+    if cfg!(debug_assertions) {return Ok(false);}
     let Some(device) = get_local_device().await? else {
         return Ok(false);
     };
@@ -266,6 +294,7 @@ struct DeviceStatusResponse {
 
 #[tauri::command]
 pub async fn check_device_activation() -> Result<bool, Error> {
+    ensure_sync_enabled()?;
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
     let device = get_local_device()
         .await?
@@ -276,7 +305,7 @@ pub async fn check_device_activation() -> Result<bool, Error> {
             return Err(Error::new(anyhow!("Local device state is invalid")))
         }
     };
-    let response = sync_http_client()
+    let response = sync_http_client()?
         .post(sync_server_url(&server_ip, "status"))
         .json(&json!({ "token": token }))
         .send()
@@ -309,6 +338,7 @@ pub enum AutoSyncResult {
 }
 
 pub async fn run_auto_sync_cycle() -> AutoSyncResult {
+    if cfg!(debug_assertions) {return AutoSyncResult::Skipped;}
     let _cycle_guard = sync_cycle_lock().lock().await;
     let Ok(registered) = is_registered_for_sync().await else {
         return AutoSyncResult::Skipped;
@@ -325,13 +355,19 @@ pub async fn run_auto_sync_cycle() -> AutoSyncResult {
     }
 
     crate::logger::Log::info("Sync cycle started");
+    let mut perf = crate::perf::Perf::new("sync_cycle");
     let mut errors = Vec::new();
     if let Err(e) = sync_impl().await {
         errors.push(format!("sync: {}", e));
     }
-    if let Err(e) = device_logs(None).await {
-        errors.push(format!("pull logs: {}", e));
+    perf.stage("upload");
+    match device_logs(None).await {
+        Ok(pulled) => perf.note("pulled", pulled),
+        Err(e) => errors.push(format!("pull logs: {}", e)),
     }
+    perf.stage("download");
+    perf.note("errors", errors.len());
+    perf.done();
     if errors.is_empty() {
         crate::logger::Log::info("Sync cycle completed");
     } else {
@@ -342,6 +378,7 @@ pub async fn run_auto_sync_cycle() -> AutoSyncResult {
 
 #[tauri::command]
 pub async fn sync_now(app: AppHandle) -> Result<(), Error> {
+    ensure_sync_enabled()?;
     if !is_sync_ready().await? {
         return Err(Error::new(anyhow!("Initial log upload still in progress")));
     }
@@ -377,17 +414,22 @@ pub async fn get_sync_countdown() -> Result<Option<i64>, Error> {
 
 #[tauri::command]
 pub async fn sync() -> Result<(), Error> {
+    ensure_sync_enabled()?;
     let _cycle_guard = sync_cycle_lock().lock().await;
     sync_impl().await
 }
 
 async fn sync_impl() -> Result<(), Error> {
+    ensure_sync_enabled()?;
     crate::logger::Log::debug("Sync upload phase started");
     if !is_registered_for_sync().await? {
         return Ok(());
     }
+    let mut perf = crate::perf::Perf::new("sync_upload");
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
     let logs = get_logs_for_sync().await?;
+    perf.stage("load_logs");
+    perf.note("logs", logs.len());
     let device = get_local_device()
         .await?
         .ok_or(anyhow!("Local device not found"))?;
@@ -405,22 +447,27 @@ async fn sync_impl() -> Result<(), Error> {
         .into_iter()
         .map(|logs| logs.id)
         .collect();
+    perf.stage("load_deleted");
+    perf.note("deleted", deleted_ids.len());
 
     let body = serde_json::json!({
         "logs": logs,
         "token":token,
         "deleted_log_ids": deleted_ids,
     });
-    let res = sync_http_client()
+    let res = sync_http_client()?
         .post(sync_server_url(&server_ip, "sync"))
         .json(&body)
         .send()
         .await?;
     require_authenticated_success(res, &device.uuid).await?;
+    perf.stage("http");
     delete_local_deleted_logs().await?;
     if let Some(max) = logs.iter().map(|log| log.id).max() {
         set_last_sync_id(&device.uuid, max).await?;
     }
+    perf.stage("finalize");
+    perf.done();
 
     Ok(())
 }
@@ -456,6 +503,7 @@ impl From<ServerLog> for Log {
 }
 
 async fn sync_devices_with_server() -> Result<HashSet<String>, Error> {
+    ensure_sync_enabled()?;
     crate::logger::Log::debug("Sync device-list phase started");
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
     let local = get_local_device()
@@ -470,7 +518,7 @@ async fn sync_devices_with_server() -> Result<HashSet<String>, Error> {
             return Err(Error::new(anyhow!("Local device state is invalid")))
         }
     };
-    let response = sync_http_client()
+    let response = sync_http_client()?
         .get(sync_server_url(&server_ip, "devices"))
         .bearer_auth(token)
         .send()
@@ -546,12 +594,18 @@ pub async fn unsubscribe_device(uuid: String) -> Result<(), Error> {
 
 #[tauri::command]
 pub async fn get_devices(app_handle: tauri::AppHandle) -> Result<Vec<Device>, Error> {
+    let mut perf = crate::perf::Perf::new("get_devices");
+    if cfg!(debug_assertions) {
+        perf.done();
+        return annotate_devices_with_local_logs(get_devices_from_db().await?).await;
+    }
     let local = get_local_device().await?;
     if !local
         .as_ref()
         .map(|device| device.is_active)
         .unwrap_or(false)
     {
+        perf.done();
         return Ok(get_devices_from_db()
             .await?
             .into_iter()
@@ -565,21 +619,30 @@ pub async fn get_devices(app_handle: tauri::AppHandle) -> Result<Vec<Device>, Er
             None
         }
     };
+    perf.stage("server_devices");
+    perf.note("server_ok", server_uuids.is_some());
     let devices = get_devices_from_db().await?;
     let devices = match server_uuids {
         Some(uuids) => annotate_devices_with_server(devices, &uuids),
         None => annotate_devices_on_sync_failure(devices),
     };
-    annotate_devices_with_local_logs(devices).await
+    let devices = annotate_devices_with_local_logs(devices).await?;
+    perf.stage("local_annotate");
+    perf.note("devices", devices.len());
+    perf.done();
+    Ok(devices)
 }
 #[tauri::command]
 pub async fn device_logs(device_uuid: Option<String>) -> Result<usize, Error> {
+    ensure_sync_enabled()?;
     crate::logger::Log::debug("Sync download phase started");
     if device_uuid.is_none() && !is_registered_for_sync().await? {
         return Ok(0);
     }
+    let mut perf = crate::perf::Perf::new("sync_download");
     let _ =
         crate::logger::Log::result("Sync device list refresh", sync_devices_with_server().await);
+    perf.stage("device_list");
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
     let local = get_local_device()
         .await?
@@ -608,6 +671,7 @@ pub async fn device_logs(device_uuid: Option<String>) -> Result<usize, Error> {
     }
 
     if devices.is_empty() {
+        perf.done();
         return Ok(0);
     }
 
@@ -620,7 +684,7 @@ pub async fn device_logs(device_uuid: Option<String>) -> Result<usize, Error> {
             is_active: true,
         })
         .collect::<Vec<ServerDevice>>();
-    let res = sync_http_client()
+    let res = sync_http_client()?
         .get(sync_server_url(&server_ip, "devices/"))
         .bearer_auth(token)
         .json(&de)
@@ -634,7 +698,10 @@ pub async fn device_logs(device_uuid: Option<String>) -> Result<usize, Error> {
         .into_iter()
         .map(Log::from)
         .collect();
+    perf.stage("http");
+    perf.note("logs", logs.len());
     insert_logs(&logs).await?;
+    perf.stage("insert");
 
     let count = if let Some(uuid) = device_uuid {
         logs.iter()
@@ -658,6 +725,8 @@ pub async fn device_logs(device_uuid: Option<String>) -> Result<usize, Error> {
             set_last_sync_id(&device.uuid, max_id).await?;
         }
     }
+    perf.stage("finalize");
+    perf.done();
 
     Ok(count)
 }

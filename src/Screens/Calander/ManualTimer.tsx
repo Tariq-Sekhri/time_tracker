@@ -1,117 +1,124 @@
-import {useEffect, useState} from "react";
-import {useMutation, useQueryClient} from "@tanstack/react-query";
-import {finish_manual_timer, RunningManualTimer, start_manual_timer, stop_manual_timer, update_manual_timer_title} from "../../api/ManualTimeBlock.ts";
+import {useEffect, useRef, useState} from "react";
+import {useQueryClient} from "@tanstack/react-query";
+import {finish_manual_timer, RunningManualTimer, start_manual_timer, stop_manual_timer, update_manual_timer_details} from "../../api/ManualTimeBlock.ts";
 import {useToast} from "../../Componants/Toast.tsx";
+import ProjectSelector from "../../Componants/ProjectSelector.tsx";
 
 function formatElapsed(startTime: number, now: number): string {
     const seconds = Math.max(0, Math.floor(now / 1000) - startTime);
     return [Math.floor(seconds / 3600), Math.floor((seconds % 3600) / 60), seconds % 60]
-        .map((value) => String(value).padStart(2, "0"))
-        .join(":");
+        .map((value) => String(value).padStart(2, "0")).join(":");
 }
 
-export function ManualTimerControl({timer, onAddPastTime}: {timer: RunningManualTimer | null; onAddPastTime: () => void}) {
+export function ManualTimerControl({timer, onAddPastTime}: {timer: RunningManualTimer | null; onAddPastTime: (anchor: HTMLElement) => void}) {
     const queryClient = useQueryClient();
     const {showToast} = useToast();
     const [now, setNow] = useState(Date.now());
-    const [isEditingTitle, setIsEditingTitle] = useState(false);
-    const [title, setTitle] = useState("");
-    const [showFinishDialog, setShowFinishDialog] = useState(false);
-    const stopMutation = useMutation({
-        mutationFn: stop_manual_timer,
-        onSuccess: async () => {
-            await queryClient.invalidateQueries({queryKey: ["runningManualTimer"]});
-            setShowFinishDialog(true);
-        },
-        onError: (error) => showToast("Could not stop timer", "error", 5000, String(error)),
-    });
+    const [title, setTitle] = useState(timer?.title ?? "");
+    const [projectId, setProjectId] = useState<number | null>(timer?.project_id ?? null);
+    const [pending, setPending] = useState(0);
+    const [finishing, setFinishing] = useState(false);
+    const timerRef = useRef(timer);
+    const pendingRef = useRef(0);
+    const queue = useRef(Promise.resolve());
+    const projectContainerRef = useRef<HTMLDivElement>(null);
+    const nameInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (pendingRef.current) return;
+        timerRef.current = timer;
+        if (document.activeElement !== nameInputRef.current) setTitle(timer?.title ?? "");
+        setProjectId(timer?.project_id ?? null);
+    }, [timer]);
 
     useEffect(() => {
         if (!timer || timer.end_time != null) return;
         setNow(Date.now());
         const interval = window.setInterval(() => setNow(Date.now()), 1000);
         return () => window.clearInterval(interval);
-    }, [timer]);
+    }, [timer?.start_time, timer?.end_time]);
 
-    useEffect(() => {
-        setTitle(timer?.title ?? "");
-        setIsEditingTitle(false);
-    }, [timer?.title]);
-
-    const startMutation = useMutation({
-        mutationFn: start_manual_timer,
-        onSuccess: async () => {
-            await queryClient.invalidateQueries({queryKey: ["runningManualTimer"]});
-            showToast("Timer started", "success");
-        },
-        onError: (error) => showToast("Could not start timer", "error", 5000, String(error)),
-    });
-    const updateTitleMutation = useMutation({
-        mutationFn: () => update_manual_timer_title(title.trim()),
-        onSuccess: async () => {
-            await queryClient.invalidateQueries({queryKey: ["runningManualTimer"]});
-            setIsEditingTitle(false);
-        },
-        onError: (error) => showToast("Could not rename timer", "error", 5000, String(error)),
-    });
-
-    if (!timer) {
-        return <div className="flex items-center rounded-lg border border-gray-700 bg-gray-900 p-1 shadow-sm">
-            <button type="button" disabled={startMutation.isPending} className="rounded-md bg-sky-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60" onClick={() => startMutation.mutate()}>{startMutation.isPending ? "Starting..." : "Start timer"}</button>
-            <button type="button" className="px-2.5 py-1.5 text-sm font-medium text-gray-300 transition hover:text-white" onClick={onAddPastTime}>Add past time</button>
-        </div>;
-    }
-
-    const saveTitle = () => {
-        if (!title.trim() || title.trim() === timer.title) {
-            setTitle(timer.title);
-            setIsEditingTitle(false);
-            return;
-        }
-        updateTitleMutation.mutate();
+    const publish = (next: RunningManualTimer | null) => {
+        timerRef.current = next;
+        queryClient.setQueryData(["runningManualTimer"], next);
     };
-    const elapsedEnd = timer.end_time == null ? now : timer.end_time * 1000;
 
-    return <>
-        <div className="flex min-w-0 items-center rounded-lg border border-sky-800/80 bg-gray-900 p-1 shadow-sm">
-            <span className="mx-1.5 h-2 w-2 shrink-0 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.8)]" aria-label="Timer running" />
-            {isEditingTitle ? <input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} onBlur={saveTitle} onKeyDown={(event) => { if (event.key === "Enter") saveTitle(); if (event.key === "Escape") { setTitle(timer.title); setIsEditingTitle(false); } }} maxLength={200} className="w-36 rounded border border-sky-500 bg-black px-1.5 py-1 text-sm text-white outline-none" aria-label="Timer task name" disabled={updateTitleMutation.isPending} /> :
-                <button type="button" onClick={() => setIsEditingTitle(true)} className={`max-w-36 truncate px-1 py-1 text-left text-sm font-semibold ${timer.title ? "text-white hover:text-sky-200" : "text-sky-300 hover:text-sky-100"}`} title="Rename timer">{timer.title || "Add task name"}</button>}
-            <span className="border-l border-gray-700 px-2 font-mono text-sm tabular-nums text-sky-200">{formatElapsed(timer.start_time, elapsedEnd)}</span>
-            {timer.end_time == null ? <button type="button" disabled={stopMutation.isPending} onClick={() => stopMutation.mutate()} className="rounded-md bg-sky-600 px-2.5 py-1 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:opacity-60">{stopMutation.isPending ? "Stopping..." : "Done"}</button> : <button type="button" onClick={() => setShowFinishDialog(true)} className="rounded-md bg-sky-600 px-2.5 py-1 text-sm font-semibold text-white transition hover:bg-sky-500">Save time</button>}
-            <button type="button" className="px-2 py-1 text-sm font-medium text-gray-400 transition hover:text-white" onClick={onAddPastTime}>Add past</button>
-        </div>
-        <FinishManualTimerDialog open={showFinishDialog} initialTitle={timer.title} onClose={() => setShowFinishDialog(false)} />
-    </>;
-}
+    // Blur, project changes, and Done can arrive together. Save them in order.
+    const enqueue = (operation: () => Promise<void>) => {
+        pendingRef.current += 1;
+        setPending((value) => value + 1);
+        queue.current = queue.current.then(operation).catch((error) => {
+            showToast("Could not save manual tracking", "error", 5000, String(error));
+            void queryClient.invalidateQueries({queryKey: ["runningManualTimer"]});
+        }).finally(() => {
+            pendingRef.current -= 1;
+            setPending((value) => value - 1);
+        });
+    };
 
-function FinishManualTimerDialog({open, initialTitle, onClose}: {open: boolean; initialTitle: string; onClose: () => void}) {
-    const queryClient = useQueryClient();
-    const {showToast} = useToast();
-    const [title, setTitle] = useState("");
-    const [error, setError] = useState<string | null>(null);
-    const mutation = useMutation({
-        mutationFn: async () => { await update_manual_timer_title(title.trim()); return finish_manual_timer(); },
-        onSuccess: async () => {
-            await Promise.all([queryClient.invalidateQueries({queryKey: ["runningManualTimer"]}), Promise.all(["manualTimeBlocks","week_statistics","day_statistics","range_statistics","total_statistics","category_app_logs"].map((key) => queryClient.invalidateQueries({queryKey: [key]})))]);
-            showToast("Timer recorded", "success");
-            onClose();
-        },
-        onError: (value) => showToast("Could not record timer", "error", 5000, String(value)),
-    });
-    useEffect(() => { if (open) { setTitle(initialTitle); setError(null); } }, [open, initialTitle]);
-    if (!open) return null;
+    const commit = (name: string, project: number | null, forceStart = false) => {
+        const nextTitle = name.trim();
+        if (!nextTitle && !forceStart && !timerRef.current && !pendingRef.current) return;
+        enqueue(async () => {
+            const current = timerRef.current;
+            if (!current) publish(await start_manual_timer(nextTitle, project));
+            else if (current.title !== nextTitle || (current.project_id ?? null) !== project) {
+                publish(await update_manual_timer_details(nextTitle, project));
+            }
+        });
+    };
+
     const finish = () => {
-        if (!title.trim()) { setError("Add a name for this time block."); return; }
-        setError(null); mutation.mutate();
+        setFinishing(true);
+        enqueue(async () => {
+            try {
+                if (!timerRef.current) return;
+                publish(await update_manual_timer_details(title.trim(), projectId));
+                publish(await stop_manual_timer());
+                await finish_manual_timer();
+                publish(null);
+                setTitle("");
+                setProjectId(null);
+                await Promise.all(["manualTimeBlocks", "week_statistics", "day_statistics", "range_statistics", "total_statistics", "category_app_logs"].map((key) => queryClient.invalidateQueries({queryKey: [key]})));
+                showToast("Time recorded", "success");
+            } finally {setFinishing(false);}
+        });
     };
-    return <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/75 p-4" onMouseDown={onClose}>
-        <div role="dialog" aria-modal="true" aria-labelledby="finish-timer-title" className="w-full max-w-md rounded-xl border border-gray-700 bg-gray-950 p-6 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
-            <h2 id="finish-timer-title" className="text-xl font-semibold text-white">What did you work on?</h2>
-            <p className="mt-1 text-sm text-gray-400">Give this completed time block a name.</p>
-            <input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") finish(); if (event.key === "Escape") onClose(); }} maxLength={200} placeholder="e.g. Client project planning" className="mt-5 w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white outline-none focus:border-sky-500" />
-            {error ? <p className="mt-2 text-sm text-red-400">{error}</p> : null}
-            <div className="mt-6 flex justify-end"><button type="button" disabled={mutation.isPending} onClick={finish} className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-60">{mutation.isPending ? "Saving..." : "Save time"}</button></div>
+
+    const elapsedEnd = timer?.end_time == null ? now : timer.end_time * 1000;
+    return <div className={`flex max-w-full flex-wrap items-center gap-2 rounded-xl border p-2 ${timer ? "border-sky-800/70 bg-sky-950/20" : "border-gray-800 bg-gray-950"}`}>
+        <input
+            ref={nameInputRef}
+            aria-label="Timer task name"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            onBlur={() => commit(title, projectId)}
+            onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    projectContainerRef.current?.querySelector("select")?.focus();
+                }
+                if (event.key === "Escape" && timerRef.current) setTitle(timerRef.current.title);
+            }}
+            maxLength={200}
+            placeholder="What are you working on?"
+            title="Enter a name, then Tab or click away to start tracking"
+            disabled={finishing}
+            className="w-52 min-w-0 rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white outline-none placeholder:text-gray-500 focus:border-sky-500 disabled:opacity-50"
+        />
+        <div ref={projectContainerRef} className="w-44">
+            <ProjectSelector value={projectId} disabled={finishing} onChange={(id) => {
+                setProjectId(id);
+                if (timerRef.current || pendingRef.current) commit(title, id);
+            }} />
         </div>
+        {timer ? <>
+            <span className="flex items-center gap-2 px-1 font-mono text-sm tabular-nums text-sky-200" aria-label={timer.end_time == null ? "Timer running" : "Timer stopped"}>
+                <span className={`h-1.5 w-1.5 rounded-full ${timer.end_time == null ? "bg-sky-400" : "bg-gray-500"}`} />
+                {formatElapsed(timer.start_time, elapsedEnd)}
+            </span>
+            <button type="button" disabled={finishing} onClick={finish} className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50">{finishing ? "Saving…" : timer.end_time == null ? "Done" : "Save time"}</button>
+        </> : <button type="button" disabled={pending > 0} onClick={() => commit(title, projectId, true)} className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50">{pending > 0 ? "Starting…" : "Start"}</button>}
+        <button type="button" onClick={(event) => onAddPastTime(event.currentTarget)} className="rounded-lg px-2 py-2 text-sm text-gray-400 hover:bg-gray-800 hover:text-white">Add past</button>
     </div>;
 }

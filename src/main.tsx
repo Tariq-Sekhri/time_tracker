@@ -7,8 +7,10 @@ import { hydrateGoogleOAuthCredentials } from "./api/GoogleCalendar.ts";
 import { migrateLocalStorageToDb } from "./migrateLocalStorageToDb.ts";
 import {installDiagnostics, logMessage, reportError} from "./diagnostics.ts";
 import ErrorBoundary from "./Componants/ErrorBoundary.tsx";
+import {installLongTaskObserver} from "./perf.ts";
 
 installDiagnostics();
+installLongTaskObserver();
 const queryClient = new QueryClient({
     queryCache: new QueryCache({onError: (error, query) => {
         void reportError(`Query failed: ${String(query.queryKey[0])}`, error);

@@ -8,6 +8,7 @@ export type CalendarEvent = {
     googleCalendarEventId?: string;
     googleCalendarId?: number;
     manualTimeBlockId?: number;
+    projectId?: number | null;
     description?: string;
     notes?: string;
     location?: string;

@@ -11,7 +11,15 @@ export default function Header({currentView, setCurrentView, notesEnabled}: {
 }) {
     const [isTracking, setIsTracking] = useState(true);
     const [appVersion, setAppVersion] = useState<string | null>(null);
+    const isDev = appVersion?.endsWith("-dev") ?? false;
     const [updateStatus, setUpdateStatus] = useState<"idle" | "checking" | "upToDate" | "available" | "error" | "applying">("idle");
+    const appRuleViews: {view: View; label: string}[] = [
+        {view: "categories", label: "Categories"},
+        {view: "regex", label: "Regex"},
+        {view: "appGroups", label: "App Groups"},
+        {view: "skipped", label: "Skipped Apps"},
+    ];
+    const isAppRulesView = appRuleViews.some(({view}) => currentView === view);
     useEffect(() => {
         invoke<boolean>("get_tracking_status").then(setIsTracking);
     }, []);
@@ -77,85 +85,61 @@ export default function Header({currentView, setCurrentView, notesEnabled}: {
         setUpdateStatus("idle");
     };
     return (
-        <div className="flex border-b border-gray-700 items-center min-w-0">
-            <div className="flex min-w-0 overflow-x-auto nice-scrollbar">
+        <div className="flex min-w-0 shrink-0 flex-col border-b border-gray-700">
+          <div className="flex min-w-0 items-center 2xl:grid 2xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+            <div className="flex min-w-0 flex-1 justify-start overflow-x-auto p-2.5 nice-scrollbar sm:justify-center 2xl:col-start-2 2xl:flex-none">
+              <div className="inline-flex shrink-0 items-center gap-1.5">
                 <button
                     onClick={() => setCurrentView("calendar")}
-                    className={`shrink-0 px-6 py-3 font-medium transition-colors ${currentView === "calendar"
-                        ? "bg-gray-800 text-white border-b-2 border-blue-500"
-                        : "text-gray-400 hover:text-white hover:bg-gray-900"
+                    className={`shrink-0 rounded-lg px-5 py-2.5 text-base font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70 ${currentView === "calendar"
+                        ? "bg-gradient-to-b from-blue-500 to-blue-700 text-white shadow-md shadow-blue-950/50 ring-1 ring-inset ring-blue-300/25"
+                        : "text-gray-400 hover:bg-white/[0.06] hover:text-gray-100"
                     }`}
                 >
                     Calendar
                 </button>
                 <button
                     onClick={() => setCurrentView("detailed")}
-                    className={`shrink-0 px-6 py-3 font-medium transition-colors ${currentView === "detailed"
-                        ? "bg-gray-800 text-white border-b-2 border-blue-500"
-                        : "text-gray-400 hover:text-white hover:bg-gray-900"
+                    className={`shrink-0 rounded-lg px-5 py-2.5 text-base font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70 ${currentView === "detailed"
+                        ? "bg-gradient-to-b from-blue-500 to-blue-700 text-white shadow-md shadow-blue-950/50 ring-1 ring-inset ring-blue-300/25"
+                        : "text-gray-400 hover:bg-white/[0.06] hover:text-gray-100"
                     }`}
                 >
                     Detailed
                 </button>
                 <button
                     onClick={() => setCurrentView("categories")}
-                    className={`shrink-0 px-6 py-3 font-medium transition-colors ${currentView === "categories"
-                        ? "bg-gray-800 text-white border-b-2 border-blue-500"
-                        : "text-gray-400 hover:text-white hover:bg-gray-900"
+                    aria-current={isAppRulesView ? "page" : undefined}
+                    className={`shrink-0 rounded-lg px-5 py-2.5 text-base font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70 ${isAppRulesView
+                        ? "bg-gradient-to-b from-blue-500 to-blue-700 text-white shadow-md shadow-blue-950/50 ring-1 ring-inset ring-blue-300/25"
+                        : "text-gray-400 hover:bg-white/[0.06] hover:text-gray-100"
                     }`}
                 >
-                    Categories
-                </button>
-                <button
-                    onClick={() => setCurrentView("regex")}
-                    className={`shrink-0 px-6 py-3 font-medium transition-colors ${currentView === "regex"
-                        ? "bg-gray-800 text-white border-b-2 border-blue-500"
-                        : "text-gray-400 hover:text-white hover:bg-gray-900"
-                    }`}
-                >
-                    Regex
-                </button>
-                <button
-                    onClick={() => setCurrentView("appGroups")}
-                    className={`shrink-0 px-6 py-3 font-medium transition-colors ${currentView === "appGroups"
-                        ? "bg-gray-800 text-white border-b-2 border-blue-500"
-                        : "text-gray-400 hover:text-white hover:bg-gray-900"
-                    }`}
-                >
-                    App Groups
+                    App Rules
                 </button>
                 <button
                     onClick={() => setCurrentView("settings")}
-                    className={`shrink-0 px-6 py-3 font-medium transition-colors ${currentView === "settings"
-                        ? "bg-gray-800 text-white border-b-2 border-blue-500"
-                        : "text-gray-400 hover:text-white hover:bg-gray-900"
+                    className={`shrink-0 rounded-lg px-5 py-2.5 text-base font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70 ${currentView === "settings"
+                        ? "bg-gradient-to-b from-blue-500 to-blue-700 text-white shadow-md shadow-blue-950/50 ring-1 ring-inset ring-blue-300/25"
+                        : "text-gray-400 hover:bg-white/[0.06] hover:text-gray-100"
                     }`}
                 >
                     Settings
                 </button>
                 <button
-                    onClick={() => setCurrentView("skipped")}
-                    className={`shrink-0 px-6 py-3 font-medium transition-colors ${currentView === "skipped"
-                        ? "bg-gray-800 text-white border-b-2 border-blue-500"
-                        : "text-gray-400 hover:text-white hover:bg-gray-900"
-                    }`}
-                >
-                    Skipped Apps
-                </button>
-                <button
                     onClick={() => setCurrentView("googleCalendars")}
-                    className={`shrink-0 px-6 py-3 font-medium transition-colors ${currentView === "googleCalendars"
-                        ? "bg-gray-800 text-white border-b-2 border-blue-500"
-                        : "text-gray-400 hover:text-white hover:bg-gray-900"
+                    className={`shrink-0 rounded-lg px-5 py-2.5 text-base font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70 ${currentView === "googleCalendars"
+                        ? "bg-gradient-to-b from-blue-500 to-blue-700 text-white shadow-md shadow-blue-950/50 ring-1 ring-inset ring-blue-300/25"
+                        : "text-gray-400 hover:bg-white/[0.06] hover:text-gray-100"
                     }`}
                 >
                     Google Calendars
                 </button>
                 <button
                     onClick={() => setCurrentView("sync")}
-                    className={`shrink-0 px-6 py-3 font-medium transition-colors ${currentView === "sync"
-                        ? "bg-gray-800 text-white border-b-2 border-blue-500"
-                        : "text-gray-400 hover:text-white hover:bg-gray-900"
+                    className={`shrink-0 rounded-lg px-5 py-2.5 text-base font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70 ${currentView === "sync"
+                        ? "bg-gradient-to-b from-blue-500 to-blue-700 text-white shadow-md shadow-blue-950/50 ring-1 ring-inset ring-blue-300/25"
+                        : "text-gray-400 hover:bg-white/[0.06] hover:text-gray-100"
                     }`}
                 >
                     Sync
@@ -163,17 +147,17 @@ export default function Header({currentView, setCurrentView, notesEnabled}: {
                 {notesEnabled && (
                     <button
                         onClick={() => setCurrentView("notes")}
-                        className={`shrink-0 px-6 py-3 font-medium transition-colors ${currentView === "notes"
-                            ? "bg-gray-800 text-white border-b-2 border-blue-500"
-                            : "text-gray-400 hover:text-white hover:bg-gray-900"
+                        className={`shrink-0 rounded-lg px-5 py-2.5 text-base font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70 ${currentView === "notes"
+                            ? "bg-gradient-to-b from-blue-500 to-blue-700 text-white shadow-md shadow-blue-950/50 ring-1 ring-inset ring-blue-300/25"
+                            : "text-gray-400 hover:bg-white/[0.06] hover:text-gray-100"
                         }`}
                     >
                         Notes
                     </button>
                 )}
+              </div>
             </div>
-            <div className="flex-1"/>
-            <div className="px-4 flex items-center gap-3 shrink-0">
+            <div className="flex shrink-0 items-center gap-3 px-4 2xl:col-start-3 2xl:justify-self-end">
                 {appVersion && (
                     <div className="flex items-center gap-2">
                         <span className="text-xs text-gray-500">v{appVersion}</span>
@@ -202,10 +186,12 @@ export default function Header({currentView, setCurrentView, notesEnabled}: {
                     </div>
                 )}
                 <span className={`text-sm ${isTracking ? 'text-green-400' : 'text-gray-500'}`}>
-                    {isTracking ? 'Tracking' : 'Paused'}
+                    {isDev ? 'Tracking disabled (dev)' : isTracking ? 'Tracking' : 'Paused'}
                 </span>
                 <button
                     onClick={toggleTracking}
+                    disabled={isDev}
+                    title={isDev ? 'Activity tracking is disabled in dev mode' : undefined}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isTracking ? 'bg-green-600' : 'bg-gray-600'
                     }`}
                     aria-label={isTracking ? 'Pause tracking' : 'Resume tracking'}
@@ -216,6 +202,26 @@ export default function Header({currentView, setCurrentView, notesEnabled}: {
                     />
                 </button>
             </div>
+          </div>
+          {isAppRulesView && (
+              <nav className="flex min-w-0 items-center justify-start overflow-x-auto border-t border-gray-800/70 bg-gray-950/60 px-5 py-2 nice-scrollbar sm:justify-center" aria-label="App rules sections">
+                  <div className="grid w-full min-w-[420px] max-w-[620px] shrink-0 grid-cols-4">
+                      {appRuleViews.map(({view, label}) => (
+                          <button
+                              key={view}
+                              onClick={() => setCurrentView(view)}
+                              aria-current={currentView === view ? "page" : undefined}
+                              className={`w-full border-b-2 px-4 py-3 text-center text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70 ${currentView === view
+                                  ? "border-blue-400 text-blue-200"
+                                  : "border-transparent text-gray-500 hover:text-gray-300"
+                              }`}
+                          >
+                              {label}
+                          </button>
+                      ))}
+                  </div>
+              </nav>
+          )}
         </div>
     );
 }

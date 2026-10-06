@@ -1,6 +1,7 @@
 import AppTitleDetails from "../../../Componants/AppTitleDetails.tsx";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState, type ReactNode } from "react";
+import { useRenderPerf } from "../../../perf.ts";
 import { get_week_statistics, CategoryStat } from "../../../api/statistics.ts";
 import { getWeekRange } from "../../../utils.ts";
 import { formatDuration, formatPercentage } from "../utils.ts";
@@ -18,8 +19,7 @@ import { useCalendarAppFilterActive } from "../../../stores/calendarAppFilterSto
 import { useBackendSettings } from "../../../hooks/useBackendSettings.ts";
 import {
     get_manual_time_blocks,
-    MANUAL_TIME_COLOR,
-    MANUAL_TIME_LABEL,
+    manualTimeCategoryStats,
     manualTimeDurationInRange,
     manualTimeAppStats,
 } from "../../../api/ManualTimeBlock.ts";
@@ -107,6 +107,7 @@ export default function StatisticsSidebar({
         isLoading,
         error,
         isError,
+        dataUpdatedAt: weekStatsUpdatedAt,
     } = useQuery({
         queryKey: ["week_statistics", week_start, week_end, calendarStartHour, statsDeviceUuids],
         queryFn: async () => {
@@ -257,24 +258,20 @@ export default function StatisticsSidebar({
         [manualTimeBlocks, manualTimeInStats, week_start, week_end],
     );
 
-    const prevManualTotalDuration = useMemo(
-        () => manualTimeInStats
-            ? prevManualTimeBlocks.reduce((sum, block) => sum + manualTimeDurationInRange(block, prevWeekStart, prevWeekEnd + 1), 0)
-            : 0,
-        [prevManualTimeBlocks, manualTimeInStats, prevWeekStart, prevWeekEnd],
-    );
+    const prevManualTotalDuration = useMemo(() => manualTimeInStats
+        ? prevManualTimeBlocks.reduce((sum, block) => sum + manualTimeDurationInRange(block, prevWeekStart, prevWeekEnd + 1), 0)
+        : 0, [prevManualTimeBlocks, manualTimeInStats, prevWeekStart, prevWeekEnd]);
 
-    const manualCategory = useMemo<CombinedCategory | null>(() => {
-        if (!manualTimeInStats || manualTotalDuration <= 0) return null;
-        return {
-            category: MANUAL_TIME_LABEL,
-            total_duration: manualTotalDuration,
+    const manualCategories = useMemo<CombinedCategory[]>(() => {
+        if (!manualTimeInStats) return [];
+        const previous = new Map(manualTimeCategoryStats(prevManualTimeBlocks, prevWeekStart, prevWeekEnd + 1).map((row) => [row.category, row.total_duration]));
+        return manualTimeCategoryStats(manualTimeBlocks, week_start, week_end + 1).map((row) => ({
+            ...row,
             percentage: 0,
-            percentage_change: percentageChangeVsPrevious(manualTotalDuration, prevManualTotalDuration),
-            color: MANUAL_TIME_COLOR,
+            percentage_change: percentageChangeVsPrevious(row.total_duration, previous.get(row.category) ?? 0),
             source: "manual",
-        };
-    }, [manualTimeInStats, manualTotalDuration, prevManualTotalDuration]);
+        }));
+    }, [manualTimeInStats, manualTimeBlocks, prevManualTimeBlocks, week_start, week_end, prevWeekStart, prevWeekEnd]);
 
     const topCategories = useMemo<CombinedCategory[]>(() => {
         if (!weekStats) return [] as CombinedCategory[];
@@ -288,12 +285,12 @@ export default function StatisticsSidebar({
 
         const combined = [
             ...trackingCategories,
-            ...(manualCategory ? [manualCategory] : []),
+            ...manualCategories,
             ...(includeGoogleInStats ? googleCategories : []),
         ];
         combined.sort((a, b) => b.total_duration - a.total_duration);
         return combined.slice(0, categorySidebarCount);
-    }, [weekStats, includeGoogleInStats, googleCategories, manualCategory, categorySidebarCount, statsCategoryNames]);
+    }, [weekStats, includeGoogleInStats, googleCategories, manualCategories, categorySidebarCount, statsCategoryNames]);
 
     const maxCategoryDuration = topCategories.length > 0 ? topCategories[0].total_duration : 1;
 
@@ -393,6 +390,14 @@ export default function StatisticsSidebar({
 
     const displayedApps = showAllApps ? filteredAllApps : filteredAllApps.slice(0, 5);
     const canShowMoreApps = filteredAllApps.length > 5;
+
+    useRenderPerf(
+        "week_stats_sidebar",
+        `${week_start}|${statsDeviceUuids?.join(",") ?? "all"}`,
+        !isLoading && (!!weekStats || isError),
+        weekStatsUpdatedAt,
+        {apps: filteredAllApps.length},
+    );
 
     if (isLoading || (!weekStats && !isError)) {
         return (

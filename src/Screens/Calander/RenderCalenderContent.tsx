@@ -1,5 +1,6 @@
 import { toErrorString } from "../../types/common.ts";
 import {reportError} from "../../diagnostics.ts";
+import {useRenderPerf} from "../../perf.ts";
 import { get_week, get_week_for_app_filter, TimeBlock } from "../../api/week.ts";
 import CalendarSkeleton from "./CalanderSkeletion.tsx";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -137,7 +138,7 @@ export default function RenderCalendarContent({
     const slotMaxTime = `${String(calendarStartHour + 24).padStart(2, "0")}:00:00`;
     const scrollTime = slotMinTime;
     const weekQueryEnabled = !!weekStart && !isNaN(weekStart.getTime());
-    const { data, isLoading, error } = useQuery({
+    const { data, isLoading, error, dataUpdatedAt } = useQuery({
         queryKey: [
             "week",
             formatLocalDateYMD(weekStart),
@@ -168,6 +169,7 @@ export default function RenderCalendarContent({
         data: filteredData,
         isLoading: isLoadingFilteredData,
         error: filteredDataError,
+        dataUpdatedAt: filteredDataUpdatedAt,
     } = useQuery({
         queryKey: [
             "week_app_filter",
@@ -398,6 +400,7 @@ export default function RenderCalendarContent({
                     extendedProps: {
                         type: "manual_time",
                         manualTimeBlockId: block.id,
+                        projectId: block.project_id,
                         manualTitle: block.title,
                         notes: block.notes,
                     },
@@ -506,6 +509,20 @@ export default function RenderCalendarContent({
         (calendarAppFilter && !filteredData);
 
     const pageError = error ?? filteredDataError;
+
+    useRenderPerf(
+        "calendar_week",
+        `${formatLocalDateYMD(weekStart)}|${calendarAppFilter ?? ""}|${calDeviceUuids?.join(",") ?? "all"}`,
+        !isPageLoading,
+        calendarAppFilter ? filteredDataUpdatedAt : dataUpdatedAt,
+        {
+            week: formatLocalDateYMD(weekStart),
+            blocks: displayedTimeBlocks.length,
+            events: events.length,
+            grid: showFullCalendarGrid,
+            app_filter: Boolean(calendarAppFilter),
+        },
+    );
 
     return (
         <div className="flex flex-1 overflow-hidden h-full min-h-0 flex flex-col">

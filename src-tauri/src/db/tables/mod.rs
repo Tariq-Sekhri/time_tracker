@@ -7,5 +7,6 @@ pub mod google_calendar;
 pub mod google_calendar_sync;
 pub mod log;
 pub mod manual_time_block;
+pub mod manual_project;
 pub mod settings;
 pub mod skipped_app;
