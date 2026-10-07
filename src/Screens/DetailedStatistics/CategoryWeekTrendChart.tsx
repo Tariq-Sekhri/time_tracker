@@ -1,4 +1,4 @@
-import {useMemo} from "react";
+import {memo, useMemo} from "react";
 import {measure} from "../../perf.ts";
 import AppTitleDetails from "../../Componants/AppTitleDetails.tsx";
 import {
@@ -9,10 +9,12 @@ import {
     Tooltip,
     XAxis,
     YAxis,
+    useXAxisTicks,
+    useYAxisScale,
 } from "recharts";
-import {WeekStatistics} from "../../api/statistics.ts";
+import {TrendWeekStatistics} from "../../api/statistics.ts";
 import {formatDuration} from "../Calander/utils.ts";
-import {adjustInstantToCalendarDayBoundary} from "../../utils.ts";
+import {buildSeries, buildTopAppSeries} from "./trendModel.ts";
 
 export type WeekTrendColumn = {
     week_start: number;
@@ -32,207 +34,10 @@ const PX_PER_WEEK = 52;
 const TOTAL_WEEK_DATA_KEY = "__week_total__";
 const TOTAL_LINE_COLOR = "#f3f4f6";
 const TOTAL_LINE_NAME = "Total";
-const APP_LINE_COLORS = [
-    "#60a5fa",
-    "#f472b6",
-    "#34d399",
-    "#fbbf24",
-    "#a78bfa",
-    "#fb923c",
-    "#22d3ee",
-    "#f87171",
-    "#a3e635",
-    "#c084fc",
-];
-
-function countDaysInTrackedWeekPeriod(
-    weekStartUnix: number,
-    weekEndUnix: number,
-    calendarStartHour: number
-): number {
-    const nowUnix = Math.floor(Date.now() / 1000);
-    const cappedEnd = Math.min(weekEndUnix, nowUnix);
-    if (cappedEnd < weekStartUnix) return 1;
-    const startCal = adjustInstantToCalendarDayBoundary(new Date(weekStartUnix * 1000), calendarStartHour);
-    const endCal = adjustInstantToCalendarDayBoundary(new Date(cappedEnd * 1000), calendarStartHour);
-    const startMid = new Date(
-        startCal.getFullYear(),
-        startCal.getMonth(),
-        startCal.getDate(),
-        12,
-        0,
-        0,
-        0
-    );
-    const endMid = new Date(endCal.getFullYear(), endCal.getMonth(), endCal.getDate(), 12, 0, 0, 0);
-    let n = 0;
-    const cur = new Date(startMid);
-    while (cur.getTime() <= endMid.getTime()) {
-        n++;
-        cur.setDate(cur.getDate() + 1);
-    }
-    return Math.max(1, n);
-}
-
-function formatWeekLabel(weekStartUnix: number): string {
-    return new Date(weekStartUnix * 1000).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-    });
-}
-
-function colorForApp(app: string): string {
-    let hash = 0;
-    for (let i = 0; i < app.length; i++) {
-        hash = (hash * 31 + app.charCodeAt(i)) | 0;
-    }
-    return APP_LINE_COLORS[Math.abs(hash) % APP_LINE_COLORS.length];
-}
-
-function buildSeries(
-    weeks: { week_start: number; week_end: number }[],
-    weekStats: (WeekStatistics | undefined)[],
-    mode: TrendValueMode,
-    calendarStartHour: number
-): { columns: WeekTrendColumn[]; series: CategoryWeekSeries[]; totalLineValues: number[] } {
-    const columns: WeekTrendColumn[] = weeks.map((w) => ({
-        week_start: w.week_start,
-        label: formatWeekLabel(w.week_start),
-    }));
-
-    const categoryMeta = new Map<string, { color: string; values: number[] }>();
-
-    weeks.forEach((weekRange, weekIdx) => {
-        const stats = weekStats[weekIdx];
-        const dayCount =
-            mode === "avg"
-                ? countDaysInTrackedWeekPeriod(
-                      weekRange.week_start,
-                      weekRange.week_end,
-                      calendarStartHour
-                  )
-                : 1;
-        const seen = new Set<string>();
-
-        for (const cat of stats?.categories ?? []) {
-            seen.add(cat.category);
-            const value =
-                mode === "avg"
-                    ? Math.floor(cat.total_duration / dayCount)
-                    : cat.total_duration;
-            const existing = categoryMeta.get(cat.category);
-            if (existing) {
-                existing.values[weekIdx] = value;
-                if (cat.color) existing.color = cat.color;
-            } else {
-                const values = new Array(weeks.length).fill(0);
-                values[weekIdx] = value;
-                categoryMeta.set(cat.category, {
-                    color: cat.color || "#6b7280",
-                    values,
-                });
-            }
-        }
-
-        for (const [name, entry] of categoryMeta) {
-            if (!seen.has(name) && entry.values[weekIdx] === undefined) {
-                entry.values[weekIdx] = 0;
-            }
-        }
-    });
-
-    const series: CategoryWeekSeries[] = Array.from(categoryMeta.entries())
-        .map(([category, {color, values}]) => ({
-            category,
-            color,
-            values,
-        }))
-        .filter((s) => s.values.some((v) => v > 0))
-        .sort((a, b) => {
-            const sumA = a.values.reduce((x, y) => x + (y ?? 0), 0);
-            const sumB = b.values.reduce((x, y) => x + (y ?? 0), 0);
-            return sumB - sumA;
-        });
-
-    const totalLineValues = weeks.map((weekRange, weekIdx) => {
-        const weekTotal = weekStats[weekIdx]?.total_time ?? 0;
-        if (mode === "total") return weekTotal;
-        const dayCount = countDaysInTrackedWeekPeriod(
-            weekRange.week_start,
-            weekRange.week_end,
-            calendarStartHour
-        );
-        return Math.floor(weekTotal / dayCount);
-    });
-
-    return {columns, series, totalLineValues};
-}
-
-function buildTopAppSeries(
-    weeks: { week_start: number; week_end: number }[],
-    weekStats: (WeekStatistics | undefined)[],
-    mode: TrendValueMode,
-    calendarStartHour: number,
-    topAppCount: number
-): { columns: WeekTrendColumn[]; series: CategoryWeekSeries[]; totalLineValues: number[] } {
-    const columns: WeekTrendColumn[] = weeks.map((w) => ({
-        week_start: w.week_start,
-        label: formatWeekLabel(w.week_start),
-    }));
-    const appValues = new Map<string, Array<number | null>>();
-
-    weeks.forEach((weekRange, weekIdx) => {
-        const dayCount =
-            mode === "avg"
-                ? countDaysInTrackedWeekPeriod(
-                      weekRange.week_start,
-                      weekRange.week_end,
-                      calendarStartHour
-                  )
-                : 1;
-
-        const topAppsThisWeek = [...(weekStats[weekIdx]?.all_apps ?? [])]
-            .sort((a, b) => b.total_duration - a.total_duration)
-            .slice(0, topAppCount);
-
-        for (const app of topAppsThisWeek) {
-            // Null means this app was not in this week's top list. The chart keeps
-            // the point absent but connects repeat appearances with a dotted line.
-            const values = appValues.get(app.app) ?? new Array(weeks.length).fill(null);
-            values[weekIdx] =
-                mode === "avg" ? Math.floor(app.total_duration / dayCount) : app.total_duration;
-            appValues.set(app.app, values);
-        }
-    });
-
-    const series = Array.from(appValues.entries())
-        .map(([category, values]) => ({category, color: colorForApp(category), values}))
-        .filter((s) => s.values.some((v) => (v ?? 0) > 0))
-        .sort(
-            (a, b) =>
-                b.values.reduce<number>((sum, value) => sum + (value ?? 0), 0) -
-                a.values.reduce<number>((sum, value) => sum + (value ?? 0), 0)
-        );
-
-    const totalLineValues = weeks.map((weekRange, weekIdx) => {
-        const weekTotal = weekStats[weekIdx]?.total_time ?? 0;
-        if (mode === "total") return weekTotal;
-        return Math.floor(
-            weekTotal /
-                countDaysInTrackedWeekPeriod(
-                    weekRange.week_start,
-                    weekRange.week_end,
-                    calendarStartHour
-                )
-        );
-    });
-
-    return {columns, series, totalLineValues};
-}
 
 type ChartRow = { label: string; week_start: number } & Record<string, number | string | null>;
 
-type TrendGapBridge = {
+export type TrendGapBridge = {
     dataKey: string;
     fromIndex: number;
     fromValue: number;
@@ -241,9 +46,33 @@ type TrendGapBridge = {
     color: string;
 };
 
+/** Straight gap connectors share a tiny SVG layer instead of each mounting a Recharts Line/store subscription. */
+export function TrendGapPaths({bridges}: {bridges: TrendGapBridge[]}) {
+    const ticks = useXAxisTicks();
+    const yScale = useYAxisScale();
+    const paths = useMemo(() => {
+        const byColor = new Map<string, string[]>();
+        if (!ticks || !yScale) return byColor;
+        for (const bridge of bridges) {
+            const x1 = ticks[bridge.fromIndex]?.coordinate;
+            const x2 = ticks[bridge.toIndex]?.coordinate;
+            const y1 = yScale(bridge.fromValue);
+            const y2 = yScale(bridge.toValue);
+            if (x1 == null || x2 == null || y1 == null || y2 == null) continue;
+            let segments = byColor.get(bridge.color);
+            if (!segments) byColor.set(bridge.color, segments = []);
+            segments.push(`M${x1},${y1}L${x2},${y2}`);
+        }
+        return byColor;
+    }, [bridges, ticks, yScale]);
+    return <g className="trend-gap-bridges" pointerEvents="none">
+        {[...paths].map(([color, segments]) => <path key={color} d={segments.join(" ")} fill="none" stroke={color} strokeWidth={2} strokeDasharray="4 4" />)}
+    </g>;
+}
+
 type CategoryWeekTrendChartProps = {
     weeks: { week_start: number; week_end: number }[];
-    weekStats: (WeekStatistics | undefined)[];
+    weekStats: (TrendWeekStatistics | undefined)[];
     isLoading: boolean;
     visibleCategoryNames: Set<string>;
     seriesMode: TrendSeriesMode;
@@ -251,9 +80,10 @@ type CategoryWeekTrendChartProps = {
     calendarStartHour: number;
     valueMode: TrendValueMode;
     showTotalLine: boolean;
+    error?: string;
 };
 
-export default function CategoryWeekTrendChart({
+function CategoryWeekTrendChart({
                                                    weeks,
                                                    weekStats,
                                                    isLoading,
@@ -263,6 +93,7 @@ export default function CategoryWeekTrendChart({
                                                    calendarStartHour,
                                                    valueMode,
                                                    showTotalLine,
+                                                   error,
                                                }: CategoryWeekTrendChartProps) {
     const {columns, series: allSeries, totalLineValues} = useMemo(
         () => measure(`trend.build_${seriesMode}`, () =>
@@ -273,7 +104,7 @@ export default function CategoryWeekTrendChart({
         [weeks, weekStats, valueMode, calendarStartHour, seriesMode, topAppCount]
     );
 
-    // Note: the parent passes a new visibleCategoryNames Set every render, so this re-runs each render.
+    // The batched query and category filter both keep stable references across unrelated renders.
     const series = useMemo(
         () => measure("trend.filter_series", () =>
             seriesMode === "topApps"
@@ -320,13 +151,23 @@ export default function CategoryWeekTrendChart({
             for (const s of series) {
                 row[s.category] = seriesMode === "topApps" ? s.values[i] : s.values[i] ?? 0;
             }
-            for (const bridge of topAppGapBridges) {
-                if (i === bridge.fromIndex) row[bridge.dataKey] = bridge.fromValue;
-                if (i === bridge.toIndex) row[bridge.dataKey] = bridge.toValue;
-            }
+
             return row;
         });
-    }, (r) => ({rows: r.length, series: series.length})), [columns, series, totalLineValues, showTotalLine, seriesMode, topAppGapBridges]);
+    }, (r) => ({rows: r.length, series: series.length})), [columns, series, totalLineValues, showTotalLine, seriesMode]);
+
+    const appNamesByApp = useMemo(() => {
+        const names = new Map<string, Set<string>>();
+        if (seriesMode !== "topApps") return new Map<string, string[]>();
+        for (const stats of weekStats) {
+            for (const app of stats?.all_apps ?? []) {
+                let entry = names.get(app.app);
+                if (!entry) names.set(app.app, entry = new Set());
+                for (const name of app.app_names) entry.add(name);
+            }
+        }
+        return new Map([...names].map(([app, values]) => [app, [...values]]));
+    }, [weekStats, seriesMode]);
 
     const showTotalLineOnChart = showTotalLine && hasTotalLineData;
 
@@ -342,6 +183,8 @@ export default function CategoryWeekTrendChart({
         seriesMode === "topApps"
             ? ` Showing the top ${topAppCount} apps in each week; solid lines join consecutive appearances, while dotted lines bridge weeks where an app was outside the top ${topAppCount}.`
             : "";
+
+    if (error) return <div role="alert" className="p-4 text-sm text-red-400">{error}</div>;
 
     if (isLoading) {
         return (
@@ -389,8 +232,7 @@ export default function CategoryWeekTrendChart({
                     <div key={s.category} className="flex items-center gap-2 min-w-0">
                         <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{backgroundColor: s.color}}/>
                         {seriesMode === "topApps" ? <AppTitleDetails app={s.category}
-                            appNames={[...new Set(weekStats.flatMap((stats) =>
-                                stats?.all_apps.filter((app) => app.app === s.category).flatMap((app) => app.app_names) ?? []))]}
+                            appNames={appNamesByApp.get(s.category) ?? []}
                             start={weeks[0].week_start} end={weeks[weeks.length - 1].week_end}
                             className="text-xs text-gray-300 truncate" /> :
                             <span className="text-xs text-gray-300 truncate">{s.category}</span>}
@@ -467,22 +309,7 @@ export default function CategoryWeekTrendChart({
                                     isAnimationActive={false}
                                 />
                             )}
-                            {topAppGapBridges.map((bridge) => (
-                                <Line
-                                    key={bridge.dataKey}
-                                    type="monotone"
-                                    dataKey={bridge.dataKey}
-                                    stroke={bridge.color}
-                                    strokeWidth={2}
-                                    strokeDasharray="4 4"
-                                    dot={false}
-                                    activeDot={false}
-                                    connectNulls
-                                    tooltipType="none"
-                                    legendType="none"
-                                    isAnimationActive={false}
-                                />
-                            ))}
+                            <TrendGapPaths bridges={topAppGapBridges} />
                             {series.map((s) => (
                                 <Line
                                     key={s.category}
@@ -508,3 +335,5 @@ export default function CategoryWeekTrendChart({
         </div>
     );
 }
+
+export default memo(CategoryWeekTrendChart);

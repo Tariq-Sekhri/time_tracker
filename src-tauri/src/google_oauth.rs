@@ -113,6 +113,9 @@ pub async fn set_google_oauth_app_credentials(
 
 #[tauri::command]
 pub async fn google_oauth_login() -> Result<AuthStatus, Error> {
+    if cfg!(debug_assertions) {
+        return Err(anyhow::anyhow!("Google Calendar network access is disabled in dev mode").into());
+    }
     let (client_id, client_secret) = resolve_google_oauth_app_credentials().await?;
     let client = BasicClient::new(ClientId::new(client_id))
         .set_client_secret(ClientSecret::new(client_secret))
@@ -285,6 +288,9 @@ pub async fn google_oauth_logout() -> Result<(), Error> {
 }
 
 pub async fn get_valid_access_token(client_id: &str, client_secret: &str) -> Result<String, Error> {
+    if cfg!(debug_assertions) {
+        return Err(anyhow::anyhow!("Google Calendar network access is disabled in dev mode").into());
+    }
     let oauth = get_google_oauth()
         .await?
         .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;

@@ -76,7 +76,18 @@ Open **Settings → Support logs → Open log folder**. If the app crashes, send
 git clone https://github.com/Tariq-Sekhri/time_tracker
 cd time_tracker
 npm install
-npm run tauri dev
+npm start
+```
+
+Development uses `time-tracker-dev/apptest.db` in the user's application data directory,
+with separate WebView storage and backups. Startup takes a consistent, read-only snapshot
+of the installed app's `time-tracker/app.db`. Tracking, sync, updater installation, and
+Google Calendar network access are disabled in development.
+
+For optimized native measurements while retaining all development isolation guards:
+
+```powershell
+npm.cmd start -- --no-watch -- --profile performance
 ```
 
 ### Build
@@ -90,14 +101,14 @@ Builds use SQLx **offline mode** (the `.sqlx/` cache in `src-tauri/`). No databa
 ```bash
 cd src-tauri
 # Ensure the app has created apptest.db at least once.
-$env:DATABASE_URL = "sqlite:///C:/Users/<you>/AppData/Roaming/time-tracker/apptest.db"
+$env:DATABASE_URL = "sqlite:///C:/Users/<you>/AppData/Roaming/time-tracker-dev/apptest.db"
 cargo sqlx prepare
 ```
 
 On Linux:
 
 ```bash
-export DATABASE_URL="sqlite:///home/<you>/.local/share/time-tracker/apptest.db"
+export DATABASE_URL="sqlite:///home/<you>/.local/share/time-tracker-dev/apptest.db"
 cargo sqlx prepare
 ```
 

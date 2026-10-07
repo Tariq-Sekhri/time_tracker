@@ -121,3 +121,20 @@ describe("manual time statistics", () => {
         expect((await invoke<Stats>("get_week_statistics", args)).total_time).toBe(before.total_time);
     });
 });
+
+
+describe("compact demo statistics commands", () => {
+    it("returns only the lifetime bounds fields used to bootstrap Detailed Statistics", async () => {
+        const full = await invoke<{first_active_day: number | null; total_time_all_time: number}>("get_total_statistics");
+        expect(await invoke("get_statistics_bounds")).toEqual({first_active_day: full.first_active_day, total_time_all_time: full.total_time_all_time});
+    });
+    it("preserves ordered weekly chart values and manual/device scope", async () => {
+        const weeks = [{week_start: 0, week_end: 1}, {week_start: 0, week_end: Math.floor(Date.now() / 1000) + 86400}];
+        const batch = await invoke("get_trend_statistics", {weeks, includeManual: false, deviceUuids: null});
+        const expected = await Promise.all(weeks.map(async ({week_start, week_end}) => {
+            const stats = await invoke<{total_time: number; categories: unknown[]; all_apps: unknown[]}>("get_week_statistics", {weekStart: week_start, weekEnd: week_end, includeManual: false, deviceUuids: null});
+            return {total_time: stats.total_time, categories: stats.categories, all_apps: stats.all_apps};
+        }));
+        expect(batch).toEqual(expected);
+    });
+});

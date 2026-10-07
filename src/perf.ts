@@ -13,6 +13,8 @@ export const HEAVY_COMMANDS = new Set([
     "get_week_statistics",
     "get_day_statistics",
     "get_total_statistics",
+    "get_statistics_bounds",
+    "get_trend_statistics",
     "get_logs",
     "get_logs_for_time_block",
     "get_logs_by_category",
@@ -51,11 +53,42 @@ export function logPerf(name: string, stages: Record<string, number>, notes: Per
     console.info(`[perf] ${name} ${parts.join(" ")}`);
 }
 
-/** Resolve after the browser has painted the current commit (double rAF). */
-export function afterPaint(): Promise<number> {
+type PaintResult = {at: number; observed: boolean; reason?: string};
+
+/** Hidden WebViews pause rAF. Exclude that wait from render timings and bound visible waits. */
+export function observePaint(): Promise<PaintResult> {
     return new Promise((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.now())));
+        let firstFrame = 0;
+        let secondFrame = 0;
+        let settled = false;
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        const finish = (observed: boolean, reason?: string) => {
+            if (settled) return;
+            settled = true;
+            if (timeout !== undefined) clearTimeout(timeout);
+            cancelAnimationFrame(firstFrame);
+            cancelAnimationFrame(secondFrame);
+            document.removeEventListener("visibilitychange", visibilityChanged);
+            resolve({at: performance.now(), observed, reason});
+        };
+        const visibilityChanged = () => {
+            if (document.visibilityState === "hidden") finish(false, "hidden");
+        };
+        if (document.visibilityState === "hidden") {
+            finish(false, "hidden");
+            return;
+        }
+        document.addEventListener("visibilitychange", visibilityChanged);
+        timeout = setTimeout(() => finish(false, "timeout"), 1000);
+        firstFrame = requestAnimationFrame(() => {
+            secondFrame = requestAnimationFrame(() => finish(true));
+        });
     });
+}
+
+/** Backwards-compatible timestamp helper for other screen timing probes. */
+export async function afterPaint(): Promise<number> {
+    return (await observePaint()).at;
 }
 
 type RenderSpan = {
@@ -96,12 +129,12 @@ export function useRenderPerf(name: string, key: string, ready: boolean, version
         current.logged = true;
         const dataAt = current.dataAt;
         const committedAt = performance.now();
-        void afterPaint().then((paintedAt) => {
+        void observePaint().then((paint) => {
             logPerf(`${name}_${current.kind}`, {
                 wait_data: dataAt - current.startedAt,
                 react_commit: committedAt - dataAt,
-                paint: paintedAt - committedAt,
-            }, notesRef.current);
+                paint: paint.observed ? paint.at - committedAt : 0,
+            }, {...notesRef.current, paint_observed: paint.observed, paint_skipped: paint.reason});
         });
     });
 }
@@ -167,13 +200,13 @@ export function useBatchPerf(name: string, key: string, enabled: boolean, total:
         span.logged = true;
         const allDoneAt = span.allDoneAt;
         const committedAt = performance.now();
-        void afterPaint().then((paintedAt) => {
+        void observePaint().then((paint) => {
             logPerf(name, {
                 to_first_result: (span.firstArrivalAt ?? allDoneAt) - span.startedAt,
                 first_to_last: allDoneAt - (span.firstArrivalAt ?? allDoneAt),
                 react_commit: committedAt - allDoneAt,
-                paint: paintedAt - committedAt,
-            }, {queries: total, cached_at_start: span.cachedAtStart, fetched: total - span.cachedAtStart, ...notesRef.current});
+                paint: paint.observed ? paint.at - committedAt : 0,
+            }, {queries: total, cached_at_start: span.cachedAtStart, fetched: total - span.cachedAtStart, ...notesRef.current, paint_observed: paint.observed, paint_skipped: paint.reason});
         });
     });
 }

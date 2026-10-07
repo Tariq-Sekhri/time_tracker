@@ -1,3 +1,4 @@
+// Test-only frozen implementation for same-data regression and timing comparisons.
 use crate::db;
 use crate::db::error::Error;
 use crate::db::tables::app_group::{
@@ -5,7 +6,8 @@ use crate::db::tables::app_group::{
 };
 use crate::db::tables::cat_regex::{get_cat_regex, CategoryRegex};
 use crate::db::tables::category::{get_categories, Category};
-use crate::db::tables::log::{clean_skipped_logs, get_logs_in_time_range, Log};
+use crate::db::tables::log::{mark_log_deleted, Log};
+use crate::db::queries::legacy_full_history_logs as get_logs;
 use crate::db::tables::settings::get_settings;
 use crate::db::tables::skipped_app::get_skipped_apps;
 
@@ -14,14 +16,14 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct TimeBlockLogs {
     pub app: String,
     pub app_names: Vec<String>,
     pub total_duration: i64,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct TimeBlock {
     pub id: i32,
     pub category: String,
@@ -343,7 +345,6 @@ fn week_bounds_from_anchor(anchor_unix: i64, calendar_start_hour: i64) -> (i64, 
     )
 }
 
-#[tauri::command]
 pub async fn get_week(
     week_anchor: i64,
     device_uuids: Option<Vec<String>>,
@@ -353,7 +354,7 @@ pub async fn get_week(
     let (week_start, week_end) = week_bounds_from_anchor(week_anchor, calendar_start_hour);
     let local_uuid = crate::db::tables::device::get_local_log_device_uuid().await?;
     perf.stage("settings");
-    let mut logs = get_logs_in_time_range(week_start, week_end).await?;
+    let mut logs = get_logs().await?;
     perf.stage("get_logs");
     perf.note("all_logs", logs.len());
     let skipped_apps = get_skipped_apps().await?;
@@ -368,13 +369,21 @@ pub async fn get_week(
     let is_skipped =
         |app_name: &str| -> bool { skipped_regexes.iter().any(|regex| regex.is_match(app_name)) };
 
-    let deleted = crate::logger::Log::result(
-        "Mark skipped activity deleted",
-        clean_skipped_logs(&skipped_regexes).await,
-    )
-    .unwrap_or(0);
-    perf.stage("skip_cleanup");
-    perf.note("skipped_deleted", deleted);
+    let logs_to_delete: Vec<i64> = logs
+        .iter()
+        .filter(|log| is_skipped(&log.app))
+        .map(|log| log.id)
+        .collect();
+    perf.stage("skip_scan");
+    perf.note("skipped_deleted", logs_to_delete.len());
+
+    for log_id in logs_to_delete {
+        let _ = crate::logger::Log::result(
+            "Mark skipped activity deleted",
+            mark_log_deleted(log_id).await,
+        );
+    }
+    perf.stage("mark_deleted");
 
     logs.retain(|log| !is_skipped(&log.app));
 
@@ -409,7 +418,6 @@ pub async fn get_week(
     Ok(blocks)
 }
 
-#[tauri::command]
 pub async fn get_week_for_app_filter(
     week_anchor: i64,
     app_name: String,
@@ -420,7 +428,7 @@ pub async fn get_week_for_app_filter(
     let (week_start, week_end) = week_bounds_from_anchor(week_anchor, calendar_start_hour);
     let local_uuid = crate::db::tables::device::get_local_log_device_uuid().await?;
     perf.stage("settings");
-    let mut logs = get_logs_in_time_range(week_start, week_end).await?;
+    let mut logs = get_logs().await?;
     perf.stage("get_logs");
     perf.note("all_logs", logs.len());
     let skipped_apps = get_skipped_apps().await?;
@@ -508,7 +516,7 @@ fn ensure_non_overlapping(mut blocks: Vec<TimeBlock>) -> Vec<TimeBlock> {
     result
 }
 
-fn transform_time_blocks(
+pub(super) fn transform_time_blocks(
     time_blocks: Vec<TimeBlock>,
     time_block_settings: &TimeBlockSettings,
 ) -> Result<Vec<TimeBlock>, Error> {
@@ -535,15 +543,12 @@ fn transform_time_blocks(
                 continue;
             }
 
-            // Blocks are sorted by start. Once this gap is too large, every
-            // later block is also out of reach; scanning/cloning them is wasted.
+            let future_category = result[j].category.clone();
             let future_start = result[j].start_time;
-            if future_start - result[i].end_time > lookahead_window {
-                break;
-            }
-            if result[j].category == current_category {
-                let future_end = result[j].end_time;
-                let future_apps = result[j].apps.clone();
+            let future_end = result[j].end_time;
+            let future_apps = result[j].apps.clone();
+
+            if future_category == current_category {
                 let current_end = result[i].end_time;
                 let gap = future_start - current_end;
 
@@ -592,141 +597,6 @@ fn transform_time_blocks(
         .collect();
 
     Ok(result)
-}
-
-#[cfg(test)]
-#[path = "week_legacy_perf.rs"]
-mod legacy_perf;
-
-#[cfg(test)]
-mod calendar_performance_tests {
-    use super::*;
-    use std::time::Instant;
-
-    #[test]
-    fn merge_window_pruning_matches_legacy_on_overlaps_and_chains() {
-        let mut seed = 17u64;
-        for case in 0..200 {
-            let settings = TimeBlockSettings {
-                min_log_duration: 1,
-                max_attach_distance: 400,
-                lookahead_window: case % 13,
-                min_duration: case % 17 + 1,
-            };
-            let mut start = 0;
-            let mut blocks = Vec::new();
-            for id in 0..100 {
-                seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
-                start += (seed % 25) as i64;
-                let duration = ((seed >> 12) % 80) as i64;
-                blocks.push(TimeBlock {
-                    id,
-                    category: format!("category{}", (seed >> 32) % 4),
-                    apps: vec![TimeBlockLogs {
-                        app: "app".into(),
-                        app_names: vec!["title".into()],
-                        total_duration: duration,
-                    }],
-                    start_time: start,
-                    end_time: start + duration,
-                });
-            }
-            let expected = legacy_perf::transform_time_blocks(
-                // The frozen implementation uses its own equivalent struct type.
-                serde_json::from_value(serde_json::to_value(&blocks).unwrap()).unwrap(),
-                &serde_json::from_value(serde_json::to_value(&settings).unwrap()).unwrap(),
-            )
-            .unwrap();
-            assert_eq!(
-                serde_json::to_value(transform_time_blocks(blocks, &settings).unwrap()).unwrap(),
-                serde_json::to_value(expected).unwrap(),
-                "Merge parity in case {case}"
-            );
-        }
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires the isolated debug snapshot populated by npm start"]
-    async fn calendar_snapshot_parity_and_benchmark() {
-        assert!(
-            cfg!(debug_assertions),
-            "Never benchmark against the release database"
-        );
-        let path = crate::db::get_db_path();
-        assert!(path.to_string_lossy().contains("time-tracker-dev"));
-        assert!(
-            path.exists(),
-            "Start the isolated dev app to create the snapshot first"
-        );
-        let logs = crate::db::tables::log::get_logs().await.unwrap();
-        let pool = crate::db::get_pool().await.unwrap();
-        let plans: Vec<(i64, i64, i64, String)> = sqlx::query_as(
-            "EXPLAIN QUERY PLAN SELECT id, device_uuid, app, timestamp, duration, is_deleted FROM logs WHERE is_deleted = 0 AND timestamp >= ?1 AND timestamp <= ?2 ORDER BY rowid",
-        ).bind(0i64).bind(1i64).fetch_all(&pool).await.unwrap();
-        assert!(
-            plans
-                .iter()
-                .any(|row| row.3.contains("idx_logs_active_timestamp")),
-            "Window query must use the timestamp index: {plans:?}"
-        );
-        println!("CALENDAR_QUERY_PLAN {plans:?}");
-        let anchor = logs
-            .iter()
-            .map(|log| log.timestamp)
-            .max()
-            .expect("Snapshot is empty");
-        let filter_app = logs
-            .iter()
-            .max_by_key(|log| log.timestamp)
-            .unwrap()
-            .app
-            .clone();
-        // Run the legacy cleanup once before comparing immutable read results.
-        legacy_perf::get_week(anchor, None).await.unwrap();
-        let mut old_ms = Vec::new();
-        let mut new_ms = Vec::new();
-        for offset in [0, 7, 28, 84, 168] {
-            let week = anchor - offset * 86400;
-            let begin = Instant::now();
-            let expected = legacy_perf::get_week(week, None).await.unwrap();
-            old_ms.push(begin.elapsed().as_secs_f64() * 1000.0);
-            let begin = Instant::now();
-            let actual = get_week(week, None).await.unwrap();
-            new_ms.push(begin.elapsed().as_secs_f64() * 1000.0);
-            assert_eq!(
-                serde_json::to_value(actual).unwrap(),
-                serde_json::to_value(expected).unwrap(),
-                "Calendar parity at offset {offset}"
-            );
-            let expected = legacy_perf::get_week_for_app_filter(week, filter_app.clone(), None)
-                .await
-                .unwrap();
-            let actual = get_week_for_app_filter(week, filter_app.clone(), None)
-                .await
-                .unwrap();
-            assert_eq!(
-                serde_json::to_value(actual).unwrap(),
-                serde_json::to_value(expected).unwrap(),
-                "Filtered calendar parity at offset {offset}"
-            );
-        }
-        assert!(get_week(anchor, Some(vec![])).await.unwrap().is_empty());
-        if let Some(uuid) = logs.iter().find_map(|log| log.device_uuid.clone()) {
-            for filter in [vec![uuid], vec!["absent-device-for-parity".to_string()]] {
-                let expected = legacy_perf::get_week(anchor, Some(filter.clone()))
-                    .await
-                    .unwrap();
-                let actual = get_week(anchor, Some(filter)).await.unwrap();
-                assert_eq!(
-                    serde_json::to_value(actual).unwrap(),
-                    serde_json::to_value(expected).unwrap(),
-                    "Device-filtered calendar parity"
-                );
-            }
-        }
-        let average = |values: &[f64]| values.iter().sum::<f64>() / values.len() as f64;
-        println!("CALENDAR_BENCH old_ms={old_ms:?} new_ms={new_ms:?} old_avg_ms={:.3} new_avg_ms={:.3} improvement_pct={:.2}", average(&old_ms), average(&new_ms), (1.0 - average(&new_ms) / average(&old_ms)) * 100.0);
-    }
 }
 
 #[cfg(test)]

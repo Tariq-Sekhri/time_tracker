@@ -15,10 +15,10 @@ import AppTitleDetails from "../../Componants/AppTitleDetails.tsx";
  *   3. trend    — multi-week chart; separate date range; NO right sidebar
  *
  * DATA FLOW SUMMARY:
- *   boundsStats  ← get_total_statistics     (once: first day, all-time total)
+ *   boundsStats: get_statistics_bounds (first day and all-time total)
  *   rangeStats   ← get_week_statistics      (Daily Avg + Total: one call for whole range)
  *   dailyAvgStats← client transform of rangeStats (divide by active days)
- *   trendWeekStats← N × get_week_statistics (one per week in trend range)
+ *   trendWeekStats: get_trend_statistics (one batched range read)
  *   categoryAppLogs← get_logs_by_category   (only when user clicks a category)
  *
  * LAYOUT:
@@ -26,12 +26,12 @@ import AppTitleDetails from "../../Componants/AppTitleDetails.tsx";
  * =============================================================================
  */
 
-import {useQueries, useQuery} from "@tanstack/react-query";
+import {useQuery} from "@tanstack/react-query";
 import {reportError} from "../../diagnostics.ts";
 import {useEffect, useMemo, useRef, useState} from "react";
 import {measure, PerfProfiler, useBatchPerf, useRenderPerf} from "../../perf.ts";
 // WeekStatistics is the shape returned for a time range (categories, apps, hourly, etc.)
-import {get_total_statistics, get_week_statistics, WeekStatistics} from "../../api/statistics.ts";
+import {get_statistics_bounds, get_trend_statistics, get_week_statistics, WeekStatistics, type TrendWeekStatistics} from "../../api/statistics.ts";
 // MergedLog = one log segment; get_logs_by_category returns many for sidebar drill-down
 import {get_logs_by_category, MergedLog} from "../../api/Log.ts";
 // Global settings: min duration to show apps, calendar day boundary hour, etc.
@@ -192,8 +192,8 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
 
     // --- QUERY: lifetime bounds (first active day, all-time total) ---
     const {data: boundsStats, isLoading: isBoundsLoading} = useQuery({
-        queryKey: ["total_statistics"],       // cache key; must match invalidate keys elsewhere
-        queryFn: get_total_statistics,        // Tauri/backend call
+        queryKey: ["total_statistics", "bounds"], // keep prefix invalidation, separate compact payload
+        queryFn: get_statistics_bounds,        // Tauri/backend call
         staleTime: Infinity,                  // never auto-refetch; manual invalidate only
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
@@ -273,23 +273,17 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
         return enumerateWeekRangesInSpan(rangeStartDate, rangeEndDate, calendarStartHour);
     }, [rangeStartDate, rangeEndDate, calendarStartHour]);
 
-    // PARALLEL QUERIES: one get_week_statistics per week in trend range
-    const trendWeekQueries = useQueries({
-        queries: trendWeeks.map((w) => ({
-            queryKey: ["week_statistics", w.week_start, w.week_end, calendarStartHour],
-            queryFn: () => get_week_statistics(w.week_start, w.week_end),
-            enabled: activeTab === "trend", // don't fetch weeks while user is on Daily Avg/Total
-            staleTime: Infinity,
-            refetchOnWindowFocus: false,
-            refetchOnReconnect: false,
-        })),
+    // One ordered, compact payload avoids N concurrent database scans and N partial chart renders.
+    const {data: trendData, isLoading: isTrendQueryLoading, isFetching: isTrendFetching, error: trendError} = useQuery({
+        queryKey: ["week_statistics", "trend", trendWeeks, calendarStartHour],
+        queryFn: () => get_trend_statistics(trendWeeks),
+        enabled: activeTab === "trend" && trendWeeks.length > 0,
+        staleTime: Infinity,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
     });
-
-    // Extract just the data objects from each query result (undefined while loading)
-    const trendWeekStats = trendWeekQueries.map((q) => q.data);
-    // True if we have weeks to load AND any week query is still loading/fetching
-    const isTrendLoading =
-        trendWeekQueries.length > 0 && trendWeekQueries.some((q) => q.isLoading || q.isFetching);
+    const trendWeekStats: TrendWeekStatistics[] = useMemo(() => trendData ?? [], [trendData]);
+    const isTrendLoading = trendWeeks.length > 0 && (isTrendQueryLoading || isTrendFetching);
 
     // MEMO: convert picker Dates → unix range for API (inclusive start/end of calendar days)
     const rangeUnix = useMemo(() => {
@@ -303,7 +297,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
     const {data: rangeStats, isLoading: isRangeLoading} = useQuery({
         queryKey: ["range_statistics", rangeUnix?.start, rangeUnix?.end, calendarStartHour],
         queryFn: () => get_week_statistics(rangeUnix!.start, rangeUnix!.end), // same fn as weekly; wider span
-        enabled: !!rangeUnix, // only run when we have valid unix bounds
+        enabled: !!rangeUnix && activeTab !== "trend", // trend has its own compact payload
         staleTime: Infinity,
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
@@ -361,6 +355,10 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
 
     // QUERY: per-app totals within selected category (sidebar drill-down)
     const {data: manualProjects = []} = useQuery({queryKey: MANUAL_PROJECTS_QUERY_KEY, queryFn: getManualProjects});
+    const trendVisibleCategoryNames = useMemo(
+        () => new Set([...visibleCategoryNames, MANUAL_TIME_LABEL, ...manualProjects.map((project) => project.name)]),
+        [visibleCategoryNames, manualProjects],
+    );
     const {data: categoryAppLogs = [], isLoading: isLoadingCategory} = useQuery({
         queryKey: categoryQueryKey,
         enabled: !!selectedCategory, // no fetch until user picks a category row
@@ -438,7 +436,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
     // Renders since mount — a jump between two perf lines means a re-render storm.
     const renderCountRef = useRef(0);
     renderCountRef.current += 1;
-    const trendWeeksDone = trendWeekQueries.filter((q) => q.data !== undefined).length;
+    const trendWeeksDone = trendWeekStats.length;
     const perfNotes = {
         tab: activeTab,
         renders: renderCountRef.current,
@@ -455,11 +453,11 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
         "detailed_stats_trend_batch",
         `${trendWeeks[0]?.week_start}|${trendWeeks[trendWeeks.length - 1]?.week_end}|${calendarStartHour}`,
         activeTab === "trend",
-        trendWeekQueries.length,
+        trendWeeks.length,
         trendWeeksDone,
         {series_mode: trendSeriesMode, value_mode: trendValueMode},
     );
-    // Screen open → first stats painted (includes total_statistics bounds + range bootstrap).
+    // Screen open → first stats painted (includes compact lifetime bounds + range bootstrap).
     useRenderPerf("detailed_stats_open", "open", isViewReady, 0, perfNotes);
     // Each tab / range change → painted.
     useRenderPerf("detailed_stats_view", `${activeTab}|${rangeUnix?.start}|${rangeUnix?.end}`, isViewReady, 0, perfNotes);
@@ -728,7 +726,8 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                             weeks={trendWeeks}
                             weekStats={trendWeekStats}
                             isLoading={isTrendLoading}
-                            visibleCategoryNames={new Set([...visibleCategoryNames, MANUAL_TIME_LABEL, ...manualProjects.map((project) => project.name)])}
+                            error={trendError ? "Could not load week trends. Change the date range or reopen Statistics to retry." : undefined}
+                            visibleCategoryNames={trendVisibleCategoryNames}
                             seriesMode={trendSeriesMode}
                             topAppCount={trendTopAppCount}
                             calendarStartHour={calendarStartHour}

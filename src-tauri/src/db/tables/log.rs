@@ -57,7 +57,20 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 }
 
 pub async fn ensure_logs_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    migrate_logs_composite_primary_key(pool).await
+    migrate_logs_composite_primary_key(pool).await?;
+    // A composite-key repair rebuilds the table after migrations have run. Restore
+    // these indexes here as well so repaired/restored databases stay fast.
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_logs_active_timestamp ON logs(timestamp) WHERE is_deleted = 0")
+        .execute(pool).await?;
+    sqlx::query("DROP INDEX IF EXISTS idx_logs_active_app")
+        .execute(pool)
+        .await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_logs_active_app_totals ON logs(app, timestamp, duration) WHERE is_deleted = 0")
+        .execute(pool)
+        .await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_logs_deleted_device_id ON logs(device_uuid, id) WHERE is_deleted = 1")
+        .execute(pool).await?;
+    Ok(())
 }
 
 async fn migrate_logs_composite_primary_key(pool: &SqlitePool) -> Result<(), sqlx::Error> {
@@ -223,9 +236,8 @@ pub async fn get_logs() -> Result<Vec<Log>, Error> {
     let mut perf = crate::perf::Perf::new("db_get_logs");
     let pool = db::get_pool().await?;
     perf.stage("pool");
-    let logs = sqlx::query_as!(
-        Log,
-        r#"SELECT id, device_uuid, app, timestamp, duration, is_deleted as "is_deleted!: bool" FROM logs WHERE is_deleted = 0"#
+    let logs = sqlx::query_as::<_, Log>(
+        "SELECT id, device_uuid, app, timestamp, duration, is_deleted FROM logs WHERE is_deleted = 0 ORDER BY rowid",
     )
     .fetch_all(&pool)
     .await?;
@@ -233,6 +245,104 @@ pub async fn get_logs() -> Result<Vec<Log>, Error> {
     perf.note("rows", logs.len());
     perf.done();
     Ok(logs)
+}
+
+/// Calendar/statistics windows should not deserialize the entire activity history.
+/// Bounds are inclusive, matching the existing Rust timestamp filters.
+pub async fn get_logs_in_time_range(start: i64, end: i64) -> Result<Vec<Log>, Error> {
+    let mut perf = crate::perf::Perf::new("db_get_logs_in_time_range");
+    let pool = db::get_pool().await?;
+    perf.stage("pool");
+    // Preserve insertion order for equal (timestamp, id) pairs across devices;
+    // the calendar's stable sort relies on that final tie-breaker.
+    // Large statistics/trend windows can cover most of the history. In that
+    // case sequential reads beat index row lookups followed by a large sort.
+    let scan = if end.saturating_sub(start) > 31 * 86400 {
+        let in_range: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM logs WHERE is_deleted = 0 AND timestamp >= ?1 AND timestamp <= ?2")
+            .bind(start).bind(end).fetch_one(&pool).await?;
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM logs WHERE is_deleted = 0")
+            .fetch_one(&pool)
+            .await?;
+        in_range > total / 4
+    } else {
+        false
+    };
+    perf.note("sequential_scan", scan);
+    let query = if scan {
+        "SELECT id, device_uuid, app, timestamp, duration, is_deleted FROM logs NOT INDEXED
+         WHERE is_deleted = 0 AND timestamp >= ?1 AND timestamp <= ?2 ORDER BY rowid"
+    } else {
+        "SELECT id, device_uuid, app, timestamp, duration, is_deleted FROM logs
+         WHERE is_deleted = 0 AND timestamp >= ?1 AND timestamp <= ?2 ORDER BY rowid"
+    };
+    let logs = sqlx::query_as::<_, Log>(query)
+        .bind(start)
+        .bind(end)
+        .fetch_all(&pool)
+        .await?;
+    perf.stage("query");
+    perf.note("rows", logs.len());
+    perf.done();
+    Ok(logs)
+}
+
+/// Preserve calendar's history-wide skipped-app cleanup without transferring every
+/// log to Rust or running one transaction per row. Regexes only depend on the title.
+pub async fn clean_skipped_logs(regexes: &[regex::Regex]) -> Result<u64, Error> {
+    if regexes.is_empty() {
+        return Ok(0);
+    }
+    let pool = db::get_pool().await?;
+    let titles: Vec<String> =
+        sqlx::query_scalar("SELECT DISTINCT app FROM logs WHERE is_deleted = 0")
+            .fetch_all(&pool)
+            .await?;
+    let matching: Vec<String> = titles
+        .into_iter()
+        .filter(|title| regexes.iter().any(|regex| regex.is_match(title)))
+        .collect();
+    if matching.is_empty() {
+        return Ok(0);
+    }
+    let Some(uuid) = get_local_device_uuid().await? else {
+        return Err(anyhow::anyhow!("local device not set").into());
+    };
+    let mut tx = pool.begin().await?;
+    // First snapshot all matching IDs: legacy cleanup looks up the local-device
+    // row for each ID, even when the skipped title came from another device.
+    let mut ids = std::collections::HashSet::new();
+    for titles in matching.chunks(400) {
+        let mut query = sqlx::QueryBuilder::<Sqlite>::new(
+            "SELECT id FROM logs WHERE is_deleted = 0 AND app IN (",
+        );
+        let mut values = query.separated(", ");
+        for title in titles {
+            values.push_bind(title);
+        }
+        values.push_unseparated(")");
+        ids.extend(
+            query
+                .build_query_scalar::<i64>()
+                .fetch_all(&mut *tx)
+                .await?,
+        );
+    }
+    let ids: Vec<i64> = ids.into_iter().collect();
+    let mut deleted = 0;
+    for ids in ids.chunks(400) {
+        let mut query = sqlx::QueryBuilder::<Sqlite>::new(
+            "UPDATE logs SET is_deleted = 1 WHERE is_deleted = 0 AND device_uuid = ",
+        );
+        query.push_bind(&uuid).push(" AND id IN (");
+        let mut values = query.separated(", ");
+        for id in ids {
+            values.push_bind(id);
+        }
+        values.push_unseparated(")");
+        deleted += query.build().execute(&mut *tx).await?.rows_affected();
+    }
+    tx.commit().await?;
+    Ok(deleted)
 }
 
 #[tauri::command]
@@ -425,6 +535,83 @@ fn merge_logs_in_time_block(
 #[cfg(test)]
 mod merge_logs_tests {
     use super::*;
+
+    #[tokio::test]
+    async fn deleted_log_index_preserves_query_and_cleanup_semantics() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        create_table(&pool).await.unwrap();
+        sqlx::query("WITH RECURSIVE ids(id) AS (SELECT 1 UNION ALL SELECT id + 1 FROM ids WHERE id < 500) INSERT INTO logs(id,device_uuid,app,timestamp,duration,is_deleted) SELECT id, 'local', 'title', id, 10, id % 97 = 0 FROM ids")
+            .execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO logs VALUES (97,'remote','title',97,10,1)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let query = "SELECT * FROM logs WHERE is_deleted = 1 AND device_uuid = ?1 ORDER BY id ASC";
+        let before = sqlx::query_as::<_, Log>(query)
+            .bind("local")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+        sqlx::query(include_str!(
+            "../../../migrations/0013_deleted_log_index.sql"
+        ))
+        .execute(&pool)
+        .await
+        .unwrap();
+        let after = sqlx::query_as::<_, Log>(query)
+            .bind("local")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+        assert_eq!(before, after);
+        assert_eq!(
+            after.iter().map(|log| log.id).collect::<Vec<_>>(),
+            vec![97, 194, 291, 388, 485]
+        );
+        for statement in [
+            "EXPLAIN QUERY PLAN SELECT * FROM logs WHERE is_deleted = 1 AND device_uuid = ?1 ORDER BY id ASC",
+            "EXPLAIN QUERY PLAN DELETE FROM logs WHERE is_deleted = 1 AND device_uuid = ?1",
+        ] {
+            let plans: Vec<(i64, i64, i64, String)> = sqlx::query_as(statement)
+                .bind("local")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+            assert!(
+                plans
+                    .iter()
+                    .any(|row| row.3.contains("idx_logs_deleted_device_id")),
+                "Tombstone lookup must use its partial index: {plans:?}"
+            );
+        }
+        sqlx::query("UPDATE logs SET is_deleted = 1 WHERE device_uuid = 'local' AND id = 1")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let marked = sqlx::query_as::<_, Log>(query)
+            .bind("local")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+        assert_eq!(marked.len(), 6);
+        assert_eq!(marked[0].id, 1);
+        let removed = sqlx::query("DELETE FROM logs WHERE is_deleted = 1 AND device_uuid = ?1")
+            .bind("local")
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(removed.rows_affected(), 6);
+        let remaining: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM logs")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(remaining, 495); // 494 active local rows and the untouched remote tombstone.
+        pool.close().await;
+    }
 
     #[test]
     fn keeps_same_app_logs_separate_by_device_uuid() {

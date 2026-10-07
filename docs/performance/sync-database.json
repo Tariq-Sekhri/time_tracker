@@ -1,0 +1,41 @@
+{
+  "scope": "SQL-only deleted-log lookup on a separate copy of the isolated development snapshot",
+  "repeats": 10,
+  "localRows": 284588,
+  "deletedRows": 15,
+  "fullRowParity": true,
+  "beforePlan": [
+    "SEARCH logs USING INDEX sqlite_autoindex_logs_1 (device_uuid=?)"
+  ],
+  "afterPlan": [
+    "SEARCH logs USING INDEX idx_logs_deleted_device_id (device_uuid=?)"
+  ],
+  "beforeMs": [
+    59.03620000000046,
+    59.36329999999998,
+    94.48530000000028,
+    68.42770000000019,
+    80.93170000000009,
+    74.88529999999992,
+    91.45290000000023,
+    85.07060000000001,
+    63.66989999999987,
+    55.844599999999446
+  ],
+  "afterMs": [
+    0.1710000000002765,
+    0.19030000000020664,
+    0.15710000000035507,
+    0.12889999999970314,
+    0.11570000000028813,
+    0.09789999999884458,
+    0.1014999999988504,
+    0.17000000000007276,
+    0.1661999999996624,
+    0.14589999999952852
+  ],
+  "beforeAvgMs": 73.31675000000004,
+  "afterAvgMs": 0.1444499999997788,
+  "improvementPct": 99.80297817347362,
+  "speedup": 507.5579785400644
+}

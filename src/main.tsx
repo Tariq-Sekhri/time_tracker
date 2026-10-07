@@ -31,6 +31,10 @@ async function bootstrap() {
         </React.StrictMode>
     );
     void logMessage("info", "Frontend mounted");
+    if (import.meta.env.DEV && import.meta.env.VITE_PERF_SCENARIO === "1") {
+        void import("./devPerformance").then(({runDevPerformanceScenario}) => runDevPerformanceScenario(queryClient))
+            .catch(error => reportError("Development performance scenario failed", error));
+    }
 }
 
 void bootstrap().catch(async (error) => {

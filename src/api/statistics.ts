@@ -81,3 +81,23 @@ export async function get_day_statistics(
         includeManual,
     });
 }
+
+/** Minimal payload for the trend chart; no hourly/day breakdown or lifetime title list. */
+export type TrendWeekStatistics = Pick<WeekStatistics, "total_time" | "categories" | "all_apps">;
+export type StatisticsBounds = Pick<WeekStatistics, "first_active_day" | "total_time_all_time">;
+
+export async function get_trend_statistics(
+    weeks: {week_start: number; week_end: number}[],
+    deviceUuids?: string[] | null,
+    includeManual = true,
+): Promise<TrendWeekStatistics[]> {
+    return invokeOrThrow<TrendWeekStatistics[]>("get_trend_statistics", {
+        weeks,
+        deviceUuids: deviceUuids ?? null,
+        includeManual,
+    });
+}
+
+export async function get_statistics_bounds(): Promise<StatisticsBounds> {
+    return invokeOrThrow<StatisticsBounds>("get_statistics_bounds");
+}

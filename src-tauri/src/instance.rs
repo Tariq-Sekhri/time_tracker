@@ -4,8 +4,8 @@ use std::sync::OnceLock;
 
 static INSTANCE: OnceLock<InstanceConfig> = OnceLock::new();
 
-const DATA_DIR_NAME: &str = "time-tracker";
-const DISPLAY_NAME: &str = "Time Tracker";
+const DATA_DIR_NAME: &str = if cfg!(debug_assertions) { "time-tracker-dev" } else { "time-tracker" };
+const DISPLAY_NAME: &str = if cfg!(debug_assertions) { "Time Tracker (Dev)" } else { "Time Tracker" };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InstanceConfig {
@@ -106,17 +106,21 @@ fn should_remove_run_key(name: &str) -> bool {
 }
 
 pub fn init_env() {
-    cleanup_stale_startup_entries();
+    if !cfg!(debug_assertions) {
+        cleanup_stale_startup_entries();
+    }
 
     #[cfg(target_os = "windows")]
     {
         let webview_dir = webview_data_dir();
-        if crate::logger::Log::result(
+        let profile_created = crate::logger::Log::result(
             "Create WebView profile directory",
             std::fs::create_dir_all(&webview_dir),
-        )
-        .is_ok()
-        {
+        );
+        if cfg!(debug_assertions) && profile_created.is_err() {
+            panic!("Cannot create isolated development WebView profile; refusing to start");
+        }
+        if profile_created.is_ok() {
             std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", &webview_dir);
         }
     }

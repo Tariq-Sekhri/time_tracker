@@ -1,0 +1,25 @@
+{
+  "baseline_commit": "2c2c7706d6633aefbd3759a19640dbfdb22f6d05",
+  "fixture": {
+    "weeks": 24,
+    "categories": 30,
+    "apps_per_week": 1000,
+    "top_app_count": 20,
+    "repetitions": 200,
+    "warmup": 10
+  },
+  "results": [
+    {
+      "name": "buildSeries",
+      "before_ms": 1.441778,
+      "after_ms": 0.22354450000000042,
+      "reduction_percent": 84.49522048470705
+    },
+    {
+      "name": "buildTopAppSeries",
+      "before_ms": 2.7311995000000002,
+      "after_ms": 0.33420449999999957,
+      "reduction_percent": 87.76345338376052
+    }
+  ]
+}

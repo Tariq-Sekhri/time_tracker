@@ -1626,6 +1626,17 @@ export async function invoke<T>(
             );
             return weekStatistics(weekStart, weekEnd, (a as {includeManual?: boolean}).includeManual !== false, a.deviceUuids as string[] | null) as unknown as T;
         }
+        case "get_trend_statistics": {
+            const weeks = (a.weeks ?? []) as {week_start: number; week_end: number}[];
+            return weeks.map(({week_start, week_end}) => {
+                const stats = weekStatistics(week_start, week_end, a.includeManual !== false, a.deviceUuids as string[] | null);
+                return {total_time: stats.total_time, categories: stats.categories, all_apps: stats.all_apps};
+            }) as unknown as T;
+        }
+        case "get_statistics_bounds": {
+            const stats = await invoke<{first_active_day: number | null; total_time_all_time: number}>("get_total_statistics", a);
+            return {first_active_day: stats.first_active_day, total_time_all_time: stats.total_time_all_time} as unknown as T;
+        }
         case "get_total_statistics": {
             const starts = [...rawLogs.map((b) => b.timestamp), ...manualTimeBlocks.map((b) => b.start_time)];
             const ends = [...rawLogs.map((b) => b.timestamp + b.duration), ...manualTimeBlocks.map((b) => b.end_time)];
@@ -1918,7 +1929,7 @@ export async function invoke<T>(
                 ),
             })) as unknown as T;
         case "get_app_version":
-            return "1.11.7-demo" as unknown as T;
+            return "1.11.8-demo" as unknown as T;
         case "refresh_tray_menu":
             return null as T;
         case "check_update_cmd":

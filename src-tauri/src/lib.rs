@@ -13,7 +13,7 @@ use commands::{apply_update_cmd, check_update_cmd};
 use core::{get_tracking_status, set_tracking_status, supervisor};
 use db::queries::{
     get_day_statistics, get_total_statistics, get_week, get_week_for_app_filter,
-    get_week_statistics,
+    get_week_statistics, get_statistics_bounds, get_trend_statistics,
 };
 use db::tables::app_group::{delete_app_group, get_app_groups, insert_app_group, update_app_group};
 use db::tables::app_metadata_kv::{
@@ -157,6 +157,12 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .append_invoke_initialization_script(include_str!("logger-bootstrap.js"))
         .on_page_load(|webview, payload| {
+            #[cfg(debug_assertions)]
+            if let Some(window) = webview.app_handle().get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
             Log::debug(format!(
                 "Webview page load window={} event={:?}",
                 webview.label(),
@@ -266,6 +272,10 @@ pub fn run() {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 use tauri_plugin_updater::UpdaterExt;
+                if cfg!(debug_assertions) {
+                    Log::info("Startup update check disabled in dev mode");
+                    return;
+                }
                 Log::info("Startup update check started");
 
                 let update = match handle.updater_builder().build() {
@@ -357,6 +367,8 @@ pub fn run() {
                     get_week_for_app_filter,
                     get_week_statistics,
                     get_total_statistics,
+                    get_statistics_bounds,
+                    get_trend_statistics,
                     get_day_statistics,
                     delete_category_by_id,
                     get_category_by_id,

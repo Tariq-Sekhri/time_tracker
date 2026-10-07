@@ -1,6 +1,6 @@
 [package]
 name = "time-tracker"
-version = "1.11.7"
+version = "1.11.8"
 description = "A Windows Auto Time Tracking App"
 authors = ["Tariq Sekhri"]
 edition = "2021"
@@ -67,3 +67,9 @@ objc2-app-kit = { version = "=0.3.1", default-features = false, features = [
 ] }
 [features]
 dev-warnings = []
+
+# Production-speed measurements with every development isolation guard enabled.
+[profile.performance]
+inherits = "release"
+debug-assertions = true
+overflow-checks = true

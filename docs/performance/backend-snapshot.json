@@ -1,0 +1,95 @@
+{
+  "date": "2026-10-07",
+  "version": "1.11.8",
+  "baseline_commit": "2c2c7706d6633aefbd3759a19640dbfdb22f6d05",
+  "scope": "Matched frozen legacy and optimized Rust implementations, same isolated dev snapshot and optimized performance profile; production was read-only",
+  "active_rows": 308679,
+  "statistics_repeats": 3,
+  "calendar_anchors": 5,
+  "legacy_trend": "24 concurrent weekly requests",
+  "optimized_trend": "one batch request",
+  "mean_reduction_pct": 76.84324077892123,
+  "areas": {
+    "all_time": {
+      "baseline_ms": [
+        1476.1598000000001,
+        1435.7758999999999,
+        1468.3177999999998
+      ],
+      "optimized_ms": [
+        851.6799000000001,
+        823.1513,
+        830.4264000000001
+      ],
+      "baseline_mean_ms": 1460.0845,
+      "optimized_mean_ms": 835.0858666666667,
+      "reduction_pct": 42.80564812059393
+    },
+    "range_24_weeks": {
+      "baseline_ms": [
+        4477.2871,
+        4630.805600000001,
+        4583.7212
+      ],
+      "optimized_ms": [
+        1187.4072,
+        1152.9957,
+        1201.6880999999998
+      ],
+      "baseline_mean_ms": 4563.937966666667,
+      "optimized_mean_ms": 1180.697,
+      "reduction_pct": 74.12986310016967
+    },
+    "trend_24_weeks": {
+      "baseline_bytes": 8346318,
+      "baseline_ms": [
+        34432.3781,
+        33452.3312,
+        35299.0364
+      ],
+      "optimized_bytes": 7157910,
+      "optimized_ms": [
+        664.2805000000001,
+        775.963,
+        657.1740000000001
+      ],
+      "baseline_mean_ms": 34394.5819,
+      "optimized_mean_ms": 699.1391666666667,
+      "reduction_pct": 97.96729854516224
+    },
+    "weekly": {
+      "baseline_ms": [
+        942.5740000000001,
+        959.8642,
+        946.1768000000001
+      ],
+      "optimized_ms": [
+        135.3358,
+        127.6455,
+        118.3342
+      ],
+      "baseline_mean_ms": 949.5383333333334,
+      "optimized_mean_ms": 127.10516666666668,
+      "reduction_pct": 86.61400364738654
+    },
+    "calendar": {
+      "baseline_ms": [
+        631.2378,
+        1651.2083,
+        1199.9664,
+        715.2311,
+        977.7677
+      ],
+      "optimized_ms": [
+        120.0127,
+        246.687,
+        230.3536,
+        126.34,
+        171.9844
+      ],
+      "baseline_mean_ms": 1035.0822600000001,
+      "optimized_mean_ms": 179.07554,
+      "reduction_pct": 82.69939048129373
+    }
+  }
+}

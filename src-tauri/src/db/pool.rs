@@ -13,6 +13,7 @@ use crate::db::Error;
 use serde::Serialize;
 
 static POOL: Mutex<Option<SqlitePool>> = Mutex::new(None);
+static POOL_INIT: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 fn app_data_time_tracker_dir() -> PathBuf {
     crate::instance::data_dir()
@@ -162,7 +163,7 @@ pub fn get_db_path() -> PathBuf {
 
 pub async fn refresh_dev_database() -> Result<(), sqlx::Error> {
     if !cfg!(debug_assertions) { return Ok(()); }
-    let source = app_data_time_tracker_dir().join("app.db");
+    let source = dirs::data_dir().unwrap_or_else(|| PathBuf::from(".")).join("time-tracker").join("app.db");
     if !db_file_has_data(&source) {
         crate::logger::Log::info("No production database to copy into dev mode");
         return Ok(());
@@ -334,6 +335,8 @@ pub async fn reset_pool() -> Result<(), sqlx::Error> {
 }
 
 pub async fn get_pool() -> Result<SqlitePool, sqlx::Error> {
+    // Only one caller may initialize/migrate the database; startup queries arrive together.
+    let _init = POOL_INIT.lock().await;
     let should_create = {
         let pool_guard = POOL.lock().unwrap();
         pool_guard.is_none()

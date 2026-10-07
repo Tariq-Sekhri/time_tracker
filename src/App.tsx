@@ -16,7 +16,7 @@ import Header from "./Componants/Header.tsx";
 import GoogleCalendarsView from "./Screens/GoogleCalendarsView.tsx";
 import Settings from "./Screens/Settings.tsx";
 import {ToastProvider, useToast} from "./Componants/Toast.tsx";
-import {get_total_statistics} from "./api/statistics.ts";
+import {get_statistics_bounds} from "./api/statistics.ts";
 import {toErrorString} from "./types/common.ts";
 import {useSyncTimer} from "./hooks/useSyncTimer.ts";
 import Sync from "./Screens/Sync.tsx";
@@ -260,8 +260,8 @@ function AppInner() {
 
     useEffect(() => {
         void queryClient.prefetchQuery({
-            queryKey: ["total_statistics"],
-            queryFn: get_total_statistics,
+            queryKey: ["total_statistics", "bounds"],
+            queryFn: get_statistics_bounds,
             staleTime: Infinity,
         });
     }, [queryClient]);
@@ -306,8 +306,8 @@ function AppInner() {
     const handleSetCurrentView = (newView: View) => {
         if (newView === "detailed") {
             void queryClient.fetchQuery({
-                queryKey: ["total_statistics"],
-                queryFn: get_total_statistics,
+                queryKey: ["total_statistics", "bounds"],
+                queryFn: get_statistics_bounds,
                 staleTime: 0,
             });
         }

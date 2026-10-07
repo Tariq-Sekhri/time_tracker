@@ -6,6 +6,9 @@ use tauri::Manager;
 
 #[tauri::command]
 pub async fn apply_update_cmd(app: AppHandle) -> Result<(), String> {
+    if cfg!(debug_assertions) {
+        return Err("Update installation is disabled in dev mode".into());
+    }
     Log::info("Update installation requested");
     let state = app.state::<UpdateState>();
     let update = Log::result("Lock pending update", state.update.lock())
@@ -86,6 +89,9 @@ pub async fn apply_update_cmd(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn check_update_cmd(app: AppHandle) -> Result<bool, String> {
+    if cfg!(debug_assertions) {
+        return Ok(false);
+    }
     Log::info("Manual update check started");
     use tauri_plugin_updater::UpdaterExt;
 
