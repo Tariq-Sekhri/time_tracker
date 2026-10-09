@@ -137,7 +137,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         }).catch(() => {});
     }, []);
 
-    const {isManualTimeInCal, isManualTimeInStats, toggleManualTimeInCal, toggleManualTimeInStats, manualProjectFiltersLoaded} = useManualProjectFilters(manualTimeInCal, manualTimeInStats);
+    const {isManualTimeInCal, isManualTimeInStats, toggleManualTimeInCal, toggleManualTimeInStats, manualProjectFiltersLoaded, isolatedProject, toggleIsolateProject, toggleAllManualTimeInCal, toggleAllManualTimeInStats} = useManualProjectFilters(manualTimeInCal, manualTimeInStats);
 
     useEffect(() => {
         if (didAlignInitialWeekToBoundary.current) return;
@@ -156,6 +156,13 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
             el.classList.remove("fc-event-selected");
         });
     }, [visibleCategoryNames]);
+
+    useEffect(() => {
+        if (!isolatedProject || !selectedEvent || selectedEvent.manualTimeBlockId != null) return;
+        setSelectedEvent(null);
+        setSelectedEventLogs([]);
+        setRightSideBarView("Week");
+    }, [isolatedProject, selectedEvent]);
 
     useEffect(() => {
         if (isManualTimeInCal(selectedEvent?.projectId) || selectedEvent?.manualTimeBlockId == null) return;
@@ -990,6 +997,10 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             setIncludeGoogleInStats={setIncludeGoogleInStats}
                             isManualTimeInCal={isManualTimeInCal}
                             manualProjectFiltersLoaded={manualProjectFiltersLoaded}
+                            isolatedProject={isolatedProject}
+                            toggleIsolateProject={toggleIsolateProject}
+                            toggleAllManualTimeInCal={toggleAllManualTimeInCal}
+                            toggleAllManualTimeInStats={toggleAllManualTimeInStats}
                             isManualTimeInStats={isManualTimeInStats}
                             toggleManualTimeInCal={toggleManualTimeInCal}
                             toggleManualTimeInStats={toggleManualTimeInStats}

@@ -114,6 +114,8 @@ export function CalendarTogglePills({
 export type CalendarSourceTogglesProps = CalendarTogglePillsProps & {
     name: string;
     color: string;
+    isolated?: boolean;
+    onToggleIsolate?: () => void;
 };
 
 export default function CalendarSourceToggles({
@@ -126,7 +128,17 @@ export default function CalendarSourceToggles({
     isLeftCollapsed,
     calLabel,
     statsLabel,
+    isolated = false,
+    onToggleIsolate,
 }: CalendarSourceTogglesProps) {
+    const isolateButton = onToggleIsolate && (
+        <button type="button" onClick={onToggleIsolate} aria-pressed={isolated}
+            aria-label={isolated ? `Stop isolating ${name}` : `Isolate ${name} in week`}
+            title={isolated ? "Restore week view" : "Show only this project in week"}
+            className={`shrink-0 rounded px-1.5 py-1 text-[11px] font-medium transition-colors ${isolated ? "bg-blue-600 text-white" : "bg-gray-900 text-gray-400 hover:bg-gray-800 hover:text-white"}`}>
+            {isLeftCollapsed ? <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg> : isolated ? "Restore" : "Isolate"}
+        </button>
+    );
     if (isLeftCollapsed) {
         return (
             <div className="flex flex-col items-center gap-1 py-1.5 rounded-lg hover:bg-gray-900/80">
@@ -143,6 +155,7 @@ export default function CalendarSourceToggles({
                     calLabel={calLabel}
                     statsLabel={statsLabel}
                 />
+                {isolateButton}
             </div>
         );
     }
@@ -153,9 +166,10 @@ export default function CalendarSourceToggles({
                 className="row-span-2 mt-0.5 h-3 w-3 shrink-0 self-start rounded-sm border border-gray-600 ring-1 ring-black/30"
                 style={{ backgroundColor: color }}
             />
-            <span className="min-w-0 truncate text-sm font-medium leading-tight text-gray-100">
-                {name}
-            </span>
+            <div className="flex min-w-0 items-center justify-between gap-1">
+                <span className="min-w-0 truncate text-sm font-medium leading-tight text-gray-100">{name}</span>
+                {isolateButton}
+            </div>
             <div className="col-start-2 flex min-w-0">
                 <CalendarTogglePills
                     inCal={inCal}

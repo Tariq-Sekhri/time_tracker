@@ -59,6 +59,10 @@ interface RenderCalendarContentProps {
     setIncludeGoogleInStats: (v: boolean) => void;
     isManualTimeInCal: ManualProjectFilter;
     manualProjectFiltersLoaded: boolean;
+    isolatedProject: {id: number | null} | null;
+    toggleIsolateProject: (id: number | null) => void;
+    toggleAllManualTimeInCal: (ids: (number | null)[]) => void;
+    toggleAllManualTimeInStats: (ids: (number | null)[]) => void;
     isManualTimeInStats: ManualProjectFilter;
     toggleManualTimeInCal: (id: number | null) => void;
     toggleManualTimeInStats: (id: number | null) => void;
@@ -91,6 +95,10 @@ export default function RenderCalendarContent({
     setIncludeGoogleInStats,
     isManualTimeInCal,
     manualProjectFiltersLoaded,
+    isolatedProject,
+    toggleIsolateProject,
+    toggleAllManualTimeInCal,
+    toggleAllManualTimeInStats,
     isManualTimeInStats,
     toggleManualTimeInCal,
     toggleManualTimeInStats,
@@ -98,6 +106,8 @@ export default function RenderCalendarContent({
 }: RenderCalendarContentProps) {
     const queryClient = useQueryClient();
     const {data: manualProjects = [], error: manualProjectsError} = useQuery({queryKey: MANUAL_PROJECTS_QUERY_KEY, queryFn: getManualProjects});
+    const manualSources = [{id: null, name: "No project"}, ...manualProjects];
+    const manualSourceIds = manualSources.map((project) => project.id);
     const { showToast, updateToast, removeToast } = useToast();
     const lastGoogleEventsErrorToastRef = useRef<string | null>(null);
     const calendarHostRef = useRef<HTMLDivElement>(null);
@@ -310,7 +320,7 @@ export default function RenderCalendarContent({
     );
 
     const events = useMemo(() => {
-        const googleEvents = calendarAppFilter
+        const googleEvents = calendarAppFilter || isolatedProject
             ? []
             : displayGoogleEvents
                   .filter((event: GoogleCalendarEvent) => isCalendarVisible(event.calendar_id))
@@ -349,7 +359,7 @@ export default function RenderCalendarContent({
                   })
                   .filter((e): e is NonNullable<typeof e> => e !== null);
 
-        const timeBlockEvents = displayedTimeBlocks
+        const timeBlockEvents = (isolatedProject ? [] : displayedTimeBlocks)
             .filter((block: TimeBlock) => {
                 if (!visibleCategories.has(block.category)) {
                     return false;
@@ -391,7 +401,7 @@ export default function RenderCalendarContent({
             })
             .filter((e): e is NonNullable<typeof e> => e !== null);
 
-        const manualEvents = calendarAppFilter
+        const manualEvents = calendarAppFilter && !isolatedProject
             ? []
             : manualTimeBlocks.filter((block) => isManualTimeInCal(block.project_id)).map((block) => {
                 const durationSec = block.end_time - block.start_time;
@@ -424,18 +434,20 @@ export default function RenderCalendarContent({
         calendarAppFilter,
         manualTimeBlocks,
         isManualTimeInCal,
+        isolatedProject,
     ]);
 
     const showFullCalendarGrid = useMemo(() => {
+        if (isolatedProject) return true;
         if (isLoading || (isLoadingGoogleEvents && !(cachedEvents?.length ?? 0))) return false;
         if (calendarAppFilter && isLoadingFilteredData) return false;
         if (error || filteredDataError) return false;
-        const hasTimeBlocks = displayedTimeBlocks.length > 0;
+        const hasTimeBlocks = !isolatedProject && displayedTimeBlocks.length > 0;
         const hasGoogleEvents =
-            !calendarAppFilter &&
+            !calendarAppFilter && !isolatedProject &&
             displayGoogleEvents.length > 0 &&
             displayGoogleEvents.some((event: GoogleCalendarEvent) => isCalendarVisible(event.calendar_id));
-        const hasManualTime = !calendarAppFilter && manualTimeBlocks.some((block) => isManualTimeInCal(block.project_id));
+        const hasManualTime = (!calendarAppFilter || isolatedProject) && manualTimeBlocks.some((block) => isManualTimeInCal(block.project_id));
         return !!(hasTimeBlocks || hasManualTime || hasGoogleEvents);
     }, [
         isLoading,
@@ -450,6 +462,7 @@ export default function RenderCalendarContent({
         isManualTimeInCal,
         calendarAppFilter,
         isLoadingFilteredData,
+        isolatedProject,
     ]);
 
     useEffect(() => {
@@ -508,13 +521,13 @@ export default function RenderCalendarContent({
         };
     }, [events, showFullCalendarGrid, ref, slotMinHeightPx]);
 
-    const isPageLoading =
+    const isPageLoading = !isolatedProject && (
         isLoading ||
         (calendarAppFilter && isLoadingFilteredData) ||
         (isLoadingGoogleEvents && !(cachedEvents?.length ?? 0)) ||
-        (calendarAppFilter && !filteredData);
+        (calendarAppFilter && !filteredData));
 
-    const pageError = error ?? filteredDataError;
+    const pageError = isolatedProject ? null : error ?? filteredDataError;
 
     useRenderPerf(
         "calendar_week",
@@ -574,7 +587,7 @@ export default function RenderCalendarContent({
                             Categories
                         </h4>
                         <CalendarTogglePills
-                            inCal={allCategoriesInCal}
+                            inCal={!isolatedProject && allCategoriesInCal}
                             inStats={allCategoriesInStats}
                             onToggleCal={toggleAllCategoriesVisible}
                             onToggleStats={toggleAllCategoriesInStats}
@@ -590,7 +603,7 @@ export default function RenderCalendarContent({
                                         key={category.id}
                                         name={category.name}
                                         color={color}
-                                        inCal={category.is_visible}
+                                        inCal={!isolatedProject && category.is_visible}
                                         inStats={category.in_stats}
                                         onToggleCal={() => toggleCategoryVisible(category.id)}
                                         onToggleStats={() => toggleCategoryInStats(category.id)}
@@ -614,7 +627,7 @@ export default function RenderCalendarContent({
                                             key={device.uuid}
                                             name={device.name}
                                             color="#6b7280"
-                                            inCal={device.in_cal}
+                                            inCal={!isolatedProject && device.in_cal}
                                             inStats={device.in_stats}
                                             onToggleCal={() => toggleDeviceInCal(device.uuid)}
                                             onToggleStats={() => toggleDeviceInStats(device.uuid)}
@@ -632,11 +645,22 @@ export default function RenderCalendarContent({
                         <h4 className={`text-sm font-semibold text-gray-300 mb-2 ${isLeftCollapsed ? "hidden" : ""}`}>
                             Manual tracking
                         </h4>
+                        <fieldset disabled={!manualProjectFiltersLoaded} aria-label="All manual tracking" className="mb-2">
+                            <CalendarTogglePills
+                                inCal={manualSourceIds.every(isManualTimeInCal)}
+                                inStats={manualSourceIds.every(isManualTimeInStats)}
+                                onToggleCal={() => toggleAllManualTimeInCal(manualSourceIds)}
+                                onToggleStats={() => toggleAllManualTimeInStats(manualSourceIds)}
+                                isLeftCollapsed={isLeftCollapsed}
+                            />
+                        </fieldset>
                         <div className="space-y-0.5">
-                            {[{id: null, name: "No project"}, ...manualProjects].map((project) => (
-                                <div key={project.id ?? "none"} role="group" aria-label={project.name} title={isLeftCollapsed ? project.name : undefined} className={!manualProjectFiltersLoaded ? "pointer-events-none opacity-50" : ""}>
+                            {manualSources.map((project) => (
+                                <fieldset disabled={!manualProjectFiltersLoaded} key={project.id ?? "none"} aria-label={project.name} title={isLeftCollapsed ? project.name : undefined}>
                                     <CalendarSourceToggles
                                         name={project.name}
+                                        isolated={isolatedProject?.id === project.id}
+                                        onToggleIsolate={() => toggleIsolateProject(project.id)}
                                         color={MANUAL_TIME_COLOR}
                                         inCal={isManualTimeInCal(project.id)}
                                         inStats={isManualTimeInStats(project.id)}
@@ -644,7 +668,7 @@ export default function RenderCalendarContent({
                                         onToggleStats={() => toggleManualTimeInStats(project.id)}
                                         isLeftCollapsed={isLeftCollapsed}
                                     />
-                                </div>
+                                </fieldset>
                             ))}
                             {manualProjectsError && !isLeftCollapsed && <p className="text-xs text-red-400">Couldn't load projects</p>}
                         </div>
@@ -678,7 +702,7 @@ export default function RenderCalendarContent({
                                     key={calendar.id}
                                     name={calendar.name}
                                     color={calendar.color}
-                                    inCal={calendar.is_visible}
+                                    inCal={!isolatedProject && calendar.is_visible}
                                     inStats={calendar.in_stats}
                                     onToggleCal={() => toggleCalendarVisible(calendar.id)}
                                     onToggleStats={() => toggleCalendarInStats(calendar.id)}
