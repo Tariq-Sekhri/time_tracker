@@ -1,4 +1,5 @@
 import AppTitleDetails from "../../Componants/AppTitleDetails.tsx";
+import VirtualList from "../../Componants/VirtualList.tsx";
 /**
  * =============================================================================
  * DetailedStatistics.tsx — FULL WALKTHROUGH
@@ -941,7 +942,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
             {activeTab !== "trend" && stats && (
                 <PerfProfiler id="detailed.apps_sidebar">
                 <div ref={sidebarRef}
-                     className="w-96 border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col">
+                     className="w-96 min-h-0 border-l border-gray-700 bg-black p-6 flex flex-col">
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2">
                             <div
@@ -962,7 +963,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                         )}
                     </div>
 
-                    <div className="space-y-2 flex-1">
+                    <div className="min-h-0 flex-1 flex flex-col">
                         {selectedCategory && isLoadingCategory ? (
                             <div className="text-gray-500 text-sm">Loading app contributions...</div>
                         ) : sidebarAppsFiltered.length === 0 ? (
@@ -974,7 +975,8 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                                 <div className="text-gray-500 text-sm">No apps recorded.</div>
                             )
                         ) : (
-                            sidebarAppsFiltered.map((app) => {
+                            <VirtualList key={`${selectedCategory ?? "all"}:${activeTab}:${categoryStartTime}:${categoryEndTime}`}
+                                items={sidebarAppsFiltered} itemKey={app => app.app} renderItem={(app) => {
                                 // Blue bar width: relative to longest app in list (visual ranking)
                                 const barPct = (app.totalDuration / sidebarMaxDuration) * 100;
                                 // Text %: share of category total (if drilled in) or whole-range total (Top Apps)
@@ -1005,7 +1007,7 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                                         </div>
                                     </div>
                                 );
-                            })
+                            }} />
                         )}
                     </div>
                 </div>

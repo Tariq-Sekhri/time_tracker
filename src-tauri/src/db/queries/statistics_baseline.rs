@@ -360,7 +360,7 @@ async fn week_statistics(
     perf.stage("app_groups");
     perf.note("app_groups", app_groups.len());
 
-    let now = Local::now().timestamp();
+    let now = super::statistics_now();
     let compare_end = week_end.min(now);
 
     let manual_logs =

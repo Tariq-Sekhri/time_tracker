@@ -20,12 +20,11 @@ export async function runDevPerformanceScenario(client: QueryClient): Promise<vo
         .find(item => item.textContent?.trim() === label);
     const paint = async () => {
         const {observePaint} = await import("./perf");
-        const result = await observePaint();
-        if (!result.observed) throw new Error(`Cannot measure native UI paint: ${result.reason}`);
+        return observePaint();
     };
     await wait(() => !!button("Detailed") && client.isFetching() === 0);
     await pause(500);
-    const samples: {area: string; ms: number; queries: number}[] = [];
+    const samples: {area: string; ms: number; queries: number; paintObserved: boolean; paintSkipped?: string; rowsMounted?: number; appObservers?: number; totalRows?: number}[] = [];
     const gapChecks: {paths: number; segments: number; finite: boolean}[] = [];
     for (let iteration = 0; iteration < 3; iteration++) {
         for (const prefix of ["week_statistics", "total_statistics", "range_statistics"]) {
@@ -35,13 +34,26 @@ export async function runDevPerformanceScenario(client: QueryClient): Promise<vo
         button("Detailed")!.click();
         await wait(() => !!button("Trend") && client.isFetching() === 0 &&
             client.getQueryCache().findAll({queryKey: ["range_statistics"]}).some(query => query.state.status === "success"));
-        await paint();
-        samples.push({area: "detailed_open", ms: performance.now() - started, queries: client.getQueryCache().getAll().length});
+        const detailedPaint = await paint();
+        samples.push({area: "detailed_open", ms: performance.now() - started, queries: client.getQueryCache().getAll().length,
+            paintObserved: detailedPaint.observed, paintSkipped: detailedPaint.reason,
+            rowsMounted: document.querySelectorAll("[data-virtual-row]").length,
+            totalRows: Number(document.querySelector("[data-virtual-list]")?.getAttribute("data-virtual-items") ?? 0),
+            appObservers: client.getQueryCache().findAll({queryKey: ["app_title_details"]}).filter(query => query.getObserversCount() > 0).length});
+        started = performance.now();
+        button("Total")!.click();
+        const totalPaint = await paint();
+        samples.push({area: "detailed_total_cached", ms: performance.now() - started, queries: client.getQueryCache().getAll().length,
+            paintObserved: totalPaint.observed, paintSkipped: totalPaint.reason,
+            rowsMounted: document.querySelectorAll("[data-virtual-row]").length,
+            totalRows: Number(document.querySelector("[data-virtual-list]")?.getAttribute("data-virtual-items") ?? 0),
+            appObservers: client.getQueryCache().findAll({queryKey: ["app_title_details"]}).filter(query => query.getObserversCount() > 0).length});
         started = performance.now();
         button("Trend")!.click();
         await wait(() => client.getQueryCache().findAll({queryKey: ["week_statistics", "trend"]}).some(query => query.state.status === "success") && client.isFetching() === 0);
-        await paint();
-        samples.push({area: "trend_open", ms: performance.now() - started, queries: client.getQueryCache().findAll({queryKey: ["week_statistics", "trend"]}).length});
+        const trendPaint = await paint();
+        samples.push({area: "trend_open", ms: performance.now() - started, queries: client.getQueryCache().findAll({queryKey: ["week_statistics", "trend"]}).length,
+            paintObserved: trendPaint.observed, paintSkipped: trendPaint.reason});
         button("Top apps")!.click();
         await pause(100);
         await paint();

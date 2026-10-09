@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "tauri": "tauri",
-    "start": "tauri dev",
+    "start": "node scripts/start-dev.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "dev": "vite",

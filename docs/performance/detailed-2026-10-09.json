@@ -1,0 +1,229 @@
+{
+  "date": "2026-10-09",
+  "version": "1.11.9",
+  "production_read_only": true,
+  "production_profile": {
+    "version": "1.11.8",
+    "date": "2026-10-08 03:18",
+    "range_days": 258,
+    "backend_ms": 5638.3,
+    "ipc_ms": 5825.1,
+    "apps": 29487,
+    "distinct_titles": 46602
+  },
+  "previous_dev_profile": "debug, unoptimized native code",
+  "query": {
+    "after_ms": [
+      2331.8086,
+      2147.153,
+      2160.1997
+    ],
+    "before_ms": [
+      2653.3908,
+      2769.691,
+      2574.3697
+    ],
+    "filtered_device_and_manual_parity": true,
+    "full_output_parity": true,
+    "range_days": 260,
+    "scope": "Same full-history Detailed query before and after shared range read; same optimized dev profile and fixed clock",
+    "before_mean_ms": 2665.8171666666667,
+    "after_mean_ms": 2213.0537666666664,
+    "reduction_pct": 16.984037977598256
+  },
+  "validation": {
+    "rust_checks": 33,
+    "frontend_tests": 40,
+    "frontend_build": true,
+    "virtual_list_fixture_rows": 30000,
+    "maximum_mounted_fixture_rows": 24
+  },
+  "native_runs": [
+    {
+      "path": "C:\\Users\\hulks\\AppData\\Roaming\\time-tracker-dev\\apptest.db",
+      "visible": true,
+      "samples": [
+        {
+          "area": "detailed_open",
+          "ms": 3043.4000000059605,
+          "queries": 54,
+          "paintObserved": true,
+          "rowsMounted": 24,
+          "totalRows": 98,
+          "appObservers": 24
+        },
+        {
+          "area": "trend_open",
+          "ms": 2586.300000011921,
+          "queries": 2,
+          "paintObserved": true
+        },
+        {
+          "area": "detailed_open",
+          "ms": 3099.699999988079,
+          "queries": 97,
+          "paintObserved": true,
+          "rowsMounted": 24,
+          "totalRows": 98,
+          "appObservers": 24
+        },
+        {
+          "area": "trend_open",
+          "ms": 1344.800000011921,
+          "queries": 2,
+          "paintObserved": true
+        },
+        {
+          "area": "detailed_open",
+          "ms": 3108.7000000178814,
+          "queries": 97,
+          "paintObserved": true,
+          "rowsMounted": 24,
+          "totalRows": 98,
+          "appObservers": 24
+        },
+        {
+          "area": "trend_open",
+          "ms": 1733.5,
+          "queries": 2,
+          "paintObserved": true
+        }
+      ],
+      "gapChecks": [
+        {
+          "paths": 4,
+          "segments": 6,
+          "finite": true
+        },
+        {
+          "paths": 4,
+          "segments": 6,
+          "finite": true
+        },
+        {
+          "paths": 4,
+          "segments": 6,
+          "finite": true
+        }
+      ]
+    },
+    {
+      "path": "C:\\Users\\hulks\\AppData\\Roaming\\time-tracker-dev\\apptest.db",
+      "visible": true,
+      "samples": [
+        {
+          "area": "detailed_open",
+          "ms": 3934.5999999940395,
+          "queries": 54,
+          "paintObserved": true,
+          "rowsMounted": 24,
+          "totalRows": 98,
+          "appObservers": 24
+        },
+        {
+          "area": "detailed_total_cached",
+          "ms": 69.7999999821186,
+          "queries": 54,
+          "paintObserved": true,
+          "rowsMounted": 24,
+          "totalRows": 6748,
+          "appObservers": 24
+        },
+        {
+          "area": "trend_open",
+          "ms": 1825.7999999821186,
+          "queries": 2,
+          "paintObserved": true
+        },
+        {
+          "area": "detailed_open",
+          "ms": 3410.5,
+          "queries": 97,
+          "paintObserved": true,
+          "rowsMounted": 24,
+          "totalRows": 98,
+          "appObservers": 24
+        },
+        {
+          "area": "detailed_total_cached",
+          "ms": 74.2999999821186,
+          "queries": 97,
+          "paintObserved": true,
+          "rowsMounted": 24,
+          "totalRows": 6748,
+          "appObservers": 24
+        },
+        {
+          "area": "trend_open",
+          "ms": 2199.5,
+          "queries": 2,
+          "paintObserved": true
+        },
+        {
+          "area": "detailed_open",
+          "ms": 4536.5,
+          "queries": 97,
+          "paintObserved": true,
+          "rowsMounted": 24,
+          "totalRows": 98,
+          "appObservers": 24
+        },
+        {
+          "area": "detailed_total_cached",
+          "ms": 75.69999998807907,
+          "queries": 97,
+          "paintObserved": true,
+          "rowsMounted": 24,
+          "totalRows": 6748,
+          "appObservers": 24
+        },
+        {
+          "area": "trend_open",
+          "ms": 1868.5999999940395,
+          "queries": 2,
+          "paintObserved": true
+        }
+      ],
+      "gapChecks": [
+        {
+          "paths": 4,
+          "segments": 6,
+          "finite": true
+        },
+        {
+          "paths": 4,
+          "segments": 6,
+          "finite": true
+        },
+        {
+          "paths": 4,
+          "segments": 6,
+          "finite": true
+        }
+      ]
+    }
+  ],
+  "native_summary": {
+    "detailed_open": {
+      "runs": 6,
+      "mean_ms": 3522.2333333343267,
+      "min_ms": 3043.4000000059605,
+      "max_ms": 4536.5,
+      "all_paints_observed": true
+    },
+    "trend_open": {
+      "runs": 6,
+      "mean_ms": 1926.4166666666667,
+      "min_ms": 1344.800000011921,
+      "max_ms": 2586.300000011921,
+      "all_paints_observed": true
+    },
+    "detailed_total_cached": {
+      "runs": 3,
+      "mean_ms": 73.2666666507721,
+      "min_ms": 69.7999999821186,
+      "max_ms": 75.69999998807907,
+      "all_paints_observed": true
+    }
+  }
+}

@@ -75,6 +75,18 @@ const MANUAL_DEVICE: &str = "manual-time-statistics";
 const MANUAL_PROJECT_DEVICE_PREFIX: &str = "manual-time-statistics:";
 const MANUAL_CATEGORY: &str = "Manual time";
 
+#[cfg(test)]
+static BENCHMARK_NOW: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+fn statistics_now() -> i64 {
+    #[cfg(test)]
+    {
+        let frozen = BENCHMARK_NOW.load(std::sync::atomic::Ordering::Relaxed);
+        if frozen != 0 { return frozen; }
+    }
+    chrono::Local::now().timestamp()
+}
+
 async fn add_manual_category_colors(colors: &mut HashMap<String, Option<String>>) -> Result<(), Error> {
     let palette = ["#0ea5e9", "#a78bfa", "#34d399", "#fbbf24", "#fb7185", "#22d3ee"];
     colors.insert(MANUAL_CATEGORY.into(), Some(palette[0].into()));
@@ -582,6 +594,16 @@ async fn week_statistics(
     device_uuids: Option<Vec<String>>,
     include_manual: Option<bool>,
 ) -> Result<WeekStatistics, Error> {
+    week_statistics_with_range_reuse(week_start, week_end, device_uuids, include_manual, true).await
+}
+
+async fn week_statistics_with_range_reuse(
+    week_start: i64,
+    week_end: i64,
+    device_uuids: Option<Vec<String>>,
+    include_manual: Option<bool>,
+    reuse_range: bool,
+) -> Result<WeekStatistics, Error> {
     use chrono::{Local, TimeZone};
 
     let mut perf = crate::perf::Perf::new("get_week_statistics");
@@ -591,7 +613,18 @@ async fn week_statistics(
     perf.note("device_filter", device_uuids.as_ref().map_or(0, |uuids| uuids.len()));
     let local_uuid = crate::db::tables::device::get_local_log_device_uuid().await?;
     perf.stage("local_uuid");
-    let mut logs = log::get_logs_in_time_range(week_start, week_end).await?;
+    let now = statistics_now();
+    let compare_end = week_end.min(now);
+    let prev_week_start = week_start - 7 * 86400;
+    let prev_compare_end = prev_week_start + (compare_end - week_start);
+    // Detailed's long current/previous windows mostly overlap. Read their union
+    // once, preserving the previous-period device semantics before filtering.
+    let share_range = reuse_range && week_end.saturating_sub(week_start) > 31 * 86400;
+    let mut logs = log::get_logs_in_time_range(if share_range { prev_week_start } else { week_start }, week_end).await?;
+    let previous_snapshot = share_range.then(|| logs.iter()
+        .filter(|log| !is_manual(log) && log.timestamp >= prev_week_start && log.timestamp <= prev_compare_end)
+        .cloned().collect::<Vec<_>>());
+    if share_range { logs.retain(|log| log.timestamp >= week_start); }
     perf.stage("get_logs");
     perf.note("all_logs", logs.len());
     let skipped_apps = get_skipped_apps().await?;
@@ -623,9 +656,6 @@ async fn week_statistics(
     let app_groups = build_app_group_matchers(&get_app_groups().await?)?;
     perf.stage("app_groups");
     perf.note("app_groups", app_groups.len());
-
-    let now = Local::now().timestamp();
-    let compare_end = week_end.min(now);
 
     let manual_logs =
         manual_statistics_logs(week_start, compare_end.saturating_add(1), include_manual).await?;
@@ -764,14 +794,15 @@ async fn week_statistics(
 
     perf.stage("all_time_sums");
 
-    let prev_week_start = week_start - 7 * 86400;
-    let prev_compare_end = prev_week_start + (compare_end - week_start);
-    let mut prev_week_logs: Vec<Log> = log::get_logs_in_time_range(prev_week_start, prev_compare_end).await?
+    let mut prev_week_logs: Vec<Log> = match previous_snapshot {
+        Some(logs) => logs,
+        None => log::get_logs_in_time_range(prev_week_start, prev_compare_end).await?
         .into_iter()
         .filter(|log| {
             !is_manual(log) && log.timestamp >= prev_week_start && log.timestamp <= prev_compare_end
         })
-        .collect();
+        .collect(),
+    };
     retain_unskipped(&mut prev_week_logs, &skipped_regexes);
     perf.stage("prev_filter");
 
@@ -1254,7 +1285,50 @@ mod optimization_benchmarks {
     }
 
     fn assert_same(old: impl Serialize, new: impl Serialize) {
-        assert_eq!(canonical(serde_json::to_value(old).unwrap()), canonical(serde_json::to_value(new).unwrap()));
+        let old = canonical(serde_json::to_value(old).unwrap());
+        let new = canonical(serde_json::to_value(new).unwrap());
+        if old != new {
+            let fields: Vec<_> = old.as_object().map(|map| map.keys().filter(|key| old[*key] != new[*key]).cloned().collect()).unwrap_or_default();
+            panic!("Statistics parity failed; changed fields: {fields:?}");
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "explicit isolated dev snapshot performance benchmark"]
+    async fn benchmark_detailed_range_reuse() {
+        assert!(cfg!(debug_assertions));
+        assert!(db::get_db_path().to_string_lossy().contains("time-tracker-dev"));
+        let now = chrono::Local::now().timestamp();
+        BENCHMARK_NOW.store(now, std::sync::atomic::Ordering::Relaxed);
+        struct ResetClock;
+        impl Drop for ResetClock { fn drop(&mut self) { BENCHMARK_NOW.store(0, std::sync::atomic::Ordering::Relaxed); } }
+        let _clock = ResetClock;
+        let start = get_statistics_bounds(None).await.unwrap().first_active_day.unwrap();
+        let mut before_ms = Vec::new();
+        let mut after_ms = Vec::new();
+        for _ in 0..3 {
+            let timer = Instant::now();
+            let old = week_statistics_with_range_reuse(start,now,None,None,false).await.unwrap();
+            before_ms.push(timer.elapsed().as_secs_f64()*1000.0);
+            let timer = Instant::now();
+            let new = week_statistics_with_range_reuse(start,now,None,None,true).await.unwrap();
+            after_ms.push(timer.elapsed().as_secs_f64()*1000.0);
+            assert_same(old,new);
+        }
+        let pool = db::get_pool().await.unwrap();
+        let device: String = sqlx::query_scalar("SELECT device_uuid FROM logs WHERE is_deleted=0 LIMIT 1").fetch_one(&pool).await.unwrap();
+        for devices in [Some(vec![]),Some(vec![device])] {
+            for manual in [Some(false),Some(true)] {
+                let old = week_statistics_with_range_reuse(start,now,devices.clone(),manual,false).await.unwrap();
+                let new = week_statistics_with_range_reuse(start,now,devices.clone(),manual,true).await.unwrap();
+                assert_same(old,new);
+            }
+        }
+        let report = serde_json::json!({"scope":"Same full-history Detailed query before and after shared range read; same optimized dev profile and fixed clock",
+            "range_days":(now-start)/86400,"before_ms":before_ms,"after_ms":after_ms,"full_output_parity":true,"filtered_device_and_manual_parity":true});
+        let output = std::env::var("TT_DETAILED_BENCHMARK_OUTPUT").unwrap_or_else(|_| "detailed-query-benchmark.local.json".into());
+        std::fs::write(output,serde_json::to_vec_pretty(&report).unwrap()).unwrap();
+        println!("DETAILED_QUERY_BENCHMARK={report}");
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1265,6 +1339,12 @@ mod optimization_benchmarks {
         assert!(path.to_string_lossy().contains("time-tracker-dev"), "Dev database required: {}", path.display());
         assert!(path.exists(), "Launch isolated dev app first to create snapshot");
         let now = chrono::Local::now().timestamp();
+        // Previous-period clipping moves with wall time even on an immutable DB.
+        // Both implementations must compare against exactly the same instant.
+        BENCHMARK_NOW.store(now, std::sync::atomic::Ordering::Relaxed);
+        struct ResetClock;
+        impl Drop for ResetClock { fn drop(&mut self) { BENCHMARK_NOW.store(0, std::sync::atomic::Ordering::Relaxed); } }
+        let _clock = ResetClock;
         let end = get_week_start(now) + 7 * 86400 - 1;
         let start = end - 7 * 86400 + 1;
         let mut report = serde_json::Map::new();

@@ -84,10 +84,11 @@ with separate WebView storage and backups. Startup takes a consistent, read-only
 of the installed app's `time-tracker/app.db`. Tracking, sync, updater installation, and
 Google Calendar network access are disabled in development.
 
-For optimized native measurements while retaining all development isolation guards:
+`npm start` uses optimized native code while retaining all development isolation guards.
+For a stable profiling session without native file watching:
 
 ```powershell
-npm.cmd start -- --no-watch -- --profile performance
+npm.cmd start -- --no-watch
 ```
 
 ### Build

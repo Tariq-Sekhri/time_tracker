@@ -50,7 +50,7 @@ A separate temporary-copy SQL benchmark measures the deleted-log lookup used by 
 Start the isolated dev application:
 
 ```powershell
-npm.cmd start -- --no-watch -- --profile performance
+npm.cmd start -- --no-watch
 ```
 
 Run normal Rust checks, or explicitly include the performance scenarios:
