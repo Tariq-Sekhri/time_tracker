@@ -26,7 +26,10 @@ import { useCalendarAppFilterActive } from "../../stores/calendarAppFilterStore.
 import { useBackendSettings } from "../../hooks/useBackendSettings.ts";
 import CalendarSourceToggles, { CalendarTogglePills } from "./CalendarSourceToggles.tsx";
 import { Device } from "../../api/sync.ts";
-import {get_manual_time_blocks, MANUAL_TIME_COLOR, MANUAL_TIME_LABEL} from "../../api/ManualTimeBlock.ts";
+import {get_manual_time_blocks, MANUAL_TIME_COLOR} from "../../api/ManualTimeBlock.ts";
+
+import {getManualProjects, MANUAL_PROJECTS_QUERY_KEY} from "../../api/ManualProject.ts";
+import {ManualProjectFilter} from "../../hooks/useManualProjectFilters.ts";
 
 const LEFT_SIDEBAR_COLLAPSED_KEY = "time-tracker:left-sidebar-collapsed";
 
@@ -54,10 +57,11 @@ interface RenderCalendarContentProps {
     toggleCalendarInStats: (calendarId: number) => void;
     includeGoogleInStats: boolean;
     setIncludeGoogleInStats: (v: boolean) => void;
-    manualTimeInCal: boolean;
-    manualTimeInStats: boolean;
-    toggleManualTimeInCal: () => void;
-    toggleManualTimeInStats: () => void;
+    isManualTimeInCal: ManualProjectFilter;
+    manualProjectFiltersLoaded: boolean;
+    isManualTimeInStats: ManualProjectFilter;
+    toggleManualTimeInCal: (id: number | null) => void;
+    toggleManualTimeInStats: (id: number | null) => void;
     onTimeBlockContextMenu?: (e: globalThis.MouseEvent, appNames: string[]) => void;
 }
 
@@ -85,13 +89,15 @@ export default function RenderCalendarContent({
     toggleCalendarInStats,
     includeGoogleInStats,
     setIncludeGoogleInStats,
-    manualTimeInCal,
-    manualTimeInStats,
+    isManualTimeInCal,
+    manualProjectFiltersLoaded,
+    isManualTimeInStats,
     toggleManualTimeInCal,
     toggleManualTimeInStats,
     onTimeBlockContextMenu,
 }: RenderCalendarContentProps) {
     const queryClient = useQueryClient();
+    const {data: manualProjects = [], error: manualProjectsError} = useQuery({queryKey: MANUAL_PROJECTS_QUERY_KEY, queryFn: getManualProjects});
     const { showToast, updateToast, removeToast } = useToast();
     const lastGoogleEventsErrorToastRef = useRef<string | null>(null);
     const calendarHostRef = useRef<HTMLDivElement>(null);
@@ -385,9 +391,9 @@ export default function RenderCalendarContent({
             })
             .filter((e): e is NonNullable<typeof e> => e !== null);
 
-        const manualEvents = calendarAppFilter || !manualTimeInCal
+        const manualEvents = calendarAppFilter
             ? []
-            : manualTimeBlocks.map((block) => {
+            : manualTimeBlocks.filter((block) => isManualTimeInCal(block.project_id)).map((block) => {
                 const durationSec = block.end_time - block.start_time;
                 return {
                     id: `manual-${block.id}`,
@@ -417,7 +423,7 @@ export default function RenderCalendarContent({
         googleCalendarMap,
         calendarAppFilter,
         manualTimeBlocks,
-        manualTimeInCal,
+        isManualTimeInCal,
     ]);
 
     const showFullCalendarGrid = useMemo(() => {
@@ -429,7 +435,7 @@ export default function RenderCalendarContent({
             !calendarAppFilter &&
             displayGoogleEvents.length > 0 &&
             displayGoogleEvents.some((event: GoogleCalendarEvent) => isCalendarVisible(event.calendar_id));
-        const hasManualTime = !calendarAppFilter && manualTimeInCal && manualTimeBlocks.length > 0;
+        const hasManualTime = !calendarAppFilter && manualTimeBlocks.some((block) => isManualTimeInCal(block.project_id));
         return !!(hasTimeBlocks || hasManualTime || hasGoogleEvents);
     }, [
         isLoading,
@@ -441,7 +447,7 @@ export default function RenderCalendarContent({
         displayGoogleEvents,
         isCalendarVisible,
         manualTimeBlocks,
-        manualTimeInCal,
+        isManualTimeInCal,
         calendarAppFilter,
         isLoadingFilteredData,
     ]);
@@ -626,15 +632,22 @@ export default function RenderCalendarContent({
                         <h4 className={`text-sm font-semibold text-gray-300 mb-2 ${isLeftCollapsed ? "hidden" : ""}`}>
                             Manual tracking
                         </h4>
-                        <CalendarSourceToggles
-                            name={MANUAL_TIME_LABEL}
-                            color={MANUAL_TIME_COLOR}
-                            inCal={manualTimeInCal}
-                            inStats={manualTimeInStats}
-                            onToggleCal={toggleManualTimeInCal}
-                            onToggleStats={toggleManualTimeInStats}
-                            isLeftCollapsed={isLeftCollapsed}
-                        />
+                        <div className="space-y-0.5">
+                            {[{id: null, name: "No project"}, ...manualProjects].map((project) => (
+                                <div key={project.id ?? "none"} role="group" aria-label={project.name} title={isLeftCollapsed ? project.name : undefined} className={!manualProjectFiltersLoaded ? "pointer-events-none opacity-50" : ""}>
+                                    <CalendarSourceToggles
+                                        name={project.name}
+                                        color={MANUAL_TIME_COLOR}
+                                        inCal={isManualTimeInCal(project.id)}
+                                        inStats={isManualTimeInStats(project.id)}
+                                        onToggleCal={() => toggleManualTimeInCal(project.id)}
+                                        onToggleStats={() => toggleManualTimeInStats(project.id)}
+                                        isLeftCollapsed={isLeftCollapsed}
+                                    />
+                                </div>
+                            ))}
+                            {manualProjectsError && !isLeftCollapsed && <p className="text-xs text-red-400">Couldn't load projects</p>}
+                        </div>
                     </div>
 
                     <div className="border-t border-gray-700 my-4" />

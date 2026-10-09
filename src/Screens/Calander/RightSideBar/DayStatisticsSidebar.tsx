@@ -1,3 +1,4 @@
+import {ManualProjectFilter} from "../../../hooks/useManualProjectFilters.ts";
 import AppTitleDetails from "../../../Componants/AppTitleDetails.tsx";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, type ReactNode } from "react";
@@ -33,7 +34,7 @@ interface DayStatisticsSidebarProps {
     googleCalendars: GoogleCalendar[];
     statsCategoryNames: Set<string>;
     statsDeviceUuids: string[] | null;
-    manualTimeInStats: boolean;
+    isManualTimeInStats: ManualProjectFilter;
     trailingToolbar?: ReactNode;
 }
 
@@ -53,7 +54,7 @@ export default function DayStatisticsSidebar({
     googleCalendars,
     statsCategoryNames,
     statsDeviceUuids,
-    manualTimeInStats,
+    isManualTimeInStats,
     trailingToolbar,
 }: DayStatisticsSidebarProps) {
     const statsCalendarIds = useMemo(
@@ -102,11 +103,14 @@ export default function DayStatisticsSidebar({
         enabled: includeGoogleInStats && statsCalendarIds.size > 0,
     });
 
-    const {data: manualTimeBlocks = [], isLoading: isLoadingManualTime} = useQuery({
+    const {data: allManualTimeBlocks = [], isLoading: isLoadingManualTime} = useQuery({
         queryKey: ["manualTimeBlocks", dayStart, dayEnd],
         queryFn: async () => get_manual_time_blocks(dayStart, dayEnd + 1),
-        enabled: dayStatsEnabled && manualTimeInStats,
+        enabled: dayStatsEnabled,
     });
+
+    const manualTimeBlocks = useMemo(() => allManualTimeBlocks.filter((block) => isManualTimeInStats(block.project_id)), [allManualTimeBlocks, isManualTimeInStats]);
+    const manualTimeInStats = manualTimeBlocks.length > 0;
 
     const calendarMap = useMemo(() => {
         const map = new Map<number, GoogleCalendar>();

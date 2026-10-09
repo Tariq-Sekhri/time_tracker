@@ -1,3 +1,4 @@
+import {ManualProjectFilter} from "../../../hooks/useManualProjectFilters.ts";
 import StatisticsSidebar from "./StatisticsSidebar.tsx";
 import { View } from "../../../App.tsx";
 import { useDateStore } from "../../../stores/dateStore.ts";
@@ -33,7 +34,7 @@ export function RightSideBar({
     googleCalendars,
     statsCategoryNames,
     statsDeviceUuids,
-    manualTimeInStats,
+    isManualTimeInStats,
 }: {
     view: SideBarView,
     setView: (newView: SideBarView) => void,
@@ -51,7 +52,7 @@ export function RightSideBar({
     googleCalendars: GoogleCalendar[],
     statsCategoryNames: Set<string>,
     statsDeviceUuids: string[] | null,
-    manualTimeInStats: boolean,
+    isManualTimeInStats: ManualProjectFilter,
 }) {
     const { date } = useDateStore();
     const { rightSidebarWidth } = useBackendSettings();
@@ -107,7 +108,7 @@ export function RightSideBar({
                         googleCalendars={googleCalendars}
                         statsCategoryNames={statsCategoryNames}
                         statsDeviceUuids={statsDeviceUuids}
-                        manualTimeInStats={manualTimeInStats}
+                        isManualTimeInStats={isManualTimeInStats}
                         trailingToolbar={collapseSidebarButton}
                     />}
                     {view === "Day" && selectedDate && <DayStatisticsSidebar
@@ -125,7 +126,7 @@ export function RightSideBar({
                         googleCalendars={googleCalendars}
                         statsCategoryNames={statsCategoryNames}
                         statsDeviceUuids={statsDeviceUuids}
-                        manualTimeInStats={manualTimeInStats}
+                        isManualTimeInStats={isManualTimeInStats}
                         trailingToolbar={collapseSidebarButton}
                     />}
                     {view === "Event" && selectedEvent && (

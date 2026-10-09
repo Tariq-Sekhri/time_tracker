@@ -1,3 +1,4 @@
+import {ManualProjectFilter} from "../../../hooks/useManualProjectFilters.ts";
 import AppTitleDetails from "../../../Componants/AppTitleDetails.tsx";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState, type ReactNode } from "react";
@@ -69,7 +70,7 @@ interface StatisticsSidebarProps {
     googleCalendars: GoogleCalendar[];
     statsCategoryNames: Set<string>;
     statsDeviceUuids: string[] | null;
-    manualTimeInStats: boolean;
+    isManualTimeInStats: ManualProjectFilter;
     trailingToolbar?: ReactNode;
 }
 
@@ -81,7 +82,7 @@ export default function StatisticsSidebar({
     googleCalendars,
     statsCategoryNames,
     statsDeviceUuids,
-    manualTimeInStats,
+    isManualTimeInStats,
     trailingToolbar,
 }: StatisticsSidebarProps) {
     const statsCalendarIds = useMemo(
@@ -143,17 +144,19 @@ export default function StatisticsSidebar({
         enabled: includeGoogleInStats && statsCalendarIds.size > 0,
     });
 
-    const {data: manualTimeBlocks = [], isLoading: isLoadingManualTime} = useQuery({
+    const {data: allManualTimeBlocks = [], isLoading: isLoadingManualTime} = useQuery({
         queryKey: ["manualTimeBlocks", week_start, week_end],
         queryFn: () => get_manual_time_blocks(week_start, week_end + 1),
-        enabled: manualTimeInStats,
     });
 
-    const {data: prevManualTimeBlocks = [], isLoading: isLoadingPrevManualTime} = useQuery({
+    const {data: allPrevManualTimeBlocks = [], isLoading: isLoadingPrevManualTime} = useQuery({
         queryKey: ["manualTimeBlocks", prevWeekStart, prevWeekEnd],
         queryFn: () => get_manual_time_blocks(prevWeekStart, prevWeekEnd + 1),
-        enabled: manualTimeInStats,
     });
+
+    const manualTimeBlocks = useMemo(() => allManualTimeBlocks.filter((block) => isManualTimeInStats(block.project_id)), [allManualTimeBlocks, isManualTimeInStats]);
+    const prevManualTimeBlocks = useMemo(() => allPrevManualTimeBlocks.filter((block) => isManualTimeInStats(block.project_id)), [allPrevManualTimeBlocks, isManualTimeInStats]);
+    const manualTimeInStats = manualTimeBlocks.length > 0 || prevManualTimeBlocks.length > 0;
 
     const calendarMap = useMemo(() => {
         const map = new Map<number, GoogleCalendar>();

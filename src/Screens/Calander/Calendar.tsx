@@ -24,6 +24,7 @@ import {useBackendSettings} from "../../hooks/useBackendSettings.ts";
 import {getAppMetadata, setAppMetadata} from "../../api/appMetadata.ts";
 import ManualTimeBlockDialog from "./ManualTimeBlockDialog.tsx";
 import {get_running_manual_timer} from "../../api/ManualTimeBlock.ts";
+import {useManualProjectFilters} from "../../hooks/useManualProjectFilters.ts";
 import {ManualTimerControl} from "./ManualTimer.tsx";
 
 const INCLUDE_GOOGLE_IN_STATS_KEY = "time-tracker:include-google-in-stats";
@@ -136,21 +137,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         }).catch(() => {});
     }, []);
 
-    const toggleManualTimeInCal = useCallback(() => {
-        setManualTimeInCal((current) => {
-            const next = !current;
-            setAppMetadata(MANUAL_TIME_IN_CAL_KEY, next ? "1" : "0").catch(() => {});
-            return next;
-        });
-    }, []);
-
-    const toggleManualTimeInStats = useCallback(() => {
-        setManualTimeInStats((current) => {
-            const next = !current;
-            setAppMetadata(MANUAL_TIME_IN_STATS_KEY, next ? "1" : "0").catch(() => {});
-            return next;
-        });
-    }, []);
+    const {isManualTimeInCal, isManualTimeInStats, toggleManualTimeInCal, toggleManualTimeInStats, manualProjectFiltersLoaded} = useManualProjectFilters(manualTimeInCal, manualTimeInStats);
 
     useEffect(() => {
         if (didAlignInitialWeekToBoundary.current) return;
@@ -171,11 +158,11 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     }, [visibleCategoryNames]);
 
     useEffect(() => {
-        if (manualTimeInCal || selectedEvent?.manualTimeBlockId == null) return;
+        if (isManualTimeInCal(selectedEvent?.projectId) || selectedEvent?.manualTimeBlockId == null) return;
         setSelectedEvent(null);
         setSelectedEventLogs([]);
         setRightSideBarView("Week");
-    }, [manualTimeInCal, selectedEvent]);
+    }, [isManualTimeInCal, selectedEvent]);
 
     useEffect(() => {
         if (!selectedEvent?.category || selectedEvent.googleCalendarEventId != null) return;
@@ -1001,8 +988,9 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             toggleCalendarInStats={toggleCalendarInStats}
                             includeGoogleInStats={includeGoogleInStats}
                             setIncludeGoogleInStats={setIncludeGoogleInStats}
-                            manualTimeInCal={manualTimeInCal}
-                            manualTimeInStats={manualTimeInStats}
+                            isManualTimeInCal={isManualTimeInCal}
+                            manualProjectFiltersLoaded={manualProjectFiltersLoaded}
+                            isManualTimeInStats={isManualTimeInStats}
                             toggleManualTimeInCal={toggleManualTimeInCal}
                             toggleManualTimeInStats={toggleManualTimeInStats}
                             onTimeBlockContextMenu={openFromContextMenuMany}
@@ -1019,7 +1007,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                               googleCalendars={displayCalendars}
                               statsCategoryNames={statsCategoryNames}
                               statsDeviceUuids={statsDeviceUuids}
-                              manualTimeInStats={manualTimeInStats}
+                              isManualTimeInStats={isManualTimeInStats}
                 />
             </div>
             {categorizeLayers}
