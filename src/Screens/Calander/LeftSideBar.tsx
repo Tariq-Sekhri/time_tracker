@@ -13,7 +13,7 @@ import {useState, type ReactNode} from "react";
 export type LeftSidebarUi = "1" | "2";
 
 export const LEFT_SIDEBAR_UIS: readonly { id: LeftSidebarUi; hint: string }[] = [
-    {id: "1", hint: "Colour checks: rows washed in their colour, checks fill with it, click a row for week"},
+    {id: "1", hint: "Colour rows: rows washed in their colour, week / stats icons in it, click a row for week"},
     {id: "2", hint: "Minimal: names only; state and eye / stats / isolate controls show on hover"},
 ];
 
@@ -123,12 +123,6 @@ function IconTarget({className}: { className?: string }) {
     </svg>;
 }
 
-function IconCheck({className}: { className?: string }) {
-    return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path d="M5 12l5 5L20 7"/>
-    </svg>;
-}
-
 function IconChevron({open, className}: { open: boolean; className?: string }) {
     return <svg className={`${className ?? ""} transition-transform ${open ? "rotate-90" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M9 6l6 6-6 6"/>
@@ -225,18 +219,16 @@ function CollapsedRail({sections, collapsed, onToggleCollapsed}: VariantProps) {
 
 // ================================================================ option 1: colour checks
 
-function CheckCell({on, onClick, label, disabled, color}: {
-    on: boolean; onClick: () => void; label: string; disabled?: boolean; color: string;
+/** A week or stats toggle drawn as its icon: in the source's colour when on, dark grey when off. */
+function CheckCell({on, onClick, label, disabled, color, kind}: {
+    on: boolean; onClick: () => void; label: string; disabled?: boolean; color: string; kind: "week" | "stats";
 }) {
+    const Icon = kind === "week" ? IconWeekGrid : IconBarChart;
     return (
         <button type="button" onClick={(e) => { e.stopPropagation(); onClick(); }} disabled={disabled} aria-pressed={on} aria-label={label} title={label}
-                className="flex h-6 w-6 shrink-0 items-center justify-center disabled:opacity-40">
-            <span className={`flex h-4 w-4 items-center justify-center rounded transition-colors ${on
-                ? "text-black/75 ring-1 ring-inset ring-black/20"
-                : "border border-gray-700 text-transparent hover:border-gray-500"}`}
-                  style={on ? {backgroundColor: color} : undefined}>
-                <IconCheck className="h-3 w-3"/>
-            </span>
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors disabled:opacity-40 hover:bg-white/[0.08] ${on ? "" : "text-gray-700 hover:text-gray-400"}`}
+                style={on ? {color} : undefined}>
+            <Icon className="h-3.5 w-3.5"/>
         </button>
     );
 }
@@ -247,8 +239,8 @@ function AllCells({section}: { section: SidebarSection }) {
     const all = section.all;
     if (!all) return <span className="w-12"/>;
     return <>
-        <CheckCell on={all.inCal} onClick={all.onToggleCal} disabled={all.disabled} color={ALL_COLOR} label={`All ${section.title} in week view`}/>
-        <CheckCell on={all.inStats} onClick={all.onToggleStats} disabled={all.disabled} color={ALL_COLOR} label={`All ${section.title} in statistics`}/>
+        <CheckCell on={all.inCal} onClick={all.onToggleCal} disabled={all.disabled} color={ALL_COLOR} kind="week" label={`All ${section.title} in week view`}/>
+        <CheckCell on={all.inStats} onClick={all.onToggleStats} disabled={all.disabled} color={ALL_COLOR} kind="stats" label={`All ${section.title} in statistics`}/>
     </>;
 }
 
@@ -285,8 +277,8 @@ function ColourRow({source}: { source: SidebarSource }) {
              } : undefined}>
             <span className={`min-w-0 flex-1 truncate text-[13px] ${source.inCal ? "text-gray-100" : "text-gray-600"}`}>{source.name}</span>
             <IsolateButton source={source}/>
-            <CheckCell on={source.inCal} onClick={source.onToggleCal} disabled={source.disabled} color={source.color} label={`Show ${source.name} in week view`}/>
-            <CheckCell on={source.inStats} onClick={source.onToggleStats} disabled={source.disabled} color={source.color} label={`Include ${source.name} in statistics`}/>
+            <CheckCell on={source.inCal} onClick={source.onToggleCal} disabled={source.disabled} color={source.color} kind="week" label={`Show ${source.name} in week view`}/>
+            <CheckCell on={source.inStats} onClick={source.onToggleStats} disabled={source.disabled} color={source.color} kind="stats" label={`Include ${source.name} in statistics`}/>
         </div>
     );
 }
@@ -305,9 +297,6 @@ function ColourList({sections, collapsed, onToggleCollapsed}: VariantProps) {
             <div className="flex items-center gap-1 py-2 pl-2 pr-1">
                 <CollapseButton collapsed={collapsed} onClick={onToggleCollapsed}/>
                 <span className="flex-1 text-sm font-semibold text-white">Sources</span>
-                <span className="w-6"/>
-                <span className="flex w-6 justify-center text-gray-500" title="Week view"><IconWeekGrid className="h-3.5 w-3.5"/></span>
-                <span className="flex w-6 justify-center text-gray-500" title="Statistics"><IconBarChart className="h-3.5 w-3.5"/></span>
             </div>
             <div className="pb-3">
                 {sections.map((section) => {
