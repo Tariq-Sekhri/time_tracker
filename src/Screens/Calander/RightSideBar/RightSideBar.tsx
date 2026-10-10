@@ -101,7 +101,6 @@ export function RightSideBar({
                 <>
                     {view === "Week" && <StatisticsSidebar
                         weekDate={date}
-                        onMoreInfo={() => setCurrentView("detailed")}
                         onCategoryClick={(category) => {
                             setSelectedCategory(category);
                             setView("CategoryFilter");
@@ -116,7 +115,6 @@ export function RightSideBar({
                     />}
                     {view === "Day" && selectedDate && <DayStatisticsSidebar
                         selectedDate={selectedDate}
-                        onMoreInfo={() => setCurrentView("detailed")}
                         onClose={() => {
                             setView("Week");
                             setSelectedDate(null);

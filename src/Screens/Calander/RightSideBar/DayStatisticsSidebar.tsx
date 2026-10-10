@@ -27,7 +27,6 @@ import {
 
 interface DayStatisticsSidebarProps {
     selectedDate: Date;
-    onMoreInfo: () => void;
     onClose: () => void;
     onCategoryClick?: (category: string) => void;
     includeGoogleInStats: boolean;
@@ -48,7 +47,6 @@ type CombinedCategory = {
 
 export default function DayStatisticsSidebar({
     selectedDate,
-    onMoreInfo,
     onClose,
     onCategoryClick,
     includeGoogleInStats,
@@ -261,14 +259,6 @@ export default function DayStatisticsSidebar({
                     </div>
                     <div className="text-gray-500 mb-4">Loading statistics...</div>
                 </div>
-                <div className="mt-auto pt-4 border-t border-gray-700">
-                    <button
-                        onClick={onMoreInfo}
-                        className="w-full px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded text-white text-sm"
-                    >
-                        More Info &gt;
-                    </button>
-                </div>
             </div>
         );
     }
@@ -302,14 +292,6 @@ export default function DayStatisticsSidebar({
                         {toErrorString(error)}
                     </div>
                 </div>
-                <div className="mt-auto pt-4 border-t border-gray-700">
-                    <button
-                        onClick={onMoreInfo}
-                        className="w-full px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded text-white text-sm"
-                    >
-                        More Info &gt;
-                    </button>
-                </div>
             </div>
         );
     }
@@ -339,14 +321,6 @@ export default function DayStatisticsSidebar({
                         </div>
                     </div>
                     <div className="text-gray-500 mb-4">No statistics available</div>
-                </div>
-                <div className="mt-auto pt-4 border-t border-gray-700">
-                    <button
-                        onClick={onMoreInfo}
-                        className="w-full px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded text-white text-sm"
-                    >
-                        More Info &gt;
-                    </button>
                 </div>
             </div>
         );
@@ -383,7 +357,7 @@ export default function DayStatisticsSidebar({
             </div>
 
             <div className="mb-6">
-                <DonutChart data={donutData} colors={categoryColors} />
+                <DonutChart data={donutData} colors={categoryColors} totalDuration={totalTime} periodLabel="this day" />
             </div>
 
             <div className="mb-6">
@@ -451,14 +425,6 @@ export default function DayStatisticsSidebar({
                 </div>
             </div>
 
-            <div className="mt-auto pt-4 border-t border-gray-700">
-                <button
-                    onClick={onMoreInfo}
-                    className="w-full px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded text-white text-sm"
-                >
-                    More Info &gt;
-                </button>
-            </div>
 
             {categorizeLayers}
         </div>

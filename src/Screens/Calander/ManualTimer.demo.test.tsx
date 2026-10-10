@@ -1,5 +1,5 @@
 /* @vitest-environment jsdom */
-import {cleanup, render, screen, waitFor} from "@testing-library/react";
+import {cleanup, fireEvent, render, screen, waitFor} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {QueryClient, QueryClientProvider, useQuery} from "@tanstack/react-query";
 import {afterEach, describe, expect, it, vi} from "vitest";
@@ -19,6 +19,37 @@ function TimerHarness() {
 afterEach(cleanup);
 
 describe("demo manual timer control", () => {
+    it("adjusts a running timer earlier and later, then records the adjusted start", async () => {
+        const user = userEvent.setup();
+        const queryClient = new QueryClient({defaultOptions: {queries: {retry: false}}});
+        render(<QueryClientProvider client={queryClient}><ToastProvider><TimerHarness /></ToastProvider></QueryClientProvider>);
+        await user.click(screen.getByRole("button", {name: "Start"}));
+        await waitFor(() => expect(screen.getByRole("button", {name: "Done"})).toBeTruthy());
+        const original = (await get_running_manual_timer())!;
+        const localInput = (timestamp: number) => {
+            const date = new Date(timestamp * 1000);
+            return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 19);
+        };
+        for (const startTime of [original.start_time - 3600, original.start_time - 120]) {
+            await user.click(screen.getByRole("button", {name: "Timer running: edit start time"}));
+            fireEvent.change(screen.getByLabelText("Start time"), {target: {value: localInput(startTime)}});
+            await user.click(screen.getByRole("button", {name: "Save"}));
+            await waitFor(async () => expect(await get_running_manual_timer()).toMatchObject({start_time: startTime, end_time: null}));
+            await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+        }
+        await expect(invoke("update_manual_timer_details", {title: "", projectId: null, startTime: original.start_time + 3600})).rejects.toThrow("Start time cannot be in the future");
+        expect((await get_running_manual_timer())!.start_time).toBe(original.start_time - 120);
+        await user.click(screen.getByRole("button", {name: "Timer running: edit start time"}));
+        fireEvent.change(screen.getByLabelText("Start time"), {target: {value: localInput(original.start_time - 7200)}});
+        await user.click(screen.getByRole("button", {name: "Cancel"}));
+        expect((await get_running_manual_timer())!.start_time).toBe(original.start_time - 120);
+        await user.click(screen.getByRole("button", {name: "Done"}));
+        await waitFor(async () => expect(await get_running_manual_timer()).toBeNull());
+        const blocks = await invoke<Array<{id: number; start_time: number}>>("get_manual_time_blocks", {rangeStart: original.start_time - 3600, rangeEnd: original.start_time + 60});
+        expect(blocks).toContainEqual(expect.objectContaining({start_time: original.start_time - 120}));
+        for (const block of blocks) await invoke("delete_manual_time_block", {id: block.id});
+        queryClient.clear();
+    });
     it("starts and records unnamed time with no project", async () => {
         const user = userEvent.setup();
         const queryClient = new QueryClient({defaultOptions: {queries: {retry: false}, mutations: {retry: false}}});

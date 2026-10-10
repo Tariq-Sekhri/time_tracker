@@ -1299,7 +1299,11 @@ export async function invoke<T>(
             if (title.length > 200) throw new DemoInvokeError(cmd, "Timer name must be 200 characters or fewer");
             if (!runningManualTimer) throw new DemoInvokeError(cmd, "No manual timer is running");
             if (projectId != null && !manualProjects.some((project) => project.id === projectId)) throw new DemoInvokeError(cmd, "Project no longer exists");
-            runningManualTimer = {...runningManualTimer, title, project_id: projectId};
+            const startTime = (a as {startTime?: number}).startTime ?? runningManualTimer.start_time;
+            if (!Number.isSafeInteger(startTime)) throw new DemoInvokeError(cmd, "Invalid start time");
+            if (startTime > Math.floor(Date.now() / 1000)) throw new DemoInvokeError(cmd, "Start time cannot be in the future");
+            if (runningManualTimer.end_time != null && startTime >= runningManualTimer.end_time) throw new DemoInvokeError(cmd, "Start time must be before the end time");
+            runningManualTimer = {...runningManualTimer, title, project_id: projectId, start_time: startTime};
             return runningManualTimer as T;
         }
         case "update_manual_timer_title": {

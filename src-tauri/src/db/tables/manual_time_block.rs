@@ -199,6 +199,7 @@ pub async fn start_manual_timer(
 pub async fn update_manual_timer_details(
     title: String,
     project_id: Option<i64>,
+    start_time: Option<i64>,
 ) -> Result<RunningManualTimer, Error> {
     let title = title.trim();
     if title.chars().count() > 200 {
@@ -213,6 +214,15 @@ pub async fn update_manual_timer_details(
         .await?
         .ok_or_else(|| anyhow::anyhow!("No manual timer is running"))?;
     let mut timer: RunningManualTimer = serde_json::from_str(&value).map_err(anyhow::Error::new)?;
+    if let Some(start) = start_time {
+        if start > chrono::Utc::now().timestamp() {
+            return Err(anyhow::anyhow!("Start time cannot be in the future").into());
+        }
+        if timer.end_time.is_some_and(|end| start >= end) {
+            return Err(anyhow::anyhow!("Start time must be before the end time").into());
+        }
+        timer.start_time = start;
+    }
     timer.title = title.to_string();
     timer.project_id = project_id;
     sqlx::query("UPDATE app_metadata SET value = ?1 WHERE key = ?2")

@@ -64,7 +64,6 @@ function filterGoogleEventsForStats(
 
 interface StatisticsSidebarProps {
     weekDate: Date;
-    onMoreInfo: () => void;
     onCategoryClick?: (category: string) => void;
     includeGoogleInStats: boolean;
     googleCalendars: GoogleCalendar[];
@@ -77,7 +76,6 @@ interface StatisticsSidebarProps {
 
 export default function StatisticsSidebar({
     weekDate,
-    onMoreInfo,
     onCategoryClick,
     includeGoogleInStats,
     googleCalendars,
@@ -414,14 +412,6 @@ export default function StatisticsSidebar({
                     </div>
                     <div className="text-gray-500 mb-4">Loading statistics...</div>
                 </div>
-                <div className="mt-auto pt-4 border-t border-gray-700">
-                    <button
-                        onClick={onMoreInfo}
-                        className="w-full px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded text-white text-sm"
-                    >
-                        More Info &gt;
-                    </button>
-                </div>
             </div>
         );
     }
@@ -439,14 +429,6 @@ export default function StatisticsSidebar({
                         {toErrorString(error)}
                     </div>
                 </div>
-                <div className="mt-auto pt-4 border-t border-gray-700">
-                    <button
-                        onClick={onMoreInfo}
-                        className="w-full px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded text-white text-sm"
-                    >
-                        More Info &gt;
-                    </button>
-                </div>
             </div>
         );
     }
@@ -460,14 +442,6 @@ export default function StatisticsSidebar({
                         {trailingToolbar}
                     </div>
                     <div className="text-gray-500 mb-4">No statistics available</div>
-                </div>
-                <div className="mt-auto pt-4 border-t border-gray-700">
-                    <button
-                        onClick={onMoreInfo}
-                        className="w-full px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded text-white text-sm"
-                    >
-                        More Info &gt;
-                    </button>
                 </div>
             </div>
         );
@@ -523,7 +497,7 @@ export default function StatisticsSidebar({
             </div>
 
             <div className="mb-6">
-                <DonutChart data={donutData} colors={categoryColors} />
+                <DonutChart data={donutData} colors={categoryColors} totalDuration={totalTime} periodLabel="this week" />
             </div>
 
             <div className="mb-6">
@@ -616,14 +590,6 @@ export default function StatisticsSidebar({
                 )}
             </div>
 
-            <div className="mt-auto pt-4 border-t border-gray-700">
-                <button
-                    onClick={onMoreInfo}
-                    className="w-full px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded text-white text-sm"
-                >
-                    More Info &gt;
-                </button>
-            </div>
 
             {categorizeLayers}
         </div>

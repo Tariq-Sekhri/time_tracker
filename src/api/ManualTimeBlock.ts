@@ -62,8 +62,8 @@ export async function start_manual_timer(title = "", projectId: number | null = 
     return invokeOrThrow<RunningManualTimer>("start_manual_timer", {title, projectId});
 }
 
-export async function update_manual_timer_details(title: string, projectId: number | null): Promise<RunningManualTimer> {
-    return invokeOrThrow<RunningManualTimer>("update_manual_timer_details", {title, projectId});
+export async function update_manual_timer_details(title: string, projectId: number | null, startTime?: number): Promise<RunningManualTimer> {
+    return invokeOrThrow<RunningManualTimer>("update_manual_timer_details", {title, projectId, startTime});
 }
 
 export async function update_manual_timer_title(title: string): Promise<RunningManualTimer> {

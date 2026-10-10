@@ -3,6 +3,12 @@ import {useQueryClient} from "@tanstack/react-query";
 import {finish_manual_timer, RunningManualTimer, start_manual_timer, stop_manual_timer, update_manual_timer_details} from "../../api/ManualTimeBlock.ts";
 import {useToast} from "../../Componants/Toast.tsx";
 import ProjectSelector from "../../Componants/ProjectSelector.tsx";
+import ManualPopover from "../../Componants/ManualPopover.tsx";
+
+function toLocalDateTimeInput(timestamp: number): string {
+    const date = new Date(timestamp * 1000);
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 19);
+}
 
 function formatElapsed(startTime: number, now: number): string {
     const seconds = Math.max(0, Math.floor(now / 1000) - startTime);
@@ -18,6 +24,9 @@ export function ManualTimerControl({timer, onAddPastTime}: {timer: RunningManual
     const [projectId, setProjectId] = useState<number | null>(timer?.project_id ?? null);
     const [pending, setPending] = useState(0);
     const [finishing, setFinishing] = useState(false);
+    const [startAnchor, setStartAnchor] = useState<HTMLElement | null>(null);
+    const [startInput, setStartInput] = useState("");
+    const [startError, setStartError] = useState<string | null>(null);
     const timerRef = useRef(timer);
     const pendingRef = useRef(0);
     const queue = useRef(Promise.resolve());
@@ -69,6 +78,7 @@ export function ManualTimerControl({timer, onAddPastTime}: {timer: RunningManual
     };
 
     const finish = () => {
+        setStartAnchor(null);
         setFinishing(true);
         enqueue(async () => {
             try {
@@ -82,6 +92,22 @@ export function ManualTimerControl({timer, onAddPastTime}: {timer: RunningManual
                 await Promise.all(["manualTimeBlocks", "week_statistics", "day_statistics", "range_statistics", "total_statistics", "category_app_logs"].map((key) => queryClient.invalidateQueries({queryKey: [key]})));
                 showToast("Time recorded", "success");
             } finally {setFinishing(false);}
+        });
+    };
+
+    const saveStartTime = () => {
+        const startTime = Math.floor(new Date(startInput).getTime() / 1000);
+        const current = timerRef.current;
+        if (!current) return;
+        if (!Number.isFinite(startTime)) {setStartError("Choose a valid start time."); return;}
+        if (startTime > Math.floor(Date.now() / 1000)) {setStartError("Start time cannot be in the future."); return;}
+        if (current.end_time != null && startTime >= current.end_time) {setStartError("Start time must be before the end time."); return;}
+        enqueue(async () => {
+            const latest = timerRef.current;
+            if (!latest) return;
+            publish(await update_manual_timer_details(latest.title, latest.project_id ?? null, startTime));
+            setStartAnchor(null);
+            startAnchor?.focus();
         });
     };
 
@@ -113,12 +139,29 @@ export function ManualTimerControl({timer, onAddPastTime}: {timer: RunningManual
             }} />
         </div>
         {timer ? <>
-            <span className="flex items-center gap-2 px-1 font-mono text-sm tabular-nums text-sky-200" aria-label={timer.end_time == null ? "Timer running" : "Timer stopped"}>
+            <button type="button" disabled={finishing} title="Edit start time" aria-haspopup="dialog" onClick={(event) => {
+                setStartInput(toLocalDateTimeInput(timer.start_time));
+                setStartError(null);
+                setStartAnchor(event.currentTarget);
+            }} className="flex items-center gap-2 rounded-lg px-2 py-2 font-mono text-sm tabular-nums text-sky-200 hover:bg-sky-900/40 disabled:opacity-50" aria-label={timer.end_time == null ? "Timer running: edit start time" : "Timer stopped: edit start time"}>
                 <span className={`h-1.5 w-1.5 rounded-full ${timer.end_time == null ? "bg-sky-400" : "bg-gray-500"}`} />
                 {formatElapsed(timer.start_time, elapsedEnd)}
-            </span>
+            </button>
             <button type="button" disabled={finishing} onClick={finish} className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50">{finishing ? "Saving…" : timer.end_time == null ? "Done" : "Save time"}</button>
         </> : <button type="button" disabled={pending > 0} onClick={() => commit(title, projectId, true)} className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50">{pending > 0 ? "Starting…" : "Start"}</button>}
         <button type="button" onClick={(event) => onAddPastTime(event.currentTarget)} className="rounded-lg px-2 py-2 text-sm text-gray-400 hover:bg-gray-800 hover:text-white">Add past</button>
+        {startAnchor && timer && <ManualPopover anchor={startAnchor} onClose={() => setStartAnchor(null)} labelledBy="timer-start-title" width={340}>
+            <form onSubmit={(event) => {event.preventDefault(); saveStartTime();}}>
+                <h2 id="timer-start-title" className="mb-4 text-lg font-semibold">Edit start time</h2>
+                <label className="block text-sm text-gray-300">Start time
+                    <input autoFocus required type="datetime-local" step="1" value={startInput} max={toLocalDateTimeInput(timer.end_time == null ? Math.floor(now / 1000) : timer.end_time - 1)} onChange={(event) => {setStartInput(event.target.value); setStartError(null);}} className="mt-1 w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white outline-none focus:border-sky-500" />
+                </label>
+                {startError && <p role="alert" className="mt-2 text-sm text-red-400">{startError}</p>}
+                <div className="mt-4 flex justify-end gap-2">
+                    <button type="button" onClick={() => {setStartAnchor(null); startAnchor.focus();}} className="rounded-lg bg-gray-800 px-3 py-2 text-sm hover:bg-gray-700">Cancel</button>
+                    <button type="submit" disabled={pending > 0 || finishing} className="rounded-lg bg-sky-600 px-3 py-2 text-sm hover:bg-sky-500 disabled:opacity-50">{pending > 0 ? "Saving…" : "Save"}</button>
+                </div>
+            </form>
+        </ManualPopover>}
     </div>;
 }
