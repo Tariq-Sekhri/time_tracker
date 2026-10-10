@@ -1,11 +1,11 @@
 /**
  * The calendar's left "Sources" sidebar, in whichever candidate design is selected.
  *
- * Two designs remain: tinted colour checks (1) and the minimal list (2). Both render
- * from the same `SidebarSection` model, so they drive the same toggles. As with
- * Bramble's layout pickers, a dev build shows a picker and the choice persists in
- * localStorage; a packaged build always gets `DEFAULT_LEFT_SIDEBAR_UI`. Once one wins,
- * the other and this switch should go.
+ * Option 1 is the new design, rendered here from the `SidebarSection` model. Option 2 is
+ * the original sidebar, still inline in RenderCalenderContent, kept for comparison. As
+ * with Bramble's layout pickers, a dev build shows a picker and the choice persists in
+ * localStorage; a packaged build always gets `DEFAULT_LEFT_SIDEBAR_UI`. Once the
+ * comparison is done, option 2 and this switch should go.
  */
 
 import {useState, type ReactNode} from "react";
@@ -14,11 +14,11 @@ export type LeftSidebarUi = "1" | "2";
 
 export const LEFT_SIDEBAR_UIS: readonly { id: LeftSidebarUi; hint: string }[] = [
     {id: "1", hint: "Colour icons: week / stats icons in the source colour, click a row for both"},
-    {id: "2", hint: "Minimal: names only; state and eye / stats / isolate controls show on hover"},
+    {id: "2", hint: "Original: a card per source with Week / Stats pills"},
 ];
 
 export const DEFAULT_LEFT_SIDEBAR_UI: LeftSidebarUi = "1";
-const KEY = "time-tracker:dev.left-sidebar-ui.v5";
+const KEY = "time-tracker:dev.left-sidebar-ui.v6";
 
 /** The selected layout, persisted across reloads in a dev build only. */
 export function useLeftSidebarUi(): [LeftSidebarUi, (ui: LeftSidebarUi) => void] {
@@ -85,13 +85,11 @@ type VariantProps = {
     onToggleCollapsed: () => void;
 };
 
-export default function LeftSideBar({ui, ...props}: VariantProps & { ui: LeftSidebarUi }) {
+export default function LeftSideBar(props: VariantProps) {
     return (
         // Clicks here must not reach the calendar's deselect handler.
         <div className="relative flex h-full shrink-0" onClick={(e) => e.stopPropagation()}>
-            {props.collapsed ? <CollapsedRail {...props}/>
-                : ui === "1" ? <ColourList {...props}/>
-                    : <MinimalList {...props}/>}
+            {props.collapsed ? <CollapsedRail {...props}/> : <ColourList {...props}/>}
         </div>
     );
 }
@@ -129,22 +127,6 @@ function IconChevron({open, className}: { open: boolean; className?: string }) {
     </svg>;
 }
 
-function IconEye({off, className}: { off?: boolean; className?: string }) {
-    return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
-        <circle cx="12" cy="12" r="3"/>
-        {off && <path d="M3 3l18 18"/>}
-    </svg>;
-}
-
-/** Bar chart, struck through when the source is left out of stats. */
-function StatsGlyph({on, className}: { on: boolean; className?: string }) {
-    return <span className="relative">
-        <IconBarChart className={className}/>
-        {!on && <span className="absolute left-1/2 top-1/2 h-px w-4 -translate-x-1/2 -translate-y-1/2 -rotate-45 bg-current"/>}
-    </span>;
-}
-
 function SectionIcon({sectionKey, className}: { sectionKey: SidebarSection["key"]; className?: string }) {
     const paths: Record<SidebarSection["key"], ReactNode> = {
         categories: <><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></>,
@@ -168,18 +150,14 @@ function CollapseButton({collapsed, onClick}: { collapsed: boolean; onClick: () 
     );
 }
 
-function IsolateButton({source, quiet = false}: {
-    source: SidebarSource;
-    /** Hide even an active isolation until the row is hovered (option 2). */
-    quiet?: boolean;
-}) {
+function IsolateButton({source}: { source: SidebarSource }) {
     if (!source.onToggleIsolate) return <span className="h-6 w-6 shrink-0"/>;
     return (
         <button type="button" onClick={(e) => { e.stopPropagation(); source.onToggleIsolate?.(); }} disabled={source.disabled} aria-pressed={!!source.isolated}
                 aria-label={source.isolated ? `Stop isolating ${source.name}` : `Isolate ${source.name} in week and stats`}
                 title={source.isolated ? "Restore week and stats" : "Show only this source in week and stats"}
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-all focus-visible:opacity-100 ${source.isolated
-                    ? `bg-blue-600 text-white ${quiet ? "opacity-0 group-hover:opacity-100" : "opacity-100"}`
+                    ? "bg-blue-600 text-white opacity-100"
                     : "text-gray-500 opacity-0 hover:bg-gray-800 hover:text-white group-hover:opacity-100"}`}>
             <IconTarget className="h-3.5 w-3.5"/>
         </button>
@@ -197,7 +175,7 @@ function Notes({section}: { section: SidebarSection }) {
     </>;
 }
 
-/** Collapsed form for both options: one swatch per source, click to toggle it in the week view. */
+/** Collapsed form: one swatch per source, click to toggle it in the week view. */
 function CollapsedRail({sections, collapsed, onToggleCollapsed}: VariantProps) {
     return (
         <div className={`${shell} flex w-14 flex-col items-center gap-3 py-3`}>
@@ -240,7 +218,7 @@ const ALL_COLOR = "#94a3b8";
 
 function AllCells({section}: { section: SidebarSection }) {
     const all = section.all;
-    if (!all) return <span className="w-12"/>;
+    if (!all) return <span className="w-14"/>;
     return <>
         <CheckCell on={all.inCal} onClick={all.onToggleCal} disabled={all.disabled} color={ALL_COLOR} kind="week" label={`All ${section.title} in week view`}/>
         <CheckCell on={all.inStats} onClick={all.onToggleStats} disabled={all.disabled} color={ALL_COLOR} kind="stats" label={`All ${section.title} in statistics`}/>
@@ -251,7 +229,7 @@ function AllCells({section}: { section: SidebarSection }) {
 function ColourSectionHeader({section, open, onToggleOpen}: { section: SidebarSection; open: boolean; onToggleOpen: () => void }) {
     return (
         <div className="sticky top-0 z-10 bg-black/95 px-1 pt-2 backdrop-blur">
-            <div className="flex items-center gap-1 rounded-md py-0.5 pl-2 pr-1">
+            <div className="flex items-center gap-2 rounded-md py-0.5 pl-2 pr-1">
                 <button type="button" onClick={onToggleOpen} aria-expanded={open} title={open ? `Collapse ${section.title}` : `Expand ${section.title}`}
                         className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-gray-500 hover:text-gray-200">
                     <span className="truncate text-xs font-medium">{section.title}</span>
@@ -317,83 +295,6 @@ function ColourList({sections, collapsed, onToggleCollapsed}: VariantProps) {
                         </div>
                     );
                 })}
-            </div>
-        </div>
-    );
-}
-
-// ================================================================ option 2: minimal list
-
-function HoverButton({on, onClick, label, disabled, children}: {
-    on: boolean; onClick: () => void; label: string; disabled?: boolean; children: ReactNode;
-}) {
-    return (
-        <button type="button" onClick={(e) => { e.stopPropagation(); onClick(); }} disabled={disabled} aria-pressed={on} aria-label={label} title={label}
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md opacity-0 transition-all focus-visible:opacity-100 disabled:opacity-30 group-hover:opacity-100 ${on ? "text-gray-300" : "text-gray-600"} hover:bg-gray-800 hover:text-white`}>
-            {children}
-        </button>
-    );
-}
-
-function MinimalSectionAll({section}: { section: SidebarSection }) {
-    if (!section.all) return null;
-    const all = section.all;
-    return <>
-        <HoverButton on={all.inCal} onClick={all.onToggleCal} disabled={all.disabled}
-                     label={all.inCal ? `Hide all ${section.title}` : `Show all ${section.title}`}>
-            <IconEye off={!all.inCal} className="h-3.5 w-3.5"/>
-        </HoverButton>
-        <HoverButton on={all.inStats} onClick={all.onToggleStats} disabled={all.disabled}
-                     label={all.inStats ? `Exclude all ${section.title} from stats` : `Include all ${section.title} in stats`}>
-            <IconBarChart className="h-3.5 w-3.5"/>
-        </HoverButton>
-    </>;
-}
-
-/** At rest every row looks the same; hovering reveals its state and the controls that change it. */
-function MinimalRow({source}: { source: SidebarSource }) {
-    return (
-        <div className="group flex h-7 items-center gap-2 rounded-md pl-2 hover:bg-white/[0.04]">
-            <button type="button" onClick={source.onToggleCal} disabled={source.disabled}
-                    className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
-                    title={source.inCal ? "Hide in week view" : "Show in week view"}>
-                <span className={`h-2 w-2 shrink-0 rounded-full transition-opacity ${source.inCal ? "" : "group-hover:opacity-25"}`}
-                      style={{backgroundColor: source.color}}/>
-                <span className={`truncate text-[13px] text-gray-200 transition-colors ${source.inCal ? "" : "group-hover:text-gray-600"}`}>{source.name}</span>
-            </button>
-            <HoverButton on={source.inCal} onClick={source.onToggleCal} disabled={source.disabled}
-                         label={source.inCal ? "Hide in week view" : "Show in week view"}>
-                <IconEye off={!source.inCal} className="h-3.5 w-3.5"/>
-            </HoverButton>
-            <HoverButton on={source.inStats} onClick={source.onToggleStats} disabled={source.disabled}
-                         label={source.inStats ? "Exclude from statistics" : "Include in statistics"}>
-                <StatsGlyph on={source.inStats} className="h-3.5 w-3.5"/>
-            </HoverButton>
-            <IsolateButton source={source} quiet/>
-        </div>
-    );
-}
-
-/** Option 2: names only, with everything else on hover. */
-function MinimalList({sections, collapsed, onToggleCollapsed}: VariantProps) {
-    return (
-        <div className={`${shell} w-60 px-2 py-3`}>
-            <div className="mb-3 flex items-center justify-between pl-2">
-                <span className="text-xs font-medium text-gray-500">Sources</span>
-                <CollapseButton collapsed={collapsed} onClick={onToggleCollapsed}/>
-            </div>
-            <div className="space-y-4">
-                {sections.map((section) => (
-                    <div key={section.key}>
-                        <div className="group flex h-7 items-center gap-1 pl-2">
-                            <span className="flex-1 text-xs font-medium text-gray-500">{section.title}</span>
-                            <MinimalSectionAll section={section}/>
-                            <span className="w-6"/>
-                        </div>
-                        {section.items.map((source) => <MinimalRow key={source.key} source={source}/>)}
-                        <Notes section={section}/>
-                    </div>
-                ))}
             </div>
         </div>
     );
