@@ -208,11 +208,11 @@ function CategoryWeekTrendChart({
     }
 
     return (
-        <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-gray-900 rounded p-4">
-            <p className="text-sm text-gray-400 shrink-0 mb-3">{modeDescription}{seriesDescription}</p>
-            <div className="flex-1 min-h-[280px] min-w-0 overflow-x-auto overflow-y-hidden nice-scrollbar rounded">
+        <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-gray-900 rounded p-3">
+            <p className="text-sm text-gray-400 shrink-0 mb-2">{modeDescription}{seriesDescription}</p>
+            <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-x-auto overflow-y-hidden nice-scrollbar rounded">
                 <div
-                    className="h-[min(520px,calc(100vh-22rem))] min-h-[260px]"
+                    className="flex-1 min-h-0"
                     style={{width: `max(100%, ${columns.length * PX_PER_WEEK}px)`}}
                 >
                     <ResponsiveContainer width="100%" height="100%">

@@ -347,7 +347,7 @@ function AppInner() {
 
             <div
                 className={
-                    currentView === "calendar"
+                    currentView === "calendar" || currentView === "detailed"
                         ? "flex-1 min-h-0 overflow-hidden flex flex-col nice-scrollbar"
                         : "flex-1 min-h-0 overflow-auto nice-scrollbar"
                 }
@@ -358,7 +358,6 @@ function AppInner() {
                 {currentView === "appGroups" && <AppGroupsView/>}
                 {currentView === "skipped" && <SkippedAppsView/>}
                 {currentView === "detailed" && (<DetailedStatistics
-                        onBack={() => setCurrentView("calendar")}
                         activeTab={statisticsTab}
                     />
                 )}

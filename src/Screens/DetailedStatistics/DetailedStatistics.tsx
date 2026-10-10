@@ -6,8 +6,7 @@ import VirtualList from "../../Componants/VirtualList.tsx";
  * =============================================================================
  *
  * WHAT THIS SCREEN IS:
- *   A full-page analytics view reachable from elsewhere in the app (parent passes
- *   onBack to pop/navigate back). It shows how you spent time across categories,
+ *   A full-page analytics view reachable from the main navigation. It shows how you spent time across categories,
  *   apps, hours of day, and (on Trend tab) week-over-week category changes.
  *
  * THREE TABS (activeTab state):
@@ -163,10 +162,8 @@ function formatCalendarSpanSinceFirstActiveDay(firstActiveDayUnix: number): stri
 
 /**
  * DetailedStatistics — default export; main screen component.
- * @param onBack — callback when user clicks "← Back" (parent handles navigation)
  */
-export default function DetailedStatistics({onBack, activeTab}: {
-    onBack: () => void;
+export default function DetailedStatistics({activeTab}: {
     activeTab: StatisticsTab;
 }) {
     const [trendValueMode, setTrendValueMode] = useState<TrendValueMode>("total");
@@ -648,24 +645,13 @@ export default function DetailedStatistics({onBack, activeTab}: {
         <div className="flex h-full overflow-hidden">
             {/* LEFT: main content column */}
             <div
-                className={`flex-1 min-w-0 p-6 text-white h-full min-h-0 ${
-                    activeTab === "trend" ? "flex flex-col overflow-hidden" : "overflow-y-auto nice-scrollbar"
+                className={`flex-1 min-w-0 text-white h-full min-h-0 ${
+                    activeTab === "trend" ? "p-3 flex flex-col overflow-hidden" : "p-6 overflow-y-auto nice-scrollbar"
                 }`}
             >
-                {/* Back navigation */}
-                <div
-                    className={`flex items-center justify-between ${activeTab === "trend" ? "mb-4 shrink-0" : "mb-6"}`}>
-                    <button
-                        onClick={onBack}
-                        className="text-gray-400 hover:text-white"
-                    >
-                        ← Back
-                    </button>
-                </div>
-
                 {/* Chart options and date range picker row */}
                 <div
-                    className={`flex flex-wrap items-center gap-3 ${activeTab === "trend" ? "mb-4 shrink-0" : "mb-6"}`}>
+                    className={`flex flex-wrap items-center gap-3 ${activeTab === "trend" ? "mb-2 shrink-0" : "mb-6"}`}>
                     <div className="ml-auto flex flex-wrap items-center justify-end gap-2 shrink-0">
                         {trendToolbar}
                         {hasDateRange ? (
