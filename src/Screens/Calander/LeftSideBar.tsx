@@ -251,10 +251,9 @@ function AllCells({section}: { section: SidebarSection }) {
 function ColourSectionHeader({section, open, onToggleOpen}: { section: SidebarSection; open: boolean; onToggleOpen: () => void }) {
     return (
         <div className="sticky top-0 z-10 bg-black/95 px-1 pt-2 backdrop-blur">
-            <div className="flex items-center gap-1 rounded-md py-0.5 pl-1 pr-1">
-                <button type="button" onClick={onToggleOpen} aria-expanded={open}
+            <div className="flex items-center gap-1 rounded-md py-0.5 pl-2 pr-1">
+                <button type="button" onClick={onToggleOpen} aria-expanded={open} title={open ? `Collapse ${section.title}` : `Expand ${section.title}`}
                         className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-gray-500 hover:text-gray-200">
-                    <IconChevron open={open} className="h-3 w-3 shrink-0"/>
                     <span className="truncate text-xs font-medium">{section.title}</span>
                     <span className="text-[11px] tabular-nums text-gray-600">{onCount(section.items)}/{section.items.length}</span>
                 </button>
