@@ -250,7 +250,7 @@ function AllCells({section}: { section: SidebarSection }) {
 /** Pinned while its section scrolls past. */
 function ColourSectionHeader({section, open, onToggleOpen}: { section: SidebarSection; open: boolean; onToggleOpen: () => void }) {
     return (
-        <div className="sticky top-0 z-10 border-y border-gray-900 bg-black/95 px-1 backdrop-blur">
+        <div className="sticky top-0 z-10 bg-black/95 px-1 pt-2 backdrop-blur">
             <div className="flex items-center gap-1 rounded-md py-0.5 pl-1 pr-1">
                 <button type="button" onClick={onToggleOpen} aria-expanded={open}
                         className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-gray-400 hover:text-white">
