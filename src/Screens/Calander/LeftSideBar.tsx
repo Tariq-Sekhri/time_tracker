@@ -219,7 +219,7 @@ function CollapsedRail({sections, collapsed, onToggleCollapsed}: VariantProps) {
 
 // ================================================================ option 1: colour checks
 
-/** A week or stats toggle drawn as its icon: in the source's colour when on, dark grey when off. */
+/** A week or stats toggle drawn as its icon: in the source's colour when on, dark grey and struck through when off. */
 function CheckCell({on, onClick, label, disabled, color, kind}: {
     on: boolean; onClick: () => void; label: string; disabled?: boolean; color: string; kind: "week" | "stats";
 }) {
@@ -228,7 +228,10 @@ function CheckCell({on, onClick, label, disabled, color, kind}: {
         <button type="button" onClick={(e) => { e.stopPropagation(); onClick(); }} disabled={disabled} aria-pressed={on} aria-label={label} title={label}
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors disabled:opacity-40 hover:bg-white/[0.08] ${on ? "" : "text-gray-700 hover:text-gray-400"}`}
                 style={on ? {color} : undefined}>
-            <Icon className="h-3.5 w-3.5"/>
+            <span className="relative">
+                <Icon className="h-3.5 w-3.5"/>
+                {!on && <span className="absolute left-1/2 top-1/2 h-px w-4 -translate-x-1/2 -translate-y-1/2 -rotate-45 bg-current"/>}
+            </span>
         </button>
     );
 }
