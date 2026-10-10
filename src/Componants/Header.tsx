@@ -2,12 +2,15 @@ import {invokeOrThrow as invoke} from "../utils.ts";
 import {useEffect, useState} from "react";
 import {listen} from "@tauri-apps/api/event";
 import {View} from "../App.tsx"
+import type {StatisticsTab} from "../Screens/DetailedStatistics/DetailedStatistics.tsx";
 
 
-export default function Header({currentView, setCurrentView, notesEnabled}: {
+export default function Header({currentView, setCurrentView, notesEnabled, statisticsTab, onStatisticsTabChange}: {
     currentView: View,
     setCurrentView: (newView: View) => void,
     notesEnabled: boolean,
+    statisticsTab: StatisticsTab,
+    onStatisticsTabChange: (tab: StatisticsTab) => void,
 }) {
     const [isTracking, setIsTracking] = useState(true);
     const [appVersion, setAppVersion] = useState<string | null>(null);
@@ -20,6 +23,11 @@ export default function Header({currentView, setCurrentView, notesEnabled}: {
         {view: "skipped", label: "Skipped Apps"},
     ];
     const isAppRulesView = appRuleViews.some(({view}) => currentView === view);
+    const statisticsTabs: {tab: StatisticsTab; label: string}[] = [
+        {tab: "dailyAvg", label: "Daily Avg"},
+        {tab: "total", label: "Total"},
+        {tab: "trend", label: "Trend"},
+    ];
     useEffect(() => {
         invoke<boolean>("get_tracking_status").then(setIsTracking);
     }, []);
@@ -203,6 +211,25 @@ export default function Header({currentView, setCurrentView, notesEnabled}: {
                 </button>
             </div>
           </div>
+          {currentView === "detailed" && (
+              <nav className="flex min-w-0 items-center justify-start overflow-x-auto border-t border-gray-800/70 bg-gray-950/60 px-5 py-2 nice-scrollbar sm:justify-center" aria-label="Statistics sections">
+                  <div className="grid w-full min-w-[300px] max-w-[620px] shrink-0 grid-cols-3">
+                      {statisticsTabs.map(({tab, label}) => (
+                          <button
+                              key={tab}
+                              onClick={() => onStatisticsTabChange(tab)}
+                              aria-current={statisticsTab === tab ? "page" : undefined}
+                              className={`w-full border-b-2 px-4 py-3 text-center text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70 ${statisticsTab === tab
+                                  ? "border-blue-400 text-blue-200"
+                                  : "border-transparent text-gray-500 hover:text-gray-300"
+                              }`}
+                          >
+                              {label}
+                          </button>
+                      ))}
+                  </div>
+              </nav>
+          )}
           {isAppRulesView && (
               <nav className="flex min-w-0 items-center justify-start overflow-x-auto border-t border-gray-800/70 bg-gray-950/60 px-5 py-2 nice-scrollbar sm:justify-center" aria-label="App rules sections">
                   <div className="grid w-full min-w-[420px] max-w-[620px] shrink-0 grid-cols-4">

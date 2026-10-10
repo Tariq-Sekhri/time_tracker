@@ -97,10 +97,10 @@ function CategoryWeekTrendChart({
     const {columns, series: allSeries, totalLineValues} = useMemo(
         () => measure(`trend.build_${seriesMode}`, () =>
             seriesMode === "topApps"
-                ? buildTopAppSeries(weeks, weekStats, valueMode, calendarStartHour, topAppCount)
-                : buildSeries(weeks, weekStats, valueMode, calendarStartHour),
+                ? buildTopAppSeries(weeks, weekStats, "avg", calendarStartHour, topAppCount)
+                : buildSeries(weeks, weekStats, "avg", calendarStartHour),
             (r) => ({weeks: weeks.length, loaded: weekStats.filter(Boolean).length, series: r.series.length})),
-        [weeks, weekStats, valueMode, calendarStartHour, seriesMode, topAppCount]
+        [weeks, weekStats, calendarStartHour, seriesMode, topAppCount]
     );
 
     // The batched query and category filter both keep stable references across unrelated renders.
@@ -156,6 +156,8 @@ function CategoryWeekTrendChart({
     }, (r) => ({rows: r.length, series: series.length})), [columns, series, totalLineValues, showTotalLine, seriesMode]);
 
     const showTotalLineOnChart = showTotalLine && hasTotalLineData;
+    // Keep coordinates and automatic axis ticks identical; only display units change.
+    const displayScale = valueMode === "total" ? 7 : 1;
 
     const modeDescription =
         valueMode === "avg"
@@ -163,8 +165,8 @@ function CategoryWeekTrendChart({
                 ? "Per-day average each week. Total line = overall daily average."
                 : "Per-day average each week."
             : showTotalLine
-              ? "Full week totals. Total line = all categories combined."
-              : "Full week totals.";
+              ? "Week totals, normalized to 7 days for incomplete weeks. Total line = all categories combined."
+              : "Week totals, normalized to 7 days for incomplete weeks.";
     const seriesDescription =
         seriesMode === "topApps"
             ? ` Showing the top ${topAppCount} apps in each week; solid lines join consecutive appearances, while dotted lines bridge weeks where an app was outside the top ${topAppCount}.`
@@ -224,7 +226,7 @@ function CategoryWeekTrendChart({
                             <YAxis
                                 tick={{fill: "#9ca3af", fontSize: 11}}
                                 tickFormatter={(sec) =>
-                                    typeof sec === "number" ? formatDuration(sec) : String(sec)
+                                    typeof sec === "number" ? formatDuration(Math.round(sec * displayScale)) : String(sec)
                                 }
                                 tickLine={false}
                                 axisLine={{stroke: "#4b5563"}}
@@ -247,7 +249,7 @@ function CategoryWeekTrendChart({
                                             : String(name ?? "");
                                     const formatted =
                                         typeof value === "number"
-                                            ? formatDuration(Math.round(value))
+                                            ? formatDuration(Math.round(value * displayScale))
                                             : String(value ?? "");
                                     return [formatted, label];
                                 }}

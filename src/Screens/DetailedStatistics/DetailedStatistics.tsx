@@ -62,7 +62,7 @@ import {
     getCalendarDayRangeUnix,            // Date + startHour → {day_start, day_end} unix
 } from "../../utils.ts";
 
-type Tab = "dailyAvg" | "total" | "trend";
+export type StatisticsTab = "dailyAvg" | "total" | "trend";
 
 const TREND_CHART_PREFS_KEY = "time-tracker:detailed-stats:trend-prefs";
 
@@ -87,7 +87,7 @@ function parseTrendChartPrefs(raw: string | null): Partial<TrendChartPrefs> {
         if (o.seriesMode === "categories" || o.seriesMode === "topApps") {
             out.seriesMode = o.seriesMode;
         }
-        if ([3, 5, 10, 15, 20].includes(Number(o.topAppCount))) {
+        if ([3, 4, 5, 6, 7, 8, 9].includes(Number(o.topAppCount))) {
             out.topAppCount = Number(o.topAppCount);
         }
         return out;
@@ -161,9 +161,10 @@ function formatCalendarSpanSinceFirstActiveDay(firstActiveDayUnix: number): stri
  * DetailedStatistics — default export; main screen component.
  * @param onBack — callback when user clicks "← Back" (parent handles navigation)
  */
-export default function DetailedStatistics({onBack}: { onBack: () => void }) {
-    // Which of the three tabs is selected; default Daily Avg
-    const [activeTab, setActiveTab] = useState<Tab>("dailyAvg");
+export default function DetailedStatistics({onBack, activeTab}: {
+    onBack: () => void;
+    activeTab: StatisticsTab;
+}) {
     const [trendValueMode, setTrendValueMode] = useState<TrendValueMode>("total");
     const [trendShowTotalLine, setTrendShowTotalLine] = useState(true);
     const [trendSeriesMode, setTrendSeriesMode] = useState<TrendSeriesMode>("categories");
@@ -655,29 +656,9 @@ export default function DetailedStatistics({onBack}: { onBack: () => void }) {
                     <div className="w-20"></div>
                 </div>
 
-                {/* Tab buttons + date range picker row */}
+                {/* Chart options and date range picker row */}
                 <div
                     className={`flex flex-wrap items-center gap-3 ${activeTab === "trend" ? "mb-4 shrink-0" : "mb-6"}`}>
-                    <div className="flex gap-1 bg-gray-800 rounded-lg p-1 shrink-0">
-                        <button
-                            onClick={() => setActiveTab("dailyAvg")}
-                            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === "dailyAvg" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"}`}
-                        >
-                            Daily Avg
-                        </button>
-                        <button
-                            onClick={() => setActiveTab("total")}
-                            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === "total" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"}`}
-                        >
-                            Total
-                        </button>
-                        <button
-                            onClick={() => setActiveTab("trend")}
-                            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === "trend" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"}`}
-                        >
-                            Trend
-                        </button>
-                    </div>
                     <div className="ml-auto flex flex-wrap items-center justify-end gap-2 shrink-0">
                         {trendToolbar}
                         {hasDateRange ? (

@@ -1,5 +1,6 @@
 ﻿import {afterEach, describe, expect, it, vi} from "vitest";
 import {buildSeries, buildTopAppSeries} from "./trendModel.ts";
+import {beforeEach} from "vitest";
 import type {TrendWeekStatistics} from "../../api/statistics.ts";
 
 const start = Math.floor(new Date(2026, 8, 14, 4).getTime() / 1000);
@@ -11,6 +12,10 @@ function stats(categories: Record<string, number>, apps: Record<string, number> 
         all_apps: Object.entries(apps).map(([app, total_duration]) => ({app, total_duration, app_names: [app + " title"], percentage_change: null})),
     };
 }
+beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 10, 12));
+});
 afterEach(() => vi.useRealTimers());
 
 describe("compact trend chart model", () => {
@@ -38,6 +43,22 @@ describe("compact trend chart model", () => {
         const model = buildSeries(weeks, [stats({Work: 700}), stats({Work: 1400}), stats({Work: 900})], "avg", 4);
         expect(model.series[0].values).toEqual([100, 200, 300]);
         expect(model.totalLineValues).toEqual([100, 200, 300]);
+    });
+
+    it.each([buildSeries, buildTopAppSeries])("normalizes incomplete weeks so weekly values are seven times daily values", (build) => {
+        vi.setSystemTime(new Date(2026, 8, 30, 3)); // Before the 4am boundary: two tracked days.
+        const data = [stats({Work: 701}, {A: 701}), stats({Work: 1401}, {A: 1401}), stats({Work: 901}, {A: 901})];
+        const daily = build(weeks, data, "avg", 4, 1);
+        const weekly = build(weeks, data, "total", 4, 1);
+        expect(daily.series[0].values[2]).toBe(450.5);
+        expect(weekly.series[0].values[0]).toBe(701);
+        expect(weekly.series[0].values[2]).toBe(3153.5);
+        weekly.series[0].values.forEach((value, index) => {
+            expect(value).toBeCloseTo(daily.series[0].values[index]! * 7);
+        });
+        weekly.totalLineValues.forEach((value, index) => {
+            expect(value).toBeCloseTo(daily.totalLineValues[index] * 7);
+        });
     });
 
     it("does not mutate backend app order or data when selecting top apps", () => {

@@ -32,6 +32,9 @@ function countDaysInTrackedWeekPeriod(
 }
 
 const weekLabelFormatter = new Intl.DateTimeFormat("en-US", {month: "short", day: "numeric"});
+function normalizeWeekValue(duration: number, dayCount: number, mode: TrendValueMode): number {
+    return mode === "avg" ? duration / dayCount : duration * (7 / dayCount);
+}
 function formatWeekLabel(weekStartUnix: number): string {
     return weekLabelFormatter.format(new Date(weekStartUnix * 1000));
 }
@@ -59,20 +62,12 @@ export function buildSeries(
 
     weeks.forEach((weekRange, weekIdx) => {
         const stats = weekStats[weekIdx];
-        const dayCount =
-            mode === "avg"
-                ? countDaysInTrackedWeekPeriod(
-                      weekRange.week_start,
-                      weekRange.week_end,
-                      calendarStartHour
-                  )
-                : 1;
+        const dayCount = countDaysInTrackedWeekPeriod(
+            weekRange.week_start, weekRange.week_end, calendarStartHour
+        );
 
         for (const cat of stats?.categories ?? []) {
-            const value =
-                mode === "avg"
-                    ? Math.floor(cat.total_duration / dayCount)
-                    : cat.total_duration;
+            const value = normalizeWeekValue(cat.total_duration, dayCount, mode);
             const existing = categoryMeta.get(cat.category);
             if (existing) {
                 existing.values[weekIdx] = value;
@@ -98,13 +93,12 @@ export function buildSeries(
 
     const totalLineValues = weeks.map((weekRange, weekIdx) => {
         const weekTotal = weekStats[weekIdx]?.total_time ?? 0;
-        if (mode === "total") return weekTotal;
         const dayCount = countDaysInTrackedWeekPeriod(
             weekRange.week_start,
             weekRange.week_end,
             calendarStartHour
         );
-        return Math.floor(weekTotal / dayCount);
+        return normalizeWeekValue(weekTotal, dayCount, mode);
     });
 
     return {columns, series, totalLineValues};
@@ -143,14 +137,9 @@ export function buildTopAppSeries(
     const appValues = new Map<string, Array<number | null>>();
 
     weeks.forEach((weekRange, weekIdx) => {
-        const dayCount =
-            mode === "avg"
-                ? countDaysInTrackedWeekPeriod(
-                      weekRange.week_start,
-                      weekRange.week_end,
-                      calendarStartHour
-                  )
-                : 1;
+        const dayCount = countDaysInTrackedWeekPeriod(
+            weekRange.week_start, weekRange.week_end, calendarStartHour
+        );
 
         const topAppsThisWeek = selectTopApps(weekStats[weekIdx]?.all_apps ?? [], topAppCount);
 
@@ -158,8 +147,7 @@ export function buildTopAppSeries(
             // Null means this app was not in this week's top list. The chart keeps
             // the point absent but connects repeat appearances with a dotted line.
             const values = appValues.get(app.app) ?? new Array(weeks.length).fill(null);
-            values[weekIdx] =
-                mode === "avg" ? Math.floor(app.total_duration / dayCount) : app.total_duration;
+            values[weekIdx] = normalizeWeekValue(app.total_duration, dayCount, mode);
             appValues.set(app.app, values);
         }
     });
@@ -171,14 +159,10 @@ export function buildTopAppSeries(
 
     const totalLineValues = weeks.map((weekRange, weekIdx) => {
         const weekTotal = weekStats[weekIdx]?.total_time ?? 0;
-        if (mode === "total") return weekTotal;
-        return Math.floor(
-            weekTotal /
-                countDaysInTrackedWeekPeriod(
-                    weekRange.week_start,
-                    weekRange.week_end,
-                    calendarStartHour
-                )
+        return normalizeWeekValue(
+            weekTotal,
+            countDaysInTrackedWeekPeriod(weekRange.week_start, weekRange.week_end, calendarStartHour),
+            mode
         );
     });
 

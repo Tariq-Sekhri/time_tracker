@@ -11,7 +11,7 @@ import Calendar from "./Screens/Calander/Calendar.tsx";
 import CategoriesView from "./Screens/CategoriesView.tsx";
 import CategoryRegexView from "./Screens/CategoryRegexView.tsx";
 import SkippedAppsView from "./Screens/SkippedAppsView.tsx";
-import DetailedStatistics from "./Screens/DetailedStatistics/DetailedStatistics.tsx";
+import DetailedStatistics, {type StatisticsTab} from "./Screens/DetailedStatistics/DetailedStatistics.tsx";
 import Header from "./Componants/Header.tsx";
 import GoogleCalendarsView from "./Screens/GoogleCalendarsView.tsx";
 import Settings from "./Screens/Settings.tsx";
@@ -42,6 +42,7 @@ function AppInner() {
     const syncTimer = useSyncTimer();
     const {data: notesState} = useQuery({queryKey: ["notes"], queryFn: getNotesState});
     const [currentView, setCurrentView] = useState<View>("calendar");
+    const [statisticsTab, setStatisticsTab] = useState<StatisticsTab>("dailyAvg");
     useEffect(() => {
         const storageKey = "time-tracker:ui-zoom";
         const minZoom = 0.7;
@@ -316,7 +317,8 @@ function AppInner() {
 
     return (
         <main className="bg-black text-white h-screen flex flex-col">
-            <Header currentView={currentView} setCurrentView={handleSetCurrentView} notesEnabled={notesState?.enabled ?? false}/>
+            <Header currentView={currentView} setCurrentView={handleSetCurrentView} notesEnabled={notesState?.enabled ?? false}
+                statisticsTab={statisticsTab} onStatisticsTabChange={setStatisticsTab}/>
 
             {updateAvailable && (
                 <div className="border-b border-gray-700 bg-gray-900 px-4 py-3 flex items-center gap-3">
@@ -357,6 +359,7 @@ function AppInner() {
                 {currentView === "skipped" && <SkippedAppsView/>}
                 {currentView === "detailed" && (<DetailedStatistics
                         onBack={() => setCurrentView("calendar")}
+                        activeTab={statisticsTab}
                     />
                 )}
                 {currentView === "settings" && <Settings/>}

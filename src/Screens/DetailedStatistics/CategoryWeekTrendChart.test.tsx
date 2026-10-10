@@ -40,6 +40,7 @@ describe("trend rendering", () => {
         rerender(<CategoryWeekTrendChart {...props} />);
         expect(buildSeries).toHaveBeenCalledTimes(1);
         rerender(<CategoryWeekTrendChart {...props} valueMode="avg" />);
-        expect(buildSeries).toHaveBeenCalledTimes(2);
+        expect(buildSeries).toHaveBeenCalledTimes(1);
+        expect(buildSeries).toHaveBeenCalledWith(props.weeks, props.weekStats, "avg", 4);
     });
 });

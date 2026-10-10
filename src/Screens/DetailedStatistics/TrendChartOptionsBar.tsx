@@ -88,7 +88,7 @@ export default function TrendChartOptionsBar({
                             className="h-8 bg-gray-900 border border-gray-700 rounded px-2 text-sm text-gray-200 cursor-pointer"
                             aria-label="Number of top apps to show"
                         >
-                            {[3, 5, 10, 15, 20].map((count) => (
+                            {[3, 4, 5, 6, 7, 8, 9].map((count) => (
                                 <option key={count} value={count}>Top {count}</option>
                             ))}
                         </select>
