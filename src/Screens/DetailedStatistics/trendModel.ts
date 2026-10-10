@@ -1,6 +1,6 @@
 import type {AppStat, TrendWeekStatistics} from "../../api/statistics.ts";
 import {adjustInstantToCalendarDayBoundary} from "../../utils.ts";
-import type {WeekTrendColumn, CategoryWeekSeries, TrendValueMode} from "./CategoryWeekTrendChart.tsx";
+import type {WeekTrendColumn, CategoryWeekSeries, TrendValueMode, TrendAppRanking} from "./CategoryWeekTrendChart.tsx";
 const APP_LINE_COLORS = ["#60a5fa","#f472b6","#34d399","#fbbf24","#a78bfa","#fb923c","#22d3ee","#f87171","#a3e635","#c084fc"];
 function countDaysInTrackedWeekPeriod(
     weekStartUnix: number,
@@ -105,9 +105,9 @@ export function buildSeries(
 }
 
 /** Select a small top list without sorting/copying every app. Equal durations retain backend order. */
-function selectTopApps(apps: AppStat[], count: number): AppStat[] {
+function selectTopApps<T extends Pick<AppStat, "app" | "total_duration">>(apps: T[], count: number): T[] {
     if (count <= 0) return [];
-    const top: AppStat[] = [];
+    const top: T[] = [];
     for (const app of apps) {
         if (top.length === count && app.total_duration <= top[top.length - 1].total_duration) continue;
         let low = 0;
@@ -128,20 +128,39 @@ export function buildTopAppSeries(
     weekStats: (TrendWeekStatistics | undefined)[],
     mode: TrendValueMode,
     calendarStartHour: number,
-    topAppCount: number
+    topAppCount: number,
+    appRanking: TrendAppRanking = "weekly"
 ): { columns: WeekTrendColumn[]; series: CategoryWeekSeries[]; totalLineValues: number[] } {
     const columns: WeekTrendColumn[] = weeks.map((w) => ({
         week_start: w.week_start,
         label: formatWeekLabel(w.week_start),
     }));
     const appValues = new Map<string, Array<number | null>>();
+    const rangeTotals = new Map<string, number>();
+    if (appRanking === "range") {
+        weeks.forEach((_, index) => {
+            for (const app of weekStats[index]?.all_apps ?? []) {
+                rangeTotals.set(app.app, (rangeTotals.get(app.app) ?? 0) + app.total_duration);
+            }
+        });
+        const topApps = selectTopApps(
+            [...rangeTotals].map(([app, total_duration]) => ({app, total_duration})), topAppCount
+        );
+        for (const app of topApps) {
+            // A loaded week without this app is zero usage, not a ranking gap.
+            appValues.set(app.app, weeks.map((_, index) => weekStats[index] ? 0 : null));
+        }
+    }
 
     weeks.forEach((weekRange, weekIdx) => {
         const dayCount = countDaysInTrackedWeekPeriod(
             weekRange.week_start, weekRange.week_end, calendarStartHour
         );
 
-        const topAppsThisWeek = selectTopApps(weekStats[weekIdx]?.all_apps ?? [], topAppCount);
+        const apps = weekStats[weekIdx]?.all_apps ?? [];
+        const topAppsThisWeek = appRanking === "range"
+            ? apps.filter((app) => appValues.has(app.app))
+            : selectTopApps(apps, topAppCount);
 
         for (const app of topAppsThisWeek) {
             // Null means this app was not in this week's top list. The chart keeps
@@ -155,7 +174,9 @@ export function buildTopAppSeries(
     const series = Array.from(appValues.entries())
         .map(([category, values]) => ({category, color: colorForApp(category), values, total: values.reduce<number>((sum, value) => sum + (value ?? 0), 0)}))
         .filter((s) => s.values.some((v) => (v ?? 0) > 0))
-        .sort((a, b) => b.total - a.total);
+        .sort((a, b) => appRanking === "range"
+            ? (rangeTotals.get(b.category) ?? 0) - (rangeTotals.get(a.category) ?? 0)
+            : b.total - a.total);
 
     const totalLineValues = weeks.map((weekRange, weekIdx) => {
         const weekTotal = weekStats[weekIdx]?.total_time ?? 0;

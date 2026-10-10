@@ -67,6 +67,26 @@ describe("compact trend chart model", () => {
         buildTopAppSeries([weeks[0]], [data], "total", 4, 1);
         expect(JSON.stringify(data)).toBe(original);
     });
+    it("selects top apps by range totals and includes weeks below the weekly cutoff and zero-usage weeks", () => {
+        const data = [stats({Work: 200}, {A: 100, B: 90}), stats({Work: 200}, {B: 120, A: 10}), stats({Work: 200}, {A: 100, C: 150})];
+        const original = JSON.stringify(data);
+        const model = buildTopAppSeries(weeks, data, "total", 4, 2, "range");
+        expect(model.series.map(s => s.category)).toEqual(["A", "B"]);
+        expect(model.series[0].values).toEqual([100, 10, 100]);
+        expect(model.series[1].values).toEqual([90, 120, 0]);
+        expect(model.totalLineValues).toEqual([200, 200, 200]);
+        expect(JSON.stringify(data)).toBe(original);
+    });
+    it("ranks range apps by raw total time rather than normalized incomplete-week values", () => {
+        vi.setSystemTime(new Date(2026, 8, 28, 12));
+        const data = [stats({Work: 100}, {A: 100}), stats({Work: 100}, {A: 100}), stats({Work: 90}, {B: 90})];
+        const daily = buildTopAppSeries(weeks, data, "avg", 4, 1, "range");
+        const weekly = buildTopAppSeries(weeks, data, "total", 4, 1, "range");
+        expect(daily.series.map(s => s.category)).toEqual(["A"]);
+        expect(weekly.series.map(s => s.category)).toEqual(["A"]);
+        expect(weekly.series[0].values).toEqual([100, 100, 0]);
+        expect(weekly.totalLineValues[2]).toBe(630);
+    });
     it("preserves stable backend order for equal-duration apps at the cutoff", () => {
         const data = stats({Work: 100}, {first: 10, second: 10, third: 10, winner: 30});
         const model = buildTopAppSeries([weeks[0]], [data], "total", 4, 2);

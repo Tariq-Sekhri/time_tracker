@@ -105,7 +105,6 @@ export default function AppGroupsView() {
     return (
         <div className="p-6 text-white [color-scheme:dark]">
             <div className="flex items-center justify-between gap-4 mb-2">
-                <h1 className="text-3xl font-bold">App Groups</h1>
                 <button
                     onClick={() => void refetch()}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded"

@@ -46,7 +46,7 @@ import {useCalendarAppFilterActive} from "../../stores/calendarAppFilterStore.ts
 // Date range UI control; calendarDateFromUnix converts backend unix → Date for picker
 import StatisticsDateRangePicker, {calendarDateFromUnix} from "./StatisticsDateRangePicker.tsx";
 // Trend tab chart component (this file passes it weeks + fetched stats)
-import CategoryWeekTrendChart, {type TrendSeriesMode, type TrendValueMode} from "./CategoryWeekTrendChart.tsx";
+import CategoryWeekTrendChart, {type TrendSeriesMode, type TrendValueMode, type TrendAppRanking} from "./CategoryWeekTrendChart.tsx";
 import TrendChartOptionsBar, {STATS_TOOLBAR_CONTROL_HEIGHT} from "./TrendChartOptionsBar.tsx";
 
 const STATS_TOOLBAR_BUTTON = `${STATS_TOOLBAR_CONTROL_HEIGHT} px-3 bg-gray-800 border border-gray-700 rounded text-sm text-white gap-2`;
@@ -71,6 +71,7 @@ type TrendChartPrefs = {
     showTotalLine: boolean;
     seriesMode: TrendSeriesMode;
     topAppCount: number;
+    appRanking: TrendAppRanking;
 };
 
 function parseTrendChartPrefs(raw: string | null): Partial<TrendChartPrefs> {
@@ -89,6 +90,9 @@ function parseTrendChartPrefs(raw: string | null): Partial<TrendChartPrefs> {
         }
         if ([3, 4, 5, 6, 7, 8, 9].includes(Number(o.topAppCount))) {
             out.topAppCount = Number(o.topAppCount);
+        }
+        if (o.appRanking === "weekly" || o.appRanking === "range") {
+            out.appRanking = o.appRanking;
         }
         return out;
     } catch (error) {
@@ -169,6 +173,7 @@ export default function DetailedStatistics({onBack, activeTab}: {
     const [trendShowTotalLine, setTrendShowTotalLine] = useState(true);
     const [trendSeriesMode, setTrendSeriesMode] = useState<TrendSeriesMode>("categories");
     const [trendTopAppCount, setTrendTopAppCount] = useState(5);
+    const [trendAppRanking, setTrendAppRanking] = useState<TrendAppRanking>("weekly");
     const trendPrefsHydrated = useRef(false);
     // How category/sidebar rows show values: % or duration (type includes "count" but UI only has % and Time)
     const [displayMode, setDisplayMode] = useState<"percentage" | "time" | "count">("time");
@@ -226,6 +231,7 @@ export default function DetailedStatistics({onBack, activeTab}: {
                 if (prefs.showTotalLine !== undefined) setTrendShowTotalLine(prefs.showTotalLine);
                 if (prefs.seriesMode) setTrendSeriesMode(prefs.seriesMode);
                 if (prefs.topAppCount) setTrendTopAppCount(prefs.topAppCount);
+                if (prefs.appRanking) setTrendAppRanking(prefs.appRanking);
             })
             .catch(() => {})
             .finally(() => {
@@ -240,9 +246,10 @@ export default function DetailedStatistics({onBack, activeTab}: {
             showTotalLine: trendShowTotalLine,
             seriesMode: trendSeriesMode,
             topAppCount: trendTopAppCount,
+            appRanking: trendAppRanking,
         };
         setAppMetadata(TREND_CHART_PREFS_KEY, JSON.stringify(prefs)).catch(() => {});
-    }, [trendValueMode, trendShowTotalLine, trendSeriesMode, trendTopAppCount]);
+    }, [trendValueMode, trendShowTotalLine, trendSeriesMode, trendTopAppCount, trendAppRanking]);
 
     useEffect(() => {
         if (activeTab !== "trend" || trendSeriesMode !== "categories") {
@@ -614,6 +621,8 @@ export default function DetailedStatistics({onBack, activeTab}: {
                     onSeriesModeChange={setTrendSeriesMode}
                     topAppCount={trendTopAppCount}
                     onTopAppCountChange={setTrendTopAppCount}
+                    appRanking={trendAppRanking}
+                    onAppRankingChange={setTrendAppRanking}
                 />
                 {trendSeriesMode === "categories" && (
                     <FilterCategories
@@ -643,7 +652,7 @@ export default function DetailedStatistics({onBack, activeTab}: {
                     activeTab === "trend" ? "flex flex-col overflow-hidden" : "overflow-y-auto nice-scrollbar"
                 }`}
             >
-                {/* Header row: Back | Title | spacer for centering */}
+                {/* Back navigation */}
                 <div
                     className={`flex items-center justify-between ${activeTab === "trend" ? "mb-4 shrink-0" : "mb-6"}`}>
                     <button
@@ -652,8 +661,6 @@ export default function DetailedStatistics({onBack, activeTab}: {
                     >
                         ← Back
                     </button>
-                    <h1 className="text-2xl font-bold">Detailed Statistics</h1>
-                    <div className="w-20"></div>
                 </div>
 
                 {/* Chart options and date range picker row */}
@@ -712,6 +719,7 @@ export default function DetailedStatistics({onBack, activeTab}: {
                             visibleCategoryNames={trendVisibleCategoryNames}
                             seriesMode={trendSeriesMode}
                             topAppCount={trendTopAppCount}
+                            appRanking={trendAppRanking}
                             calendarStartHour={calendarStartHour}
                             valueMode={trendValueMode}
                             showTotalLine={trendShowTotalLine}

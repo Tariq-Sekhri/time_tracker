@@ -175,7 +175,6 @@ export default function SkippedAppsView() {
     return (
         <div className="p-6 text-white">
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold">Skipped Apps</h1>
                 <button
                     onClick={handleRefresh}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded flex items-center gap-2"

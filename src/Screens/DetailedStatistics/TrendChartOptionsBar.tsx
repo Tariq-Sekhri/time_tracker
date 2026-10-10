@@ -1,4 +1,4 @@
-import type {TrendSeriesMode, TrendValueMode} from "./CategoryWeekTrendChart.tsx";
+import type {TrendSeriesMode, TrendValueMode, TrendAppRanking} from "./CategoryWeekTrendChart.tsx";
 
 export const STATS_TOOLBAR_CONTROL_HEIGHT =
     "h-10 min-h-10 flex items-center shrink-0";
@@ -11,6 +11,8 @@ type TrendChartOptionsBarProps = {    valueMode: TrendValueMode;
     onSeriesModeChange: (mode: TrendSeriesMode) => void;
     topAppCount: number;
     onTopAppCountChange: (count: number) => void;
+    appRanking: TrendAppRanking;
+    onAppRankingChange: (ranking: TrendAppRanking) => void;
 };
 
 export default function TrendChartOptionsBar({
@@ -22,10 +24,12 @@ export default function TrendChartOptionsBar({
                                                onSeriesModeChange,
                                                topAppCount,
                                                onTopAppCountChange,
+                                               appRanking,
+                                               onAppRankingChange,
                                            }: TrendChartOptionsBarProps) {
     return (
         <div
-            className={`${STATS_TOOLBAR_CONTROL_HEIGHT} flex-wrap gap-3 px-3 bg-gray-800 border border-gray-700 rounded`}
+            className="min-h-10 flex items-center shrink-0 flex-wrap gap-3 px-3 py-1 bg-gray-800 border border-gray-700 rounded"
         >
             <div className="flex flex-wrap items-center gap-3">
                 <span className="text-sm text-gray-400 shrink-0">Values</span>
@@ -80,6 +84,20 @@ export default function TrendChartOptionsBar({
                     </button>
                 </div>
                 {seriesMode === "topApps" && (
+                    <>
+                    <div className="flex p-0.5 bg-gray-900 rounded border border-gray-700" role="group" aria-label="Rank top apps by">
+                        {(["weekly", "range"] as const).map((ranking) => (
+                            <button
+                                key={ranking}
+                                type="button"
+                                aria-pressed={appRanking === ranking}
+                                onClick={() => onAppRankingChange(ranking)}
+                                className={`px-2 py-1 text-sm rounded transition-colors ${appRanking === ranking ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"}`}
+                            >
+                                {ranking === "weekly" ? "Each week" : "Range total"}
+                            </button>
+                        ))}
+                    </div>
                     <label className="flex items-center gap-2">
                         <span className="text-sm text-gray-400">Count</span>
                         <select
@@ -93,6 +111,7 @@ export default function TrendChartOptionsBar({
                             ))}
                         </select>
                     </label>
+                    </>
                 )}
             </div>
         </div>

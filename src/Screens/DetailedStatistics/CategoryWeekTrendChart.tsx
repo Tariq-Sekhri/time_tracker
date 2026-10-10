@@ -28,6 +28,7 @@ export type CategoryWeekSeries = {
 
 export type TrendValueMode = "avg" | "total";
 export type TrendSeriesMode = "categories" | "topApps";
+export type TrendAppRanking = "weekly" | "range";
 
 const PX_PER_WEEK = 52;
 const TOTAL_WEEK_DATA_KEY = "__week_total__";
@@ -76,6 +77,7 @@ type CategoryWeekTrendChartProps = {
     visibleCategoryNames: Set<string>;
     seriesMode: TrendSeriesMode;
     topAppCount: number;
+    appRanking?: TrendAppRanking;
     calendarStartHour: number;
     valueMode: TrendValueMode;
     showTotalLine: boolean;
@@ -89,6 +91,7 @@ function CategoryWeekTrendChart({
                                                    visibleCategoryNames,
                                                    seriesMode,
                                                    topAppCount,
+                                                   appRanking = "weekly",
                                                    calendarStartHour,
                                                    valueMode,
                                                    showTotalLine,
@@ -97,10 +100,10 @@ function CategoryWeekTrendChart({
     const {columns, series: allSeries, totalLineValues} = useMemo(
         () => measure(`trend.build_${seriesMode}`, () =>
             seriesMode === "topApps"
-                ? buildTopAppSeries(weeks, weekStats, "avg", calendarStartHour, topAppCount)
+                ? buildTopAppSeries(weeks, weekStats, "avg", calendarStartHour, topAppCount, appRanking)
                 : buildSeries(weeks, weekStats, "avg", calendarStartHour),
             (r) => ({weeks: weeks.length, loaded: weekStats.filter(Boolean).length, series: r.series.length})),
-        [weeks, weekStats, calendarStartHour, seriesMode, topAppCount]
+        [weeks, weekStats, calendarStartHour, seriesMode, topAppCount, appRanking]
     );
 
     // The batched query and category filter both keep stable references across unrelated renders.
@@ -116,7 +119,7 @@ function CategoryWeekTrendChart({
     const hasTotalLineData = totalLineValues.some((v) => v > 0);
 
     const topAppGapBridges = useMemo<TrendGapBridge[]>(() => measure("trend.gap_bridges", () => {
-        if (seriesMode !== "topApps") return [];
+        if (seriesMode !== "topApps" || appRanking !== "weekly") return [];
 
         return series.flatMap((s) => {
             const bridges: TrendGapBridge[] = [];
@@ -139,7 +142,7 @@ function CategoryWeekTrendChart({
 
             return bridges;
         });
-    }, (r) => ({bridges: r.length})), [series, seriesMode]);
+    }, (r) => ({bridges: r.length})), [series, seriesMode, appRanking]);
 
     const chartData: ChartRow[] = useMemo(() => measure("trend.chart_data", () => {
         return columns.map((col, i) => {
@@ -169,7 +172,9 @@ function CategoryWeekTrendChart({
               : "Week totals, normalized to 7 days for incomplete weeks.";
     const seriesDescription =
         seriesMode === "topApps"
-            ? ` Showing the top ${topAppCount} apps in each week; solid lines join consecutive appearances, while dotted lines bridge weeks where an app was outside the top ${topAppCount}.`
+            ? appRanking === "range"
+                ? ` Showing the top ${topAppCount} apps by total time across the selected range, with every week included.`
+                : ` Showing the top ${topAppCount} apps in each week; solid lines join consecutive appearances, while dotted lines bridge weeks where an app was outside the top ${topAppCount}.`
             : "";
 
     if (error) return <div role="alert" className="p-4 text-sm text-red-400">{error}</div>;
