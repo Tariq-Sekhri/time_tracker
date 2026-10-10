@@ -24,8 +24,7 @@ import { useToast } from "../../Componants/Toast.tsx";
 import { getAppMetadata, setAppMetadata } from "../../api/appMetadata.ts";
 import { useCalendarAppFilterActive } from "../../stores/calendarAppFilterStore.ts";
 import { useBackendSettings } from "../../hooks/useBackendSettings.ts";
-import CalendarSourceToggles, { CalendarTogglePills } from "./CalendarSourceToggles.tsx";
-import LeftSideBar, { LeftSidebarPicker, SidebarSection, useLeftSidebarUi } from "./LeftSideBar.tsx";
+import LeftSideBar, { SidebarSection } from "./LeftSideBar.tsx";
 import { Device } from "../../api/sync.ts";
 import {get_manual_time_blocks, MANUAL_TIME_COLOR} from "../../api/ManualTimeBlock.ts";
 
@@ -120,7 +119,6 @@ export default function RenderCalendarContent({
     const calendarHostRef = useRef<HTMLDivElement>(null);
     const [isRelogging, setIsRelogging] = useState(false);
     const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
-    const [leftSidebarUi, setLeftSidebarUi] = useLeftSidebarUi();
 
     const { calendarStartHour, calendarHeight, timeBlockSettings } = useBackendSettings();
     const calendarAppFilter = useCalendarAppFilterActive();
@@ -557,7 +555,7 @@ export default function RenderCalendarContent({
         },
     );
 
-    // Every source the new left sidebar lists, with its week / stats / isolate toggles.
+    // Every source the left sidebar lists, with its week / stats / isolate toggles.
     const sidebarSections: SidebarSection[] = [
         {
             key: "categories",
@@ -571,6 +569,7 @@ export default function RenderCalendarContent({
             items: categories.map((category) => ({
                 key: String(category.id),
                 name: category.name,
+                priority: category.priority,
                 color: getCategoryColor(category.name, categoryColorMap.get(category.name)),
                 inCal: isolation.category !== null ? isolation.category === category.id : category.is_visible,
                 inStats: isolation.category !== null ? isolation.category === category.id : category.in_stats,
@@ -646,7 +645,6 @@ export default function RenderCalendarContent({
 
     return (
         <div className="flex flex-1 overflow-hidden h-full min-h-0 flex flex-col">
-            <LeftSidebarPicker ui={leftSidebarUi} onChange={setLeftSidebarUi}/>
             {isAuthExpired && (
                 <div className="flex-shrink-0 px-4 py-2 bg-red-900/50 border-b border-red-700/50 text-red-200 text-sm flex items-center justify-between">
                     <span>Google Calendar session expired. Re-connect to see your events.</span>
@@ -667,163 +665,8 @@ export default function RenderCalendarContent({
                 </div>
             )}
             <div className="flex flex-1 overflow-hidden min-h-0">
-                {leftSidebarUi === "1" ? (
-                    <LeftSideBar sections={sidebarSections}
-                                 collapsed={isLeftCollapsed} onToggleCollapsed={() => setIsLeftCollapsed((v) => !v)}/>
-                ) : (
-                    <div
-                        className={`border-r border-gray-700 bg-black overflow-y-auto overflow-x-hidden nice-scrollbar flex-shrink-0 transition-all duration-200 ease-in-out ${isLeftCollapsed ? "w-16 p-2" : "w-64 p-4"}`}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className={`text-lg font-semibold text-white ${isLeftCollapsed ? "hidden" : ""}`}>
-                                Sources
-                            </h3>
-                            <button
-                                type="button"
-                                onClick={() => setIsLeftCollapsed((v) => !v)}
-                                className="shrink-0 px-2 py-1 text-sm bg-gray-800 hover:bg-gray-700 text-white rounded transition-colors"
-                                aria-label={isLeftCollapsed ? "Expand filter sidebar" : "Collapse filter sidebar"}
-                            >
-                                {isLeftCollapsed ? "»" : "«"}
-                            </button>
-                        </div>
-                        <div className="mb-4">
-                            <h4 className={`text-sm font-semibold text-gray-300 mb-2 ${isLeftCollapsed ? "hidden" : ""}`}>
-                                Categories
-                            </h4>
-                            <CalendarTogglePills
-                                inCal={isolation.category === null && allCategoriesInCal}
-                                inStats={allCategoriesInStats}
-                                onToggleCal={toggleAllCategoriesVisible}
-                                onToggleStats={toggleAllCategoriesInStats}
-                                isLeftCollapsed={isLeftCollapsed}
-                                fullWidth
-                            />
-                            <div className={`space-y-1 mt-2 ${isLeftCollapsed ? "space-y-0 mt-0" : ""}`}>
-                                {categories.map((category) => {
-                                    const dbColor = categoryColorMap.get(category.name);
-                                    const color = getCategoryColor(category.name, dbColor);
-                                    return (
-                                        <CalendarSourceToggles
-                                            key={category.id}
-                                            name={category.name}
-                                            color={color}
-                                            inCal={isolation.category !== null ? isolation.category === category.id : category.is_visible}
-                                            isolated={isolation.category === category.id}
-                                            onToggleIsolate={() => isolation.toggleCategory(category.id)}
-                                            inStats={isolation.category !== null ? isolation.category === category.id : category.in_stats}
-                                            onToggleCal={() => toggleCategoryVisible(category.id)}
-                                            onToggleStats={() => toggleCategoryInStats(category.id)}
-                                            isLeftCollapsed={isLeftCollapsed}
-                                        />
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        {calendarDevices.length > 0 ? (
-                            <>
-                                <div className="border-t border-gray-700 my-4" />
-                                <div className="mb-4">
-                                    <h4 className={`text-sm font-semibold text-gray-300 mb-2 ${isLeftCollapsed ? "hidden" : ""}`}>
-                                        Devices
-                                    </h4>
-                                    <div className={`space-y-0.5 ${isLeftCollapsed ? "space-y-0" : ""}`}>
-                                        {calendarDevices.map((device) => (
-                                            <CalendarSourceToggles
-                                                key={device.uuid}
-                                                name={device.name}
-                                                color="#6b7280"
-                                                inCal={isolation.device !== null ? isolation.device === device.uuid : device.in_cal}
-                                                isolated={isolation.device === device.uuid}
-                                                onToggleIsolate={() => isolation.toggleDevice(device.uuid)}
-                                                inStats={isolation.device !== null ? isolation.device === device.uuid : device.in_stats}
-                                                onToggleCal={() => toggleDeviceInCal(device.uuid)}
-                                                onToggleStats={() => toggleDeviceInStats(device.uuid)}
-                                                isLeftCollapsed={isLeftCollapsed}
-                                            />
-                                        ))}
-                                    </div>
-                                </div>
-                            </>
-                        ) : null}
-
-                        <div className="border-t border-gray-700 my-4" />
-
-                        <div className="mb-4">
-                            <h4 className={`text-sm font-semibold text-gray-300 mb-2 ${isLeftCollapsed ? "hidden" : ""}`}>
-                                Manual tracking
-                            </h4>
-                            <fieldset disabled={!manualProjectFiltersLoaded} aria-label="All manual tracking" className="mb-2">
-                                <CalendarTogglePills
-                                    inCal={manualSourceIds.every(isManualTimeInCal)}
-                                    inStats={manualSourceIds.every(isManualTimeInStats)}
-                                    onToggleCal={() => toggleAllManualTimeInCal(manualSourceIds)}
-                                    onToggleStats={() => toggleAllManualTimeInStats(manualSourceIds)}
-                                    isLeftCollapsed={isLeftCollapsed}
-                                />
-                            </fieldset>
-                            <div className="space-y-0.5">
-                                {manualSources.map((project) => (
-                                    <fieldset disabled={!manualProjectFiltersLoaded} key={project.id ?? "none"} aria-label={project.name} title={isLeftCollapsed ? project.name : undefined}>
-                                        <CalendarSourceToggles
-                                            name={project.name}
-                                            isolated={isolatedProject?.id === project.id}
-                                            onToggleIsolate={() => toggleIsolateProject(project.id)}
-                                            color={MANUAL_TIME_COLOR}
-                                            inCal={isManualTimeInCal(project.id)}
-                                            inStats={isManualTimeInStats(project.id)}
-                                            onToggleCal={() => toggleManualTimeInCal(project.id)}
-                                            onToggleStats={() => toggleManualTimeInStats(project.id)}
-                                            isLeftCollapsed={isLeftCollapsed}
-                                        />
-                                    </fieldset>
-                                ))}
-                                {manualProjectsError && !isLeftCollapsed && <p className="text-xs text-red-400">Couldn't load projects</p>}
-                            </div>
-                        </div>
-
-                        <div className="border-t border-gray-700 my-4" />
-
-                        <div className="mb-4">
-                            <div className="flex items-center justify-between mb-2">
-                                <h4 className={`text-sm font-semibold text-gray-300 ${isLeftCollapsed ? "hidden" : ""}`}>
-                                    Google Calendars
-                                </h4>
-                            </div>
-                            <fieldset disabled={googleCalendars.length === 0} aria-label="All Google calendars" className="mb-2">
-                                <CalendarTogglePills
-                                    inCal={isolation.calendar === null && googleCalendars.length > 0 && googleCalendars.every((calendar) => calendar.is_visible)}
-                                    inStats={isolation.calendar === null && includeGoogleInStats && googleCalendars.length > 0 && googleCalendars.every((calendar) => calendar.in_stats)}
-                                    onToggleCal={toggleAllGoogleCalendarsInCal}
-                                    onToggleStats={toggleAllGoogleCalendarsInStats}
-                                    isLeftCollapsed={isLeftCollapsed}
-                                />
-                            </fieldset>
-
-                            <div className={`space-y-0.5 ${isLeftCollapsed ? "space-y-0" : ""}`}>
-                                {googleCalendars.map((calendar) => (
-                                    <CalendarSourceToggles
-                                        key={calendar.id}
-                                        name={calendar.name}
-                                        color={calendar.color}
-                                        inCal={isCalendarVisible(calendar.id)}
-                                        isolated={isolation.calendar === calendar.id}
-                                        onToggleIsolate={() => isolation.toggleCalendar(calendar.id)}
-                                        inStats={isolation.calendar !== null ? isolation.calendar === calendar.id : calendar.in_stats}
-                                        onToggleCal={() => toggleCalendarVisible(calendar.id)}
-                                        onToggleStats={() => toggleCalendarInStats(calendar.id)}
-                                        isLeftCollapsed={isLeftCollapsed}
-                                    />
-                                ))}
-                                {googleCalendars.length === 0 && !isLeftCollapsed ? (
-                                    <p className="text-sm text-gray-500">No calendars added</p>
-                                ) : null}
-                            </div>
-                        </div>
-                    </div>
-                )}
+                <LeftSideBar sections={sidebarSections}
+                             collapsed={isLeftCollapsed} onToggleCollapsed={() => setIsLeftCollapsed((v) => !v)}/>
                 <div
                     ref={calendarHostRef}
                     className="calendar-fc-host flex-1 h-full min-h-0 min-w-0 overflow-hidden"

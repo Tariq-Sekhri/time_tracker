@@ -1,57 +1,11 @@
 /**
- * The calendar's left "Sources" sidebar, in whichever candidate design is selected.
+ * The calendar's left "Sources" sidebar: one row per category, device, manual project
+ * and Google calendar, each with week-view and stats toggles drawn in its colour.
  *
- * Option 1 is the new design, rendered here from the `SidebarSection` model. Option 2 is
- * the original sidebar, still inline in RenderCalenderContent, kept for comparison. As
- * with Bramble's layout pickers, a dev build shows a picker and the choice persists in
- * localStorage; a packaged build always gets `DEFAULT_LEFT_SIDEBAR_UI`. Once the
- * comparison is done, option 2 and this switch should go.
+ * Chosen from a set of candidates compared live with Componants/DesignPicker.tsx.
  */
 
 import {useState, type ReactNode} from "react";
-
-export type LeftSidebarUi = "1" | "2";
-
-export const LEFT_SIDEBAR_UIS: readonly { id: LeftSidebarUi; hint: string }[] = [
-    {id: "1", hint: "Colour icons: week / stats icons in the source colour, click a row for both"},
-    {id: "2", hint: "Original: a card per source with Week / Stats pills"},
-];
-
-export const DEFAULT_LEFT_SIDEBAR_UI: LeftSidebarUi = "1";
-const KEY = "time-tracker:dev.left-sidebar-ui.v6";
-
-/** The selected layout, persisted across reloads in a dev build only. */
-export function useLeftSidebarUi(): [LeftSidebarUi, (ui: LeftSidebarUi) => void] {
-    const [ui, setUi] = useState<LeftSidebarUi>(() => {
-        if (!import.meta.env.DEV) return DEFAULT_LEFT_SIDEBAR_UI;
-        const saved = localStorage.getItem(KEY);
-        return LEFT_SIDEBAR_UIS.find((c) => c.id === saved)?.id ?? DEFAULT_LEFT_SIDEBAR_UI;
-    });
-    return [ui, (next) => {
-        localStorage.setItem(KEY, next);
-        setUi(next);
-    }];
-}
-
-/** Dev-only switch between the layouts, pinned bottom-left; renders nothing in a packaged build. */
-export function LeftSidebarPicker({ui, onChange}: { ui: LeftSidebarUi; onChange: (ui: LeftSidebarUi) => void }) {
-    if (!import.meta.env.DEV) return null;
-    return (
-        <div className="fixed bottom-3 left-3 z-50 flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-950/95 px-2 py-1 shadow-lg"
-             title="Dev only: which left sidebar layout to show" onClick={(e) => e.stopPropagation()}>
-            <span className="text-[10px] uppercase tracking-wider text-gray-500">sidebar</span>
-            <div className="flex gap-0.5" role="radiogroup" aria-label="Left sidebar layout">
-                {LEFT_SIDEBAR_UIS.map((c) => (
-                    <button key={c.id} type="button" role="radio" aria-checked={ui === c.id} title={c.hint}
-                            onClick={() => onChange(c.id)}
-                            className={`h-6 min-w-6 rounded px-1 text-xs font-medium transition-colors ${ui === c.id ? "bg-blue-600 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white"}`}>
-                        {c.id}
-                    </button>
-                ))}
-            </div>
-        </div>
-    );
-}
 
 export type SidebarToggleState = {
     inCal: boolean;
@@ -67,6 +21,8 @@ export type SidebarSource = SidebarToggleState & {
     color: string;
     isolated?: boolean;
     onToggleIsolate?: () => void;
+    /** Higher sorts first among sources in the same on/off group (categories only). */
+    priority?: number;
 };
 
 export type SidebarSection = {
@@ -164,6 +120,12 @@ function IsolateButton({source}: { source: SidebarSource }) {
     );
 }
 
+/** Sources shown in the week view first, then by priority; otherwise keeps the given order. */
+function sortSources(items: SidebarSource[]) {
+    return [...items].sort((a, b) =>
+        Number(b.inCal) - Number(a.inCal) || (b.priority ?? 0) - (a.priority ?? 0));
+}
+
 function onCount(items: SidebarSource[]) {
     return items.filter((s) => s.inCal).length;
 }
@@ -183,7 +145,7 @@ function CollapsedRail({sections, collapsed, onToggleCollapsed}: VariantProps) {
             {sections.map((section) => (
                 <div key={section.key} className="flex flex-col items-center gap-1.5 border-t border-gray-800 pt-3" title={section.title}>
                     <SectionIcon sectionKey={section.key} className="mb-0.5 h-3.5 w-3.5 text-gray-600"/>
-                    {section.items.map((source) => (
+                    {sortSources(section.items).map((source) => (
                         <button key={source.key} type="button" onClick={source.onToggleCal} disabled={source.disabled}
                                 title={`${source.name}${source.inCal ? "" : " (hidden)"}`} aria-pressed={source.inCal}
                                 className={`h-4 w-4 rounded-full transition-all hover:scale-125 ${source.isolated ? "ring-2 ring-blue-400 ring-offset-2 ring-offset-black" : ""}`}
@@ -195,7 +157,7 @@ function CollapsedRail({sections, collapsed, onToggleCollapsed}: VariantProps) {
     );
 }
 
-// ================================================================ option 1: colour checks
+// ---------------------------------------------------------------- expanded sidebar
 
 /** A week or stats toggle drawn as its icon: in the source's colour when on, dark grey and struck through when off. */
 function CheckCell({on, onClick, label, disabled, color, kind}: {
@@ -267,7 +229,7 @@ function ColourRow({source}: { source: SidebarSource }) {
     );
 }
 
-/** Option 1: colour icons, and section headers pinned while scrolling. */
+/** The expanded sidebar: colour icons, and section headers pinned while scrolling. */
 function ColourList({sections, collapsed, onToggleCollapsed}: VariantProps) {
     const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
     const toggleSection = (key: string) => setClosed((prev) => {
@@ -295,7 +257,7 @@ function ColourList({sections, collapsed, onToggleCollapsed}: VariantProps) {
                         <div key={section.key}>
                             <ColourSectionHeader section={section} open={open} onToggleOpen={() => toggleSection(section.key)}/>
                             {open && <div className="px-1 py-1">
-                                {section.items.map((source) => <ColourRow key={source.key} source={source}/>)}
+                                {sortSources(section.items).map((source) => <ColourRow key={source.key} source={source}/>)}
                                 <Notes section={section}/>
                             </div>}
                         </div>
