@@ -253,9 +253,9 @@ function ColourSectionHeader({section, open, onToggleOpen}: { section: SidebarSe
         <div className="sticky top-0 z-10 bg-black/95 px-1 pt-2 backdrop-blur">
             <div className="flex items-center gap-1 rounded-md py-0.5 pl-1 pr-1">
                 <button type="button" onClick={onToggleOpen} aria-expanded={open}
-                        className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-gray-400 hover:text-white">
+                        className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-gray-500 hover:text-gray-200">
                     <IconChevron open={open} className="h-3 w-3 shrink-0"/>
-                    <span className="truncate text-[11px] font-semibold uppercase tracking-wider">{section.title}</span>
+                    <span className="truncate text-xs font-medium">{section.title}</span>
                     <span className="text-[11px] tabular-nums text-gray-600">{onCount(section.items)}/{section.items.length}</span>
                 </button>
                 <span className="w-6"/>
@@ -303,7 +303,7 @@ function ColourList({sections, collapsed, onToggleCollapsed}: VariantProps) {
         <div className={`${shell} w-64`}>
             <div className="flex items-center gap-1 py-2 pl-2 pr-1">
                 <CollapseButton collapsed={collapsed} onClick={onToggleCollapsed}/>
-                <span className="flex-1 text-sm font-semibold text-white">Sources</span>
+                <span className="flex-1 text-xs font-medium text-gray-500">Sources</span>
             </div>
             <div className="pb-3">
                 {sections.map((section) => {
