@@ -13,7 +13,7 @@ import {useState, type ReactNode} from "react";
 export type LeftSidebarUi = "1" | "2";
 
 export const LEFT_SIDEBAR_UIS: readonly { id: LeftSidebarUi; hint: string }[] = [
-    {id: "1", hint: "Colour rows: rows washed in their colour, week / stats icons in it, click a row for both"},
+    {id: "1", hint: "Colour icons: week / stats icons in the source colour, click a row for both"},
     {id: "2", hint: "Minimal: names only; state and eye / stats / isolate controls show on hover"},
 ];
 
@@ -263,11 +263,10 @@ function ColourSectionHeader({section, open, onToggleOpen}: { section: SidebarSe
 }
 
 /**
- * A source row washed in its colour while visible. Clicking the row sets week and stats
+ * A source row; its colour shows only on its week and stats icons. Clicking the row sets week and stats
  * together: both off when both are on, otherwise both on.
  */
 function ColourRow({source}: { source: SidebarSource }) {
-    const wash = source.inCal;
     const bothOn = source.inCal && source.inStats;
     const toggleBoth = () => {
         if (source.disabled) return;
@@ -279,11 +278,7 @@ function ColourRow({source}: { source: SidebarSource }) {
              onClick={toggleBoth}
              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleBoth(); } }}
              title={bothOn ? "Click to hide in week view and stats" : "Click to show in week view and stats"}
-             className={`group relative mb-0.5 flex cursor-pointer items-center gap-2 rounded-md py-0.5 pl-2 pr-1 transition-[background-color,filter] ${source.isolated ? "ring-1 ring-inset ring-blue-400" : ""} ${wash ? "hover:brightness-125" : "hover:bg-white/[0.04]"} ${source.disabled ? "cursor-not-allowed opacity-50" : ""}`}
-             style={wash ? {
-                 backgroundColor: `color-mix(in srgb, ${source.color} 14%, transparent)`,
-                 boxShadow: `inset 3px 0 0 ${source.color}`,
-             } : undefined}>
+             className={`group relative mb-0.5 flex cursor-pointer items-center gap-2 rounded-md py-0.5 pl-2 pr-1 transition-colors hover:bg-white/[0.04] ${source.isolated ? "ring-1 ring-inset ring-blue-400" : ""} ${source.disabled ? "cursor-not-allowed opacity-50" : ""}`}>
             <span className={`min-w-0 flex-1 truncate text-[13px] ${source.inCal ? "text-gray-100" : "text-gray-600"}`}>{source.name}</span>
             <IsolateButton source={source}/>
             <CheckCell on={source.inCal} onClick={source.onToggleCal} disabled={source.disabled} color={source.color} kind="week" label={`Show ${source.name} in week view`}/>
@@ -292,7 +287,7 @@ function ColourRow({source}: { source: SidebarSource }) {
     );
 }
 
-/** Option 1: colour checks, washed rows, and section headers pinned while scrolling. */
+/** Option 1: colour icons, and section headers pinned while scrolling. */
 function ColourList({sections, collapsed, onToggleCollapsed}: VariantProps) {
     const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
     const toggleSection = (key: string) => setClosed((prev) => {
