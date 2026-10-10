@@ -11,14 +11,15 @@ vi.mock("./trendModel.ts", async (importOriginal) => {
 vi.mock("recharts", () => ({
     CartesianGrid: () => null, Line: () => null, LineChart: () => null,
     ResponsiveContainer: () => null, Tooltip: () => null, XAxis: () => null, YAxis: () => null,
-    useXAxisTicks: () => [{coordinate: 10}, {coordinate: 30}, {coordinate: 50}, {coordinate: 70}],
+    useXAxisTicks: () => [{coordinate: 10}, {coordinate: 70}], // Only endpoints have visible labels.
+    useXAxisScale: () => (index: number) => 10 + index * 20,
     useYAxisScale: () => (value: number) => 200 - value,
 }));
 vi.mock("../../Componants/AppTitleDetails.tsx", () => ({default: () => null}));
 afterEach(() => {cleanup(); vi.clearAllMocks();});
 
 describe("trend rendering", () => {
-    it("groups gaps into paths while preserving their exact straight endpoints and dash style", () => {
+    it("keeps gap endpoints aligned with every week even when axis labels are skipped", () => {
         const bridges: TrendGapBridge[] = [
             {dataKey: "a", fromIndex: 0, fromValue: 20, toIndex: 2, toValue: 40, color: "#red"},
             {dataKey: "b", fromIndex: 1, fromValue: 60, toIndex: 3, toValue: 80, color: "#red"},

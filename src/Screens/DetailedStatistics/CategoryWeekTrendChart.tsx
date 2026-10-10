@@ -8,7 +8,7 @@ import {
     Tooltip,
     XAxis,
     YAxis,
-    useXAxisTicks,
+    useXAxisScale,
     useYAxisScale,
 } from "recharts";
 import {TrendWeekStatistics} from "../../api/statistics.ts";
@@ -31,6 +31,7 @@ export type TrendSeriesMode = "categories" | "topApps";
 export type TrendAppRanking = "weekly" | "range";
 
 const TOTAL_WEEK_DATA_KEY = "__week_total__";
+const WEEK_INDEX_DATA_KEY = "__week_index__";
 const TOTAL_LINE_COLOR = "#f3f4f6";
 const TOTAL_LINE_NAME = "Total";
 
@@ -47,14 +48,14 @@ export type TrendGapBridge = {
 
 /** Straight gap connectors share a tiny SVG layer instead of each mounting a Recharts Line/store subscription. */
 export function TrendGapPaths({bridges}: {bridges: TrendGapBridge[]}) {
-    const ticks = useXAxisTicks();
+    const xScale = useXAxisScale();
     const yScale = useYAxisScale();
     const paths = useMemo(() => {
         const byColor = new Map<string, string[]>();
-        if (!ticks || !yScale) return byColor;
+        if (!xScale || !yScale) return byColor;
         for (const bridge of bridges) {
-            const x1 = ticks[bridge.fromIndex]?.coordinate;
-            const x2 = ticks[bridge.toIndex]?.coordinate;
+            const x1 = xScale(bridge.fromIndex);
+            const x2 = xScale(bridge.toIndex);
             const y1 = yScale(bridge.fromValue);
             const y2 = yScale(bridge.toValue);
             if (x1 == null || x2 == null || y1 == null || y2 == null) continue;
@@ -63,7 +64,7 @@ export function TrendGapPaths({bridges}: {bridges: TrendGapBridge[]}) {
             segments.push(`M${x1},${y1}L${x2},${y2}`);
         }
         return byColor;
-    }, [bridges, ticks, yScale]);
+    }, [bridges, xScale, yScale]);
     return <g className="trend-gap-bridges" pointerEvents="none">
         {[...paths].map(([color, segments]) => <path key={color} d={segments.join(" ")} fill="none" stroke={color} strokeWidth={2} strokeDasharray="4 4" />)}
     </g>;
@@ -145,7 +146,7 @@ function CategoryWeekTrendChart({
 
     const chartData: ChartRow[] = useMemo(() => measure("trend.chart_data", () => {
         return columns.map((col, i) => {
-            const row: ChartRow = {label: col.label, week_start: col.week_start};
+            const row: ChartRow = {label: col.label, week_start: col.week_start, [WEEK_INDEX_DATA_KEY]: i};
             if (showTotalLine) {
                 row[TOTAL_WEEK_DATA_KEY] = totalLineValues[i] ?? 0;
             }
@@ -221,7 +222,8 @@ function CategoryWeekTrendChart({
                         >
                             <CartesianGrid stroke="#374151" strokeDasharray="6 6" vertical={false}/>
                             <XAxis
-                                dataKey="label"
+                                dataKey={WEEK_INDEX_DATA_KEY}
+                                tickFormatter={(index) => columns[Number(index)]?.label ?? ""}
                                 interval="preserveStartEnd"
                                 minTickGap={16}
                                 tick={{fill: "#9ca3af", fontSize: 11}}
@@ -258,7 +260,7 @@ function CategoryWeekTrendChart({
                                             : String(value ?? "");
                                     return [formatted, label];
                                 }}
-                                labelFormatter={(label) => (label != null ? String(label) : "")}
+                                labelFormatter={(index) => columns[Number(index)]?.label ?? ""}
                                 itemSorter={(a) => {
                                     if (a?.dataKey === TOTAL_WEEK_DATA_KEY || a?.name === TOTAL_LINE_NAME) {
                                         return Number.MIN_SAFE_INTEGER;
