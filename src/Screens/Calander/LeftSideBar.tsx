@@ -1,32 +1,24 @@
 /**
  * The calendar's left "Sources" sidebar, in whichever candidate design is selected.
  *
- * Two families made the cut: colour checks (1, with 1a and 1b) and the minimal list
- * (2, with 2a-2f). All render from the same `SidebarSection` model, so they
- * drive the same toggles. As with Bramble's layout pickers, a dev build shows a picker
- * and the choice persists in localStorage; a packaged build always gets
- * `DEFAULT_LEFT_SIDEBAR_UI`. Once one wins, the others and this switch should go.
+ * Two designs remain: tinted colour checks (1) and the minimal list (2). Both render
+ * from the same `SidebarSection` model, so they drive the same toggles. As with
+ * Bramble's layout pickers, a dev build shows a picker and the choice persists in
+ * localStorage; a packaged build always gets `DEFAULT_LEFT_SIDEBAR_UI`. Once one wins,
+ * the other and this switch should go.
  */
 
 import {useState, type ReactNode} from "react";
 
-export type LeftSidebarUi = "1" | "1a" | "1b" | "2" | "2a" | "2b" | "2c" | "2d" | "2e" | "2f";
+export type LeftSidebarUi = "1" | "2";
 
 export const LEFT_SIDEBAR_UIS: readonly { id: LeftSidebarUi; hint: string }[] = [
-    {id: "1", hint: "Colour checks, tinted: visible rows are washed in their colour with a colour edge"},
-    {id: "1a", hint: "Colour checks: checks fill with the source colour, click a row for week, sticky section headers"},
-    {id: "1b", hint: "Colour checks, power tools: search, an Everything row, and a Hidden / Differs focus filter"},
-    {id: "2", hint: "Minimal: names only, eye / stats / isolate controls appear on hover"},
-    {id: "2a", hint: "Minimal legend: the dot hides, the name solos"},
-    {id: "2b", hint: "Minimal, tucked: hidden sources fold into a line per section, sections collapse to a dot strip"},
-    {id: "2c", hint: "Minimal, words: \"week\" and \"stats\" toggles always shown, lit when on"},
-    {id: "2d", hint: "Minimal, icon columns: eye and chart always shown under Week / Stats headings"},
-    {id: "2e", hint: "Minimal, dot pair: two colour dots per row, round for week, square for stats"},
-    {id: "2f", hint: "Minimal, whisper: rows note only what's unusual; hover for hide / +stats / only"},
+    {id: "1", hint: "Colour checks: rows washed in their colour, checks fill with it, click a row for week"},
+    {id: "2", hint: "Minimal: names only; state and eye / stats / isolate controls show on hover"},
 ];
 
 export const DEFAULT_LEFT_SIDEBAR_UI: LeftSidebarUi = "1";
-const KEY = "time-tracker:dev.left-sidebar-ui.v4";
+const KEY = "time-tracker:dev.left-sidebar-ui.v5";
 
 /** The selected layout, persisted across reloads in a dev build only. */
 export function useLeftSidebarUi(): [LeftSidebarUi, (ui: LeftSidebarUi) => void] {
@@ -49,10 +41,10 @@ export function LeftSidebarPicker({ui, onChange}: { ui: LeftSidebarUi; onChange:
              title="Dev only: which left sidebar layout to show" onClick={(e) => e.stopPropagation()}>
             <span className="text-[10px] uppercase tracking-wider text-gray-500">sidebar</span>
             <div className="flex gap-0.5" role="radiogroup" aria-label="Left sidebar layout">
-                {LEFT_SIDEBAR_UIS.map((c, i) => (
+                {LEFT_SIDEBAR_UIS.map((c) => (
                     <button key={c.id} type="button" role="radio" aria-checked={ui === c.id} title={c.hint}
                             onClick={() => onChange(c.id)}
-                            className={`h-6 min-w-6 rounded px-1 text-xs font-medium transition-colors ${i === 3 ? "ml-1.5" : ""} ${ui === c.id ? "bg-blue-600 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white"}`}>
+                            className={`h-6 min-w-6 rounded px-1 text-xs font-medium transition-colors ${ui === c.id ? "bg-blue-600 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white"}`}>
                         {c.id}
                     </button>
                 ))}
@@ -97,24 +89,11 @@ export default function LeftSideBar({ui, ...props}: VariantProps & { ui: LeftSid
     return (
         // Clicks here must not reach the calendar's deselect handler.
         <div className="relative flex h-full shrink-0" onClick={(e) => e.stopPropagation()}>
-            {props.collapsed ? <CollapsedRail {...props}/> : <Variant ui={ui} {...props}/>}
+            {props.collapsed ? <CollapsedRail {...props}/>
+                : ui === "1" ? <ColourList {...props}/>
+                    : <MinimalList {...props}/>}
         </div>
     );
-}
-
-function Variant({ui, ...props}: VariantProps & { ui: LeftSidebarUi }) {
-    switch (ui) {
-        case "1": return <ColourList {...props} tinted/>;
-        case "1a": return <ColourList {...props}/>;
-        case "1b": return <ColourList {...props} tools/>;
-        case "2": return <MinimalList {...props}/>;
-        case "2a": return <LegendList {...props}/>;
-        case "2b": return <TuckedList {...props}/>;
-        case "2c": return <WordToggleList {...props}/>;
-        case "2d": return <IconColumnsList {...props}/>;
-        case "2e": return <DotPairList {...props}/>;
-        case "2f": return <WhisperList {...props}/>;
-    }
 }
 
 // ---------------------------------------------------------------- shared bits
@@ -195,14 +174,18 @@ function CollapseButton({collapsed, onClick}: { collapsed: boolean; onClick: () 
     );
 }
 
-function IsolateButton({source}: { source: SidebarSource }) {
+function IsolateButton({source, quiet = false}: {
+    source: SidebarSource;
+    /** Hide even an active isolation until the row is hovered (option 2). */
+    quiet?: boolean;
+}) {
     if (!source.onToggleIsolate) return <span className="h-6 w-6 shrink-0"/>;
     return (
         <button type="button" onClick={(e) => { e.stopPropagation(); source.onToggleIsolate?.(); }} disabled={source.disabled} aria-pressed={!!source.isolated}
                 aria-label={source.isolated ? `Stop isolating ${source.name}` : `Isolate ${source.name} in week and stats`}
                 title={source.isolated ? "Restore week and stats" : "Show only this source in week and stats"}
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-all focus-visible:opacity-100 ${source.isolated
-                    ? "bg-blue-600 text-white opacity-100"
+                    ? `bg-blue-600 text-white ${quiet ? "opacity-0 group-hover:opacity-100" : "opacity-100"}`
                     : "text-gray-500 opacity-0 hover:bg-gray-800 hover:text-white group-hover:opacity-100"}`}>
             <IconTarget className="h-3.5 w-3.5"/>
         </button>
@@ -220,17 +203,7 @@ function Notes({section}: { section: SidebarSection }) {
     </>;
 }
 
-function useClosedSections() {
-    const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
-    const toggle = (key: string) => setClosed((prev) => {
-        const next = new Set(prev);
-        if (next.has(key)) next.delete(key); else next.add(key);
-        return next;
-    });
-    return [closed, toggle] as const;
-}
-
-/** Collapsed form for every option: one swatch per source, click to toggle it in the week view. */
+/** Collapsed form for both options: one swatch per source, click to toggle it in the week view. */
 function CollapsedRail({sections, collapsed, onToggleCollapsed}: VariantProps) {
     return (
         <div className={`${shell} flex w-14 flex-col items-center gap-3 py-3`}>
@@ -250,32 +223,22 @@ function CollapsedRail({sections, collapsed, onToggleCollapsed}: VariantProps) {
     );
 }
 
-// ================================================================ family 1: colour checks
+// ================================================================ option 1: colour checks
 
 function CheckCell({on, onClick, label, disabled, color}: {
-    on: boolean; onClick: () => void; label: string; disabled?: boolean;
-    /** Fill colour when on; slate otherwise. */
-    color?: string;
+    on: boolean; onClick: () => void; label: string; disabled?: boolean; color: string;
 }) {
     return (
         <button type="button" onClick={(e) => { e.stopPropagation(); onClick(); }} disabled={disabled} aria-pressed={on} aria-label={label} title={label}
                 className="flex h-6 w-6 shrink-0 items-center justify-center disabled:opacity-40">
             <span className={`flex h-4 w-4 items-center justify-center rounded transition-colors ${on
-                ? color ? "text-black/75 ring-1 ring-inset ring-black/20" : "bg-slate-400 text-black"
+                ? "text-black/75 ring-1 ring-inset ring-black/20"
                 : "border border-gray-700 text-transparent hover:border-gray-500"}`}
-                  style={on && color ? {backgroundColor: color} : undefined}>
+                  style={on ? {backgroundColor: color} : undefined}>
                 <IconCheck className="h-3 w-3"/>
             </span>
         </button>
     );
-}
-
-function ColumnLegend() {
-    return <>
-        <span className="w-6"/>
-        <span className="flex w-6 justify-center text-gray-500" title="Week view"><IconWeekGrid className="h-3.5 w-3.5"/></span>
-        <span className="flex w-6 justify-center text-gray-500" title="Statistics"><IconBarChart className="h-3.5 w-3.5"/></span>
-    </>;
 }
 
 const ALL_COLOR = "#94a3b8";
@@ -307,30 +270,19 @@ function ColourSectionHeader({section, open, onToggleOpen}: { section: SidebarSe
     );
 }
 
-/** A source row: click anywhere to toggle the week view; checks fill with the source's colour. */
-function ColourRow({source, tinted, differs}: {
-    source: SidebarSource;
-    /** 1: wash a visible row in its colour, with a colour edge. */
-    tinted?: boolean;
-    /** 1b: mark rows whose week and stats settings disagree. */
-    differs?: boolean;
-}) {
-    const wash = tinted && source.inCal;
+/** A source row washed in its colour while visible; click anywhere to toggle the week view. */
+function ColourRow({source}: { source: SidebarSource }) {
+    const wash = source.inCal;
     return (
         <div role="button" tabIndex={source.disabled ? -1 : 0} aria-pressed={source.inCal}
              onClick={() => !source.disabled && source.onToggleCal()}
              onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && !source.disabled) { e.preventDefault(); source.onToggleCal(); } }}
              title={source.inCal ? "Click to hide in week view" : "Click to show in week view"}
-             className={`group relative flex cursor-pointer items-center gap-2 rounded-md py-0.5 pl-2 pr-1 transition-[background-color,filter] ${tinted ? "mb-0.5" : ""} ${source.isolated
-                 ? tinted ? "ring-1 ring-inset ring-blue-400" : "bg-blue-500/10 shadow-[inset_2px_0_0_#3b82f6]"
-                 : ""} ${wash ? "hover:brightness-125" : source.isolated ? "" : "hover:bg-white/[0.04]"} ${source.disabled ? "cursor-not-allowed opacity-50" : ""}`}
+             className={`group relative mb-0.5 flex cursor-pointer items-center gap-2 rounded-md py-0.5 pl-2 pr-1 transition-[background-color,filter] ${source.isolated ? "ring-1 ring-inset ring-blue-400" : ""} ${wash ? "hover:brightness-125" : "hover:bg-white/[0.04]"} ${source.disabled ? "cursor-not-allowed opacity-50" : ""}`}
              style={wash ? {
                  backgroundColor: `color-mix(in srgb, ${source.color} 14%, transparent)`,
                  boxShadow: `inset 3px 0 0 ${source.color}`,
              } : undefined}>
-            {differs && source.inCal !== source.inStats && (
-                <span className="pointer-events-none absolute left-0.5 top-1/2 h-3 w-0.5 -translate-y-1/2 rounded-full bg-amber-400/70" title="Week and stats differ"/>
-            )}
             <span className={`min-w-0 flex-1 truncate text-[13px] ${source.inCal ? "text-gray-100" : "text-gray-600"}`}>{source.name}</span>
             <IsolateButton source={source}/>
             <CheckCell on={source.inCal} onClick={source.onToggleCal} disabled={source.disabled} color={source.color} label={`Show ${source.name} in week view`}/>
@@ -339,110 +291,33 @@ function ColourRow({source, tinted, differs}: {
     );
 }
 
-type Focus = "all" | "hidden" | "differs";
-const FOCUSES: { id: Focus; label: string; hint: string }[] = [
-    {id: "all", label: "All", hint: "Every source"},
-    {id: "hidden", label: "Hidden", hint: "Sources off in the week view or stats"},
-    {id: "differs", label: "Differs", hint: "Sources whose week and stats settings disagree"},
-];
-
-/** 1b's search box, focus filter and Everything row. */
-function ColourTools({sections, query, setQuery, focus, setFocus}: {
-    sections: SidebarSection[];
-    query: string; setQuery: (q: string) => void;
-    focus: Focus; setFocus: (f: Focus) => void;
-}) {
-    const everyItem = sections.flatMap((s) => s.items);
-    const everythingCal = everyItem.length > 0 && everyItem.every((s) => s.inCal);
-    const everythingStats = everyItem.length > 0 && everyItem.every((s) => s.inStats);
-    // Flip each section to the shared target, using its own all-toggle where it has one.
-    const flipEverything = (field: "cal" | "stats") => {
-        const target = !(field === "cal" ? everythingCal : everythingStats);
-        for (const section of sections) {
-            if (section.all) {
-                if (section.all.disabled) continue;
-                const on = field === "cal" ? section.all.inCal : section.all.inStats;
-                if (on !== target) (field === "cal" ? section.all.onToggleCal : section.all.onToggleStats)();
-            } else {
-                for (const s of section.items) {
-                    if ((field === "cal" ? s.inCal : s.inStats) !== target) (field === "cal" ? s.onToggleCal : s.onToggleStats)();
-                }
-            }
-        }
-    };
-    const filtering = query.trim() !== "" || focus !== "all";
-
-    return (
-        <div className="space-y-2 px-2 pb-2">
-            <div className="relative">
-                <svg className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                    <circle cx="11" cy="11" r="7"/>
-                    <path d="M21 21l-4.3-4.3"/>
-                </svg>
-                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter sources…"
-                       onKeyDown={(e) => { if (e.key === "Escape") setQuery(""); }}
-                       className="w-full rounded-md border border-gray-800 bg-gray-950 py-1 pl-7 pr-2 text-[13px] text-gray-200 placeholder:text-gray-600 focus:border-blue-500/60 focus:outline-none"/>
-            </div>
-            <div className="grid grid-cols-3 gap-0.5 rounded-md bg-gray-900 p-0.5" role="radiogroup" aria-label="Which sources to list">
-                {FOCUSES.map((f) => (
-                    <button key={f.id} type="button" role="radio" aria-checked={focus === f.id} title={f.hint} onClick={() => setFocus(f.id)}
-                            className={`rounded py-0.5 text-[11px] font-medium transition-colors ${focus === f.id ? "bg-gray-700 text-white" : "text-gray-500 hover:text-gray-200"}`}>
-                        {f.label}
-                    </button>
-                ))}
-            </div>
-            {!filtering && (
-                <div className="flex items-center gap-1 pl-1 pr-0">
-                    <span className="flex-1 text-[12px] font-medium text-gray-300">Everything</span>
-                    <span className="w-6"/>
-                    <CheckCell on={everythingCal} onClick={() => flipEverything("cal")} color={ALL_COLOR} label="Every source in week view"/>
-                    <CheckCell on={everythingStats} onClick={() => flipEverything("stats")} color={ALL_COLOR} label="Every source in statistics"/>
-                </div>
-            )}
-        </div>
-    );
-}
-
-/**
- * Family 1. Checks fill with each source's own colour, the whole row toggles the week
- * view, and section headers stay pinned while scrolling. 1 also washes visible rows in
- * their colour; 1b adds search, a focus filter and an Everything row.
- */
-function ColourList({sections, collapsed, onToggleCollapsed, tinted = false, tools = false}: VariantProps & { tinted?: boolean; tools?: boolean }) {
-    const [closed, toggleSection] = useClosedSections();
-    const [query, setQuery] = useState("");
-    const [focus, setFocus] = useState<Focus>("all");
-    const q = tools ? query.trim().toLowerCase() : "";
-    const filtering = q !== "" || (tools && focus !== "all");
-    const matches = (s: SidebarSource) =>
-        (!q || s.name.toLowerCase().includes(q)) &&
-        (!tools || focus === "all" || (focus === "hidden" ? !s.inCal || !s.inStats : s.inCal !== s.inStats));
-    const shown = filtering
-        ? sections.map((section) => ({...section, items: section.items.filter(matches)})).filter((section) => section.items.length > 0)
-        : sections;
+/** Option 1: colour checks, washed rows, and section headers pinned while scrolling. */
+function ColourList({sections, collapsed, onToggleCollapsed}: VariantProps) {
+    const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
+    const toggleSection = (key: string) => setClosed((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key); else next.add(key);
+        return next;
+    });
 
     return (
         <div className={`${shell} w-64`}>
             <div className="flex items-center gap-1 py-2 pl-2 pr-1">
                 <CollapseButton collapsed={collapsed} onClick={onToggleCollapsed}/>
                 <span className="flex-1 text-sm font-semibold text-white">Sources</span>
-                <ColumnLegend/>
+                <span className="w-6"/>
+                <span className="flex w-6 justify-center text-gray-500" title="Week view"><IconWeekGrid className="h-3.5 w-3.5"/></span>
+                <span className="flex w-6 justify-center text-gray-500" title="Statistics"><IconBarChart className="h-3.5 w-3.5"/></span>
             </div>
-            {tools && <ColourTools sections={sections} query={query} setQuery={setQuery} focus={focus} setFocus={setFocus}/>}
             <div className="pb-3">
-                {shown.length === 0 && (
-                    <p className="px-2 py-4 text-center text-[13px] text-gray-500">
-                        {q ? `No sources match “${query}”` : focus === "hidden" ? "Nothing hidden" : "Week and stats agree everywhere"}
-                    </p>
-                )}
-                {shown.map((section) => {
-                    const open = filtering || !closed.has(section.key);
+                {sections.map((section) => {
+                    const open = !closed.has(section.key);
                     return (
                         <div key={section.key}>
                             <ColourSectionHeader section={section} open={open} onToggleOpen={() => toggleSection(section.key)}/>
                             {open && <div className="px-1 py-1">
-                                {section.items.map((source) => <ColourRow key={source.key} source={source} tinted={tinted} differs={tools}/>)}
-                                {!filtering && <Notes section={section}/>}
+                                {section.items.map((source) => <ColourRow key={source.key} source={source}/>)}
+                                <Notes section={section}/>
                             </div>}
                         </div>
                     );
@@ -452,27 +327,16 @@ function ColourList({sections, collapsed, onToggleCollapsed, tinted = false, too
     );
 }
 
-// ================================================================ family 2: minimal list
+// ================================================================ option 2: minimal list
 
-function HoverButton({on, onClick, label, disabled, children, sticky = false}: {
+function HoverButton({on, onClick, label, disabled, children}: {
     on: boolean; onClick: () => void; label: string; disabled?: boolean; children: ReactNode;
-    /** Stay visible outside hover (used to flag a non-default state). */
-    sticky?: boolean;
 }) {
     return (
         <button type="button" onClick={(e) => { e.stopPropagation(); onClick(); }} disabled={disabled} aria-pressed={on} aria-label={label} title={label}
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-all focus-visible:opacity-100 disabled:opacity-30 ${on ? "text-gray-300" : "text-gray-600"} hover:bg-gray-800 hover:text-white ${sticky ? "" : "opacity-0 group-hover:opacity-100"}`}>
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md opacity-0 transition-all focus-visible:opacity-100 disabled:opacity-30 group-hover:opacity-100 ${on ? "text-gray-300" : "text-gray-600"} hover:bg-gray-800 hover:text-white`}>
             {children}
         </button>
-    );
-}
-
-function MinimalHeader({title, collapsed, onToggleCollapsed}: { title: string; collapsed: boolean; onToggleCollapsed: () => void }) {
-    return (
-        <div className="mb-3 flex items-center justify-between pl-2">
-            <span className="text-xs font-medium text-gray-500">{title}</span>
-            <CollapseButton collapsed={collapsed} onClick={onToggleCollapsed}/>
-        </div>
     );
 }
 
@@ -491,35 +355,38 @@ function MinimalSectionAll({section}: { section: SidebarSection }) {
     </>;
 }
 
+/** At rest every row looks the same; hovering reveals its state and the controls that change it. */
 function MinimalRow({source}: { source: SidebarSource }) {
     return (
         <div className="group flex h-7 items-center gap-2 rounded-md pl-2 hover:bg-white/[0.04]">
             <button type="button" onClick={source.onToggleCal} disabled={source.disabled}
                     className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
                     title={source.inCal ? "Hide in week view" : "Show in week view"}>
-                <span className="h-2 w-2 shrink-0 rounded-full transition-opacity"
-                      style={{backgroundColor: source.color, opacity: source.inCal ? 1 : 0.25}}/>
-                <span className={`truncate text-[13px] transition-colors ${source.inCal ? "text-gray-200" : "text-gray-600"}`}>{source.name}</span>
+                <span className={`h-2 w-2 shrink-0 rounded-full transition-opacity ${source.inCal ? "" : "group-hover:opacity-25"}`}
+                      style={{backgroundColor: source.color}}/>
+                <span className={`truncate text-[13px] text-gray-200 transition-colors ${source.inCal ? "" : "group-hover:text-gray-600"}`}>{source.name}</span>
             </button>
             <HoverButton on={source.inCal} onClick={source.onToggleCal} disabled={source.disabled}
                          label={source.inCal ? "Hide in week view" : "Show in week view"}>
                 <IconEye off={!source.inCal} className="h-3.5 w-3.5"/>
             </HoverButton>
-            {/* Excluded from stats is the unusual state, so it stays flagged when not hovered. */}
-            <HoverButton on={source.inStats} onClick={source.onToggleStats} disabled={source.disabled} sticky={!source.inStats}
+            <HoverButton on={source.inStats} onClick={source.onToggleStats} disabled={source.disabled}
                          label={source.inStats ? "Exclude from statistics" : "Include in statistics"}>
                 <StatsGlyph on={source.inStats} className="h-3.5 w-3.5"/>
             </HoverButton>
-            <IsolateButton source={source}/>
+            <IsolateButton source={source} quiet/>
         </div>
     );
 }
 
-/** 2: the original pick. */
+/** Option 2: names only, with everything else on hover. */
 function MinimalList({sections, collapsed, onToggleCollapsed}: VariantProps) {
     return (
         <div className={`${shell} w-60 px-2 py-3`}>
-            <MinimalHeader title="Sources" collapsed={collapsed} onToggleCollapsed={onToggleCollapsed}/>
+            <div className="mb-3 flex items-center justify-between pl-2">
+                <span className="text-xs font-medium text-gray-500">Sources</span>
+                <CollapseButton collapsed={collapsed} onClick={onToggleCollapsed}/>
+            </div>
             <div className="space-y-4">
                 {sections.map((section) => (
                     <div key={section.key}>
@@ -531,350 +398,6 @@ function MinimalList({sections, collapsed, onToggleCollapsed}: VariantProps) {
                         {section.items.map((source) => <MinimalRow key={source.key} source={source}/>)}
                         <Notes section={section}/>
                     </div>
-                ))}
-            </div>
-        </div>
-    );
-}
-
-/**
- * 2a: reads like a chart legend. The dot shows or hides a source in the week view;
- * clicking the name solos it (isolates it in week and stats), clicking again restores.
- */
-function LegendList({sections, collapsed, onToggleCollapsed}: VariantProps) {
-    const soloing = sections.some((s) => s.items.some((i) => i.isolated));
-    return (
-        <div className={`${shell} w-60 px-2 py-3`}>
-            <MinimalHeader title="Sources" collapsed={collapsed} onToggleCollapsed={onToggleCollapsed}/>
-            <p className="-mt-1 mb-3 pl-2 text-[11px] text-gray-600">Dot hides · name solos</p>
-            <div className="space-y-4">
-                {sections.map((section) => (
-                    <div key={section.key}>
-                        <div className="group flex h-7 items-center gap-1 pl-2">
-                            <span className="flex-1 text-xs font-medium text-gray-500">{section.title}</span>
-                            <MinimalSectionAll section={section}/>
-                        </div>
-                        {section.items.map((source) => {
-                            const solo = source.onToggleIsolate ?? source.onToggleCal;
-                            return (
-                                <div key={source.key} className="group flex h-7 items-center gap-1 rounded-md hover:bg-white/[0.04]">
-                                    <button type="button" onClick={source.onToggleCal} disabled={source.disabled} aria-pressed={source.inCal}
-                                            aria-label={source.inCal ? `Hide ${source.name} in week view` : `Show ${source.name} in week view`}
-                                            title={source.inCal ? "Hide in week view" : "Show in week view"}
-                                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md hover:bg-white/[0.06]">
-                                        <span className="h-2.5 w-2.5 rounded-full transition-all"
-                                              style={source.inCal ? {backgroundColor: source.color} : {boxShadow: `inset 0 0 0 1.5px ${source.color}`, opacity: 0.6}}/>
-                                    </button>
-                                    <button type="button" onClick={solo} disabled={source.disabled} aria-pressed={!!source.isolated}
-                                            title={source.onToggleIsolate ? (source.isolated ? "Restore week and stats" : "Show only this") : undefined}
-                                            className={`min-w-0 flex-1 truncate text-left text-[13px] transition-colors ${source.isolated
-                                                ? "font-medium text-blue-300"
-                                                : soloing ? "text-gray-600 hover:text-gray-300"
-                                                    : source.inCal ? "text-gray-200 hover:text-white" : "text-gray-600 hover:text-gray-300"}`}>
-                                        {source.name}
-                                    </button>
-                                    {source.isolated && <span className="shrink-0 rounded bg-blue-600/20 px-1 text-[10px] font-semibold uppercase tracking-wide text-blue-300">solo</span>}
-                                    <HoverButton on={source.inStats} onClick={source.onToggleStats} disabled={source.disabled} sticky={!source.inStats}
-                                                 label={source.inStats ? "Exclude from statistics" : "Include in statistics"}>
-                                        <StatsGlyph on={source.inStats} className="h-3.5 w-3.5"/>
-                                    </HoverButton>
-                                </div>
-                            );
-                        })}
-                        <Notes section={section}/>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-}
-
-/**
- * 2b: the minimal list with clutter put away. Sources hidden from the week view fold
- * into an "n hidden" line at the end of their section, and a section title folds the
- * whole section down to a strip of its colours.
- */
-function TuckedList({sections, collapsed, onToggleCollapsed}: VariantProps) {
-    const [closed, toggleSection] = useClosedSections();
-    const [openHidden, toggleHidden] = useClosedSections();
-    return (
-        <div className={`${shell} w-60 px-2 py-3`}>
-            <MinimalHeader title="Sources" collapsed={collapsed} onToggleCollapsed={onToggleCollapsed}/>
-            <div className="space-y-3">
-                {sections.map((section) => {
-                    const open = !closed.has(section.key);
-                    const shown = section.items.filter((s) => s.inCal);
-                    const hidden = section.items.filter((s) => !s.inCal);
-                    const hiddenOpen = openHidden.has(section.key);
-                    return (
-                        <div key={section.key}>
-                            <div className="group flex h-7 items-center gap-1 pl-2">
-                                <button type="button" onClick={() => toggleSection(section.key)} aria-expanded={open}
-                                        className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-xs font-medium text-gray-500 hover:text-gray-200">
-                                    <span className="truncate">{section.title}</span>
-                                    <IconChevron open={open} className="h-2.5 w-2.5 shrink-0 opacity-0 group-hover:opacity-100"/>
-                                </button>
-                                {open && <MinimalSectionAll section={section}/>}
-                                <span className="w-6"/>
-                            </div>
-                            {!open ? (
-                                <button type="button" onClick={() => toggleSection(section.key)} title={`Expand ${section.title}`}
-                                        className="flex w-full flex-wrap gap-1 rounded-md px-2 py-1 hover:bg-white/[0.04]">
-                                    {section.items.length === 0 && <span className="text-[11px] text-gray-700">empty</span>}
-                                    {section.items.map((s) => (
-                                        <span key={s.key} className="h-2 w-2 rounded-full"
-                                              style={{backgroundColor: s.color, opacity: s.inCal ? 1 : 0.2}}/>
-                                    ))}
-                                </button>
-                            ) : <>
-                                {shown.map((source) => <MinimalRow key={source.key} source={source}/>)}
-                                {hidden.length > 0 && <>
-                                    <button type="button" onClick={() => toggleHidden(section.key)} aria-expanded={hiddenOpen}
-                                            className="flex h-7 w-full items-center gap-2 rounded-md pl-2 text-left text-[12px] text-gray-600 hover:bg-white/[0.04] hover:text-gray-300">
-                                        <span className="flex -space-x-1">
-                                            {hidden.slice(0, 4).map((s) => (
-                                                <span key={s.key} className="h-2 w-2 rounded-full ring-1 ring-black" style={{backgroundColor: s.color, opacity: 0.4}}/>
-                                            ))}
-                                        </span>
-                                        <span className="flex-1">{hidden.length} hidden</span>
-                                        <IconChevron open={hiddenOpen} className="mr-2 h-2.5 w-2.5"/>
-                                    </button>
-                                    {hiddenOpen && <div className="ml-2 border-l border-gray-800 pl-1">
-                                        {hidden.map((source) => <MinimalRow key={source.key} source={source}/>)}
-                                    </div>}
-                                </>}
-                                <Notes section={section}/>
-                            </>}
-                        </div>
-                    );
-                })}
-            </div>
-        </div>
-    );
-}
-
-// ---------------------------------------------------------------- family 2, always-visible takes
-// 2c-2f keep 2's quiet look, but every control is on screen without hovering, apart from
-// isolate (and 2f's word buttons), so nothing has to be discovered.
-
-/** A titled section: muted title, its all-controls on the right, then its rows. */
-function PlainSection({section, controls, children}: { section: SidebarSection; controls?: ReactNode; children: ReactNode }) {
-    return (
-        <div>
-            <div className="flex h-7 items-center gap-1 pl-2">
-                <span className="flex-1 truncate text-xs font-medium text-gray-500">{section.title}</span>
-                {controls}
-            </div>
-            {children}
-            <Notes section={section}/>
-        </div>
-    );
-}
-
-function Swatch({source}: { source: SidebarSource }) {
-    return <span className="h-2 w-2 shrink-0 rounded-full transition-opacity"
-                 style={{backgroundColor: source.color, opacity: source.inCal ? 1 : 0.25}}/>;
-}
-
-function SourceName({source}: { source: SidebarSource }) {
-    return <span className={`min-w-0 flex-1 truncate text-[13px] transition-colors ${source.isolated ? "text-blue-300" : source.inCal ? "text-gray-200" : "text-gray-600"}`}
-                 title={source.name}>{source.name}</span>;
-}
-
-/** Column labels for the two always-visible controls, sitting over a trailing isolate slot. */
-function MinimalColumns({first, second}: { first: ReactNode; second: ReactNode }) {
-    return (
-        <div className="mb-1 flex h-5 items-center gap-1 pl-2 text-gray-600">
-            <span className="flex-1"/>
-            <span className="flex w-6 justify-center">{first}</span>
-            <span className="flex w-6 justify-center">{second}</span>
-            <span className="w-6"/>
-        </div>
-    );
-}
-
-function WordToggle({on, onClick, children, label, disabled}: { on: boolean; onClick: () => void; children: ReactNode; label: string; disabled?: boolean }) {
-    return (
-        <button type="button" onClick={onClick} disabled={disabled} aria-pressed={on} aria-label={label} title={label}
-                className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] leading-none transition-colors disabled:opacity-30 ${on
-                    ? "bg-white/[0.07] text-gray-200 hover:bg-white/[0.12]"
-                    : "text-gray-600 hover:bg-white/[0.04] hover:text-gray-300"}`}>
-            {children}
-        </button>
-    );
-}
-
-/** 2c: the toggles are the words "week" and "stats", lit when on. Nothing to decode. */
-function WordToggleList({sections, collapsed, onToggleCollapsed}: VariantProps) {
-    return (
-        <div className={`${shell} w-64 px-2 py-3`}>
-            <MinimalHeader title="Sources" collapsed={collapsed} onToggleCollapsed={onToggleCollapsed}/>
-            <div className="space-y-4">
-                {sections.map((section) => (
-                    <PlainSection key={section.key} section={section} controls={section.all && <>
-                        <WordToggle on={section.all.inCal} onClick={section.all.onToggleCal} disabled={section.all.disabled} label={`All ${section.title} in week view`}>week</WordToggle>
-                        <WordToggle on={section.all.inStats} onClick={section.all.onToggleStats} disabled={section.all.disabled} label={`All ${section.title} in statistics`}>stats</WordToggle>
-                        <span className="w-6"/>
-                    </>}>
-                        {section.items.map((source) => (
-                            <div key={source.key} className="group flex h-7 items-center gap-1 rounded-md pl-2 hover:bg-white/[0.03]">
-                                <span className="flex min-w-0 flex-1 items-center gap-2.5"><Swatch source={source}/><SourceName source={source}/></span>
-                                <WordToggle on={source.inCal} onClick={source.onToggleCal} disabled={source.disabled} label={`Show ${source.name} in week view`}>week</WordToggle>
-                                <WordToggle on={source.inStats} onClick={source.onToggleStats} disabled={source.disabled} label={`Include ${source.name} in statistics`}>stats</WordToggle>
-                                <IsolateButton source={source}/>
-                            </div>
-                        ))}
-                    </PlainSection>
-                ))}
-            </div>
-        </div>
-    );
-}
-
-function GlyphToggle({on, onClick, label, disabled, children}: { on: boolean; onClick: () => void; label: string; disabled?: boolean; children: ReactNode }) {
-    return (
-        <button type="button" onClick={onClick} disabled={disabled} aria-pressed={on} aria-label={label} title={label}
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors disabled:opacity-30 hover:bg-gray-800 hover:text-white ${on ? "text-gray-300" : "text-gray-700"}`}>
-            {children}
-        </button>
-    );
-}
-
-/** 2d: 2's eye and chart icons, always shown in labelled columns; off reads as struck and dark. */
-function IconColumnsList({sections, collapsed, onToggleCollapsed}: VariantProps) {
-    return (
-        <div className={`${shell} w-60 px-2 py-3`}>
-            <MinimalHeader title="Sources" collapsed={collapsed} onToggleCollapsed={onToggleCollapsed}/>
-            <MinimalColumns first={<span className="text-[10px]">Week</span>} second={<span className="text-[10px]">Stats</span>}/>
-            <div className="space-y-4">
-                {sections.map((section) => (
-                    <PlainSection key={section.key} section={section} controls={section.all && <>
-                        <GlyphToggle on={section.all.inCal} onClick={section.all.onToggleCal} disabled={section.all.disabled} label={`All ${section.title} in week view`}>
-                            <IconEye off={!section.all.inCal} className="h-3.5 w-3.5"/>
-                        </GlyphToggle>
-                        <GlyphToggle on={section.all.inStats} onClick={section.all.onToggleStats} disabled={section.all.disabled} label={`All ${section.title} in statistics`}>
-                            <StatsGlyph on={section.all.inStats} className="h-3.5 w-3.5"/>
-                        </GlyphToggle>
-                        <span className="w-6"/>
-                    </>}>
-                        {section.items.map((source) => (
-                            <div key={source.key} className="group flex h-7 items-center gap-1 rounded-md pl-2 hover:bg-white/[0.03]">
-                                <span className="flex min-w-0 flex-1 items-center gap-2.5"><Swatch source={source}/><SourceName source={source}/></span>
-                                <GlyphToggle on={source.inCal} onClick={source.onToggleCal} disabled={source.disabled} label={source.inCal ? "Hide in week view" : "Show in week view"}>
-                                    <IconEye off={!source.inCal} className="h-3.5 w-3.5"/>
-                                </GlyphToggle>
-                                <GlyphToggle on={source.inStats} onClick={source.onToggleStats} disabled={source.disabled} label={source.inStats ? "Exclude from statistics" : "Include in statistics"}>
-                                    <StatsGlyph on={source.inStats} className="h-3.5 w-3.5"/>
-                                </GlyphToggle>
-                                <IsolateButton source={source}/>
-                            </div>
-                        ))}
-                    </PlainSection>
-                ))}
-            </div>
-        </div>
-    );
-}
-
-function Dot({on, color, shape, onClick, label, disabled}: {
-    on: boolean; color: string; shape: "round" | "square"; onClick: () => void; label: string; disabled?: boolean;
-}) {
-    return (
-        <button type="button" onClick={onClick} disabled={disabled} aria-pressed={on} aria-label={label} title={label}
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md hover:bg-white/[0.06] disabled:opacity-30">
-            <span className={`h-2.5 w-2.5 transition-all ${shape === "round" ? "rounded-full" : "rounded-[2px]"}`}
-                  style={on ? {backgroundColor: color} : {boxShadow: `inset 0 0 0 1.5px ${color}`, opacity: 0.5}}/>
-        </button>
-    );
-}
-
-/** 2e: no icons or words per row, just two of the source's colour dots: round for week, square for stats. */
-function DotPairList({sections, collapsed, onToggleCollapsed}: VariantProps) {
-    return (
-        <div className={`${shell} w-60 px-2 py-3`}>
-            <MinimalHeader title="Sources" collapsed={collapsed} onToggleCollapsed={onToggleCollapsed}/>
-            <MinimalColumns
-                first={<span title="Week view (round)"><IconWeekGrid className="h-3 w-3"/></span>}
-                second={<span title="Statistics (square)"><IconBarChart className="h-3 w-3"/></span>}/>
-            <div className="space-y-4">
-                {sections.map((section) => (
-                    <PlainSection key={section.key} section={section} controls={section.all && <>
-                        <Dot on={section.all.inCal} color="#9ca3af" shape="round" onClick={section.all.onToggleCal} disabled={section.all.disabled} label={`All ${section.title} in week view`}/>
-                        <Dot on={section.all.inStats} color="#9ca3af" shape="square" onClick={section.all.onToggleStats} disabled={section.all.disabled} label={`All ${section.title} in statistics`}/>
-                        <span className="w-6"/>
-                    </>}>
-                        {section.items.map((source) => (
-                            <div key={source.key} className="group flex h-7 items-center gap-1 rounded-md pl-2 hover:bg-white/[0.03]">
-                                <SourceName source={source}/>
-                                <Dot on={source.inCal} color={source.color} shape="round" onClick={source.onToggleCal} disabled={source.disabled}
-                                     label={source.inCal ? `Hide ${source.name} in week view` : `Show ${source.name} in week view`}/>
-                                <Dot on={source.inStats} color={source.color} shape="square" onClick={source.onToggleStats} disabled={source.disabled}
-                                     label={source.inStats ? `Exclude ${source.name} from statistics` : `Include ${source.name} in statistics`}/>
-                                <IsolateButton source={source}/>
-                            </div>
-                        ))}
-                    </PlainSection>
-                ))}
-            </div>
-        </div>
-    );
-}
-
-function HoverWord({onClick, children, label, disabled, accent}: { onClick: () => void; children: ReactNode; label: string; disabled?: boolean; accent?: boolean }) {
-    return (
-        <button type="button" onClick={onClick} disabled={disabled} title={label} aria-label={label}
-                className={`shrink-0 rounded px-1 py-0.5 text-[11px] leading-none transition-colors disabled:opacity-30 ${accent ? "text-blue-300 hover:bg-blue-500/15" : "text-gray-400 hover:bg-white/[0.08] hover:text-white"}`}>
-            {children}
-        </button>
-    );
-}
-
-/**
- * 2f: at rest a row says in plain words only what is unusual about it ("hidden",
- * "no stats", "only"); hovering swaps that for word buttons that change it.
- */
-function WhisperList({sections, collapsed, onToggleCollapsed}: VariantProps) {
-    return (
-        <div className={`${shell} w-60 px-2 py-3`}>
-            <MinimalHeader title="Sources" collapsed={collapsed} onToggleCollapsed={onToggleCollapsed}/>
-            <div className="space-y-4">
-                {sections.map((section) => (
-                    <PlainSection key={section.key} section={section} controls={section.all && <span className="flex gap-0.5 pr-1">
-                        <HoverWord onClick={section.all.onToggleCal} disabled={section.all.disabled} label={`${section.all.inCal ? "Hide" : "Show"} all ${section.title}`}>
-                            {section.all.inCal ? "hide all" : "show all"}
-                        </HoverWord>
-                    </span>}>
-                        {section.items.map((source) => {
-                            const notes = [
-                                source.isolated && <span key="only" className="text-blue-300">only</span>,
-                                !source.inCal && !source.isolated && <span key="hidden">hidden</span>,
-                                !source.inStats && <span key="stats">no stats</span>,
-                            ].filter(Boolean);
-                            return (
-                                <div key={source.key} className="group flex h-7 items-center gap-2 rounded-md pl-2 pr-1 hover:bg-white/[0.04]">
-                                    <Swatch source={source}/>
-                                    <SourceName source={source}/>
-                                    <span className="flex shrink-0 gap-1.5 text-[11px] text-gray-600 group-hover:hidden">
-                                        {notes.map((n, i) => <span key={i} className="flex gap-1.5">{i > 0 && <span className="text-gray-800">·</span>}{n}</span>)}
-                                    </span>
-                                    <span className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
-                                        <HoverWord onClick={source.onToggleCal} disabled={source.disabled} label={source.inCal ? "Hide in week view" : "Show in week view"}>
-                                            {source.inCal ? "hide" : "show"}
-                                        </HoverWord>
-                                        <HoverWord onClick={source.onToggleStats} disabled={source.disabled} label={source.inStats ? "Exclude from statistics" : "Include in statistics"}>
-                                            {source.inStats ? "−stats" : "+stats"}
-                                        </HoverWord>
-                                        {source.onToggleIsolate && (
-                                            <HoverWord onClick={source.onToggleIsolate} disabled={source.disabled} accent
-                                                       label={source.isolated ? "Restore week and stats" : "Show only this source"}>
-                                                {source.isolated ? "restore" : "only"}
-                                            </HoverWord>
-                                        )}
-                                    </span>
-                                </div>
-                            );
-                        })}
-                    </PlainSection>
                 ))}
             </div>
         </div>
