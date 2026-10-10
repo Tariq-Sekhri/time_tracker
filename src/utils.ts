@@ -86,8 +86,7 @@ export function getWeekStartDate(date: Date, calendarStartHour: number): Date {
 export function enumerateWeekRangesInSpan(
     rangeStart: Date,
     rangeEnd: Date,
-    calendarStartHour: number,
-    maxWeeks = 24
+    calendarStartHour: number
 ): { week_start: number; week_end: number }[] {
     let cursor = getWeekStartDate(rangeStart, calendarStartHour);
     const endCursor = getWeekStartDate(rangeEnd, calendarStartHour);
@@ -97,9 +96,6 @@ export function enumerateWeekRangesInSpan(
         const next = new Date(cursor);
         next.setDate(next.getDate() + 7);
         cursor = getWeekStartDate(next, calendarStartHour);
-    }
-    if (out.length > maxWeeks) {
-        return out.slice(out.length - maxWeeks);
     }
     return out;
 }
