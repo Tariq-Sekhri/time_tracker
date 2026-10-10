@@ -25,6 +25,7 @@ import {getAppMetadata, setAppMetadata} from "../../api/appMetadata.ts";
 import ManualTimeBlockDialog from "./ManualTimeBlockDialog.tsx";
 import {get_running_manual_timer} from "../../api/ManualTimeBlock.ts";
 import {useManualProjectFilters} from "../../hooks/useManualProjectFilters.ts";
+import {useCalendarIsolation} from "../../hooks/useCalendarIsolation.ts";
 import {ManualTimerControl} from "./ManualTimer.tsx";
 
 const INCLUDE_GOOGLE_IN_STATS_KEY = "time-tracker:include-google-in-stats";
@@ -71,13 +72,17 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         queryFn: get_running_manual_timer,
     });
 
+    const isolation = useCalendarIsolation();
+    const isolatedProject = isolation.project;
+    const toggleIsolateProject = isolation.toggleProject;
+
     const visibleCategoryNames = useMemo(() => {
         const names = new Set<string>();
         for (const cat of categories) {
-            if (cat.is_visible) names.add(cat.name);
+            if (isolation.category !== null ? cat.id === isolation.category : cat.is_visible) names.add(cat.name);
         }
         return names;
-    }, [categories]);
+    }, [categories, isolation.category]);
 
     const statsCategoryNames = useMemo(() => {
         const names = new Set<string>();
@@ -101,8 +106,8 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const calendarDevices = useMemo(() => getCalendarDevices(devices), [devices]);
 
     const calDeviceUuids = useMemo(
-        () => buildDeviceUuidsForFilter(calendarDevices, (d) => d.in_cal),
-        [calendarDevices],
+        () => isolation.device !== null ? [isolation.device] : buildDeviceUuidsForFilter(calendarDevices, (d) => d.in_cal),
+        [calendarDevices, isolation.device],
     );
 
     const statsDeviceUuids = useMemo(
@@ -137,7 +142,8 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         }).catch(() => {});
     }, []);
 
-    const {isManualTimeInCal, isManualTimeInStats, toggleManualTimeInCal, toggleManualTimeInStats, manualProjectFiltersLoaded, isolatedProject, toggleIsolateProject, toggleAllManualTimeInCal, toggleAllManualTimeInStats} = useManualProjectFilters(manualTimeInCal, manualTimeInStats);
+    const {isManualTimeInCal: savedManualTimeInCal, isManualTimeInStats, toggleManualTimeInCal, toggleManualTimeInStats, manualProjectFiltersLoaded, toggleAllManualTimeInCal, toggleAllManualTimeInStats} = useManualProjectFilters(manualTimeInCal, manualTimeInStats);
+    const isManualTimeInCal = useCallback((id?: number | null) => isolatedProject ? (id ?? null) === isolatedProject.id : savedManualTimeInCal(id), [isolatedProject, savedManualTimeInCal]);
 
     useEffect(() => {
         if (didAlignInitialWeekToBoundary.current) return;
@@ -972,26 +978,27 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                 <div className="flex-1 overflow-hidden min-h-0">
                     <div className="h-full min-h-0 flex flex-col" onClick={handleCalendarClick}>
                         <RenderCalendarContent
+                            isolation={isolation}
                             ref={calenderRef}
                             date={date}
                             categoryColorMap={categoryColorMap}
                             visibleCategories={visibleCategoryNames}
                             categories={categories}
-                            toggleCategoryVisible={toggleCategoryVisible}
+                            toggleCategoryVisible={(id) => { isolation.clearCategory(); toggleCategoryVisible(id); }}
                             toggleCategoryInStats={toggleCategoryInStats}
                             allCategoriesInCal={allCategoriesInCal}
                             allCategoriesInStats={allCategoriesInStats}
-                            toggleAllCategoriesVisible={toggleAllCategoriesVisible}
+                            toggleAllCategoriesVisible={() => { isolation.clearCategory(); toggleAllCategoriesVisible(); }}
                             toggleAllCategoriesInStats={toggleAllCategoriesInStats}
                             calendarDevices={calendarDevices}
-                            toggleDeviceInCal={toggleDeviceInCal}
+                            toggleDeviceInCal={(id) => { isolation.clearDevice(); toggleDeviceInCal(id); }}
                             toggleDeviceInStats={toggleDeviceInStats}
                             calDeviceUuids={calDeviceUuids}
                             handleEventClick={handleEventClick}
                             onDatesSet={handleDatesSet}
                             googleCalendarMap={googleCalendarMap}
                             googleCalendars={displayCalendars}
-                            toggleCalendarVisible={toggleCalendarVisible}
+                            toggleCalendarVisible={(id) => { isolation.clearCalendar(); toggleCalendarVisible(id); }}
                             toggleCalendarInStats={toggleCalendarInStats}
                             includeGoogleInStats={includeGoogleInStats}
                             setIncludeGoogleInStats={setIncludeGoogleInStats}
@@ -999,10 +1006,10 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             manualProjectFiltersLoaded={manualProjectFiltersLoaded}
                             isolatedProject={isolatedProject}
                             toggleIsolateProject={toggleIsolateProject}
-                            toggleAllManualTimeInCal={toggleAllManualTimeInCal}
+                            toggleAllManualTimeInCal={(id) => { isolation.clearProject(); toggleAllManualTimeInCal(id); }}
                             toggleAllManualTimeInStats={toggleAllManualTimeInStats}
                             isManualTimeInStats={isManualTimeInStats}
-                            toggleManualTimeInCal={toggleManualTimeInCal}
+                            toggleManualTimeInCal={(id) => { isolation.clearProject(); toggleManualTimeInCal(id); }}
                             toggleManualTimeInStats={toggleManualTimeInStats}
                             onTimeBlockContextMenu={openFromContextMenuMany}
                         />

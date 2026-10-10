@@ -31,9 +31,12 @@ import {get_manual_time_blocks, MANUAL_TIME_COLOR} from "../../api/ManualTimeBlo
 import {getManualProjects, MANUAL_PROJECTS_QUERY_KEY} from "../../api/ManualProject.ts";
 import {ManualProjectFilter} from "../../hooks/useManualProjectFilters.ts";
 
+import {CalendarIsolation} from "../../hooks/useCalendarIsolation.ts";
+
 const LEFT_SIDEBAR_COLLAPSED_KEY = "time-tracker:left-sidebar-collapsed";
 
 interface RenderCalendarContentProps {
+    isolation: CalendarIsolation;
     ref: any;
     date: Date;
     visibleCategories: Set<string>;
@@ -70,6 +73,7 @@ interface RenderCalendarContentProps {
 }
 
 export default function RenderCalendarContent({
+    isolation,
     ref,
     date,
     visibleCategories,
@@ -315,12 +319,12 @@ export default function RenderCalendarContent({
     const displayedTimeBlocks = calendarAppFilter ? (filteredData ?? []) : (data ?? []);
 
     const isCalendarVisible = useCallback(
-        (calendarId: number) => googleCalendarMap.get(calendarId)?.is_visible ?? false,
-        [googleCalendarMap]
+        (calendarId: number) => isolation.calendar !== null ? calendarId === isolation.calendar : googleCalendarMap.get(calendarId)?.is_visible ?? false,
+        [googleCalendarMap, isolation.calendar]
     );
 
     const events = useMemo(() => {
-        const googleEvents = calendarAppFilter || isolatedProject
+        const googleEvents = (!isolation.showGoogle || (calendarAppFilter && isolation.calendar === null))
             ? []
             : displayGoogleEvents
                   .filter((event: GoogleCalendarEvent) => isCalendarVisible(event.calendar_id))
@@ -359,7 +363,7 @@ export default function RenderCalendarContent({
                   })
                   .filter((e): e is NonNullable<typeof e> => e !== null);
 
-        const timeBlockEvents = (isolatedProject ? [] : displayedTimeBlocks)
+        const timeBlockEvents = (isolation.showTracked ? displayedTimeBlocks : [])
             .filter((block: TimeBlock) => {
                 if (!visibleCategories.has(block.category)) {
                     return false;
@@ -401,7 +405,7 @@ export default function RenderCalendarContent({
             })
             .filter((e): e is NonNullable<typeof e> => e !== null);
 
-        const manualEvents = calendarAppFilter && !isolatedProject
+        const manualEvents = !isolation.showManual || (calendarAppFilter && !isolatedProject)
             ? []
             : manualTimeBlocks.filter((block) => isManualTimeInCal(block.project_id)).map((block) => {
                 const durationSec = block.end_time - block.start_time;
@@ -435,10 +439,14 @@ export default function RenderCalendarContent({
         manualTimeBlocks,
         isManualTimeInCal,
         isolatedProject,
+        isolation.showTracked,
+        isolation.showGoogle,
+        isolation.showManual,
+        isolation.calendar,
     ]);
 
     const showFullCalendarGrid = useMemo(() => {
-        if (isolatedProject) return true;
+        if (isolation.active) return true;
         if (isLoading || (isLoadingGoogleEvents && !(cachedEvents?.length ?? 0))) return false;
         if (calendarAppFilter && isLoadingFilteredData) return false;
         if (error || filteredDataError) return false;
@@ -450,6 +458,7 @@ export default function RenderCalendarContent({
         const hasManualTime = (!calendarAppFilter || isolatedProject) && manualTimeBlocks.some((block) => isManualTimeInCal(block.project_id));
         return !!(hasTimeBlocks || hasManualTime || hasGoogleEvents);
     }, [
+        isolation.active,
         isLoading,
         isLoadingGoogleEvents,
         cachedEvents,
@@ -463,6 +472,10 @@ export default function RenderCalendarContent({
         calendarAppFilter,
         isLoadingFilteredData,
         isolatedProject,
+        isolation.showTracked,
+        isolation.showGoogle,
+        isolation.showManual,
+        isolation.calendar,
     ]);
 
     useEffect(() => {
@@ -521,13 +534,10 @@ export default function RenderCalendarContent({
         };
     }, [events, showFullCalendarGrid, ref, slotMinHeightPx]);
 
-    const isPageLoading = !isolatedProject && (
-        isLoading ||
-        (calendarAppFilter && isLoadingFilteredData) ||
-        (isLoadingGoogleEvents && !(cachedEvents?.length ?? 0)) ||
-        (calendarAppFilter && !filteredData));
+    const isPageLoading = (isolation.showTracked && (isLoading || (calendarAppFilter && (isLoadingFilteredData || !filteredData)))) ||
+        (isolation.showGoogle && isLoadingGoogleEvents && !(cachedEvents?.length ?? 0));
 
-    const pageError = isolatedProject ? null : error ?? filteredDataError;
+    const pageError = isolation.showTracked ? error ?? filteredDataError : null;
 
     useRenderPerf(
         "calendar_week",
@@ -587,7 +597,7 @@ export default function RenderCalendarContent({
                             Categories
                         </h4>
                         <CalendarTogglePills
-                            inCal={!isolatedProject && allCategoriesInCal}
+                            inCal={isolation.category === null && allCategoriesInCal}
                             inStats={allCategoriesInStats}
                             onToggleCal={toggleAllCategoriesVisible}
                             onToggleStats={toggleAllCategoriesInStats}
@@ -603,7 +613,9 @@ export default function RenderCalendarContent({
                                         key={category.id}
                                         name={category.name}
                                         color={color}
-                                        inCal={!isolatedProject && category.is_visible}
+                                        inCal={isolation.category !== null ? isolation.category === category.id : category.is_visible}
+                                        isolated={isolation.category === category.id}
+                                        onToggleIsolate={() => isolation.toggleCategory(category.id)}
                                         inStats={category.in_stats}
                                         onToggleCal={() => toggleCategoryVisible(category.id)}
                                         onToggleStats={() => toggleCategoryInStats(category.id)}
@@ -627,7 +639,9 @@ export default function RenderCalendarContent({
                                             key={device.uuid}
                                             name={device.name}
                                             color="#6b7280"
-                                            inCal={!isolatedProject && device.in_cal}
+                                            inCal={isolation.device !== null ? isolation.device === device.uuid : device.in_cal}
+                                            isolated={isolation.device === device.uuid}
+                                            onToggleIsolate={() => isolation.toggleDevice(device.uuid)}
                                             inStats={device.in_stats}
                                             onToggleCal={() => toggleDeviceInCal(device.uuid)}
                                             onToggleStats={() => toggleDeviceInStats(device.uuid)}
@@ -702,7 +716,9 @@ export default function RenderCalendarContent({
                                     key={calendar.id}
                                     name={calendar.name}
                                     color={calendar.color}
-                                    inCal={!isolatedProject && calendar.is_visible}
+                                    inCal={isCalendarVisible(calendar.id)}
+                                    isolated={isolation.calendar === calendar.id}
+                                    onToggleIsolate={() => isolation.toggleCalendar(calendar.id)}
                                     inStats={calendar.in_stats}
                                     onToggleCal={() => toggleCalendarVisible(calendar.id)}
                                     onToggleStats={() => toggleCalendarInStats(calendar.id)}
@@ -720,9 +736,9 @@ export default function RenderCalendarContent({
                     className="calendar-fc-host flex-1 h-full min-h-0 min-w-0 overflow-hidden"
                     style={{ ["--tt-slot-min-height" as any]: `${slotMinHeightPx}px` }}
                 >
-                    {isPageLoading || isLoadingManualTime ? (
+                    {isPageLoading || (isolation.showManual && isLoadingManualTime) ? (
                         <CalendarSkeleton />
-                    ) : pageError || manualTimeError ? (
+                    ) : pageError || (isolation.showManual && manualTimeError) ? (
                         <div className="flex items-center justify-center h-full w-full">
                             <div className="text-center">
                                 <div className="text-red-400 text-xl mb-2">Error loading data</div>
