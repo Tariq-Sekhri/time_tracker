@@ -278,9 +278,15 @@ function ColourList({sections, collapsed, onToggleCollapsed}: VariantProps) {
 
     return (
         <div className={`${shell} w-64`}>
-            <div className="flex items-center gap-1 py-2 pl-2 pr-1">
-                <CollapseButton collapsed={collapsed} onClick={onToggleCollapsed}/>
-                <span className="flex-1 text-xs font-medium text-gray-500">Sources</span>
+            {/* The whole row collapses the sidebar, not just the chevron. */}
+            <div className="px-1 pt-2">
+                <button type="button" onClick={onToggleCollapsed} aria-label="Collapse filter sidebar" title="Collapse"
+                        className="group flex w-full items-center gap-1 rounded-md py-1 pl-1 pr-1 text-left text-gray-500 transition-colors hover:bg-white/[0.04] hover:text-gray-200">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center">
+                        <IconChevron open={false} className={`h-3.5 w-3.5 ${collapsed ? "" : "rotate-180"}`}/>
+                    </span>
+                    <span className="flex-1 text-xs font-medium">Sources</span>
+                </button>
             </div>
             <div className="pb-3">
                 {sections.map((section) => {
