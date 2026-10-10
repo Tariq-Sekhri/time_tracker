@@ -1,6 +1,5 @@
 import {memo, useMemo} from "react";
 import {measure} from "../../perf.ts";
-import AppTitleDetails from "../../Componants/AppTitleDetails.tsx";
 import {
     CartesianGrid,
     Line,
@@ -156,19 +155,6 @@ function CategoryWeekTrendChart({
         });
     }, (r) => ({rows: r.length, series: series.length})), [columns, series, totalLineValues, showTotalLine, seriesMode]);
 
-    const appNamesByApp = useMemo(() => {
-        const names = new Map<string, Set<string>>();
-        if (seriesMode !== "topApps") return new Map<string, string[]>();
-        for (const stats of weekStats) {
-            for (const app of stats?.all_apps ?? []) {
-                let entry = names.get(app.app);
-                if (!entry) names.set(app.app, entry = new Set());
-                for (const name of app.app_names) entry.add(name);
-            }
-        }
-        return new Map([...names].map(([app, values]) => [app, [...values]]));
-    }, [weekStats, seriesMode]);
-
     const showTotalLineOnChart = showTotalLine && hasTotalLineData;
 
     const modeDescription =
@@ -217,28 +203,6 @@ function CategoryWeekTrendChart({
     return (
         <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-gray-900 rounded p-4">
             <p className="text-sm text-gray-400 shrink-0 mb-3">{modeDescription}{seriesDescription}</p>
-            <div
-                className="flex flex-wrap gap-x-4 gap-y-2 mb-4 pb-4 border-b border-gray-800 shrink-0 max-h-28 overflow-y-auto nice-scrollbar">
-                {showTotalLineOnChart && (
-                    <div className="flex items-center gap-2 min-w-0">
-                        <div
-                            className="w-2.5 h-2.5 rounded-full shrink-0 border border-gray-500"
-                            style={{backgroundColor: TOTAL_LINE_COLOR}}
-                        />
-                        <span className="text-xs text-gray-200 font-medium truncate">{TOTAL_LINE_NAME}</span>
-                    </div>
-                )}
-                {series.map((s) => (
-                    <div key={s.category} className="flex items-center gap-2 min-w-0">
-                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{backgroundColor: s.color}}/>
-                        {seriesMode === "topApps" ? <AppTitleDetails app={s.category}
-                            appNames={appNamesByApp.get(s.category) ?? []}
-                            start={weeks[0].week_start} end={weeks[weeks.length - 1].week_end}
-                            className="text-xs text-gray-300 truncate" /> :
-                            <span className="text-xs text-gray-300 truncate">{s.category}</span>}
-                    </div>
-                ))}
-            </div>
             <div className="flex-1 min-h-[280px] min-w-0 overflow-x-auto overflow-y-hidden nice-scrollbar rounded">
                 <div
                     className="h-[min(520px,calc(100vh-22rem))] min-h-[260px]"
