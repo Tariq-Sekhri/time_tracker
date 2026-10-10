@@ -30,7 +30,6 @@ export type TrendValueMode = "avg" | "total";
 export type TrendSeriesMode = "categories" | "topApps";
 export type TrendAppRanking = "weekly" | "range";
 
-const PX_PER_WEEK = 52;
 const TOTAL_WEEK_DATA_KEY = "__week_total__";
 const TOTAL_LINE_COLOR = "#f3f4f6";
 const TOTAL_LINE_NAME = "Total";
@@ -210,10 +209,9 @@ function CategoryWeekTrendChart({
     return (
         <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-gray-900 rounded p-3">
             <p className="text-sm text-gray-400 shrink-0 mb-2">{modeDescription}{seriesDescription}</p>
-            <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-x-auto overflow-y-hidden nice-scrollbar rounded">
+            <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden rounded">
                 <div
-                    className="flex-1 min-h-0"
-                    style={{width: `max(100%, ${columns.length * PX_PER_WEEK}px)`}}
+                    className="flex-1 min-h-0 min-w-0 w-full"
                 >
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart
@@ -224,6 +222,8 @@ function CategoryWeekTrendChart({
                             <CartesianGrid stroke="#374151" strokeDasharray="6 6" vertical={false}/>
                             <XAxis
                                 dataKey="label"
+                                interval="preserveStartEnd"
+                                minTickGap={16}
                                 tick={{fill: "#9ca3af", fontSize: 11}}
                                 tickLine={false}
                                 axisLine={{stroke: "#4b5563"}}
