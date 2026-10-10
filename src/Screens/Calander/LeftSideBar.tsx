@@ -13,7 +13,7 @@ import {useState, type ReactNode} from "react";
 export type LeftSidebarUi = "1" | "2";
 
 export const LEFT_SIDEBAR_UIS: readonly { id: LeftSidebarUi; hint: string }[] = [
-    {id: "1", hint: "Colour rows: rows washed in their colour, week / stats icons in it, click a row for week"},
+    {id: "1", hint: "Colour rows: rows washed in their colour, week / stats icons in it, click a row for both"},
     {id: "2", hint: "Minimal: names only; state and eye / stats / isolate controls show on hover"},
 ];
 
@@ -262,14 +262,23 @@ function ColourSectionHeader({section, open, onToggleOpen}: { section: SidebarSe
     );
 }
 
-/** A source row washed in its colour while visible; click anywhere to toggle the week view. */
+/**
+ * A source row washed in its colour while visible. Clicking the row sets week and stats
+ * together: both off when both are on, otherwise both on.
+ */
 function ColourRow({source}: { source: SidebarSource }) {
     const wash = source.inCal;
+    const bothOn = source.inCal && source.inStats;
+    const toggleBoth = () => {
+        if (source.disabled) return;
+        if (source.inCal === bothOn) source.onToggleCal();
+        if (source.inStats === bothOn) source.onToggleStats();
+    };
     return (
-        <div role="button" tabIndex={source.disabled ? -1 : 0} aria-pressed={source.inCal}
-             onClick={() => !source.disabled && source.onToggleCal()}
-             onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && !source.disabled) { e.preventDefault(); source.onToggleCal(); } }}
-             title={source.inCal ? "Click to hide in week view" : "Click to show in week view"}
+        <div role="button" tabIndex={source.disabled ? -1 : 0} aria-pressed={bothOn}
+             onClick={toggleBoth}
+             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleBoth(); } }}
+             title={bothOn ? "Click to hide in week view and stats" : "Click to show in week view and stats"}
              className={`group relative mb-0.5 flex cursor-pointer items-center gap-2 rounded-md py-0.5 pl-2 pr-1 transition-[background-color,filter] ${source.isolated ? "ring-1 ring-inset ring-blue-400" : ""} ${wash ? "hover:brightness-125" : "hover:bg-white/[0.04]"} ${source.disabled ? "cursor-not-allowed opacity-50" : ""}`}
              style={wash ? {
                  backgroundColor: `color-mix(in srgb, ${source.color} 14%, transparent)`,
