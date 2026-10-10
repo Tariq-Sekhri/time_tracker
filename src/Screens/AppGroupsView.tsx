@@ -32,7 +32,7 @@ export default function AppGroupsView() {
     const [editing, setEditing] = useState<AppGroup | null>(null);
     const [editError, setEditError] = useState<string | null>(null);
 
-    const {data: groups = [], isLoading, refetch} = useQuery({
+    const {data: groups = [], isLoading} = useQuery({
         queryKey: ["app_groups"],
         queryFn: get_app_groups,
     });
@@ -104,14 +104,6 @@ export default function AppGroupsView() {
 
     return (
         <div className="p-6 text-white [color-scheme:dark]">
-            <div className="flex items-center justify-between gap-4 mb-2">
-                <button
-                    onClick={() => void refetch()}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded"
-                >
-                    Refresh
-                </button>
-            </div>
             <p className="text-sm text-gray-400 mb-6 max-w-4xl">
                 Treat changing window titles as one app in calendars and statistics. The display name is shown in
                 Top Apps, while the regex matches the original recorded title. Existing logs are grouped immediately.
