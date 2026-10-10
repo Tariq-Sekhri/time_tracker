@@ -33,6 +33,7 @@ interface DayStatisticsSidebarProps {
     includeGoogleInStats: boolean;
     googleCalendars: GoogleCalendar[];
     statsCategoryNames: Set<string>;
+    statsCategoryFilter: string[] | null;
     statsDeviceUuids: string[] | null;
     isManualTimeInStats: ManualProjectFilter;
     trailingToolbar?: ReactNode;
@@ -53,6 +54,7 @@ export default function DayStatisticsSidebar({
     includeGoogleInStats,
     googleCalendars,
     statsCategoryNames,
+    statsCategoryFilter,
     statsDeviceUuids,
     isManualTimeInStats,
     trailingToolbar,
@@ -78,11 +80,11 @@ export default function DayStatisticsSidebar({
         isError,
         dataUpdatedAt: dayStatsUpdatedAt,
     } = useQuery({
-        queryKey: ["day_statistics", dayStart, dayEnd, statsDeviceUuids],
+        queryKey: ["day_statistics", dayStart, dayEnd, statsDeviceUuids, statsCategoryFilter],
         queryFn: async () => {
             if (!dayStart || !dayEnd) return null;
             try {
-                const stats = await get_day_statistics(dayStart, dayEnd, statsDeviceUuids, false);
+                const stats = await get_day_statistics(dayStart, dayEnd, statsDeviceUuids, false, statsCategoryFilter);
                 return stats;
             } catch (e) {
                 console.error("[DayStats] queryFn threw:", e);

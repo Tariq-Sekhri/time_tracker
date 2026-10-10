@@ -55,12 +55,14 @@ export async function get_week_statistics(
     weekEnd: number,
     deviceUuids?: string[] | null,
     includeManual = true,
+    categoryNames: string[] | null = null,
 ): Promise<WeekStatistics> {
     return invokeOrThrow<WeekStatistics>("get_week_statistics", {
         weekStart,
         weekEnd,
         deviceUuids: deviceUuids ?? null,
         includeManual,
+        categoryNames,
     });
 }
 
@@ -73,12 +75,14 @@ export async function get_day_statistics(
     dayEnd: number,
     deviceUuids?: string[] | null,
     includeManual = true,
+    categoryNames: string[] | null = null,
 ): Promise<DayStatistics> {
     return invokeOrThrow<DayStatistics>("get_day_statistics", {
         dayStart,
         dayEnd,
         deviceUuids: deviceUuids ?? null,
         includeManual,
+        categoryNames,
     });
 }
 

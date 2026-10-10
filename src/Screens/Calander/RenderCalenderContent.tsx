@@ -616,7 +616,7 @@ export default function RenderCalendarContent({
                                         inCal={isolation.category !== null ? isolation.category === category.id : category.is_visible}
                                         isolated={isolation.category === category.id}
                                         onToggleIsolate={() => isolation.toggleCategory(category.id)}
-                                        inStats={category.in_stats}
+                                        inStats={isolation.category !== null ? isolation.category === category.id : category.in_stats}
                                         onToggleCal={() => toggleCategoryVisible(category.id)}
                                         onToggleStats={() => toggleCategoryInStats(category.id)}
                                         isLeftCollapsed={isLeftCollapsed}
@@ -642,7 +642,7 @@ export default function RenderCalendarContent({
                                             inCal={isolation.device !== null ? isolation.device === device.uuid : device.in_cal}
                                             isolated={isolation.device === device.uuid}
                                             onToggleIsolate={() => isolation.toggleDevice(device.uuid)}
-                                            inStats={device.in_stats}
+                                            inStats={isolation.device !== null ? isolation.device === device.uuid : device.in_stats}
                                             onToggleCal={() => toggleDeviceInCal(device.uuid)}
                                             onToggleStats={() => toggleDeviceInStats(device.uuid)}
                                             isLeftCollapsed={isLeftCollapsed}
@@ -719,7 +719,7 @@ export default function RenderCalendarContent({
                                     inCal={isCalendarVisible(calendar.id)}
                                     isolated={isolation.calendar === calendar.id}
                                     onToggleIsolate={() => isolation.toggleCalendar(calendar.id)}
-                                    inStats={calendar.in_stats}
+                                    inStats={isolation.calendar !== null ? isolation.calendar === calendar.id : calendar.in_stats}
                                     onToggleCal={() => toggleCalendarVisible(calendar.id)}
                                     onToggleStats={() => toggleCalendarInStats(calendar.id)}
                                     isLeftCollapsed={isLeftCollapsed}

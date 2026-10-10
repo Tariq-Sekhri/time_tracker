@@ -69,6 +69,7 @@ interface StatisticsSidebarProps {
     includeGoogleInStats: boolean;
     googleCalendars: GoogleCalendar[];
     statsCategoryNames: Set<string>;
+    statsCategoryFilter: string[] | null;
     statsDeviceUuids: string[] | null;
     isManualTimeInStats: ManualProjectFilter;
     trailingToolbar?: ReactNode;
@@ -81,6 +82,7 @@ export default function StatisticsSidebar({
     includeGoogleInStats,
     googleCalendars,
     statsCategoryNames,
+    statsCategoryFilter,
     statsDeviceUuids,
     isManualTimeInStats,
     trailingToolbar,
@@ -110,10 +112,10 @@ export default function StatisticsSidebar({
         isError,
         dataUpdatedAt: weekStatsUpdatedAt,
     } = useQuery({
-        queryKey: ["week_statistics", week_start, week_end, calendarStartHour, statsDeviceUuids],
+        queryKey: ["week_statistics", week_start, week_end, calendarStartHour, statsDeviceUuids, statsCategoryFilter],
         queryFn: async () => {
             try {
-                const stats = await get_week_statistics(week_start, week_end, statsDeviceUuids, false);
+                const stats = await get_week_statistics(week_start, week_end, statsDeviceUuids, false, statsCategoryFilter);
                 return stats;
             } catch (e) {
                 console.error("[WeekStats] queryFn threw:", e);

@@ -996,13 +996,13 @@ function manualStatsBlocks(start: number, end: number): TimeBlockRow[] {
     return blocks;
 }
 
-function weekStatistics(ws: number, we: number, includeManual = true, deviceUuids?: string[] | null) {
+function weekStatistics(ws: number, we: number, includeManual = true, deviceUuids?: string[] | null, categoryNames?: string[] | null) {
     seed();
     const daySec = 86400;
-    const blocks = [...blocksInRangeEffective(ws, we, deviceUuids), ...(includeManual ? manualStatsBlocks(ws, we + 1) : [])];
+    const blocks = [...blocksInRangeEffective(ws, we, deviceUuids), ...(includeManual ? manualStatsBlocks(ws, we + 1) : [])].filter(block => categoryNames == null || categoryNames.includes(block.category));
     const prevWs = ws - 7 * daySec;
     const prevWe = we - 7 * daySec;
-    const prevBlocks = [...blocksInRangeEffective(prevWs, prevWe, deviceUuids), ...(includeManual ? manualStatsBlocks(prevWs, prevWe + 1) : [])];
+    const prevBlocks = [...blocksInRangeEffective(prevWs, prevWe, deviceUuids), ...(includeManual ? manualStatsBlocks(prevWs, prevWe + 1) : [])].filter(block => categoryNames == null || categoryNames.includes(block.category));
 
     const built = buildCategoryStats(blocks, ws, we);
     const prevBuilt = buildCategoryStats(prevBlocks, prevWs, prevWe);
@@ -1111,9 +1111,9 @@ function weekStatistics(ws: number, we: number, includeManual = true, deviceUuid
     };
 }
 
-function dayStatistics(ds: number, de: number, includeManual = true, deviceUuids?: string[] | null) {
+function dayStatistics(ds: number, de: number, includeManual = true, deviceUuids?: string[] | null, categoryNames?: string[] | null) {
     seed();
-    const blocks = [...blocksInRangeEffective(ds, de, deviceUuids), ...(includeManual ? manualStatsBlocks(ds, de + 1) : [])];
+    const blocks = [...blocksInRangeEffective(ds, de, deviceUuids), ...(includeManual ? manualStatsBlocks(ds, de + 1) : [])].filter(block => categoryNames == null || categoryNames.includes(block.category));
     const { total, cats, apps, appNames, hourly } = buildCategoryStats(blocks, ds, de);
     const catList = Array.from(cats.entries()).map(([category, v]) => ({
         category,
@@ -1624,7 +1624,7 @@ export async function invoke<T>(
                     (a as { week_end?: number }).week_end ??
                     0
             );
-            return weekStatistics(weekStart, weekEnd, (a as {includeManual?: boolean}).includeManual !== false, a.deviceUuids as string[] | null) as unknown as T;
+            return weekStatistics(weekStart, weekEnd, (a as {includeManual?: boolean}).includeManual !== false, a.deviceUuids as string[] | null, a.categoryNames as string[] | null) as unknown as T;
         }
         case "get_trend_statistics": {
             const weeks = (a.weeks ?? []) as {week_start: number; week_end: number}[];
@@ -1653,7 +1653,7 @@ export async function invoke<T>(
                     (a as { day_end?: number }).day_end ??
                     0
             );
-            return dayStatistics(dayStart, dayEnd, (a as {includeManual?: boolean}).includeManual !== false, a.deviceUuids as string[] | null) as unknown as T;
+            return dayStatistics(dayStart, dayEnd, (a as {includeManual?: boolean}).includeManual !== false, a.deviceUuids as string[] | null, a.categoryNames as string[] | null) as unknown as T;
         }
         case "get_notes_state":
             return {...notesState} as unknown as T;

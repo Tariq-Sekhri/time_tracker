@@ -133,8 +133,8 @@ export default function CalendarSourceToggles({
 }: CalendarSourceTogglesProps) {
     const isolateButton = onToggleIsolate && (
         <button type="button" onClick={onToggleIsolate} aria-pressed={isolated}
-            aria-label={isolated ? `Stop isolating ${name}` : `Isolate ${name} in week`}
-            title={isolated ? "Restore week view" : "Show only this source in week; keep compatible filters"}
+            aria-label={isolated ? `Stop isolating ${name}` : `Isolate ${name} in week and stats`}
+            title={isolated ? "Restore week and stats" : "Show only this source in week and stats; keep compatible filters"}
             className={`shrink-0 rounded px-1.5 py-1 text-[11px] font-medium transition-colors ${isolated ? "bg-blue-600 text-white" : "bg-gray-900 text-gray-400 hover:bg-gray-800 hover:text-white"}`}>
             {isLeftCollapsed ? <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg> : isolated ? "Restore" : "Isolate"}
         </button>

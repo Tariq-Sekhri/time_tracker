@@ -108,6 +108,36 @@ fn log_category(log: &Log, regexes: &[CachedCategoryRegex]) -> String {
     }
 }
 
+// Apply before aggregation so totals, app groups, and comparisons share a scope.
+fn retain_statistics_categories(logs: &mut Vec<Log>, names: Option<&[String]>, regexes: &[CachedCategoryRegex]) {
+    let Some(names) = names else { return; };
+    logs.retain(|log| names.contains(&log_category(log, regexes)));
+}
+
+#[cfg(test)]
+mod isolation_tests {
+    use super::*;
+
+    #[test]
+    fn statistics_isolation_combines_device_and_category_before_app_aggregation() {
+        let regexes = vec![CachedCategoryRegex {regex: Regex::new("Editor").unwrap(), category: "Work".into(), priority: 0}];
+        let logs = vec![("desktop", "Editor", 20), ("phone", "Editor", 30), ("desktop", "Browser", 40)]
+            .into_iter().enumerate().map(|(id, (device, app, duration))| Log {
+                id: id as i64, device_uuid: Some(device.into()), app: app.into(), timestamp: 100, duration, is_deleted: false,
+            }).collect::<Vec<_>>();
+        let mut scoped = crate::db::tables::device::filter_logs_by_devices(logs.clone(), Some(vec!["desktop".into()]), Some("desktop".into()));
+        retain_statistics_categories(&mut scoped, Some(&["Work".into()]), &regexes);
+        assert_eq!(scoped.len(), 1);
+        assert_eq!(scoped[0].duration, 20);
+        assert_eq!(app_duration_map(&scoped, &[]).values().sum::<i64>(), 20);
+        retain_statistics_categories(&mut scoped, Some(&[]), &regexes);
+        assert!(scoped.is_empty());
+        let mut restored = logs.clone();
+        retain_statistics_categories(&mut restored, None, &regexes);
+        assert_eq!(restored.len(), logs.len());
+    }
+}
+
 // Aggregation-only segments preserve the original block and its notes.
 fn manual_segments(
     blocks: &[crate::db::tables::manual_time_block::ManualTimeBlock],
@@ -582,8 +612,9 @@ pub async fn get_week_statistics(
     week_end: i64,
     device_uuids: Option<Vec<String>>,
     include_manual: Option<bool>,
+    category_names: Option<Vec<String>>,
 ) -> Result<WeekStatistics, Error> {
-    let stats = week_statistics(week_start, week_end, device_uuids, include_manual).await?;
+    let stats = week_statistics_with_range_reuse(week_start, week_end, device_uuids, include_manual, true, category_names).await?;
     crate::perf::payload_probe("get_week_statistics_payload", &stats);
     Ok(stats)
 }
@@ -594,7 +625,7 @@ async fn week_statistics(
     device_uuids: Option<Vec<String>>,
     include_manual: Option<bool>,
 ) -> Result<WeekStatistics, Error> {
-    week_statistics_with_range_reuse(week_start, week_end, device_uuids, include_manual, true).await
+    week_statistics_with_range_reuse(week_start, week_end, device_uuids, include_manual, true, None).await
 }
 
 async fn week_statistics_with_range_reuse(
@@ -603,6 +634,7 @@ async fn week_statistics_with_range_reuse(
     device_uuids: Option<Vec<String>>,
     include_manual: Option<bool>,
     reuse_range: bool,
+    category_names: Option<Vec<String>>,
 ) -> Result<WeekStatistics, Error> {
     use chrono::{Local, TimeZone};
 
@@ -642,7 +674,7 @@ async fn week_statistics_with_range_reuse(
     perf.stage("skip_filter");
     perf.note("after_skip", logs.len());
 
-    logs = crate::db::tables::device::filter_logs_by_devices(logs, device_uuids, local_uuid);
+    logs = crate::db::tables::device::filter_logs_by_devices(logs, device_uuids.clone(), local_uuid.clone());
     perf.stage("device_filter");
     perf.note("after_devices", logs.len());
 
@@ -662,6 +694,8 @@ async fn week_statistics_with_range_reuse(
     perf.stage("manual");
     perf.note("manual_segments", manual_logs.len());
     logs.extend(manual_logs);
+
+    retain_statistics_categories(&mut logs, category_names.as_deref(), &regex);
 
     let week_logs: Vec<Log> = logs
         .into_iter()
@@ -804,6 +838,9 @@ async fn week_statistics_with_range_reuse(
         .collect(),
     };
     retain_unskipped(&mut prev_week_logs, &skipped_regexes);
+    if category_names.is_some() {
+        prev_week_logs = crate::db::tables::device::filter_logs_by_devices(prev_week_logs, device_uuids, local_uuid);
+    }
     perf.stage("prev_filter");
 
     prev_week_logs.extend(
@@ -814,6 +851,7 @@ async fn week_statistics_with_range_reuse(
         )
         .await?,
     );
+    retain_statistics_categories(&mut prev_week_logs, category_names.as_deref(), &regex);
     perf.stage("prev_manual");
     perf.note("prev_logs", prev_week_logs.len());
 
@@ -1087,6 +1125,7 @@ pub async fn get_day_statistics(
     day_end: i64,
     device_uuids: Option<Vec<String>>,
     include_manual: Option<bool>,
+    category_names: Option<Vec<String>>,
 ) -> Result<DayStatistics, Error> {
     let mut perf = crate::perf::Perf::new("get_day_statistics");
     let mut clock = StatisticsClock::default();
@@ -1117,6 +1156,8 @@ pub async fn get_day_statistics(
     logs.extend(
         manual_statistics_logs(day_start, day_end.saturating_add(1), include_manual).await?,
     );
+
+    retain_statistics_categories(&mut logs, category_names.as_deref(), &regex);
 
     let day_logs: Vec<Log> = logs
         .into_iter()
@@ -1308,10 +1349,10 @@ mod optimization_benchmarks {
         let mut after_ms = Vec::new();
         for _ in 0..3 {
             let timer = Instant::now();
-            let old = week_statistics_with_range_reuse(start,now,None,None,false).await.unwrap();
+            let old = week_statistics_with_range_reuse(start,now,None,None,false,None).await.unwrap();
             before_ms.push(timer.elapsed().as_secs_f64()*1000.0);
             let timer = Instant::now();
-            let new = week_statistics_with_range_reuse(start,now,None,None,true).await.unwrap();
+            let new = week_statistics_with_range_reuse(start,now,None,None,true,None).await.unwrap();
             after_ms.push(timer.elapsed().as_secs_f64()*1000.0);
             assert_same(old,new);
         }
@@ -1319,8 +1360,8 @@ mod optimization_benchmarks {
         let device: String = sqlx::query_scalar("SELECT device_uuid FROM logs WHERE is_deleted=0 LIMIT 1").fetch_one(&pool).await.unwrap();
         for devices in [Some(vec![]),Some(vec![device])] {
             for manual in [Some(false),Some(true)] {
-                let old = week_statistics_with_range_reuse(start,now,devices.clone(),manual,false).await.unwrap();
-                let new = week_statistics_with_range_reuse(start,now,devices.clone(),manual,true).await.unwrap();
+                let old = week_statistics_with_range_reuse(start,now,devices.clone(),manual,false,None).await.unwrap();
+                let new = week_statistics_with_range_reuse(start,now,devices.clone(),manual,true,None).await.unwrap();
                 assert_same(old,new);
             }
         }
@@ -1356,7 +1397,7 @@ mod optimization_benchmarks {
         for devices in [Some(Vec::new()), device.map(|device| vec![device])] {
             for include_manual in [Some(false), Some(true)] {
                 let old = baseline::get_week_statistics(start + 1777,end - 999,devices.clone(),include_manual).await.unwrap();
-                let new = get_week_statistics(start + 1777,end - 999,devices.clone(),include_manual).await.unwrap();
+                let new = get_week_statistics(start + 1777,end - 999,devices.clone(),include_manual,None).await.unwrap();
                 assert_same(old,new);
             }
         }
@@ -1368,7 +1409,7 @@ mod optimization_benchmarks {
                 let old = baseline::get_week_statistics(range_start,range_end,None,None).await.unwrap();
                 old_ms.push(timer.elapsed().as_secs_f64()*1000.0);
                 let timer = Instant::now();
-                let new = get_week_statistics(range_start,range_end,None,None).await.unwrap();
+                let new = get_week_statistics(range_start,range_end,None,None,None).await.unwrap();
                 new_ms.push(timer.elapsed().as_secs_f64()*1000.0);
                 assert_same(old,new);
             }

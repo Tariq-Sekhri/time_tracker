@@ -33,6 +33,7 @@ export function RightSideBar({
     includeGoogleInStats,
     googleCalendars,
     statsCategoryNames,
+    statsCategoryFilter,
     statsDeviceUuids,
     isManualTimeInStats,
 }: {
@@ -51,6 +52,7 @@ export function RightSideBar({
     includeGoogleInStats: boolean,
     googleCalendars: GoogleCalendar[],
     statsCategoryNames: Set<string>,
+    statsCategoryFilter: string[] | null,
     statsDeviceUuids: string[] | null,
     isManualTimeInStats: ManualProjectFilter,
 }) {
@@ -107,6 +109,7 @@ export function RightSideBar({
                         includeGoogleInStats={includeGoogleInStats}
                         googleCalendars={googleCalendars}
                         statsCategoryNames={statsCategoryNames}
+                        statsCategoryFilter={statsCategoryFilter}
                         statsDeviceUuids={statsDeviceUuids}
                         isManualTimeInStats={isManualTimeInStats}
                         trailingToolbar={collapseSidebarButton}
@@ -125,6 +128,7 @@ export function RightSideBar({
                         includeGoogleInStats={includeGoogleInStats}
                         googleCalendars={googleCalendars}
                         statsCategoryNames={statsCategoryNames}
+                        statsCategoryFilter={statsCategoryFilter}
                         statsDeviceUuids={statsDeviceUuids}
                         isManualTimeInStats={isManualTimeInStats}
                         trailingToolbar={collapseSidebarButton}

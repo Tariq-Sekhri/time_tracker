@@ -87,10 +87,10 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const statsCategoryNames = useMemo(() => {
         const names = new Set<string>();
         for (const cat of categories) {
-            if (cat.in_stats) names.add(cat.name);
+            if (isolation.showTracked && (isolation.category !== null ? cat.id === isolation.category : cat.in_stats)) names.add(cat.name);
         }
         return names;
-    }, [categories]);
+    }, [categories, isolation.category, isolation.showTracked]);
 
     const {data: serverIp} = useQuery({
         queryKey: ["sync", "serverIp"],
@@ -111,8 +111,8 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     );
 
     const statsDeviceUuids = useMemo(
-        () => buildDeviceUuidsForFilter(calendarDevices, (d) => d.in_cal && d.in_stats),
-        [calendarDevices],
+        () => !isolation.showTracked ? [] : isolation.device !== null ? [isolation.device] : buildDeviceUuidsForFilter(calendarDevices, (d) => d.in_cal && d.in_stats),
+        [calendarDevices, isolation.device, isolation.showTracked],
     );
 
     useEffect(() => {
@@ -142,8 +142,10 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         }).catch(() => {});
     }, []);
 
-    const {isManualTimeInCal: savedManualTimeInCal, isManualTimeInStats, toggleManualTimeInCal, toggleManualTimeInStats, manualProjectFiltersLoaded, toggleAllManualTimeInCal, toggleAllManualTimeInStats} = useManualProjectFilters(manualTimeInCal, manualTimeInStats);
+    const {isManualTimeInCal: savedManualTimeInCal, isManualTimeInStats: savedManualTimeInStats, toggleManualTimeInCal, toggleManualTimeInStats, manualProjectFiltersLoaded, toggleAllManualTimeInCal, toggleAllManualTimeInStats} = useManualProjectFilters(manualTimeInCal, manualTimeInStats);
     const isManualTimeInCal = useCallback((id?: number | null) => isolatedProject ? (id ?? null) === isolatedProject.id : savedManualTimeInCal(id), [isolatedProject, savedManualTimeInCal]);
+
+    const isManualTimeInStats = useCallback((id?: number | null) => isolation.showManual && (isolatedProject ? (id ?? null) === isolatedProject.id : savedManualTimeInStats(id)), [isolation.showManual, isolatedProject, savedManualTimeInStats]);
 
     useEffect(() => {
         if (didAlignInitialWeekToBoundary.current) return;
@@ -985,21 +987,21 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             visibleCategories={visibleCategoryNames}
                             categories={categories}
                             toggleCategoryVisible={(id) => { isolation.clearCategory(); toggleCategoryVisible(id); }}
-                            toggleCategoryInStats={toggleCategoryInStats}
+                            toggleCategoryInStats={(id) => { isolation.clearCategory(); toggleCategoryInStats(id); }}
                             allCategoriesInCal={allCategoriesInCal}
                             allCategoriesInStats={allCategoriesInStats}
                             toggleAllCategoriesVisible={() => { isolation.clearCategory(); toggleAllCategoriesVisible(); }}
-                            toggleAllCategoriesInStats={toggleAllCategoriesInStats}
+                            toggleAllCategoriesInStats={() => { isolation.clearCategory(); toggleAllCategoriesInStats(); }}
                             calendarDevices={calendarDevices}
                             toggleDeviceInCal={(id) => { isolation.clearDevice(); toggleDeviceInCal(id); }}
-                            toggleDeviceInStats={toggleDeviceInStats}
+                            toggleDeviceInStats={(id) => { isolation.clearDevice(); toggleDeviceInStats(id); }}
                             calDeviceUuids={calDeviceUuids}
                             handleEventClick={handleEventClick}
                             onDatesSet={handleDatesSet}
                             googleCalendarMap={googleCalendarMap}
                             googleCalendars={displayCalendars}
                             toggleCalendarVisible={(id) => { isolation.clearCalendar(); toggleCalendarVisible(id); }}
-                            toggleCalendarInStats={toggleCalendarInStats}
+                            toggleCalendarInStats={(id) => { isolation.clearCalendar(); toggleCalendarInStats(id); }}
                             includeGoogleInStats={includeGoogleInStats}
                             setIncludeGoogleInStats={setIncludeGoogleInStats}
                             isManualTimeInCal={isManualTimeInCal}
@@ -1007,10 +1009,10 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             isolatedProject={isolatedProject}
                             toggleIsolateProject={toggleIsolateProject}
                             toggleAllManualTimeInCal={(id) => { isolation.clearProject(); toggleAllManualTimeInCal(id); }}
-                            toggleAllManualTimeInStats={toggleAllManualTimeInStats}
+                            toggleAllManualTimeInStats={(id) => { isolation.clearProject(); toggleAllManualTimeInStats(id); }}
                             isManualTimeInStats={isManualTimeInStats}
                             toggleManualTimeInCal={(id) => { isolation.clearProject(); toggleManualTimeInCal(id); }}
-                            toggleManualTimeInStats={toggleManualTimeInStats}
+                            toggleManualTimeInStats={(id) => { isolation.clearProject(); toggleManualTimeInStats(id); }}
                             onTimeBlockContextMenu={openFromContextMenuMany}
                         />
                     </div>
@@ -1021,8 +1023,9 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                               setSelectedDate={setSelectedDate} setCurrentView={setCurrentView}
                               selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory}
                               isLoadingCategory={isLoadingCategory}
-                              includeGoogleInStats={includeGoogleInStats}
-                              googleCalendars={displayCalendars}
+                              includeGoogleInStats={isolation.showGoogle && (isolation.calendar !== null || includeGoogleInStats)}
+                              googleCalendars={isolation.calendar !== null ? displayCalendars.map(c => ({...c, in_stats: c.id === isolation.calendar})) : displayCalendars}
+                              statsCategoryFilter={isolation.active ? [...statsCategoryNames].sort() : null}
                               statsCategoryNames={statsCategoryNames}
                               statsDeviceUuids={statsDeviceUuids}
                               isManualTimeInStats={isManualTimeInStats}
