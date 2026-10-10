@@ -709,6 +709,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
             setCachedCalendars(updated);
             try {
                 await update_google_calendar({id: calendarId, in_stats});
+                if (in_stats) setIncludeGoogleInStats(true);
             } catch (e) {
                 console.error("[GCal Calendar] Failed to update calendar stats:", e);
                 queryClient.setQueryData<GoogleCalendar[]>(["googleCalendars"], previous);
@@ -717,6 +718,29 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         },
         [displayCalendars, queryClient]
     );
+
+    const toggleAllGoogleCalendars = useCallback(async (field: "is_visible" | "in_stats") => {
+        const previous = queryClient.getQueryData<GoogleCalendar[]>(["googleCalendars"]) ??
+            getCachedCalendars() ?? displayCalendars;
+        if (previous.length === 0) return;
+        isolation.clearCalendar();
+        const next = !(previous.every((calendar) => calendar[field]) &&
+            (field !== "in_stats" || includeGoogleInStats));
+        const updated = previous.map((calendar) => ({...calendar, [field]: next}));
+        queryClient.setQueryData<GoogleCalendar[]>(["googleCalendars"], updated);
+        setCachedCalendars(updated);
+        const results = await Promise.allSettled(previous.map((calendar) =>
+            update_google_calendar({id: calendar.id, [field]: next})
+        ));
+        if (results.some((result) => result.status === "rejected")) {
+            console.error("[GCal Calendar] Failed to update all calendars", results);
+            await queryClient.invalidateQueries({queryKey: ["googleCalendars"]});
+            const refreshed = queryClient.getQueryData<GoogleCalendar[]>(["googleCalendars"]);
+            if (refreshed) setCachedCalendars(refreshed);
+        } else if (field === "in_stats") {
+            setIncludeGoogleInStats(next);
+        }
+    }, [displayCalendars, queryClient, includeGoogleInStats, isolation.clearCalendar]);
 
 
     useEffect(() => {
@@ -1003,7 +1027,8 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             toggleCalendarVisible={(id) => { isolation.clearCalendar(); toggleCalendarVisible(id); }}
                             toggleCalendarInStats={(id) => { isolation.clearCalendar(); toggleCalendarInStats(id); }}
                             includeGoogleInStats={includeGoogleInStats}
-                            setIncludeGoogleInStats={setIncludeGoogleInStats}
+                            toggleAllGoogleCalendarsInCal={() => { void toggleAllGoogleCalendars("is_visible"); }}
+                            toggleAllGoogleCalendarsInStats={() => { void toggleAllGoogleCalendars("in_stats"); }}
                             isManualTimeInCal={isManualTimeInCal}
                             manualProjectFiltersLoaded={manualProjectFiltersLoaded}
                             isolatedProject={isolatedProject}

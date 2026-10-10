@@ -59,7 +59,8 @@ interface RenderCalendarContentProps {
     toggleCalendarVisible: (calendarId: number) => void;
     toggleCalendarInStats: (calendarId: number) => void;
     includeGoogleInStats: boolean;
-    setIncludeGoogleInStats: (v: boolean) => void;
+    toggleAllGoogleCalendarsInCal: () => void;
+    toggleAllGoogleCalendarsInStats: () => void;
     isManualTimeInCal: ManualProjectFilter;
     manualProjectFiltersLoaded: boolean;
     isolatedProject: {id: number | null} | null;
@@ -96,7 +97,8 @@ export default function RenderCalendarContent({
     toggleCalendarVisible,
     toggleCalendarInStats,
     includeGoogleInStats,
-    setIncludeGoogleInStats,
+    toggleAllGoogleCalendarsInCal,
+    toggleAllGoogleCalendarsInStats,
     isManualTimeInCal,
     manualProjectFiltersLoaded,
     isolatedProject,
@@ -696,19 +698,15 @@ export default function RenderCalendarContent({
                                 Google Calendars
                             </h4>
                         </div>
-                        <label
-                            className={`flex items-center gap-3 p-2 rounded-lg hover:bg-gray-900/80 cursor-pointer border border-transparent hover:border-gray-800 ${isLeftCollapsed ? "hidden" : ""}`}
-                        >
-                            <input
-                                type="checkbox"
-                                checked={includeGoogleInStats}
-                                onChange={(e) => setIncludeGoogleInStats(e.target.checked)}
-                                className="w-4 h-4 rounded cursor-pointer accent-blue-600"
+                        <fieldset disabled={googleCalendars.length === 0} aria-label="All Google calendars" className="mb-2">
+                            <CalendarTogglePills
+                                inCal={isolation.calendar === null && googleCalendars.length > 0 && googleCalendars.every((calendar) => calendar.is_visible)}
+                                inStats={isolation.calendar === null && includeGoogleInStats && googleCalendars.length > 0 && googleCalendars.every((calendar) => calendar.in_stats)}
+                                onToggleCal={toggleAllGoogleCalendarsInCal}
+                                onToggleStats={toggleAllGoogleCalendarsInStats}
+                                isLeftCollapsed={isLeftCollapsed}
                             />
-                            <span className="text-sm text-gray-200 flex-1 leading-snug">
-                                Merge Google events into week statistics
-                            </span>
-                        </label>
+                        </fieldset>
 
                         <div className={`space-y-0.5 ${isLeftCollapsed ? "space-y-0" : ""}`}>
                             {googleCalendars.map((calendar) => (
