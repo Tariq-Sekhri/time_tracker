@@ -58,7 +58,6 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
         queryFn: get_cat_regex,
     });
 
-    const triggerRef = useRef<HTMLElement | null>(null);
     const [ruleDialog, setRuleDialog] = useState<{rule: CategoryRegex; mode: "edit" | "delete"; anchor: HTMLElement | null} | null>(null);
     const {data: matchedRules = [], isLoading: rulesLoading, error: rulesError} = useQuery({
         queryKey: ["matchingCategoryRules", menu?.appNames, catRegexRows, categories],
@@ -67,9 +66,10 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
     });
     const responsibleRules = matchedRules.filter((match, index, rows) => match.rule && rows.findIndex((row) => row.rule?.id === match.rule?.id) === index);
     const editRule = (rule: CategoryRegex, mode: "edit" | "delete") => {
-        setRuleDialog({rule, mode, anchor: triggerRef.current});
-        setMenu(null);
+        // Keep the menu open and open the editor beside it.
+        setRuleDialog({rule, mode, anchor: menuRef.current});
     };
+    useEffect(() => {if (!menu) setRuleDialog(null);}, [menu]);
     const ruleSaved = () => {
         invalidateKeys(queryClient, [["cat_regex"], ["matchingCategoryRules"], ["week"], ["week_app_filter"], ["week_statistics"], ["day_statistics"], ["range_statistics"], ["total_statistics"], ["category_app_logs"], ...extra]);
         setRuleDialog(null);
@@ -94,11 +94,11 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
     useEffect(() => {
         if (!menu) return;
         const close = (e: PointerEvent) => {
-            if (menuRef.current?.contains(e.target as Node)) return;
+            if (menuRef.current?.contains(e.target as Node) || (e.target instanceof Element && e.target.closest("[data-manual-popover]"))) return;
             setMenu(null);
         };
         const onKey = (e: KeyboardEvent) => {
-            if (e.key === "Escape") setMenu(null);
+            if (e.key === "Escape" && !document.querySelector("[data-manual-popover]")) setMenu(null);
         };
         document.addEventListener("pointerdown", close);
         window.addEventListener("keydown", onKey);
@@ -204,7 +204,6 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
     const openFromContextMenuMany = (e: ReactMouseEvent | globalThis.MouseEvent, appNames: string[]) => {
         e.preventDefault();
         e.stopPropagation();
-        triggerRef.current = e.currentTarget instanceof HTMLElement ? e.currentTarget : e.target instanceof HTMLElement ? e.target : null;
         const pad = 8;
         const estimated = lastMenuSizeRef.current ?? { width: 288, height: 256 };
         const viewportW = window.innerWidth;
