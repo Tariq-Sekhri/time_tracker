@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.12.1] - 2026-10-13
+
+- Patch version update with no feature or behavior changes.
+
 ## [1.12.0] - 2026-10-13
 
 - Added AFK detection with multiple sources and optional filtering.
