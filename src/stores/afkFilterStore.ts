@@ -4,9 +4,9 @@ export const useAfkFilter = create<{excludeAfk: boolean; setExcludeAfk: (value: 
     set => ({excludeAfk: true, setExcludeAfk: excludeAfk => set({excludeAfk})}),
     {
         name: "time-tracker:afk-filter",
-        version: 1,
-        // Existing installs used opt-in filtering. Enable the new default once;
-        // subsequent choices to inspect raw history remain persistent.
+        version: 2,
+        // Start the renamed Include AFK control off once on upgrade;
+        // subsequent choices to inspect away time remain persistent.
         migrate: () => ({excludeAfk: true}),
     },
 ));

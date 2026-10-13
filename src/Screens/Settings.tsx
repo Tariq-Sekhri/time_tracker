@@ -408,7 +408,8 @@ export default function Settings() {
             </section>
 
             <details className="settings-panel settings-disclosure">
-                <summary><span><strong>Timeblock detection</strong><span className="settings-summary-note">Advanced grouping rules</span></span></summary>
+                <summary><span><strong>Timeblock detection</strong><span className="settings-summary-note">Activity and AFK grouping rules</span></span></summary>
+                <p className="text-sm text-gray-400">These rules also group AFK periods when Include AFK is enabled. Grouping stays separate for each device and does not change recorded evidence or the exact time hidden by the AFK filter.</p>
                 <div className="settings-disclosure-content">{renderFields(SETTINGS_LAYOUT[1])}</div>
             </details>
 

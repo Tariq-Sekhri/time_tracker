@@ -1,6 +1,6 @@
 import {roundDurations} from "./roundDurations";
 import {defaultAfkSettings, evaluateAfk, type AfkSettings, type AfkInterval, type Observation} from "../../src/afk/model";
-import {subtractAfk} from "../../src/afk/intervals";
+import {afkSpans,subtractAfk} from "../../src/afk/intervals";
 import {
     DEMO_DEFAULT_CATEGORIES,
     DEMO_DEFAULT_CAT_REGEX,
@@ -1180,6 +1180,17 @@ export async function invoke<T>(
         }
         case "get_afk_intervals":
             return demoAfkIntervals().filter(i=>i.start_time<Number(a.rangeEnd)&&i.end_time>Number(a.rangeStart)&&(a.deviceUuids==null||(a.deviceUuids as string[]).includes(i.device_uuid))) as T;
+        case "get_afk_time_blocks": {
+            const spans=afkSpans(demoAfkIntervals(),Number(a.rangeStart),Number(a.rangeEnd));
+            const result=[];
+            for(const device of new Set(spans.map(span=>span.device))) {
+                if(a.deviceUuids!=null&&!(a.deviceUuids as string[]).includes(device))continue;
+                const logs=spans.filter(span=>span.device===device).map((span,id)=>({id,app:"AFK",timestamp:span.start,duration:span.end-span.start}));
+                const blocks=buildTimeBlocksFromLogs(logs,Number(a.rangeStart),Number(a.rangeEnd),[],[],[],a.settings as ReturnType<typeof getTimeBlockSettings>);
+                result.push(...blocks.map(block=>({device,start:block.start_time,end:block.end_time})));
+            }
+            return result as T;
+        }
         case "get_afk_storage":
             return {intervals:demoAfkIntervals().length,afk_seconds:demoAfkIntervals().reduce((sum,i)=>sum+i.end_time-i.start_time,0),allocated_bytes:null,activity_rows:rawLogs.length} as T;
         case "query_afk": {

@@ -287,6 +287,35 @@ fn get_time_blocks(
     Ok(time_blocks)
 }
 
+#[derive(Serialize, Debug, PartialEq)]
+pub struct AfkDisplayBlock {
+    pub device: String,
+    pub start: i64,
+    pub end: i64,
+}
+
+pub(crate) fn afk_display_blocks(
+    intervals: &[crate::afk::storage::Interval],
+    start: i64,
+    end: i64,
+    settings: &TimeBlockSettings,
+) -> Result<Vec<AfkDisplayBlock>, Error> {
+    let mut devices = std::collections::BTreeMap::<String, Vec<(i64,i64)>>::new();
+    for interval in intervals.iter().filter(|i| i.state==2 && i.start_time<end && i.end_time>start) {
+        devices.entry(interval.device_uuid.clone()).or_default().push((interval.start_time.max(start),interval.end_time.min(end)));
+    }
+    let mut result=Vec::new();
+    for (device,spans) in devices {
+        // Evidence mask changes can split one continuous away period into rows.
+        let logs=merge_spans(spans).into_iter().enumerate().map(|(id,(start,end))| Log {
+            id:id as i64, device_uuid:Some(device.clone()),app:"AFK".into(),timestamp:start,duration:end-start,is_deleted:false,
+        }).collect::<Vec<_>>();
+        let blocks=transform_time_blocks(get_time_blocks(&logs,&[],&[],settings)?,settings)?;
+        result.extend(blocks.into_iter().map(|block| AfkDisplayBlock {device:device.clone(),start:block.start_time,end:block.end_time}));
+    }
+    Ok(result)
+}
+
 fn setting_val(rows: &HashMap<String, i32>, key: &str, default: i32) -> i64 {
     rows.get(key).copied().unwrap_or(default) as i64
 }
@@ -520,6 +549,35 @@ fn afk_barriers(logs: &[Log], evidence: &[crate::afk::storage::Interval]) -> Vec
 #[cfg(test)]
 mod afk_calendar_tests {
     use super::*;
+    #[test]
+    fn afk_display_uses_shared_rules_without_combining_devices_or_hiding_present_gaps() {
+        let interval=|device:&str,start,end| crate::afk::storage::Interval {
+            device_uuid:device.into(),start_time:start,end_time:end,state:2,known_mask:1,active_mask:0,settings_id:1,
+        };
+        let evidence=vec![interval("a",100,110),interval("a",120,130),interval("b",115,125)];
+        let mut settings=TimeBlockSettings {min_log_duration:1,max_attach_distance:10,lookahead_window:10,min_duration:20};
+        assert_eq!(afk_display_blocks(&evidence,0,200,&settings).unwrap(),vec![AfkDisplayBlock{device:"a".into(),start:100,end:130}]);
+        // Minimum duration counts observed away seconds, not the intervening gap.
+        settings.min_duration=25;
+        assert!(afk_display_blocks(&evidence,0,200,&settings).unwrap().is_empty());
+        settings.min_duration=1;settings.lookahead_window=9;
+        assert_eq!(afk_display_blocks(&evidence,0,200,&settings).unwrap().len(),3);
+        let log=Log{id:1,device_uuid:Some("a".into()),app:"Editor".into(),timestamp:100,duration:30,is_deleted:false};
+        let filtered=crate::afk::storage::subtract(vec![log],&evidence);
+        assert_eq!((filtered[0].timestamp,filtered[0].duration),(110,10));
+    }
+
+    #[test]
+    fn afk_display_attaches_short_evidence_using_activity_thresholds() {
+        let evidence=vec![
+            crate::afk::storage::Interval{device_uuid:"a".into(),start_time:100,end_time:160,state:2,known_mask:1,active_mask:0,settings_id:1},
+            crate::afk::storage::Interval{device_uuid:"a".into(),start_time:165,end_time:170,state:2,known_mask:1,active_mask:0,settings_id:1},
+        ];
+        let mut settings=TimeBlockSettings{min_log_duration:10,max_attach_distance:5,lookahead_window:10,min_duration:65};
+        assert_eq!(afk_display_blocks(&evidence,0,200,&settings).unwrap().len(),1);
+        settings.max_attach_distance=4;
+        assert!(afk_display_blocks(&evidence,0,200,&settings).unwrap().is_empty());
+    }
     #[test]
     fn afk_barriers_preserve_activity_on_other_selected_devices() {
         let sample=|device:&str,start,duration|Log {id:1,device_uuid:Some(device.into()),app:"Movie".into(),timestamp:start,duration,is_deleted:false};

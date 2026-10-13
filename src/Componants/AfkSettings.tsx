@@ -82,6 +82,7 @@ export default function AfkSettings() {
         <div role="tabpanel" id={`afk-panel-${tab}`} aria-labelledby={`afk-tab-${tab}`} className="afk-tab-content">
             {tab === "Detection" && <>
                 <Toggle label="Label AFK time" hint="Activity and evidence are kept even when labels are off." checked={draft.enabled} onChange={enabled => update({enabled})}/>
+                <p className="text-sm text-gray-400">Away time is excluded by default. Enable Include AFK on the calendar or statistics view to inspect it. AFK periods use the Timeblock detection settings above to merge nearby blocks and hide short blocks.</p>
                 <div className="settings-field-grid afk-number-grid">
                     <NumberField label="Minimum agreeing sources / groups" displayLabel="Minimum agreement" value={draft.minimum_sources} min={1} max={11} onChange={minimum_sources => update({minimum_sources})}/>
                     <NumberField label="Away score threshold (%)" value={draft.away_threshold} min={1} onChange={away_threshold => update({away_threshold})}/>

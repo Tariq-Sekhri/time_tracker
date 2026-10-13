@@ -157,6 +157,15 @@ pub struct StorageInfo {
     allocated_bytes: Option<i64>,
     activity_rows: i64,
 }
+
+#[tauri::command]
+pub async fn get_afk_time_blocks(
+    range_start: i64, range_end: i64, device_uuids: Option<Vec<String>>,
+    settings: crate::db::queries::week::TimeBlockSettings,
+) -> Result<Vec<crate::db::queries::week::AfkDisplayBlock>, Error> {
+    let intervals=get_afk_intervals(range_start,range_end,device_uuids).await?;
+    crate::db::queries::week::afk_display_blocks(&intervals,range_start,range_end,&settings)
+}
 #[tauri::command]
 pub async fn get_afk_storage() -> Result<StorageInfo, Error> {
     let pool = get_pool().await?;

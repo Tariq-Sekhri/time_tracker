@@ -35,6 +35,12 @@ Existing installs enable filtering once on upgrade; the control still allows
 inspection of raw history. Unfiltered calendar AFK spans use background shading
 and do not compete for space with activity blocks.
 
+The Include AFK control is off by default. Displayed away periods use the same
+Timeblock detection pipeline and settings as activity blocks, separately per
+device: minimum sample duration, short-sample attachment distance, lookahead gap
+merging, and minimum observed duration. Only the display is grouped; filtering
+and synced evidence retain exact original intervals, including present gaps.
+
 ## Measured storage
 
 Run `python scripts/measure-afk-storage.py`. It creates SQLite databases in

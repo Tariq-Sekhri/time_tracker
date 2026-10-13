@@ -273,6 +273,13 @@ export default function RenderCalendarContent({
         enabled:weekQueryEnabled, refetchInterval:30000,
     });
     const awaySpans=useMemo(()=>afkSpans(afkIntervals,weekRange.week_start,weekRange.week_end+1),[afkIntervals,weekRange]);
+    const {data: awayBlocks=[]}=useQuery({
+        queryKey:["afkTimeBlocks",weekRange.week_start,weekRange.week_end,calDeviceUuids,timeBlockSettings],
+        queryFn:()=>invokeOrThrow<{device:string;start:number;end:number}[]>("get_afk_time_blocks",{
+            rangeStart:weekRange.week_start,rangeEnd:weekRange.week_end+1,deviceUuids:calDeviceUuids,settings:timeBlockSettings,
+        }),
+        enabled:weekQueryEnabled&&!excludeAfk,refetchInterval:30000,
+    });
     const awaySignature=awaySpans.map(span=>`${span.device}:${span.start}:${span.end}`).join("|");
     useEffect(()=>{
         if (!excludeAfk || !awaySignature) return;
@@ -507,7 +514,7 @@ export default function RenderCalendarContent({
             classNames: ["tt-manual-draft"],
             extendedProps: {type: "manual_draft"},
         }] : [];
-        const awayEvents=!excludeAfk&&isolation.showTracked&&!isolatedProject ? awaySpans.map(span=>({
+        const awayEvents=!excludeAfk&&isolation.showTracked&&!isolatedProject ? awayBlocks.map(span=>({
             id:`afk-${span.device}-${span.start}`,title:"AFK",start:new Date(span.start*1000),end:new Date(span.end*1000),
             editable:false,display:"background",backgroundColor:"#78350f",
             classNames:["tt-afk-evidence"],extendedProps:{type:"afk",deviceUuid:span.device},
@@ -516,6 +523,7 @@ export default function RenderCalendarContent({
     }, [
         displayedTimeBlocks,
         awaySpans,
+        awayBlocks,
         excludeAfk,
         categoryColorMap,
         visibleCategories,
@@ -826,7 +834,7 @@ export default function RenderCalendarContent({
                         eventClick={(info) => {if (info.event.id !== MANUAL_DRAFT_ID && info.event.extendedProps.type !== "afk") handleEventClick(info);}}
                         eventDidMount={(info) => {
                             const eventType = info.event.extendedProps?.type as string | undefined;
-                            if(eventType==="afk") info.el.title=`AFK evidence for ${info.event.extendedProps.deviceUuid}. Original activity is preserved; use Exclude AFK to filter.`;
+                            if(eventType==="afk") info.el.title=`AFK period for ${info.event.extendedProps.deviceUuid}, grouped using Timeblock detection settings. Turn off Include AFK to hide away time.`;
                             if (eventType === "manual_draft" && !info.isMirror) onManualDraftAnchor(info.el);
                             if (eventType !== "timeblock") return;
                             const handler = (e: globalThis.MouseEvent) => {
