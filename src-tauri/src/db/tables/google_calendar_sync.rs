@@ -9,6 +9,13 @@ use serde::{Deserialize, Serialize};
 
 const GOOGLE_API_BASE: &str = "https://www.googleapis.com/calendar/v3";
 
+fn ensure_google_calendar_writes_enabled() -> Result<(), Error> {
+    if cfg!(debug_assertions) {
+        return Err(anyhow::anyhow!("Google Calendar event changes are disabled in dev mode; calendar fetching is available.").into());
+    }
+    Ok(())
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GoogleCalendarEvent {
     pub calendar_id: i32,
@@ -385,6 +392,7 @@ pub async fn get_all_google_calendar_events(
 pub async fn create_google_calendar_event(
     params: CreateGoogleCalendarEventParams,
 ) -> Result<String, Error> {
+    ensure_google_calendar_writes_enabled()?;
     let (client_id, client_secret) =
         crate::google_oauth::resolve_google_oauth_app_credentials().await?;
     let calendar = get_google_calendar_by_id(params.calendar_id).await?;
@@ -435,6 +443,7 @@ pub async fn create_google_calendar_event(
 pub async fn update_google_calendar_event(
     update: UpdateGoogleCalendarEventParams,
 ) -> Result<(), Error> {
+    ensure_google_calendar_writes_enabled()?;
     let (client_id, client_secret) =
         crate::google_oauth::resolve_google_oauth_app_credentials().await?;
     let calendar = get_google_calendar_by_id(update.calendar_id).await?;
@@ -481,6 +490,7 @@ pub async fn update_google_calendar_event(
 pub async fn delete_google_calendar_event(
     params: DeleteGoogleCalendarEventParams,
 ) -> Result<(), Error> {
+    ensure_google_calendar_writes_enabled()?;
     let (client_id, client_secret) =
         crate::google_oauth::resolve_google_oauth_app_credentials().await?;
     let calendar = get_google_calendar_by_id(params.calendar_id).await?;
@@ -500,4 +510,26 @@ pub async fn delete_google_calendar_event(
         .context("Failed to delete event")?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod development_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn development_event_writes_are_rejected_before_database_or_network_access() {
+        assert!(cfg!(debug_assertions));
+        let create = create_google_calendar_event(CreateGoogleCalendarEventParams {
+            calendar_id: -1, title: "test".into(), start: 0, end: 1, description: None,
+        }).await.unwrap_err();
+        let update = update_google_calendar_event(UpdateGoogleCalendarEventParams {
+            calendar_id: -1, event_id: "test".into(), title: "test".into(), start: 0, end: 1, description: None,
+        }).await.unwrap_err();
+        let delete = delete_google_calendar_event(DeleteGoogleCalendarEventParams {
+            calendar_id: -1, event_id: "test".into(),
+        }).await.unwrap_err();
+        for error in [create, update, delete] {
+            assert!(error.to_string().contains("event changes are disabled in dev mode"));
+        }
+    }
 }

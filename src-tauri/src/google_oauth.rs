@@ -22,6 +22,14 @@ const GOOGLE_AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const REDIRECT_PORT: u16 = 8742;
 
+fn calendar_oauth_scope() -> &'static str {
+    if cfg!(debug_assertions) {
+        "https://www.googleapis.com/auth/calendar.readonly"
+    } else {
+        "https://www.googleapis.com/auth/calendar"
+    }
+}
+
 fn open_auth_url(url: &str) -> Result<(), Error> {
     #[cfg(target_os = "linux")]
     {
@@ -113,9 +121,6 @@ pub async fn set_google_oauth_app_credentials(
 
 #[tauri::command]
 pub async fn google_oauth_login() -> Result<AuthStatus, Error> {
-    if cfg!(debug_assertions) {
-        return Err(anyhow::anyhow!("Google Calendar network access is disabled in dev mode").into());
-    }
     let (client_id, client_secret) = resolve_google_oauth_app_credentials().await?;
     let client = BasicClient::new(ClientId::new(client_id))
         .set_client_secret(ClientSecret::new(client_secret))
@@ -128,9 +133,7 @@ pub async fn google_oauth_login() -> Result<AuthStatus, Error> {
 
     let (auth_url, _csrf_token) = client
         .authorize_url(CsrfToken::new_random)
-        .add_scope(Scope::new(
-            "https://www.googleapis.com/auth/calendar".to_string(),
-        ))
+        .add_scope(Scope::new(calendar_oauth_scope().to_string()))
         .add_scope(Scope::new(
             "https://www.googleapis.com/auth/userinfo.email".to_string(),
         ))
@@ -288,9 +291,7 @@ pub async fn google_oauth_logout() -> Result<(), Error> {
 }
 
 pub async fn get_valid_access_token(client_id: &str, client_secret: &str) -> Result<String, Error> {
-    if cfg!(debug_assertions) {
-        return Err(anyhow::anyhow!("Google Calendar network access is disabled in dev mode").into());
-    }
+    // Dev reads its isolated snapshot; refreshed tokens are saved to apptest.db.
     let oauth = get_google_oauth()
         .await?
         .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
@@ -512,4 +513,13 @@ async fn get_user_email(access_token: &str) -> Result<String, Error> {
         })?;
 
     Ok(email)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn development_google_login_requests_read_only_calendar_access() {
+        assert!(cfg!(debug_assertions));
+        assert_eq!(super::calendar_oauth_scope(), "https://www.googleapis.com/auth/calendar.readonly");
+    }
 }

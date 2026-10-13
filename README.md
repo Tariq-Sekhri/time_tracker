@@ -81,8 +81,11 @@ npm start
 
 Development uses `time-tracker-dev/apptest.db` in the user's application data directory,
 with separate WebView storage and backups. Startup takes a consistent, read-only snapshot
-of the installed app's `time-tracker/app.db`. Tracking, sync, updater installation, and
-Google Calendar network access are disabled in development.
+of the installed app's `time-tracker/app.db`. Tracking, server sync, and updater
+installation are disabled in development. Google Calendar lists and events can be
+fetched using the copied account credentials, with token refresh saved only to the dev
+database. New dev logins request read-only calendar access; creating, editing, and
+deleting Google Calendar events are disabled in development.
 
 `npm start` uses optimized native code while retaining all development isolation guards.
 For a stable profiling session without native file watching:

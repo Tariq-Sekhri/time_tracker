@@ -43,7 +43,7 @@ A separate temporary-copy SQL benchmark measures the deleted-log lookup used by 
 - The final normal Rust suite passed 30 tests, with the two performance scenarios intentionally skipped; it includes the additional deleted-log index test.
 - Frontend tests: 35 passed, one opt-in benchmark skipped. The separate synthetic benchmark was executed explicitly.
 - The production frontend build passed. The optimized native dev build uses `debug-assertions = true`, keeping development safety guards enabled.
-- Dev uses `%APPDATA%/time-tracker-dev/apptest.db`, separate WebView storage and backups, and disables activity tracking, sync, updater operations, startup registration cleanup, and Google Calendar network access.
+- Dev uses `%APPDATA%/time-tracker-dev/apptest.db`, separate WebView storage and backups, and disables activity tracking, server sync, updater operations, and startup registration cleanup. Google Calendar fetching is allowed; event creation, editing, and deletion are disabled.
 
 ## Reproducing
 
