@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.11.11] - 2026-10-13
+
+- Patch version update with no feature or behavior changes.
+
 ## [1.11.10] - 2026-10-13
 
 - Drag on the calendar to preview a manual time entry, including future dates. Hold for a one-hour entry, then move or resize it. Single clicks keep their original behavior.

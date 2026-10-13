@@ -1,7 +1,7 @@
 {
   "name": "time-tracker-demo",
   "private": true,
-  "version": "1.11.10-demo",
+  "version": "1.11.11-demo",
   "type": "module",
   "scripts": {
     "dev": "vite --config vite.config.ts",
