@@ -238,6 +238,20 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
 
     const isBatchMenu = (menu?.appNames.length ?? 0) > 1;
 
+    const copyButton = menu && (
+        <button
+            type="button"
+            onClick={handleCopyFromMenu}
+            className="text-gray-400 hover:text-white p-1 rounded hover:bg-gray-800 flex-shrink-0"
+            title={isBatchMenu ? `Copy ${menu.appNames.length} app names` : "Copy app name"}
+            aria-label={isBatchMenu ? `Copy ${menu.appNames.length} app names` : "Copy app name"}
+        >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+        </button>
+    );
+
     const categorizeLayers = (
         <>
             {menu && (
@@ -247,49 +261,35 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
                     style={{ left: menu.x, top: menu.y }}
                     role="menu"
                 >
-                    <div
-                        className="px-3 py-2 text-xs border-b border-gray-700 space-y-1 min-w-0"
-                        title={isBatchMenu ? `${menu.appNames.length} apps` : menu.appNames[0]}
-                    >
-                        <div className="flex items-center justify-between gap-2 min-w-0">
-                            <div className="text-gray-300 font-mono truncate min-w-0 flex-1 leading-snug">
-                                {isBatchMenu ? `${menu.appNames.length} apps selected` : `App: ${menu.appNames[0]}`}
-                            </div>
-                            <button
-                                type="button"
-                                onClick={handleCopyFromMenu}
-                                className="text-gray-400 hover:text-white p-1 rounded hover:bg-gray-800 flex-shrink-0"
-                                title={isBatchMenu ? `Copy ${menu.appNames.length} app names` : "Copy app name"}
-                                aria-label={isBatchMenu ? `Copy ${menu.appNames.length} app names` : "Copy app name"}
-                            >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                                    />
-                                </svg>
-                            </button>
+                    {!isBatchMenu && responsibleRules.length === 0 ? (
+                        <div className="flex items-center gap-2 px-3 py-1.5 text-xs border-b border-gray-700 min-w-0" title={menu.appNames[0]}>
+                            <span className="font-mono text-gray-500 truncate min-w-0 flex-1">{rulesLoading ? "Loading…" : "No matching regex"}</span>
+                            <span className="text-gray-400 shrink-0">{matchedRules[0]?.category_name ?? "—"}</span>
+                            {copyButton}
                         </div>
-                        <div className="text-gray-400 break-words leading-snug min-w-0">
-                            category: {isBatchMenu ? "Assign all selected apps" : (matchedRules[0]?.category_name ?? (rulesLoading ? "Loading…" : "—"))}
+                    ) : isBatchMenu && (
+                        <div className="flex items-center gap-2 px-3 py-1.5 text-xs border-b border-gray-700 min-w-0">
+                            <span className="text-gray-300 truncate min-w-0 flex-1">{menu.appNames.length} apps selected</span>
+                            {copyButton}
                         </div>
-                    </div>
-                    {rulesError && <p className="px-3 py-2 text-xs text-red-300">Couldn’t identify the matching rule.</p>}
+                    )}
+                    {rulesError && <p className="px-3 py-1.5 text-xs text-red-300">Couldn’t identify the matching rule.</p>}
                     {responsibleRules.map((match) => {
                         const rule = match.rule!;
                         const protectedRule = match.category_name === "Miscellaneous" && rule.regex === ".*";
-                        return <div key={rule.id} className="border-b border-gray-700 py-1">
-                            <button type="button" onClick={() => {useRegexNavigation.getState().openRule(rule.id); setMenu(null);}} title="Open and focus this regex in App Rules" className="block w-full px-3 py-2 text-left text-xs text-sky-300 hover:bg-gray-800">
-                                <span className="block text-gray-400">Matching regex · {match.category_name}</span>
-                                <span className="block break-all font-mono">{rule.regex}</span>
-                                <span className="mt-1 block">Open in App Rules →</span>
-                            </button>
-                            {!protectedRule && <div className="flex gap-1 px-2">
-                                <button type="button" onClick={() => editRule(rule, "edit")} aria-label={`Edit matching regex ${rule.regex}`} className="flex-1 rounded px-2 py-1.5 text-left text-xs text-gray-200 hover:bg-gray-800">Edit regex</button>
-                                <button type="button" onClick={() => editRule(rule, "delete")} aria-label={`Delete matching regex ${rule.regex}`} className="flex-1 rounded px-2 py-1.5 text-left text-xs text-red-300 hover:bg-gray-800">Delete regex</button>
-                            </div>}
+                        return <div key={rule.id} className="flex items-center gap-1 pl-3 pr-1 py-1 text-xs border-b border-gray-700 min-w-0" title={isBatchMenu ? match.app : `${menu.appNames[0]}
+${rule.regex}`}>
+                            <span className="font-mono text-gray-200 truncate min-w-0 flex-1">{rule.regex}</span>
+                            <button type="button" onClick={() => {useRegexNavigation.getState().openRule(rule.id); setMenu(null);}} title="Open this regex in App Rules" aria-label={`Matching regex · ${match.category_name}: ${rule.regex} — open in App Rules`} className="shrink-0 rounded px-1.5 py-0.5 text-sky-300 hover:bg-gray-800 hover:underline">{match.category_name} →</button>
+                            {!protectedRule && <>
+                                <button type="button" onClick={() => editRule(rule, "edit")} title="Edit regex" aria-label={`Edit matching regex ${rule.regex}`} className="shrink-0 rounded p-1 text-gray-400 hover:bg-gray-800 hover:text-white">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.232-6.232a2.5 2.5 0 113.536 3.536L12.536 16.536 8 18l1.464-4.536z" /></svg>
+                                </button>
+                                <button type="button" onClick={() => editRule(rule, "delete")} title="Delete regex" aria-label={`Delete matching regex ${rule.regex}`} className="shrink-0 rounded p-1 text-gray-400 hover:bg-gray-800 hover:text-red-400">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                </button>
+                            </>}
+                            {!isBatchMenu && copyButton}
                         </div>;
                     })}
                     {sortedCategories.map((cat) => (
