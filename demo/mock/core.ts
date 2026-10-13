@@ -405,7 +405,7 @@ function blocksInRangeEffective(ws: number, we: number, deviceUuids?: string[] |
         categories,
         catRegex,
         skippedApps,
-        source===rawLogs?getTimeBlockSettings():{...getTimeBlockSettings(),maxAttachDistance:0}
+        getTimeBlockSettings()
     );
 }
 

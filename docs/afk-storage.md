@@ -10,7 +10,7 @@ other platforms and device history without evidence stay unknown.
 
 The AFK filter is enabled by default and subtracts overlapping AFK seconds from copies of logs
 before aggregation. It uses device identity, preserves unknown time and manual
-entries, and prevents calendar gap attachment from joining across an AFK gap.
+entries. The remaining activity uses the normal timeblock merging and attachment rules.
 Changing settings affects future decisions. Historical decisions retain their
 original configuration rather than being silently rewritten.
 
@@ -32,8 +32,7 @@ Imports and download cursors commit in one transaction. An older server reports
 an AFK sync error instead of silently treating evidence as synced.
 
 Existing installs enable filtering once on upgrade; the control still allows
-inspection of raw history. Unfiltered calendar AFK spans use background shading
-and do not compete for space with activity blocks.
+inspection of raw history. Include AFK shows grouped, labeled AFK calendar blocks.
 
 The Include AFK control is off by default. Displayed away periods use the same
 Timeblock detection pipeline and settings as activity blocks, separately per

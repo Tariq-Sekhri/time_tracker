@@ -212,6 +212,15 @@ pub fn subtract(logs: Vec<Log>, intervals: &[Interval]) -> Vec<Log> {
     }
     for spans in by_device.values_mut() {
         spans.sort_unstable();
+        // Normalize overlapping evidence before binary-searching by end time.
+        let mut merged=Vec::<(i64,i64)>::new();
+        for &(start,end) in spans.iter() {
+            if let Some(previous)=merged.last_mut() {
+                if previous.1>=start {previous.1=previous.1.max(end);continue;}
+            }
+            merged.push((start,end));
+        }
+        *spans=merged;
     }
     let mut result = Vec::with_capacity(logs.len());
     for log in logs {

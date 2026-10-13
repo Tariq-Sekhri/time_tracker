@@ -771,11 +771,18 @@ pub async fn device_logs(device_uuid: Option<String>) -> Result<usize, Error> {
         if let Some(&max_id) = max_id_by_device.get(&device.uuid) {
             set_last_sync_id(&device.uuid, max_id).await?;
         }
+    }
+    let mut afk_errors=Vec::new();
+    for device in &devices {
         // AFK has its own cursor: evidence may change without any new log IDs.
-        download_afk_evidence(&device.uuid, &local_uuid, &token, &server_ip).await?;
+        // One device's evidence failure must not prevent other devices syncing.
+        if let Err(error)=download_afk_evidence(&device.uuid, &local_uuid, &token, &server_ip).await {
+            afk_errors.push(format!("AFK history for {}: {error}",device.name));
+        }
     }
     perf.stage("finalize");
     perf.done();
 
+    if !afk_errors.is_empty() { return Err(anyhow!(afk_errors.join("; ")).into()); }
     Ok(count)
 }

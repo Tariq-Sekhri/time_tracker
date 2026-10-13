@@ -423,9 +423,6 @@ pub async fn get_week(
         return Ok(Vec::new());
     }
 
-    if crate::afk::filter_requested() {
-        return afk_time_blocks(&logs, &regex, &app_groups, &time_block_settings).await;
-    }
     let blocks = get_time_blocks(&logs, &regex, &app_groups, &time_block_settings)?;
     perf.stage("build_blocks");
     perf.note("raw_blocks", blocks.len());
@@ -489,9 +486,6 @@ pub async fn get_week_for_app_filter(
         return Ok(Vec::new());
     }
 
-    if crate::afk::filter_requested() {
-        return afk_time_blocks(&logs, &regex, &app_groups, &time_block_settings).await;
-    }
     let blocks = get_time_blocks(&logs, &regex, &app_groups, &time_block_settings)?;
     perf.stage("build_blocks");
     let blocks = transform_time_blocks(blocks, &time_block_settings)?;
@@ -501,27 +495,6 @@ pub async fn get_week_for_app_filter(
     Ok(blocks)
 }
 
-// AFK boundaries must not be joined back together by the normal gap-attachment
-// rules. Activity from another selected device can still cover the same period.
-async fn afk_time_blocks(logs: &[Log], regex: &[CachedCategoryRegex], groups: &[CachedAppGroup], settings: &TimeBlockSettings) -> Result<Vec<TimeBlock>, Error> {
-    if logs.is_empty() { return Ok(Vec::new()); }
-    let start=logs.iter().map(|l|l.timestamp).min().unwrap();
-    let end=logs.iter().map(|l|l.timestamp.saturating_add(l.duration)).max().unwrap();
-    let evidence=crate::afk::storage::get_afk_intervals(start,end,None).await?;
-    let barriers=afk_barriers(logs,&evidence);
-    let mut ordered=logs.to_vec(); ordered.sort_by_key(|l|l.timestamp);
-    let mut result=Vec::new(); let mut from=0;
-    for (_, stop) in barriers {
-        let to=ordered.partition_point(|l|l.timestamp<stop);
-        if to>from {
-            result.extend(transform_time_blocks(get_time_blocks(&ordered[from..to],regex,groups,settings)?,settings)?);
-        }
-        from=to;
-    }
-    result.extend(transform_time_blocks(get_time_blocks(&ordered[from..],regex,groups,settings)?,settings)?);
-    for (i,block) in result.iter_mut().enumerate() {block.id=i as i32;}
-    Ok(result)
-}
 fn merge_spans(mut spans: Vec<(i64,i64)>) -> Vec<(i64,i64)> {
     spans.sort_unstable(); let mut result=Vec::<(i64,i64)>::new();
     for (start,end) in spans {
@@ -529,26 +502,42 @@ fn merge_spans(mut spans: Vec<(i64,i64)>) -> Vec<(i64,i64)> {
         result.push((start,end));
     } result
 }
-fn afk_barriers(logs: &[Log], evidence: &[crate::afk::storage::Interval]) -> Vec<(i64,i64)> {
-    let devices=logs.iter().filter_map(|l|l.device_uuid.as_deref()).collect::<std::collections::HashSet<_>>();
-    let away=merge_spans(evidence.iter().filter(|i|i.state==2&&devices.contains(i.device_uuid.as_str())).map(|i|(i.start_time,i.end_time)).collect());
-    let present=merge_spans(logs.iter().map(|l|(l.timestamp,l.timestamp.saturating_add(l.duration))).collect());
-    let mut gaps=Vec::new();
-    for (start,stop) in away {
-        let mut cursor=start;
-        for &(a,b) in &present[present.partition_point(|&(_,b)|b<=start)..] {
-            if a>=stop {break;}
-            if a>cursor {gaps.push((cursor,a.min(stop)));}
-            cursor=cursor.max(b);
-            if cursor>=stop {break;}
-        }
-        if cursor<stop {gaps.push((cursor,stop));}
-    } gaps
-}
 
 #[cfg(test)]
 mod afk_calendar_tests {
     use super::*;
+    #[test]
+    fn hundreds_of_fragmented_afk_rows_merge_into_three_device_scoped_blocks() {
+        let mut evidence=Vec::new();
+        for (base,count,device) in [(1000,200,"a"),(20000,200,"a"),(40000,188,"b")] {
+            for i in 0..count {
+                evidence.push(crate::afk::storage::Interval {
+                    device_uuid:device.into(),start_time:base+i*3,end_time:base+i*3+2,
+                    state:2,known_mask:1,active_mask:0,settings_id:1,
+                });
+            }
+        }
+        let settings=TimeBlockSettings{min_log_duration:1,max_attach_distance:400,lookahead_window:500,min_duration:300};
+        let blocks=afk_display_blocks(&evidence,0,50000,&settings).unwrap();
+        assert_eq!(evidence.len(),588);
+        assert_eq!(blocks.len(),3);
+        assert_eq!(blocks.iter().map(|b|b.device.as_str()).collect::<Vec<_>>(),vec!["a","a","b"]);
+    }
+
+    #[tokio::test]
+    #[ignore = "Explicit read-only check of the isolated development snapshot"]
+    async fn afk_snapshot_grouping_probe() {
+        let path=std::path::PathBuf::from(std::env::var("APPDATA").unwrap()).join("time-tracker-dev/apptest.db");
+        let options=sqlx::sqlite::SqliteConnectOptions::new().filename(path).read_only(true);
+        let pool=sqlx::sqlite::SqlitePoolOptions::new().max_connections(1).connect_with(options).await.unwrap();
+        let evidence=sqlx::query_as::<_,crate::afk::storage::Interval>("SELECT device_uuid,start_time,end_time,state,known_mask,active_mask,settings_id FROM afk_intervals WHERE state=2 ORDER BY device_uuid,start_time").fetch_all(&pool).await.unwrap();
+        let rows=sqlx::query_as::<_,(String,i64)>("SELECT key,val FROM settings WHERE key IN ('minLogDuration','maxAttachDistance','lookaheadWindow','minDuration')").fetch_all(&pool).await.unwrap().into_iter().collect::<HashMap<_,_>>();
+        let settings=TimeBlockSettings{min_log_duration:rows["minLogDuration"],max_attach_distance:rows["maxAttachDistance"],lookahead_window:rows["lookaheadWindow"],min_duration:rows["minDuration"]};
+        let blocks=afk_display_blocks(&evidence,0,i64::MAX,&settings).unwrap();
+        println!("AFK snapshot: {} evidence rows -> {} visible merged blocks",evidence.len(),blocks.len());
+        assert!(!blocks.is_empty());assert!(blocks.len()<evidence.len());
+        pool.close().await;
+    }
     #[test]
     fn afk_display_uses_shared_rules_without_combining_devices_or_hiding_present_gaps() {
         let interval=|device:&str,start,end| crate::afk::storage::Interval {
@@ -579,13 +568,31 @@ mod afk_calendar_tests {
         assert!(afk_display_blocks(&evidence,0,200,&settings).unwrap().is_empty());
     }
     #[test]
-    fn afk_barriers_preserve_activity_on_other_selected_devices() {
+    fn excluding_afk_preserves_gap_merging_and_short_sample_attachment() {
         let sample=|device:&str,start,duration|Log {id:1,device_uuid:Some(device.into()),app:"Movie".into(),timestamp:start,duration,is_deleted:false};
-        let mut logs=vec![sample("a",100,20),sample("a",180,20)];
+        let logs=vec![sample("a",100,100),sample("a",210,5)];
         let evidence=vec![crate::afk::storage::Interval {device_uuid:"a".into(),start_time:120,end_time:180,state:2,known_mask:1,active_mask:0,settings_id:1}];
-        assert_eq!(afk_barriers(&logs,&evidence),vec![(120,180)]);
-        logs.push(sample("b",100,100));assert!(afk_barriers(&logs,&evidence).is_empty());
-        let unrelated=vec![sample("b",100,20),sample("b",180,20)];assert!(afk_barriers(&unrelated,&evidence).is_empty());
+        let filtered=crate::afk::storage::subtract(logs,&evidence);
+        let settings=TimeBlockSettings{min_log_duration:10,max_attach_distance:10,lookahead_window:60,min_duration:45};
+        let blocks=transform_time_blocks(get_time_blocks(&filtered,&[],&[],&settings).unwrap(),&settings).unwrap();
+        assert_eq!(blocks.len(),1);
+        assert_eq!((blocks[0].start_time,blocks[0].end_time),(100,200));
+        assert_eq!(blocks[0].apps[0].total_duration,45);
+    }
+
+    #[test]
+    fn another_devices_afk_does_not_change_activity_blocks_or_durations() {
+        let sample=|device:&str,start,duration|Log{id:1,device_uuid:Some(device.into()),app:"Editor".into(),timestamp:start,duration,is_deleted:false};
+        let phone=vec![sample("b",100,20),sample("b",180,20),sample("b",205,5)];
+        let mut combined=phone.clone();combined.push(sample("a",120,60));
+        let evidence=vec![crate::afk::storage::Interval{device_uuid:"a".into(),start_time:120,end_time:180,state:2,known_mask:1,active_mask:0,settings_id:1}];
+        let settings=TimeBlockSettings{min_log_duration:10,max_attach_distance:5,lookahead_window:60,min_duration:45};
+        let expected=transform_time_blocks(get_time_blocks(&phone,&[],&[],&settings).unwrap(),&settings).unwrap();
+        let filtered=crate::afk::storage::subtract(combined,&evidence);
+        let actual=transform_time_blocks(get_time_blocks(&filtered,&[],&[],&settings).unwrap(),&settings).unwrap();
+        assert_eq!(actual,expected);
+        assert_eq!(actual.len(),1);
+        assert_eq!(actual[0].apps[0].total_duration,45);
     }
 }
 
