@@ -161,7 +161,7 @@ pub struct StorageInfo {
 pub async fn get_afk_storage() -> Result<StorageInfo, Error> {
     let pool = get_pool().await?;
     let (intervals, afk_seconds): (i64,i64) = sqlx::query_as("SELECT COUNT(*),COALESCE(SUM(CASE WHEN state=2 THEN end_time-start_time ELSE 0 END),0) FROM afk_intervals").fetch_one(&pool).await?;
-    let allocated_bytes = sqlx::query_scalar::<_,i64>("SELECT COALESCE(SUM(pgsize),0) FROM dbstat WHERE name IN ('afk_intervals','afk_configurations','idx_afk_device_time','sqlite_autoindex_afk_configurations_1')").fetch_one(&pool).await.ok();
+    let allocated_bytes = sqlx::query_scalar::<_,i64>("SELECT COALESCE(SUM(pgsize),0) FROM dbstat WHERE name IN ('afk_intervals','afk_configurations','idx_afk_device_time','sqlite_autoindex_afk_configurations_1','afk_remote_intervals','afk_sync_cursors','sqlite_autoindex_afk_remote_intervals_1','sqlite_autoindex_afk_sync_cursors_1')").fetch_one(&pool).await.ok();
     let activity_rows = sqlx::query_scalar("SELECT COUNT(*) FROM logs")
         .fetch_one(&pool)
         .await?;
@@ -270,6 +270,7 @@ pub async fn query_afk(
         .scope(true, async move {
             use crate::db::{queries as q, tables::log as l};
             let result = match command.as_str() {
+                "get_logs" => serde_json::to_value(l::get_logs().await?),
                 "get_week" => serde_json::to_value(
                     q::get_week(required(a.week_anchor)?, a.device_uuids).await?,
                 ),

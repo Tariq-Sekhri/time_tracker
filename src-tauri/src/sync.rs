@@ -209,6 +209,53 @@ async fn post_logs_to_server(
     Ok(count)
 }
 
+async fn upload_afk_evidence(device: &str, token: &str, server_ip: &str, all: bool) -> Result<(), Error> {
+    ensure_sync_enabled()?;
+    let pool = db::get_pool().await?;
+    let through: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(a.id),0) FROM afk_intervals a WHERE a.device_uuid=?
+        AND NOT EXISTS(SELECT 1 FROM afk_remote_intervals r WHERE r.interval_id=a.id)")
+        .bind(device).fetch_one(&pool).await?;
+    let mut cursor = if all { 0 } else { crate::afk::sync::upload_cursor(&pool, device).await? };
+    loop {
+        let page = crate::afk::sync::upload_page(&pool, device, cursor, through).await?;
+        let Some(last) = page.last().map(|e| e.id) else { break; };
+        let response = sync_http_client()?.post(sync_server_url(server_ip, "afk"))
+            .bearer_auth(token).json(&page).send().await?;
+        require_afk_success(response, device).await?;
+        crate::afk::sync::acknowledge_upload(&pool, device, last).await?;
+        if last >= through { break; }
+        cursor = last;
+    }
+    Ok(())
+}
+
+async fn require_afk_success(response: reqwest::Response, device: &str) -> Result<reqwest::Response, Error> {
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Err(anyhow!("AFK sync is unavailable. Update the Time Tracker server to support AFK evidence.").into());
+    }
+    require_authenticated_success(response, device).await
+}
+
+async fn download_afk_evidence(device: &str, local: &str, token: &str, server_ip: &str) -> Result<(), Error> {
+    ensure_sync_enabled()?;
+    let pool = db::get_pool().await?;
+    let mut cursor = crate::afk::sync::download_cursor(&pool, device).await?;
+    loop {
+        let response = sync_http_client()?.get(sync_server_url(server_ip, &format!("afk/{device}")))
+            .bearer_auth(token).query(&[("after",cursor)]).send().await?;
+        let page: Vec<crate::afk::sync::Evidence> = require_afk_success(response, local).await?.json().await?;
+        if page.is_empty() { break; }
+        if page.len() > crate::afk::sync::PAGE_SIZE || page.iter().any(|e| e.revision <= cursor)
+            || page.windows(2).any(|p| p[0].revision >= p[1].revision) {
+            return Err(anyhow!("Invalid AFK sync page ordering").into());
+        }
+        crate::afk::sync::import_page(&pool, device, &page).await?;
+        cursor = page.last().unwrap().revision;
+        if page.len() < crate::afk::sync::PAGE_SIZE { break; }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn upload_all_logs() -> Result<usize, Error> {
     ensure_sync_enabled()?;
@@ -223,10 +270,6 @@ pub async fn upload_all_logs() -> Result<usize, Error> {
     let logs = get_local_logs().await?;
     perf.stage("load_logs");
     perf.note("logs", logs.len());
-    if logs.is_empty() {
-        perf.done();
-        return Ok(0);
-    }
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
     let token = match device.state {
         DeviceState::Local { token } => token,
@@ -234,7 +277,9 @@ pub async fn upload_all_logs() -> Result<usize, Error> {
             return Err(Error::from(anyhow!("somehow got remote device?")));
         }
     };
-    let count = post_logs_to_server(logs, token, server_ip, device.uuid).await?;
+    let count = post_logs_to_server(logs, token.clone(), server_ip.clone(), device.uuid.clone()).await?;
+    if count == 0 { set_last_sync_id(&device.uuid, 0).await?; }
+    upload_afk_evidence(&device.uuid, &token, &server_ip, true).await?;
     perf.stage("upload");
     perf.done();
     Ok(count)
@@ -264,7 +309,8 @@ pub async fn reupload_all_logs() -> Result<usize, Error> {
     let logs = get_all_local_logs_for_reupload(&device.uuid).await?;
     perf.stage("load_logs");
     perf.note("logs", logs.len());
-    let count = post_logs_to_server(logs, token, server_ip, device.uuid.clone()).await?;
+    let count = post_logs_to_server(logs, token.clone(), server_ip.clone(), device.uuid.clone()).await?;
+    upload_afk_evidence(&device.uuid, &token, &server_ip, true).await?;
     perf.stage("upload");
     perf.done();
     if count == 0 {
@@ -466,6 +512,7 @@ async fn sync_impl() -> Result<(), Error> {
     if let Some(max) = logs.iter().map(|log| log.id).max() {
         set_last_sync_id(&device.uuid, max).await?;
     }
+    upload_afk_evidence(&device.uuid, &token, &server_ip, false).await?;
     perf.stage("finalize");
     perf.done();
 
@@ -686,7 +733,7 @@ pub async fn device_logs(device_uuid: Option<String>) -> Result<usize, Error> {
         .collect::<Vec<ServerDevice>>();
     let res = sync_http_client()?
         .get(sync_server_url(&server_ip, "devices/"))
-        .bearer_auth(token)
+        .bearer_auth(&token)
         .json(&de)
         .send()
         .await?;
@@ -724,6 +771,8 @@ pub async fn device_logs(device_uuid: Option<String>) -> Result<usize, Error> {
         if let Some(&max_id) = max_id_by_device.get(&device.uuid) {
             set_last_sync_id(&device.uuid, max_id).await?;
         }
+        // AFK has its own cursor: evidence may change without any new log IDs.
+        download_afk_evidence(&device.uuid, &local_uuid, &token, &server_ip).await?;
     }
     perf.stage("finalize");
     perf.done();

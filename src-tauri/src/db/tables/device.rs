@@ -277,6 +277,8 @@ pub async fn register_local_device(device: Device) -> Result<()> {
     let mut tx = pool.begin().await?;
     insert_device(&mut *tx, &device).await?;
     set_local_device_uuid_with_tx(&mut tx, &device.uuid).await?;
+    sqlx::query("UPDATE afk_intervals SET device_uuid=?1 WHERE device_uuid=?2")
+        .bind(&device.uuid).bind(PENDING_LOCAL_DEVICE_UUID).execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -308,6 +310,12 @@ async fn invalidate_local_device_registration_with_pool(
     .execute(&mut *tx)
     .await?;
 
+    sqlx::query("UPDATE afk_intervals SET device_uuid=?1 WHERE device_uuid=?2
+        AND NOT EXISTS(SELECT 1 FROM afk_remote_intervals r WHERE r.interval_id=afk_intervals.id)")
+        .bind(PENDING_LOCAL_DEVICE_UUID).bind(uuid).execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM afk_sync_cursors WHERE device_uuid=?")
+        .bind(uuid).execute(&mut *tx).await?;
+
     tx.commit().await?;
     Ok(())
 }
@@ -324,6 +332,8 @@ mod sync_registration_tests {
             .connect("sqlite::memory:")
             .await
             .unwrap();
+        sqlx::raw_sql(include_str!("../../../migrations/0014_afk_evidence.sql")).execute(&pool).await.unwrap();
+        sqlx::raw_sql(include_str!("../../../migrations/0015_afk_sync.sql")).execute(&pool).await.unwrap();
         create_table(&pool).await.unwrap();
         crate::db::tables::log::create_table(&pool).await.unwrap();
 
@@ -343,6 +353,9 @@ mod sync_registration_tests {
         .await
         .unwrap();
 
+        sqlx::query("INSERT INTO afk_configurations(settings_json) VALUES ('{}')").execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO afk_intervals(device_uuid,start_time,end_time,state,known_mask,active_mask,settings_id) VALUES ('old-device',100,115,2,1,0,1)").execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO afk_sync_cursors(device_uuid,upload_id) VALUES ('old-device',1)").execute(&pool).await.unwrap();
         invalidate_local_device_registration_with_pool(&pool, "old-device")
             .await
             .unwrap();
@@ -360,6 +373,10 @@ mod sync_registration_tests {
         .await
         .unwrap();
         assert_eq!((pending_count, active_local_count), (1, 0));
+        let afk_device: String = sqlx::query_scalar("SELECT device_uuid FROM afk_intervals").fetch_one(&pool).await.unwrap();
+        assert_eq!(afk_device,PENDING_LOCAL_DEVICE_UUID);
+        let cursors: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM afk_sync_cursors").fetch_one(&pool).await.unwrap();
+        assert_eq!(cursors,0);
     }
 }
 

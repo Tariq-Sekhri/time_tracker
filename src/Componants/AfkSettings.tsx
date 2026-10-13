@@ -133,7 +133,7 @@ export default function AfkSettings() {
                 </div>
                 <details className="afk-source-help"><summary>How decisions and history work</summary>
                     <p>Away score is away weight divided by total voting weight. Related signals use their strongest weight, with presence winning within a group. Entry and return delays apply before the label changes.</p>
-                    <p>Settings affect future evidence. Earlier decisions keep their settings, and unknown time remains included in the AFK filter. Signals currently support Windows; AFK history stays on this device.</p>
+                    <p>Settings affect future evidence. Earlier decisions keep their settings, and unknown time remains included. Signals currently support Windows. AFK history syncs with the server and hides activity only for the device that was away.</p>
                 </details>
             </>}
         </div>

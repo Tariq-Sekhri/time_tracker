@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Hide tracked activity during recorded AFK time by default, separately for each device.
+- Sync AFK history with the server, including ongoing away periods.
+- Show AFK evidence as background shading when inspecting unfiltered calendar history.
+
 ## [1.12.1] - 2026-10-13
 
 - Patch version update with no feature or behavior changes.

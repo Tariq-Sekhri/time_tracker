@@ -273,6 +273,15 @@ export default function RenderCalendarContent({
         enabled:weekQueryEnabled, refetchInterval:30000,
     });
     const awaySpans=useMemo(()=>afkSpans(afkIntervals,weekRange.week_start,weekRange.week_end+1),[afkIntervals,weekRange]);
+    const awaySignature=awaySpans.map(span=>`${span.device}:${span.start}:${span.end}`).join("|");
+    useEffect(()=>{
+        if (!excludeAfk || !awaySignature) return;
+        // An open calendar must also refresh when recorded away time extends.
+        void queryClient.invalidateQueries({
+            predicate: query=>["week","week_app_filter","week_statistics","day_statistics"].includes(String(query.queryKey[0])),
+            refetchType:"active",
+        },{cancelRefetch:false});
+    },[awaySignature,excludeAfk,queryClient]);
 
     const {
         data: manualTimeBlocks = [],
@@ -500,7 +509,7 @@ export default function RenderCalendarContent({
         }] : [];
         const awayEvents=!excludeAfk&&isolation.showTracked&&!isolatedProject ? awaySpans.map(span=>({
             id:`afk-${span.device}-${span.start}`,title:"AFK",start:new Date(span.start*1000),end:new Date(span.end*1000),
-            editable:false,backgroundColor:"#78350f",borderColor:"#f59e0b",textColor:"#fde68a",
+            editable:false,display:"background",backgroundColor:"#78350f",
             classNames:["tt-afk-evidence"],extendedProps:{type:"afk",deviceUuid:span.device},
         })) : [];
         return [...timeBlockEvents, ...manualEvents, ...googleEvents, ...draftEvents, ...awayEvents];

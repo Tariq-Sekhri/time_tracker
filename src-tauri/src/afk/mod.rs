@@ -1,5 +1,6 @@
 //! AFK is sidecar evidence, never a switch controlling activity logging.
 pub(crate) mod storage;
+pub(crate) mod sync;
 #[cfg(target_os = "windows")]
 mod windows;
 pub use storage::{filter_logs, filter_requested};

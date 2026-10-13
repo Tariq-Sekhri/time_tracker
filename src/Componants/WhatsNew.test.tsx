@@ -9,9 +9,7 @@ it("shows release notes after an upgrade and remembers dismissal", async () => {
     const view = render(<WhatsNew/>);
     expect(screen.getByRole("dialog")).toBeTruthy();
     expect(screen.getAllByRole("listitem").map(item => item.textContent)).toEqual([
-        "Added AFK detection with multiple sources and optional filtering.",
-        "Redesigned and reorganized Settings.",
-        "Calendar filters now preserve activity history.",
+        "Patch version update with no feature or behavior changes.",
     ]);
     await userEvent.click(screen.getByRole("button", {name: "Got it"}));
     expect(screen.queryByRole("dialog")).toBeNull();

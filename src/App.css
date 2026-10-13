@@ -153,8 +153,8 @@ body {
   background: #e0f2fe;
   border-radius: 2px;
 }
-/* Evidence is a label alongside activity, never a replacement record. */
-.tt-afk-evidence { opacity: .85; border-left-width: 3px !important; }
+/* Unfiltered history uses background evidence rather than stacked event cards. */
+.tt-afk-evidence { opacity: .25; }
 /* Settings: a compact overview, with advanced AFK controls in focused views. */
 .settings-page { height: 100%; overflow-y: auto; color: #e5e7eb; padding: 32px 24px 48px; }
 .settings-content { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }

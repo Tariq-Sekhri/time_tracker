@@ -4,22 +4,43 @@ The AFK recorder runs independently of activity logging. It stores a device,
 time range, three-state decision, two signal masks, and a shared settings ID in
 `afk_intervals`. Equal consecutive samples extend the same interval. Gaps are
 left unknown; changing settings creates a separate configuration snapshot.
-Original activity rows and sync payloads are unchanged. AFK evidence currently
-stays local to Windows desktop; other platforms and downloaded device history
-without evidence stay unknown.
+Original activity rows and log-sync payloads are unchanged. AFK evidence has its
+own authenticated, incremental server sync. Detection currently supports Windows;
+other platforms and device history without evidence stay unknown.
 
-The optional AFK filter subtracts overlapping AFK seconds from copies of logs
+The AFK filter is enabled by default and subtracts overlapping AFK seconds from copies of logs
 before aggregation. It uses device identity, preserves unknown time and manual
 entries, and prevents calendar gap attachment from joining across an AFK gap.
 Changing settings affects future decisions. Historical decisions retain their
 original configuration rather than being silently rewritten.
 
+## Server sync
+
+Updated desktops upload local evidence to `POST /v1/afk` and download evidence for
+subscribed devices from `GET /v1/afk/{device_uuid}?after=<revision>`. Both routes
+require an approved device's bearer token. The server assigns uploaded evidence
+to the authenticated device; clients cannot upload another device's AFK state.
+Existing desktop and Android log-sync requests remain compatible.
+
+Pages contain at most 500 intervals. Uploads include the last acknowledged
+interval again so an ongoing away period extends on the server. Replays do not
+create duplicate records or shorten an interval. Downloads use independent
+revision cursors, so changed evidence arrives even without new activity log IDs.
+Downloaded source IDs are mapped to local interval IDs per device; settings
+snapshots are deduplicated locally and never replace this desktop's settings.
+Imports and download cursors commit in one transaction. An older server reports
+an AFK sync error instead of silently treating evidence as synced.
+
+Existing installs enable filtering once on upgrade; the control still allows
+inspection of raw history. Unfiltered calendar AFK spans use background shading
+and do not compete for space with activity blocks.
+
 ## Measured storage
 
 Run `python scripts/measure-afk-storage.py`. It creates SQLite databases in
-memory using the shipped schema. These are synthetic 24-hour scenarios, including
+memory using the recorder schema. These are synthetic 24-hour scenarios, including
 table/index page allocation and one shared settings snapshot, not observations
-of real signal-change frequency. WAL and backup overhead are not included.
+of real signal-change frequency. Sync mapping/cursor, WAL, and backup overhead are not included.
 
 | Evidence changes | Intervals / day | SQLite allocation |
 | --- | ---: | ---: |

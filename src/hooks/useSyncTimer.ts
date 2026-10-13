@@ -1,7 +1,9 @@
 import {useEffect, useState} from "react";
 import {listen} from "@tauri-apps/api/event";
+import {useQueryClient} from "@tanstack/react-query";
 
 export function useSyncTimer() {
+    const queryClient = useQueryClient();
     const [countdownSeconds, setCountdownSeconds] = useState<number | null>(null);
     const [isSyncing, setIsSyncing] = useState(false);
 
@@ -24,6 +26,7 @@ export function useSyncTimer() {
             });
             unlistenSyncSuccessful = await listen("sync-successful", () => {
                 setIsSyncing(false);
+                void queryClient.invalidateQueries();
             });
             unlistenSyncError = await listen("sync-error", () => {
                 setIsSyncing(false);
@@ -38,7 +41,7 @@ export function useSyncTimer() {
             if (unlistenSyncSuccessful) unlistenSyncSuccessful();
             if (unlistenSyncError) unlistenSyncError();
         };
-    }, []);
+    }, [queryClient]);
 
     return {countdownSeconds, isSyncing, setCountdownSeconds, setIsSyncing};
 }
