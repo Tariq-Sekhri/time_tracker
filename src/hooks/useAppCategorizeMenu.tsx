@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useToast } from "../Componants/Toast.tsx";
 import { get_categories } from "../api/Category.ts";
 import { get_cat_regex, insert_cat_regex, update_cat_regex_by_id, getMatchingCategoryRule, type CategoryRegex } from "../api/CategoryRegex.ts";
@@ -114,6 +114,32 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
         if (rect.width > 0 && rect.height > 0) {
             lastMenuSizeRef.current = { width: rect.width, height: rect.height };
         }
+    }, [menu]);
+
+    // The menu grows once its matching rule loads, so keep re-clamping it inside the viewport.
+    useLayoutEffect(() => {
+        const el = menuRef.current;
+        if (!menu || !el) return;
+        const pad = 8;
+        const clamp = () => {
+            const zoomStyle = getComputedStyle(document.documentElement).zoom;
+            const zoom = (zoomStyle.endsWith("%") ? parseFloat(zoomStyle) / 100 : parseFloat(zoomStyle)) || 1;
+            el.style.left = `${menu.x}px`;
+            el.style.top = `${menu.y}px`;
+            const rect = el.getBoundingClientRect();
+            const shiftX = Math.max(Math.min(0, window.innerWidth - pad - rect.right), pad - rect.left);
+            const shiftY = Math.max(Math.min(0, window.innerHeight - pad - rect.bottom), pad - rect.top);
+            el.style.left = `${menu.x + shiftX / zoom}px`;
+            el.style.top = `${menu.y + shiftY / zoom}px`;
+        };
+        clamp();
+        const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(clamp) : null;
+        observer?.observe(el);
+        window.addEventListener("resize", clamp);
+        return () => {
+            observer?.disconnect();
+            window.removeEventListener("resize", clamp);
+        };
     }, [menu]);
 
     const assignAppCategoryMutation = useMutation({
