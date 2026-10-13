@@ -1,12 +1,16 @@
 import {useLayoutEffect, useRef, useState, type ReactNode} from "react";
 import {createPortal} from "react-dom";
 
-export default function ManualPopover({anchor, onClose, labelledBy, children, width = 480}: {
+export default function ManualPopover({anchor, onClose, labelledBy, children, width = 480, ignoreOutsideSelector, beside = false, positionKey, suspended = false}: {
     anchor: HTMLElement | null;
     onClose: () => void;
     labelledBy: string;
     children: ReactNode;
     width?: number;
+    ignoreOutsideSelector?: string;
+    beside?: boolean;
+    positionKey?: string;
+    suspended?: boolean;
 }) {
     const panelRef = useRef<HTMLDivElement>(null);
     const [position, setPosition] = useState({top: 0, left: 0, width});
@@ -23,8 +27,8 @@ export default function ManualPopover({anchor, onClose, labelledBy, children, wi
             const below = rect.bottom / zoom + 8;
             const above = rect.top / zoom - panelHeight - 8;
             setPosition({
-                top: below + panelHeight <= viewHeight - 12 ? below : Math.max(12, above),
-                left: Math.max(12, Math.min(rect.right / zoom - panelWidth, viewWidth - panelWidth - 12)),
+                top: beside ? Math.max(12, Math.min(rect.top / zoom, viewHeight - panelHeight - 12)) : below + panelHeight <= viewHeight - 12 ? below : Math.max(12, above),
+                left: beside ? Math.max(12, Math.min(rect.right / zoom + panelWidth + 8 <= viewWidth - 12 ? rect.right / zoom + 8 : rect.left / zoom - panelWidth - 8, viewWidth - panelWidth - 12)) : Math.max(12, Math.min(rect.right / zoom - panelWidth, viewWidth - panelWidth - 12)),
                 width: panelWidth,
             });
         };
@@ -43,24 +47,24 @@ export default function ManualPopover({anchor, onClose, labelledBy, children, wi
             window.removeEventListener("resize", positionPanel);
             window.removeEventListener("scroll", positionPanel, true);
         };
-    }, [anchor, width]);
+    }, [anchor, width, beside, positionKey]);
 
     useLayoutEffect(() => {
         const onOutside = (event: PointerEvent) => {
             const target = event.target;
-            if (!(target instanceof Element) || target.closest("[data-manual-popover]") || anchor?.contains(target)) return;
+            if (!(target instanceof Element) || target.closest("[data-manual-popover]") || (ignoreOutsideSelector && target.closest(ignoreOutsideSelector)) || anchor?.contains(target)) return;
             onClose();
         };
         document.addEventListener("pointerdown", onOutside);
         return () => document.removeEventListener("pointerdown", onOutside);
-    }, [anchor, onClose]);
+    }, [anchor, onClose, ignoreOutsideSelector]);
 
     return createPortal(<div
         ref={panelRef}
         role="dialog"
         aria-labelledby={labelledBy}
         data-manual-popover
-        style={{...position, maxHeight: "calc(100vh - 24px)"}}
+        style={{...position, visibility: suspended ? "hidden" : undefined, pointerEvents: suspended ? "none" : undefined, maxHeight: "calc(100vh - 24px)"}}
         className="fixed z-[300] overflow-y-auto rounded-xl border border-gray-700 bg-gray-950 p-5 text-white shadow-2xl shadow-black/70 nice-scrollbar"
         onKeyDown={(event) => {
             if (event.key === "Escape") {event.stopPropagation(); onClose(); anchor?.focus();}

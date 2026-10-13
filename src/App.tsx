@@ -1,3 +1,4 @@
+import WhatsNew from "./Componants/WhatsNew.tsx";
 import "./App.css";
 import {useState, useEffect} from "react";
 import {useQueryClient} from "@tanstack/react-query";
@@ -374,6 +375,7 @@ export default function App() {
     return (
         <ToastProvider>
             <AppInner/>
+            <WhatsNew/>
         </ToastProvider>
     );
 }

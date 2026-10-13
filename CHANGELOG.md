@@ -1,0 +1,9 @@
+# Changelog
+
+## [Unreleased]
+
+## [1.11.10] - 2026-10-13
+
+- Drag on the calendar to preview a manual time entry, including future dates. Hold for a one-hour entry, then move or resize it. Single clicks keep their original behavior.
+- Manual tracking now uses Categories instead of Projects for work, social, and personal time.
+- See what's new after updating, with matching changelog notes on GitHub releases.

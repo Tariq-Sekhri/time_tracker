@@ -65,7 +65,7 @@ describe("demo manual timer control", () => {
         for (const block of blocks) await invoke("delete_manual_time_block", {id: block.id});
         queryClient.clear();
     });
-    it("starts on name blur, keeps Project focused, saves project changes and records without a naming dialog", async () => {
+    it("starts on name blur, keeps Category focused, saves project changes and records without a naming dialog", async () => {
         const user = userEvent.setup();
         const projectId = await invoke<number>("create_manual_project", {name: "Focus project"});
         const queryClient = new QueryClient({defaultOptions: {queries: {retry: false}, mutations: {retry: false}}});
@@ -77,7 +77,7 @@ describe("demo manual timer control", () => {
             </QueryClientProvider>,
         );
 
-        await waitFor(() => expect((screen.getByRole("combobox", {name: "Project"}) as HTMLSelectElement).disabled).toBe(false));
+        await waitFor(() => expect((screen.getByRole("combobox", {name: "Category"}) as HTMLSelectElement).disabled).toBe(false));
         const input = screen.getByRole("textbox", {name: "Timer task name"});
         await user.click(input);
         await user.tab();
@@ -86,8 +86,8 @@ describe("demo manual timer control", () => {
         await user.type(input, "Planning");
         await expect(invoke("get_running_manual_timer")).resolves.toBeNull();
         await user.tab();
-        expect(document.activeElement).toBe(screen.getByRole("combobox", {name: "Project"}));
-        await user.selectOptions(screen.getByRole("combobox", {name: "Project"}), String(projectId));
+        expect(document.activeElement).toBe(screen.getByRole("combobox", {name: "Category"}));
+        await user.selectOptions(screen.getByRole("combobox", {name: "Category"}), String(projectId));
         await waitFor(async () => {
             await expect(invoke("get_running_manual_timer")).resolves.toMatchObject({title: "Planning", project_id: projectId, end_time: null});
         });

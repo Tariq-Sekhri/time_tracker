@@ -1,3 +1,5 @@
+import {MANUAL_DRAFT_ID, MANUAL_HOLD_MS, manualTimeQueryKeys, persistManualEventRange, type ManualTimeDraft} from "./manualCalendarEditing.ts";
+import {calendarDateAtPoint, isManualRangeDrag, MANUAL_DRAG_DISTANCE, useHoldToCreate} from "./useHoldToCreate.ts";
 import { toErrorString } from "../../types/common.ts";
 import {reportError} from "../../diagnostics.ts";
 import {useRenderPerf} from "../../perf.ts";
@@ -9,7 +11,7 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getCategoryColor, getWeekStart, formatDuration, formatLocalDateYMD } from "./utils.ts";
 import { Category } from "../../api/Category.ts";
-import { EventClickArg, DatesSetArg } from "@fullcalendar/core";
+import { EventClickArg, DatesSetArg, EventChangeArg } from "@fullcalendar/core";
 import interactionPlugin from '@fullcalendar/interaction';
 import {
     get_all_google_calendar_events,
@@ -53,6 +55,13 @@ interface RenderCalendarContentProps {
     toggleDeviceInStats: (uuid: string) => void;
     calDeviceUuids: string[] | null;
     handleEventClick: (clickInfo: EventClickArg) => void;
+    onCreateManualTime: (start: Date, end: Date) => void;
+    onPlainCalendarClick: () => void;
+    manualDraft: ManualTimeDraft | null;
+    onManualDraftChange: (draft: ManualTimeDraft) => void;
+    onManualDraftAnchor: (anchor: HTMLElement) => void;
+    onManualDraftManipulating: (active: boolean) => void;
+    onManualTimeChanged: (id: number, start: Date, end: Date) => void;
     onDatesSet: (dates: DatesSetArg) => void;
     googleCalendarMap: Map<number, GoogleCalendar>;
     googleCalendars: GoogleCalendar[];
@@ -91,6 +100,13 @@ export default function RenderCalendarContent({
     toggleDeviceInStats,
     calDeviceUuids,
     handleEventClick,
+    onCreateManualTime,
+    manualDraft,
+    onPlainCalendarClick,
+    onManualDraftChange,
+    onManualDraftAnchor,
+    onManualDraftManipulating,
+    onManualTimeChanged,
     onDatesSet,
     googleCalendarMap,
     googleCalendars,
@@ -112,11 +128,39 @@ export default function RenderCalendarContent({
 }: RenderCalendarContentProps) {
     const queryClient = useQueryClient();
     const {data: manualProjects = [], error: manualProjectsError} = useQuery({queryKey: MANUAL_PROJECTS_QUERY_KEY, queryFn: getManualProjects});
-    const manualSources = [{id: null, name: "No project"}, ...manualProjects];
+    const manualSources = [{id: null, name: "No category"}, ...manualProjects];
     const manualSourceIds = manualSources.map((project) => project.id);
     const { showToast, updateToast, removeToast } = useToast();
     const lastGoogleEventsErrorToastRef = useRef<string | null>(null);
     const calendarHostRef = useRef<HTMLDivElement>(null);
+    const hold = useHoldToCreate(calendarHostRef, () => ref.current?.getApi().unselect(), (x, y) => {
+        const host = calendarHostRef.current;
+        const start = host && calendarDateAtPoint(host, x, y);
+        if (start) ref.current?.getApi().select(start, new Date(start.getTime() + 3600000));
+    }, onPlainCalendarClick);
+    const pendingManualEdits = useRef(new Set<string>());
+    const changeManualRange = async (info: EventChangeArg) => {
+        const {event} = info;
+        if (!event.start || !event.end) {info.revert(); return;}
+        if (event.id === MANUAL_DRAFT_ID && manualDraft) {
+            onManualDraftChange({...manualDraft, start: event.start, end: event.end});
+            return;
+        }
+        if (event.extendedProps.type !== "manual_time" || pendingManualEdits.current.has(event.id)) {
+            info.revert(); return;
+        }
+        pendingManualEdits.current.add(event.id);
+        try {
+            await persistManualEventRange(event);
+            onManualTimeChanged(event.extendedProps.manualTimeBlockId, event.start, event.end);
+            await Promise.all(manualTimeQueryKeys.map((key) => queryClient.invalidateQueries({queryKey: [key]})));
+        } catch (error) {
+            info.revert();
+            showToast("Couldn't change manual time", "error", 5000, String(error));
+        } finally {
+            pendingManualEdits.current.delete(event.id);
+        }
+    };
     const [isRelogging, setIsRelogging] = useState(false);
     const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
 
@@ -413,6 +457,8 @@ export default function RenderCalendarContent({
                 const durationSec = block.end_time - block.start_time;
                 return {
                     id: `manual-${block.id}`,
+                    editable: true,
+                    classNames: ["tt-manual-event"],
                     title: `${block.title} (${formatDuration(durationSec)})`,
                     start: new Date(block.start_time * 1000).toISOString(),
                     end: new Date(block.end_time * 1000).toISOString(),
@@ -429,7 +475,19 @@ export default function RenderCalendarContent({
                 };
             });
 
-        return [...timeBlockEvents, ...manualEvents, ...googleEvents];
+        const draftEvents = manualDraft ? [{
+            id: MANUAL_DRAFT_ID,
+            title: manualDraft.title.trim() || "(No title)",
+            start: manualDraft.start,
+            end: manualDraft.end,
+            editable: true,
+            backgroundColor: MANUAL_TIME_COLOR,
+            borderColor: "#7dd3fc",
+            textColor: "#ffffff",
+            classNames: ["tt-manual-draft"],
+            extendedProps: {type: "manual_draft"},
+        }] : [];
+        return [...timeBlockEvents, ...manualEvents, ...googleEvents, ...draftEvents];
     }, [
         displayedTimeBlocks,
         categoryColorMap,
@@ -439,6 +497,7 @@ export default function RenderCalendarContent({
         googleCalendarMap,
         calendarAppFilter,
         manualTimeBlocks,
+        manualDraft,
         isManualTimeInCal,
         isolatedProject,
         isolation.showTracked,
@@ -470,6 +529,7 @@ export default function RenderCalendarContent({
         displayGoogleEvents,
         isCalendarVisible,
         manualTimeBlocks,
+        manualDraft,
         isManualTimeInCal,
         calendarAppFilter,
         isLoadingFilteredData,
@@ -616,7 +676,7 @@ export default function RenderCalendarContent({
                 onToggleStats: () => toggleManualTimeInStats(project.id),
                 disabled: !manualProjectFiltersLoaded,
             })),
-            error: manualProjectsError ? "Couldn't load projects" : undefined,
+            error: manualProjectsError ? "Couldn't load categories" : undefined,
         },
         {
             key: "google",
@@ -669,6 +729,7 @@ export default function RenderCalendarContent({
                              collapsed={isLeftCollapsed} onToggleCollapsed={() => setIsLeftCollapsed((v) => !v)}/>
                 <div
                     ref={calendarHostRef}
+                    onMouseDownCapture={hold.onMouseDownCapture}
                     className="calendar-fc-host flex-1 h-full min-h-0 min-w-0 overflow-hidden"
                     style={{ ["--tt-slot-min-height" as any]: `${slotMinHeightPx}px` }}
                 >
@@ -695,9 +756,50 @@ export default function RenderCalendarContent({
                         initialView="timeGridWeek"
                         initialDate={formatLocalDateYMD(weekStart)}
                         events={events}
-                        eventClick={handleEventClick}
+                        selectable={true}
+                        selectMirror={true}
+                        selectMinDistance={MANUAL_DRAG_DISTANCE}
+                        selectLongPressDelay={MANUAL_HOLD_MS}
+                        snapDuration="00:15:00"
+                        unselectAuto={false}
+                        selectAllow={(range) => {
+                            const current = hold.gesture.current;
+                            return (current.held && !current.moved) || isManualRangeDrag(range.start, range.end, current.distance);
+                        }}
+                        select={(info) => {
+                            // Programmatic selection is the hold preview. Native selection
+                            // must cross a time slot and exceed normal click movement.
+                            if (!info.jsEvent) return;
+                            info.view.calendar.unselect();
+                            if (!isManualRangeDrag(info.start, info.end, hold.gesture.current.distance)) {
+                                onPlainCalendarClick();
+                                return;
+                            }
+                            onCreateManualTime(info.start, info.end);
+                        }}
+                        dateClick={(info) => {
+                            if (!hold.gesture.current.held || hold.gesture.current.moved) return;
+                            info.view.calendar.unselect();
+                            onCreateManualTime(info.date, new Date(info.date.getTime() + 3600000));
+                        }}
+                        eventDragStart={(info) => {if (info.event.id === MANUAL_DRAFT_ID) onManualDraftManipulating(true);}}
+                        eventDragStop={() => onManualDraftManipulating(false)}
+                        eventResizeStart={(info) => {if (info.event.id === MANUAL_DRAFT_ID) onManualDraftManipulating(true);}}
+                        eventResizeStop={() => onManualDraftManipulating(false)}
+                        eventDrop={changeManualRange}
+                        eventResize={changeManualRange}
+                        eventAllow={(_range, event) => !!event && !pendingManualEdits.current.has(event.id)}
+                        eventResizableFromStart={true}
+                        dragScroll={true}
+                        eventClassNames={(info) => info.isMirror && !info.event.id ? ["tt-selection-preview"] : []}
+                        eventContent={(info) => info.isMirror && !info.event.id ? <div className="px-1 text-xs">
+                            <div>{info.timeText}</div>
+                            <strong>(No title)</strong>
+                        </div> : true}
+                        eventClick={(info) => {if (info.event.id !== MANUAL_DRAFT_ID) handleEventClick(info);}}
                         eventDidMount={(info) => {
                             const eventType = info.event.extendedProps?.type as string | undefined;
+                            if (eventType === "manual_draft" && !info.isMirror) onManualDraftAnchor(info.el);
                             if (eventType !== "timeblock") return;
                             const handler = (e: globalThis.MouseEvent) => {
                                 const apps = (info.event.extendedProps?.apps ?? []) as { app: string; appNames: string[]; totalDuration: number }[];

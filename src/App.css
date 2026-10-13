@@ -125,3 +125,31 @@ body {
 .fc-theme-standard .fc-scroller::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, #9ca3af 0%, #6b7280 100%);
 }
+
+.calendar-fc-host .tt-selection-preview,
+.calendar-fc-host .tt-manual-draft {
+  background: #0ea5e9 !important;
+  border: 2px solid #7dd3fc !important;
+  border-radius: 5px;
+  box-shadow: 0 0 0 1px #082f49, 0 3px 10px #0005;
+}
+.calendar-fc-host .tt-manual-draft { cursor: grab; }
+.calendar-fc-host .tt-manual-event { cursor: grab; }
+.calendar-fc-host .tt-manual-draft:active,
+.calendar-fc-host .tt-manual-event:active { cursor: grabbing; }
+.calendar-fc-host .tt-manual-draft .fc-event-resizer,
+.calendar-fc-host .tt-manual-event .fc-event-resizer {
+  display: block;
+  height: 9px;
+  cursor: ns-resize;
+}
+.calendar-fc-host .tt-manual-draft .fc-event-resizer::after,
+.calendar-fc-host .tt-manual-event:hover .fc-event-resizer::after {
+  content: "";
+  display: block;
+  width: 22px;
+  height: 2px;
+  margin: 3px auto;
+  background: #e0f2fe;
+  border-radius: 2px;
+}

@@ -121,7 +121,7 @@ export default function ManualTimeBlockView({
                         <input type="datetime-local" value={end} onChange={(event) => setEnd(event.target.value)} className="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-white outline-none focus:border-sky-500" />
                     </label>
                     <div>
-                        <span className="mb-1 block text-sm text-gray-400">Project</span>
+                        <span className="mb-1 block text-sm text-gray-400">Category</span>
                         <ProjectSelector value={projectId} onChange={setProjectId} disabled={updateMutation.isPending} />
                     </div>
                     <label className="block">
@@ -138,7 +138,7 @@ export default function ManualTimeBlockView({
                 <div className="mt-5 flex flex-1 flex-col">
                     <div>
                         <h3 className="break-words text-lg font-semibold text-white">{selectedEvent.title}</h3>
-                        <p className="mt-1 text-sm text-sky-300">{projects.find((project) => project.id === selectedEvent.projectId)?.name ?? "No project"}</p>
+                        <p className="mt-1 text-sm text-sky-300">{projects.find((project) => project.id === selectedEvent.projectId)?.name ?? "No category"}</p>
                         <p className="mt-2 text-sm text-gray-400">{selectedEvent.start.toLocaleString()} – {selectedEvent.end.toLocaleString()}</p>
                         <p className="mt-1 text-sm font-medium text-sky-400">{formatDuration(Math.floor((selectedEvent.end.getTime() - selectedEvent.start.getTime()) / 1000))}</p>
                         <div className="mt-5 border-t border-gray-800 pt-5">

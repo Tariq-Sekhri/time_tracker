@@ -1,3 +1,4 @@
+import {type ManualTimeDraft} from "./manualCalendarEditing.ts";
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 import {get_categories, Category, update_category_by_id} from "../../api/Category.ts";
 import {get_logs_for_time_block, get_logs_by_category, get_log_by_id} from "../../api/Log.ts";
@@ -40,6 +41,13 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const [includeGoogleInStats, setIncludeGoogleInStats] = useState(true);
     const [manualTimeInCal, setManualTimeInCal] = useState(true);
     const [manualTimeInStats, setManualTimeInStats] = useState(true);
+    const [manualDraftManipulating, setManualDraftManipulating] = useState(false);
+    const [manualDraft, setManualDraft] = useState<ManualTimeDraft | null>(null);
+    const updateManualDraft = useCallback((draft: ManualTimeDraft) => {
+        setManualDraft((previous) => previous && previous.start.getTime() === draft.start.getTime()
+            && previous.end.getTime() === draft.end.getTime() && previous.title === draft.title ? previous : draft);
+    }, []);
+    const closeManualDraft = useCallback(() => {setShowManualTimeDialog(false); setManualDraft(null); setManualTimeAnchor(null); setManualDraftManipulating(false);}, []);
     const [showManualTimeDialog, setShowManualTimeDialog] = useState(false);
     const [manualTimeAnchor, setManualTimeAnchor] = useState<HTMLElement | null>(null);
     const includeGoogleInStatsLoadedRef = useRef(false);
@@ -551,16 +559,20 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         }
     };
 
+    const clearCalendarSelection = useCallback(() => {
+        setRightSideBarView("Week");
+        setSelectedEvent(null);
+        setSelectedEventLogs([]);
+        setSelectedDate(null);
+        setSelectedCategory(null);
+    }, []);
+
     const handleCalendarClick = (e: React.MouseEvent) => {
         const target = e.target as HTMLElement;
         const isEventClick = target.closest('.fc-event') !== null;
         const isHeaderClick = target.closest('.fc-col-header-cell') !== null;
         if (!isEventClick && !isHeaderClick) {
-            setRightSideBarView("Week");
-            setSelectedEvent(null);
-            setSelectedEventLogs([]);
-            setSelectedDate(null);
-            setSelectedCategory(null);
+            clearCalendarSelection();
         }
     };
 
@@ -984,6 +996,8 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const weekEnd = new Date(headerWeekStart);
     weekEnd.setDate(weekEnd.getDate() + 6);
 
+    useEffect(() => {closeManualDraft();}, [date, closeManualDraft]);
+
     const headerTitle = `${headerWeekStart.toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric'
@@ -997,7 +1011,12 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             appJumpPrevDisabled={appJumpPrevDisabled} appJumpNextDisabled={appJumpNextDisabled}
                             timerControl={<ManualTimerControl
                                 timer={runningManualTimer}
-                                onAddPastTime={(anchor) => {setManualTimeAnchor(anchor); setShowManualTimeDialog(true);}}
+                                onAddPastTime={(anchor) => {
+                                    const start = isCurrentWeek(date, calendarStartHour) ? new Date() : getWeekStart(date, calendarStartHour);
+                                    start.setMinutes(Math.ceil(start.getMinutes() / 15) * 15, 0, 0);
+                                    setManualDraft({start, end: new Date(start.getTime() + 3600000), title: ""});
+                                    setManualTimeAnchor(anchor); setShowManualTimeDialog(true);
+                                }}
                             />}/>
 
             <div className="flex flex-1 overflow-hidden min-h-0">
@@ -1020,6 +1039,15 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             toggleDeviceInCal={(id) => { isolation.clearDevice(); toggleDeviceInCal(id); }}
                             toggleDeviceInStats={(id) => { isolation.clearDevice(); toggleDeviceInStats(id); }}
                             calDeviceUuids={calDeviceUuids}
+                            onPlainCalendarClick={clearCalendarSelection}
+                            manualDraft={manualDraft}
+                            onManualDraftChange={updateManualDraft}
+                            onManualDraftAnchor={setManualTimeAnchor}
+                            onManualDraftManipulating={setManualDraftManipulating}
+                            onManualTimeChanged={(id, start, end) => setSelectedEvent((previous) => previous?.manualTimeBlockId === id ? {...previous, start, end} : previous)}
+                            onCreateManualTime={(start, end) => {
+                                setManualDraft({start, end, title: ""}); setShowManualTimeDialog(true);
+                            }}
                             handleEventClick={handleEventClick}
                             onDatesSet={handleDatesSet}
                             googleCalendarMap={googleCalendarMap}
@@ -1058,12 +1086,15 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
             </div>
             {categorizeLayers}
 
-            <ManualTimeBlockDialog
+            {manualDraft && <ManualTimeBlockDialog
                 open={showManualTimeDialog}
                 anchor={manualTimeAnchor}
-                initialStart={isCurrentWeek(date, calendarStartHour) ? new Date() : getWeekStart(date, calendarStartHour)}
-                onClose={() => setShowManualTimeDialog(false)}
-            />
+                initialStart={manualDraft.start}
+                initialEnd={manualDraft.end}
+                onPreviewChange={updateManualDraft}
+                manipulating={manualDraftManipulating}
+                onClose={closeManualDraft}
+            />}
 
 
         </div>

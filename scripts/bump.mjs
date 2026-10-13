@@ -80,10 +80,20 @@ const currentVersion = readJson(mainPackageJson).version;
 const newVersion = bumpVersion(currentVersion, bumpType);
 const newDemoVersion = `${newVersion}-demo`;
 
+const changelogPath = join(root, "CHANGELOG.md");
+const changelog = readFileSync(changelogPath, "utf8");
+const unreleased = changelog.match(/## \[Unreleased\]\r?\n([\s\S]*?)(?=\n## |$)/);
+if (!unreleased || !unreleased[1].trim()) {
+  throw new Error("Add a concise summary of all changes since the last bump under ## [Unreleased] in CHANGELOG.md first.");
+}
+const datedHeading = `## [${newVersion}] - ${new Date().toISOString().slice(0, 10)}`;
+
+
 const demoPackageJson = join(root, "demo", "package.json");
 const oldDemoVersion = readJson(demoPackageJson).version;
 
 const updatedFiles = [
+  "CHANGELOG.md",
   "package.json",
   "package-lock.json",
   "src-tauri/Cargo.toml",
@@ -126,6 +136,8 @@ replaceAll(
   `"${oldDemoVersion}"`,
   `"${newDemoVersion}"`
 );
+
+writeFileSync(changelogPath, changelog.replace("## [Unreleased]", `## [Unreleased]\n\n${datedHeading}`));
 
 console.log(`Bumped ${currentVersion} -> ${newVersion} (${bumpType})`);
 console.log(`Demo version ${oldDemoVersion} -> ${newDemoVersion}`);

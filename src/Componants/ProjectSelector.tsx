@@ -47,7 +47,7 @@ export default function ProjectSelector({value, onChange, disabled = false}: {
         onError: (value) => setError(String(value)),
     });
     const act = (action: ProjectAction) => {
-        if (action.type !== "delete" && !action.name.trim()) { setError("Enter a project name."); return; }
+        if (action.type !== "delete" && !action.name.trim()) { setError("Enter a category name."); return; }
         setError(null);
         mutation.mutate(action);
     };
@@ -78,27 +78,27 @@ export default function ProjectSelector({value, onChange, disabled = false}: {
 
     return <>
         <div className="flex min-w-0 items-center gap-1">
-            <select ref={selectRef} aria-label="Project" value={projects.some((project) => project.id === value) ? String(value) : ""} disabled={disabled || isLoading || Boolean(loadError)} onChange={(event) => onChange(event.target.value ? Number(event.target.value) : null)} className="min-w-0 flex-1 rounded-lg border border-gray-700 bg-gray-950 px-2.5 py-2 text-sm text-gray-200 outline-none focus:border-sky-500 disabled:opacity-50">
-                <option value="">{isLoading ? "Loading projects…" : loadError ? "Projects unavailable" : "No project"}</option>
+            <select ref={selectRef} aria-label="Category" value={projects.some((project) => project.id === value) ? String(value) : ""} disabled={disabled || isLoading || Boolean(loadError)} onChange={(event) => onChange(event.target.value ? Number(event.target.value) : null)} className="min-w-0 flex-1 rounded-lg border border-gray-700 bg-gray-950 px-2.5 py-2 text-sm text-gray-200 outline-none focus:border-sky-500 disabled:opacity-50">
+                <option value="">{isLoading ? "Loading categories…" : loadError ? "Categories unavailable" : "No category"}</option>
                 {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
             </select>
-            <button ref={manageRef} type="button" disabled={disabled} onClick={() => {setError(null); setOpen(true);}} aria-label="Manage projects" title="Create, edit, or delete projects" className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:opacity-50">
+            <button ref={manageRef} type="button" disabled={disabled} onClick={() => {setError(null); setOpen(true);}} aria-label="Manage categories" title="Create, edit, or delete categories" className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:opacity-50">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
             </button>
         </div>
-        {open && <ManualPopover anchor={manageRef.current} onClose={close} labelledBy="manage-projects-title">
+        {open && <ManualPopover anchor={manageRef.current} onClose={close} labelledBy="manage-manual-categories-title">
             <div ref={dialogRef} className="flex max-h-[70vh] flex-col">
                 <div className="mb-4 flex items-center justify-between">
-                    <h2 id="manage-projects-title" className="text-xl font-semibold text-white">Projects</h2>
-                    <button type="button" onClick={close} disabled={mutation.isPending} aria-label="Close projects" className="rounded px-2 py-1 text-gray-400 hover:bg-gray-800 hover:text-white">×</button>
+                    <h2 id="manage-manual-categories-title" className="text-xl font-semibold text-white">Categories</h2>
+                    <button type="button" onClick={close} disabled={mutation.isPending} aria-label="Close categories" className="rounded px-2 py-1 text-gray-400 hover:bg-gray-800 hover:text-white">×</button>
                 </div>
                 <form className="mb-4 flex gap-2" onSubmit={(event) => {event.preventDefault(); act({type: "create", name});}}>
-                    <input autoFocus aria-label="New project name" value={name} onChange={(event) => setName(event.target.value)} maxLength={100} placeholder="New project name" disabled={mutation.isPending} className="min-w-0 flex-1 rounded-lg border border-gray-700 bg-black px-3 py-2 text-sm text-white outline-none focus:border-sky-500" />
+                    <input autoFocus aria-label="New category name" value={name} onChange={(event) => setName(event.target.value)} maxLength={100} placeholder="New category name" disabled={mutation.isPending} className="min-w-0 flex-1 rounded-lg border border-gray-700 bg-black px-3 py-2 text-sm text-white outline-none focus:border-sky-500" />
                     <button type="submit" disabled={mutation.isPending || !name.trim()} className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50">Create</button>
                 </form>
                 {(error || loadError) && <p role="alert" className="mb-3 text-sm text-red-400">{error || String(loadError)}</p>}
                 <div className="min-h-0 overflow-y-auto nice-scrollbar">
-                    {!projects.length && <p className="py-6 text-center text-sm text-gray-500">Create a project to organize your manual time.</p>}
+                    {!projects.length && <p className="py-6 text-center text-sm text-gray-500">Create a category to organize your manual time.</p>}
                     {projects.map((project) => <div key={project.id} className="border-t border-gray-800 py-3">
                         {editId === project.id ? <form className="flex items-center gap-2" onSubmit={(event) => {event.preventDefault(); act({type: "edit", id: project.id, name: editName});}}>
                             <input autoFocus aria-label={`Rename ${project.name}`} value={editName} onChange={(event) => setEditName(event.target.value)} maxLength={100} disabled={mutation.isPending} className="min-w-0 flex-1 rounded border border-gray-700 bg-black px-2 py-1.5 text-sm text-white outline-none focus:border-sky-500" />
@@ -110,10 +110,10 @@ export default function ProjectSelector({value, onChange, disabled = false}: {
                             <button type="button" disabled={mutation.isPending} onClick={() => {setDeleteId(project.id); setEditId(null);}} className="text-sm text-red-400 hover:text-red-300" aria-label={`Delete ${project.name}`}>Delete</button>
                         </div>}
                         {deleteId === project.id && <div className="mt-3 rounded-lg border border-red-900/50 bg-red-950/20 p-3">
-                            <p className="text-sm text-gray-300">Delete this project? Its time entries will be kept without a project.</p>
+                            <p className="text-sm text-gray-300">Delete this category? Its time entries will be kept without a category.</p>
                             <div className="mt-3 flex justify-end gap-3">
                                 <button type="button" disabled={mutation.isPending} onClick={() => setDeleteId(null)} className="text-sm text-gray-400 hover:text-white">Cancel</button>
-                                <button type="button" disabled={mutation.isPending} onClick={() => act({type: "delete", id: project.id})} className="rounded bg-red-600 px-3 py-1.5 text-sm text-white hover:bg-red-500 disabled:opacity-50">Delete project</button>
+                                <button type="button" disabled={mutation.isPending} onClick={() => act({type: "delete", id: project.id})} className="rounded bg-red-600 px-3 py-1.5 text-sm text-white hover:bg-red-500 disabled:opacity-50">Delete category</button>
                             </div>
                         </div>}
                     </div>)}

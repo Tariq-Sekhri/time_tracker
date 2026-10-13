@@ -88,6 +88,10 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Read changelog
+        id: changelog
+        run: node scripts/release-notes.mjs
+
       - name: Build and upload release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -99,7 +103,7 @@ jobs:
         with:
           tagName: ${{ github.event_name == 'workflow_dispatch' && inputs.beta && format('app-v__VERSION__-beta.{0}', github.run_number) || 'app-v__VERSION__' }}
           releaseName: ${{ github.event_name == 'workflow_dispatch' && inputs.beta && format('Time Tracker v__VERSION__ Beta {0}', github.run_number) || 'Time Tracker v__VERSION__' }}
-          releaseBody: "Installers for Windows (.exe) and Linux (.deb) are in Assets. Ignore .sig and latest.json where present; they are used for automatic updates."
+          releaseBody: ${{ steps.changelog.outputs.body }}
           releaseDraft: false
           prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.beta }}
           args: ${{ matrix.bundles }}
