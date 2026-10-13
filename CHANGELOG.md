@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-10-13
+
+- Added AFK detection with multiple sources and optional filtering.
+- Redesigned and reorganized Settings.
+- Calendar filters now preserve activity history.
+
 ## [1.11.11] - 2026-10-13
 
 - Patch version update with no feature or behavior changes.

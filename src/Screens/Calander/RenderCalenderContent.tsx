@@ -34,6 +34,10 @@ import {getManualProjects, MANUAL_PROJECTS_QUERY_KEY} from "../../api/ManualProj
 import {ManualProjectFilter} from "../../hooks/useManualProjectFilters.ts";
 
 import {CalendarIsolation} from "../../hooks/useCalendarIsolation.ts";
+import {invokeOrThrow} from "../../utils.ts";
+import {afkSpans} from "../../afk/intervals.ts";
+import type {AfkInterval} from "../../afk/model.ts";
+import {useAfkFilter} from "../../stores/afkFilterStore.ts";
 
 const LEFT_SIDEBAR_COLLAPSED_KEY = "time-tracker:left-sidebar-collapsed";
 
@@ -262,6 +266,13 @@ export default function RenderCalendarContent({
         () => getWeekRange(date, calendarStartHour),
         [date, calendarStartHour]
     );
+    const excludeAfk=useAfkFilter(state=>state.excludeAfk);
+    const {data: afkIntervals=[]}=useQuery({
+        queryKey:["afkIntervals",weekRange.week_start,weekRange.week_end,calDeviceUuids],
+        queryFn:()=>invokeOrThrow<AfkInterval[]>("get_afk_intervals",{rangeStart:weekRange.week_start,rangeEnd:weekRange.week_end+1,deviceUuids:calDeviceUuids}),
+        enabled:weekQueryEnabled, refetchInterval:30000,
+    });
+    const awaySpans=useMemo(()=>afkSpans(afkIntervals,weekRange.week_start,weekRange.week_end+1),[afkIntervals,weekRange]);
 
     const {
         data: manualTimeBlocks = [],
@@ -487,9 +498,16 @@ export default function RenderCalendarContent({
             classNames: ["tt-manual-draft"],
             extendedProps: {type: "manual_draft"},
         }] : [];
-        return [...timeBlockEvents, ...manualEvents, ...googleEvents, ...draftEvents];
+        const awayEvents=!excludeAfk&&isolation.showTracked&&!isolatedProject ? awaySpans.map(span=>({
+            id:`afk-${span.device}-${span.start}`,title:"AFK",start:new Date(span.start*1000),end:new Date(span.end*1000),
+            editable:false,backgroundColor:"#78350f",borderColor:"#f59e0b",textColor:"#fde68a",
+            classNames:["tt-afk-evidence"],extendedProps:{type:"afk",deviceUuid:span.device},
+        })) : [];
+        return [...timeBlockEvents, ...manualEvents, ...googleEvents, ...draftEvents, ...awayEvents];
     }, [
         displayedTimeBlocks,
+        awaySpans,
+        excludeAfk,
         categoryColorMap,
         visibleCategories,
         displayGoogleEvents,
@@ -796,9 +814,10 @@ export default function RenderCalendarContent({
                             <div>{info.timeText}</div>
                             <strong>(No title)</strong>
                         </div> : true}
-                        eventClick={(info) => {if (info.event.id !== MANUAL_DRAFT_ID) handleEventClick(info);}}
+                        eventClick={(info) => {if (info.event.id !== MANUAL_DRAFT_ID && info.event.extendedProps.type !== "afk") handleEventClick(info);}}
                         eventDidMount={(info) => {
                             const eventType = info.event.extendedProps?.type as string | undefined;
+                            if(eventType==="afk") info.el.title=`AFK evidence for ${info.event.extendedProps.deviceUuid}. Original activity is preserved; use Exclude AFK to filter.`;
                             if (eventType === "manual_draft" && !info.isMirror) onManualDraftAnchor(info.el);
                             if (eventType !== "timeblock") return;
                             const handler = (e: globalThis.MouseEvent) => {

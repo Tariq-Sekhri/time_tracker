@@ -3,7 +3,7 @@ import changelog from "../../CHANGELOG.md?raw";
 import {createPortal} from "react-dom";
 
 const releases = [...changelog.matchAll(/## \[([0-9]+\.[0-9]+\.[0-9]+)\][^\n]*\n([\s\S]*?)(?=\n## |$)/g)]
-    .map((match) => ({version: match[1], notes: match[2].trim().split("\n").filter((line) => line.startsWith("- ")).map((line) => line.slice(2))}));
+    .map((match) => ({version: match[1], notes: match[2].trim().split("\n").filter((line) => line.startsWith("- ")).map((line) => line.slice(2).trim())}));
 const storageKey = "time-tracker:changelog-seen";
 
 export default function WhatsNew() {
@@ -19,10 +19,7 @@ export default function WhatsNew() {
         return () => previous?.focus();
     }, [open]);
     if (!open) return null;
-    let seen: string | null = null;
-    try { seen = localStorage.getItem(storageKey); } catch { /* Storage can be unavailable. */ }
-    const seenIndex = releases.findIndex((release) => release.version === seen);
-    const visible = seenIndex > 0 ? releases.slice(0, seenIndex) : releases.slice(0, 1);
+    const visible = releases.slice(0, 1);
     const dismiss = () => {
         try { localStorage.setItem(storageKey, releases[0].version); } catch { /* Still allow dismissal. */ }
         setOpen(false);

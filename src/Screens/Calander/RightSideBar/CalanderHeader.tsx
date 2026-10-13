@@ -1,6 +1,7 @@
 import {isCurrentWeek} from "../utils.ts";
 import CalendarAppFilterIndicator from "../../../Componants/CalendarAppFilterIndicator.tsx";
 import {ReactNode} from "react";
+import AfkFilter from "../../../Componants/AfkFilter.tsx";
 
 export default function CalanderHeader(props: {
     headerTitle: string,
@@ -20,6 +21,7 @@ export default function CalanderHeader(props: {
             <h2 className="text-xl font-semibold text-white">{props.headerTitle}</h2>
             <div className="flex flex-wrap items-center justify-end gap-2">
                 {props.timerControl}
+                <AfkFilter />
                 <div className="h-6 w-px bg-gray-800" aria-hidden="true" />
                 <CalendarAppFilterIndicator
                     onPrev={props.appJumpPrev}

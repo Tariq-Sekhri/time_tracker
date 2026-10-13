@@ -1,3 +1,6 @@
+import {roundDurations} from "./roundDurations";
+import {defaultAfkSettings, evaluateAfk, type AfkSettings, type AfkInterval, type Observation} from "../../src/afk/model";
+import {subtractAfk} from "../../src/afk/intervals";
 import {
     DEMO_DEFAULT_CATEGORIES,
     DEMO_DEFAULT_CAT_REGEX,
@@ -92,10 +95,10 @@ function seedDevices(nextId: number) {
     }
 }
 
-function logsForDevices(uuids?: string[] | null): RawLog[] {
-    if (uuids == null) return rawLogs;
+function logsForDevices(uuids?: string[] | null, source=rawLogs): RawLog[] {
+    if (uuids == null) return source;
     const allowed = new Set(uuids);
-    return rawLogs.filter((row) => allowed.has(row.device_uuid ?? LOCAL_DEVICE_UUID));
+    return source.filter((row) => allowed.has(row.device_uuid ?? LOCAL_DEVICE_UUID));
 }
 type TimeBlockRow = DemoTimeBlock;
 
@@ -394,20 +397,20 @@ function isAppSkippedByRules(appName: string): boolean {
     return false;
 }
 
-function blocksInRangeEffective(ws: number, we: number, deviceUuids?: string[] | null): TimeBlockRow[] {
+function blocksInRangeEffective(ws: number, we: number, deviceUuids?: string[] | null, source=rawLogs): TimeBlockRow[] {
     return buildTimeBlocksFromLogs(
-        logsForDevices(deviceUuids),
+        logsForDevices(deviceUuids, source),
         ws,
         we,
         categories,
         catRegex,
         skippedApps,
-        getTimeBlockSettings()
+        source===rawLogs?getTimeBlockSettings():{...getTimeBlockSettings(),maxAttachDistance:0}
     );
 }
 
-function activeRawLogs(): RawLog[] {
-    return rawLogs.filter((r) => !isAppSkippedByRules(r.app));
+function activeRawLogs(source=rawLogs): RawLog[] {
+    return source.filter((r) => !isAppSkippedByRules(r.app));
 }
 
 function seed() {
@@ -996,13 +999,13 @@ function manualStatsBlocks(start: number, end: number): TimeBlockRow[] {
     return blocks;
 }
 
-function weekStatistics(ws: number, we: number, includeManual = true, deviceUuids?: string[] | null, categoryNames?: string[] | null) {
+function weekStatistics(ws: number, we: number, includeManual = true, deviceUuids?: string[] | null, categoryNames?: string[] | null, source=rawLogs) {
     seed();
     const daySec = 86400;
-    const blocks = [...blocksInRangeEffective(ws, we, deviceUuids), ...(includeManual ? manualStatsBlocks(ws, we + 1) : [])].filter(block => categoryNames == null || categoryNames.includes(block.category));
+    const blocks = [...blocksInRangeEffective(ws, we, deviceUuids, source), ...(includeManual ? manualStatsBlocks(ws, we + 1) : [])].filter(block => categoryNames == null || categoryNames.includes(block.category));
     const prevWs = ws - 7 * daySec;
     const prevWe = we - 7 * daySec;
-    const prevBlocks = [...blocksInRangeEffective(prevWs, prevWe, deviceUuids), ...(includeManual ? manualStatsBlocks(prevWs, prevWe + 1) : [])].filter(block => categoryNames == null || categoryNames.includes(block.category));
+    const prevBlocks = [...blocksInRangeEffective(prevWs, prevWe, deviceUuids, source), ...(includeManual ? manualStatsBlocks(prevWs, prevWe + 1) : [])].filter(block => categoryNames == null || categoryNames.includes(block.category));
 
     const built = buildCategoryStats(blocks, ws, we);
     const prevBuilt = buildCategoryStats(prevBlocks, prevWs, prevWe);
@@ -1041,6 +1044,7 @@ function weekStatistics(ws: number, we: number, includeManual = true, deviceUuid
     });
     catList.sort((a, b) => b.total_duration - a.total_duration);
 
+    const roundedAppDurations = roundDurations(apps);
     const appArr = Array.from(apps.entries())
         .map(([app, total_duration]) => {
             const prevAppDur =
@@ -1054,7 +1058,7 @@ function weekStatistics(ws: number, we: number, includeManual = true, deviceUuid
             return {
                 app,
                 app_names: [...(built.appNames.get(app) ?? [])],
-                total_duration: Math.round(total_duration),
+                total_duration: roundedAppDurations.get(app) ?? 0,
                 percentage_change: pch,
             };
         })
@@ -1079,11 +1083,11 @@ function weekStatistics(ws: number, we: number, includeManual = true, deviceUuid
 
     const nowSec = Math.floor(Date.now() / 1000);
     const todayStart = getLocalDayStartSec(nowSec);
-    const allTimeToday = logsForDevices(deviceUuids)
+    const allTimeToday = logsForDevices(deviceUuids, source)
         .filter((r) => r.timestamp >= todayStart && r.timestamp < todayStart + daySec)
         .reduce((s, r) => s + r.duration, 0);
 
-    const totalTimeAllTime = logsForDevices(deviceUuids).reduce((s, r) => s + r.duration, 0) + (includeManual ? manualTimeBlocks.reduce((sum, block) => sum + block.end_time - block.start_time, 0) : 0);
+    const totalTimeAllTime = logsForDevices(deviceUuids, source).reduce((s, r) => s + r.duration, 0) + (includeManual ? manualTimeBlocks.reduce((sum, block) => sum + block.end_time - block.start_time, 0) : 0);
 
     const numActive = activeDayStarts.size;
     const average_time_active_days =
@@ -1111,9 +1115,9 @@ function weekStatistics(ws: number, we: number, includeManual = true, deviceUuid
     };
 }
 
-function dayStatistics(ds: number, de: number, includeManual = true, deviceUuids?: string[] | null, categoryNames?: string[] | null) {
+function dayStatistics(ds: number, de: number, includeManual = true, deviceUuids?: string[] | null, categoryNames?: string[] | null, source=rawLogs) {
     seed();
-    const blocks = [...blocksInRangeEffective(ds, de, deviceUuids), ...(includeManual ? manualStatsBlocks(ds, de + 1) : [])].filter(block => categoryNames == null || categoryNames.includes(block.category));
+    const blocks = [...blocksInRangeEffective(ds, de, deviceUuids, source), ...(includeManual ? manualStatsBlocks(ds, de + 1) : [])].filter(block => categoryNames == null || categoryNames.includes(block.category));
     const { total, cats, apps, appNames, hourly } = buildCategoryStats(blocks, ds, de);
     const catList = Array.from(cats.entries()).map(([category, v]) => ({
         category,
@@ -1123,11 +1127,12 @@ function dayStatistics(ds: number, de: number, includeManual = true, deviceUuids
         color: v.color,
     }));
     catList.sort((a, b) => b.total_duration - a.total_duration);
+    const roundedAppDurations = roundDurations(apps);
     const appArr = Array.from(apps.entries())
         .map(([app, total_duration]) => ({
             app,
             app_names: [...(appNames.get(app) ?? [])],
-            total_duration: Math.round(total_duration),
+            total_duration: roundedAppDurations.get(app) ?? 0,
             percentage_change: null as number | null,
         }))
         .sort((a, b) => b.total_duration - a.total_duration);
@@ -1142,15 +1147,47 @@ function dayStatistics(ds: number, de: number, includeManual = true, deviceUuids
     };
 }
 
+function demoAfkIntervals(): AfkInterval[] {
+    const seen=new Set<number>();const result:AfkInterval[]=[];
+    for(const log of rawLogs) {
+        const day=getLocalDayStartSec(log.timestamp);
+        if((log.device_uuid??LOCAL_DEVICE_UUID)!==LOCAL_DEVICE_UUID||log.duration<120||seen.has(day))continue;
+        seen.add(day);const start=log.timestamp+Math.floor(log.duration/3);
+        result.push({device_uuid:LOCAL_DEVICE_UUID,start_time:start,end_time:start+600,state:2,known_mask:1,active_mask:0,settings_id:1});
+    }
+    return result;
+}
+
 export async function invoke<T>(
     cmd: string,
-    args?: Record<string, unknown>
+    args?: Record<string, unknown>,
+    readSnapshot?: RawLog[]
 ): Promise<T> {
     seed();
     const a = args ?? {};
+    const snapshot=readSnapshot??rawLogs;
 
     try {
     switch (cmd) {
+        case "get_afk_settings":
+            return JSON.parse(appMetadata.afk_settings_v1??JSON.stringify(defaultAfkSettings())) as T;
+        case "set_afk_settings":
+            appMetadata.afk_settings_v1=JSON.stringify(a.settings);return null as T;
+        case "get_afk_status": {
+            const config=JSON.parse(appMetadata.afk_settings_v1??JSON.stringify(defaultAfkSettings())) as AfkSettings;
+            const observations:Observation[]=config.sources.map((_,i)=>({available:i!==3,active:[4,5,6,10].includes(i),idle_seconds:i<3?600:null,detail:"Simulated demo evidence"}));
+            return {timestamp:Math.floor(Date.now()/1000),observations,decision:evaluateAfk(config,observations),recording:false,storage_error:null,simulated:true} as T;
+        }
+        case "get_afk_intervals":
+            return demoAfkIntervals().filter(i=>i.start_time<Number(a.rangeEnd)&&i.end_time>Number(a.rangeStart)&&(a.deviceUuids==null||(a.deviceUuids as string[]).includes(i.device_uuid))) as T;
+        case "get_afk_storage":
+            return {intervals:demoAfkIntervals().length,afk_seconds:demoAfkIntervals().reduce((sum,i)=>sum+i.end_time-i.start_time,0),allocated_bytes:null,activity_rows:rawLogs.length} as T;
+        case "query_afk": {
+            const command=String(a.command);
+            if(!["get_week","get_week_for_app_filter","get_week_statistics","get_day_statistics","get_total_statistics","get_trend_statistics","get_statistics_bounds","get_logs_by_category","get_logs_for_time_block","get_logs_for_app_in_time_range"].includes(command))throw new DemoInvokeError(cmd,"Unsupported AFK query");
+            return invoke<T>(command,a.args as Record<string,unknown>,subtractAfk(rawLogs.map(log=>({...log,device_uuid:log.device_uuid??LOCAL_DEVICE_UUID})),demoAfkIntervals()));
+        }
+
         case "get_server_ip":
             return DEMO_SERVER_IP as T;
         case "set_server_ip":
@@ -1455,7 +1492,7 @@ export async function invoke<T>(
             return null as T;
         }
         case "get_logs":
-            return activeRawLogs().map((r) => ({
+            return activeRawLogs(snapshot).map((r) => ({
                 ...r,
                 timestamp: new Date(r.timestamp * 1000),
             })) as unknown as T;
@@ -1476,7 +1513,7 @@ export async function invoke<T>(
                 1,
                 Math.floor(Number((a as { minLogDuration?: number }).minLogDuration ?? 60))
             );
-            const rows = activeRawLogs().filter(
+            const rows = activeRawLogs(snapshot).filter(
                 (r) =>
                     resolveDemoAppGroup(r.app) === app &&
                     r.timestamp >= rangeStart &&
@@ -1504,7 +1541,7 @@ export async function invoke<T>(
             if (!req) return [] as unknown as T;
             const minD = Math.max(1, Math.floor(Number(req.min_log_duration ?? 60)));
             const rows = logsForCategoryInRange(
-                rawLogs,
+                snapshot,
                 req.category,
                 req.start_time,
                 req.end_time,
@@ -1532,7 +1569,7 @@ export async function invoke<T>(
             const minD = Math.max(1, Math.floor(Number(req.min_log_duration ?? 60)));
             const set = new Set(req.app_names);
             const rows = logsOverlappingBlock(
-                activeRawLogs(),
+                activeRawLogs(snapshot),
                 set,
                 req.start_time,
                 req.end_time,
@@ -1551,7 +1588,7 @@ export async function invoke<T>(
             if (!req) return 0 as unknown as T;
             const set = new Set(req.app_names);
             const n = logsOverlappingBlock(
-                activeRawLogs(),
+                activeRawLogs(snapshot),
                 set,
                 req.start_time,
                 req.end_time,
@@ -1563,7 +1600,7 @@ export async function invoke<T>(
             const regexPattern = pickString(a, ["regexPattern", "regex_pattern"]) ?? "";
             validateRegexPattern(regexPattern, cmd);
             const re = new RegExp(regexPattern);
-            const n = activeRawLogs().filter((m) => re.test(m.app)).length;
+            const n = activeRawLogs(snapshot).filter((m) => re.test(m.app)).length;
             return n as unknown as T;
         }
         case "delete_log_by_id": {
@@ -1584,7 +1621,7 @@ export async function invoke<T>(
             if (!req) return 0 as unknown as T;
             const set = new Set(req.app_names);
             const toRemove = new Set(
-                logsOverlappingBlock(activeRawLogs(), set, req.start_time, req.end_time, 1).map(
+                logsOverlappingBlock(activeRawLogs(snapshot), set, req.start_time, req.end_time, 1).map(
                     (r) => r.id
                 )
             );
@@ -1594,7 +1631,7 @@ export async function invoke<T>(
         }
         case "get_week": {
             const { week_start: weekStart, week_end: weekEnd } = resolveWeekBounds(a);
-            const out = blocksInRangeEffective(weekStart, weekEnd, a.deviceUuids as string[] | null).map((b) => ({
+            const out = blocksInRangeEffective(weekStart, weekEnd, a.deviceUuids as string[] | null, snapshot).map((b) => ({
                 id: b.id,
                 category: b.category,
                 start_time: b.start_time,
@@ -1606,7 +1643,7 @@ export async function invoke<T>(
         case "get_week_for_app_filter": {
             const { week_start: weekStart, week_end: weekEnd } = resolveWeekBounds(a);
             const appName = String((a as { appName?: string }).appName ?? "");
-            const out = blocksInRangeEffective(weekStart, weekEnd, a.deviceUuids as string[] | null)
+            const out = blocksInRangeEffective(weekStart, weekEnd, a.deviceUuids as string[] | null, snapshot)
                 .filter((b) => b.apps.some((ap) => resolveDemoAppGroup(ap.app) === appName))
                 .map((b) => ({
                     id: b.id,
@@ -1628,23 +1665,23 @@ export async function invoke<T>(
                     (a as { week_end?: number }).week_end ??
                     0
             );
-            return weekStatistics(weekStart, weekEnd, (a as {includeManual?: boolean}).includeManual !== false, a.deviceUuids as string[] | null, a.categoryNames as string[] | null) as unknown as T;
+            return weekStatistics(weekStart, weekEnd, (a as {includeManual?: boolean}).includeManual !== false, a.deviceUuids as string[] | null, a.categoryNames as string[] | null, snapshot) as unknown as T;
         }
         case "get_trend_statistics": {
             const weeks = (a.weeks ?? []) as {week_start: number; week_end: number}[];
             return weeks.map(({week_start, week_end}) => {
-                const stats = weekStatistics(week_start, week_end, a.includeManual !== false, a.deviceUuids as string[] | null);
+                const stats = weekStatistics(week_start, week_end, a.includeManual !== false, a.deviceUuids as string[] | null, null, snapshot);
                 return {total_time: stats.total_time, categories: stats.categories, all_apps: stats.all_apps};
             }) as unknown as T;
         }
         case "get_statistics_bounds": {
-            const stats = await invoke<{first_active_day: number | null; total_time_all_time: number}>("get_total_statistics", a);
+            const stats = await invoke<{first_active_day: number | null; total_time_all_time: number}>("get_total_statistics", a, snapshot);
             return {first_active_day: stats.first_active_day, total_time_all_time: stats.total_time_all_time} as unknown as T;
         }
         case "get_total_statistics": {
-            const starts = [...rawLogs.map((b) => b.timestamp), ...manualTimeBlocks.map((b) => b.start_time)];
-            const ends = [...rawLogs.map((b) => b.timestamp + b.duration), ...manualTimeBlocks.map((b) => b.end_time)];
-            return weekStatistics(starts.length ? Math.min(...starts) : 0, ends.length ? Math.max(...ends) : 1, (a as {includeManual?: boolean}).includeManual !== false, a.deviceUuids as string[] | null) as unknown as T;
+            const starts = [...snapshot.map((b) => b.timestamp), ...manualTimeBlocks.map((b) => b.start_time)];
+            const ends = [...snapshot.map((b) => b.timestamp + b.duration), ...manualTimeBlocks.map((b) => b.end_time)];
+            return weekStatistics(starts.length ? Math.min(...starts) : 0, ends.length ? Math.max(...ends) : 1, (a as {includeManual?: boolean}).includeManual !== false, a.deviceUuids as string[] | null, null, snapshot) as unknown as T;
         }
         case "get_day_statistics": {
             const dayStart = Number(
@@ -1657,7 +1694,7 @@ export async function invoke<T>(
                     (a as { day_end?: number }).day_end ??
                     0
             );
-            return dayStatistics(dayStart, dayEnd, (a as {includeManual?: boolean}).includeManual !== false, a.deviceUuids as string[] | null, a.categoryNames as string[] | null) as unknown as T;
+            return dayStatistics(dayStart, dayEnd, (a as {includeManual?: boolean}).includeManual !== false, a.deviceUuids as string[] | null, a.categoryNames as string[] | null, snapshot) as unknown as T;
         }
         case "get_notes_state":
             return {...notesState} as unknown as T;
@@ -1933,7 +1970,7 @@ export async function invoke<T>(
                 ),
             })) as unknown as T;
         case "get_app_version":
-            return "1.11.11-demo" as unknown as T;
+            return "1.12.0-demo" as unknown as T;
         case "refresh_tray_menu":
             return null as T;
         case "check_update_cmd":

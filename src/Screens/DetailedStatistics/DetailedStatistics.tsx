@@ -44,6 +44,7 @@ import {logRowLeftClickCalendarFilter} from "../../utils/calendarAppFilterRowCli
 import {useCalendarAppFilterActive} from "../../stores/calendarAppFilterStore.ts";
 // Date range UI control; calendarDateFromUnix converts backend unix → Date for picker
 import StatisticsDateRangePicker, {calendarDateFromUnix} from "./StatisticsDateRangePicker.tsx";
+import AfkFilter from "../../Componants/AfkFilter.tsx";
 // Trend tab chart component (this file passes it weeks + fetched stats)
 import CategoryWeekTrendChart, {type TrendSeriesMode, type TrendValueMode, type TrendAppRanking} from "./CategoryWeekTrendChart.tsx";
 import TrendChartOptionsBar, {STATS_TOOLBAR_CONTROL_HEIGHT} from "./TrendChartOptionsBar.tsx";
@@ -654,6 +655,7 @@ export default function DetailedStatistics({activeTab}: {
                     className={`flex flex-wrap items-center gap-3 ${activeTab === "trend" ? "mb-2 shrink-0" : "mb-6"}`}>
                     <div className="ml-auto flex flex-wrap items-center justify-end gap-2 shrink-0">
                         {trendToolbar}
+                        <AfkFilter />
                         {hasDateRange ? (
                             <>
                                 <button

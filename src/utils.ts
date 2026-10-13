@@ -1,9 +1,13 @@
 import { invokeLogged } from "./diagnostics.ts";
+import {useAfkFilter, AFK_FILTER_COMMANDS} from "./stores/afkFilterStore.ts";
 
 export async function invokeOrThrow<T>(
     command: string,
     args?: Record<string, any>
 ): Promise<T> {
+    if (useAfkFilter.getState().excludeAfk && AFK_FILTER_COMMANDS.has(command)) {
+        return await invokeLogged<T>("query_afk", {command, args: args ?? {}});
+    }
     return await invokeLogged<T>(command, args);
 }
 

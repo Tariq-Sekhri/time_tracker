@@ -8,7 +8,11 @@ it("shows release notes after an upgrade and remembers dismissal", async () => {
     localStorage.setItem("time-tracker:changelog-seen", "1.11.9");
     const view = render(<WhatsNew/>);
     expect(screen.getByRole("dialog")).toBeTruthy();
-    expect(screen.getAllByRole("listitem").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("listitem").map(item => item.textContent)).toEqual([
+        "Added AFK detection with multiple sources and optional filtering.",
+        "Redesigned and reorganized Settings.",
+        "Calendar filters now preserve activity history.",
+    ]);
     await userEvent.click(screen.getByRole("button", {name: "Got it"}));
     expect(screen.queryByRole("dialog")).toBeNull();
     view.unmount();

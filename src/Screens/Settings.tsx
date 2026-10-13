@@ -11,6 +11,7 @@ import {
 import { toErrorString } from "../types/common.ts";
 import { useNotesState } from "../hooks/useNotesState.ts";
 import {getSupportLogInfo, openSupportLogFolder, isDesktopApp, type SupportLogInfo} from "../diagnostics.ts";
+import AfkSettings from "../Componants/AfkSettings.tsx";
 
 type FieldDef = { key: string; label: string };
 type CategoryDef = { title: string; fields: FieldDef[] };
@@ -376,60 +377,47 @@ export default function Settings() {
 
     const hasFields = useMemo(() => Object.keys(fields).length > 0, [fields]);
 
-    return (
-        <div className="p-6 text-white h-full overflow-y-auto nice-scrollbar">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
-                <h1 className="text-2xl font-bold">Settings</h1>
-                <button
-                    type="button"
-                    disabled={!hasFields || allLocked}
-                    onClick={resetSettings}
-                    title="Resets every unlocked setting to its default. Locked settings are left unchanged."
-                    className="px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded text-white text-sm font-medium shrink-0 self-start sm:self-auto disabled:opacity-40 disabled:pointer-events-none"
-                >
-                    Reset
-                </button>
-            </div>
+    const renderFields = (category: CategoryDef) => <div className="settings-field-grid">
+        {category.fields.map(def => <NumberSettingField key={def.key} label={def.label} field={fields[def.key]}
+            onCommit={value => setVal(def.key, value)} onToggleLock={() => toggleLock(def.key)}
+            onReset={() => resetField(def.key)} onInvalid={message => showToast(message, "error")} />)}
+    </div>;
 
-            <div className="space-y-6">
-                <div className="bg-gray-900 p-4 rounded flex items-center justify-between gap-4">
-                    <div>
-                        <h2 className="text-lg font-semibold">Notes</h2>
-                        <p className="mt-1 text-sm text-gray-400">Show the Notes page in the top navigation.</p>
-                    </div>
-                    <input
-                        type="checkbox"
-                        checked={notesEnabled}
-                        onChange={(event) => {
-                            void setNotesEnabled(event.target.checked).catch((error) => {
-                                showToast("Could not update Notes", "error", 5000, toErrorString(error));
-                            });
-                        }}
-                        className="h-5 w-5 accent-blue-500"
-                        aria-label="Enable Notes"
-                    />
+    return <div className="settings-page nice-scrollbar">
+        <div className="settings-content">
+            <header className="settings-page-header">
+                <div><h1>Settings</h1><p>Make the tracker work the way you do.</p></div>
+                <button type="button" disabled={!hasFields || allLocked} onClick={resetSettings}
+                    title="Resets unlocked calendar, display, and timeblock settings. AFK settings have their own reset."
+                    className="settings-secondary-button">Reset view settings</button>
+            </header>
+
+            <section className="settings-panel" aria-labelledby="calendar-settings-title">
+                <div className="settings-section-heading"><div><h2 id="calendar-settings-title">Calendar</h2><p>Layout and sidebar.</p></div></div>
+                {renderFields(SETTINGS_LAYOUT[0])}
+            </section>
+
+            <section className="settings-panel" aria-labelledby="display-settings-title">
+                <div className="settings-section-heading"><div><h2 id="display-settings-title">Display</h2><p>Keep the interface focused.</p></div></div>
+                <div className="settings-field-grid">
+                    <label className="settings-toggle-row"><span>Show Notes</span><input type="checkbox" checked={notesEnabled}
+                        onChange={event => {void setNotesEnabled(event.target.checked).catch(error => showToast("Could not update Notes", "error", 5000, toErrorString(error)));}}
+                        aria-label="Enable Notes" /></label>
+                    {renderFields(SETTINGS_LAYOUT[2])}
                 </div>
-                {isDesktopApp() && <DatabaseLocationSetting />}
-                {isDesktopApp() && <SupportLogsSetting />}
-                {SETTINGS_LAYOUT.map((category) => (
-                    <div key={category.title} className="bg-gray-900 p-4 rounded">
-                        <h2 className="text-lg font-semibold mb-4">{category.title}</h2>
-                        <div className="space-y-3">
-                            {category.fields.map((def) => (
-                                <NumberSettingField
-                                    key={def.key}
-                                    label={def.label}
-                                    field={fields[def.key]}
-                                    onCommit={(value) => setVal(def.key, value)}
-                                    onToggleLock={() => toggleLock(def.key)}
-                                    onReset={() => resetField(def.key)}
-                                    onInvalid={(message) => showToast(message, "error")}
-                                />
-                            ))}
-                        </div>
-                    </div>
-                ))}
-            </div>
+            </section>
+
+            <details className="settings-panel settings-disclosure">
+                <summary><span><strong>Timeblock detection</strong><span className="settings-summary-note">Advanced grouping rules</span></span></summary>
+                <div className="settings-disclosure-content">{renderFields(SETTINGS_LAYOUT[1])}</div>
+            </details>
+
+            <AfkSettings />
+
+            {isDesktopApp() && <details className="settings-panel settings-disclosure">
+                <summary><span><strong>Data &amp; support</strong><span className="settings-summary-note">Database location and diagnostic logs</span></span></summary>
+                <div className="settings-disclosure-content space-y-4"><DatabaseLocationSetting /><SupportLogsSetting /></div>
+            </details>}
         </div>
-    );
+    </div>;
 }
