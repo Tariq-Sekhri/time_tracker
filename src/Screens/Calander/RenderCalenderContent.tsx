@@ -1,4 +1,5 @@
 import {MANUAL_DRAFT_ID, MANUAL_HOLD_MS, manualTimeQueryKeys, persistManualEventRange, type ManualTimeDraft} from "./manualCalendarEditing.ts";
+import AfkEventContent from "./AfkEventContent";
 import {calendarDateAtPoint, isManualRangeDrag, MANUAL_DRAG_DISTANCE, useHoldToCreate} from "./useHoldToCreate.ts";
 import { toErrorString } from "../../types/common.ts";
 import {reportError} from "../../diagnostics.ts";
@@ -829,7 +830,9 @@ export default function RenderCalendarContent({
                         eventResizableFromStart={true}
                         dragScroll={true}
                         eventClassNames={(info) => info.isMirror && !info.event.id ? ["tt-selection-preview"] : []}
-                        eventContent={(info) => info.isMirror && !info.event.id ? <div className="px-1 text-xs">
+                        eventContent={(info) => info.event.extendedProps.type==="afk"&&info.event.start&&info.event.end ? <AfkEventContent
+                            device={String(info.event.extendedProps.deviceUuid)} start={Math.floor(info.event.start.getTime()/1000)} end={Math.floor(info.event.end.getTime()/1000)} timeText={info.timeText}
+                        /> : info.isMirror && !info.event.id ? <div className="px-1 text-xs">
                             <div>{info.timeText}</div>
                             <strong>(No title)</strong>
                         </div> : true}

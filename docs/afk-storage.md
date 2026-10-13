@@ -47,6 +47,11 @@ and intersects it with actual away evidence for that device. It excludes present
 gaps, other-device activity, and deleted logs. Scores are reconstructed from saved
 signal masks and configuration snapshots, not current detection settings.
 
+Included AFK events also render expandable captured-log groups directly inside
+the calendar event content. Hiding AFK unmounts that content; it never restores
+captured away logs to ordinary activity. Source/confidence inspection remains
+available by clicking the AFK block header.
+
 ## Measured storage
 
 Run `python scripts/measure-afk-storage.py`. It creates SQLite databases in
