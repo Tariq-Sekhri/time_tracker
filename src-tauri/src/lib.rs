@@ -367,6 +367,7 @@ pub fn run() {
                     afk::get_afk_status,
                     afk::storage::get_afk_intervals,
                     afk::storage::get_afk_time_blocks,
+                    afk::details::get_afk_block_details,
                     afk::storage::get_afk_storage,
                     afk::storage::query_afk,
                     logger::get_support_log_info,

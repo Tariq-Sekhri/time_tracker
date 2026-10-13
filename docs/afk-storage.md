@@ -32,13 +32,20 @@ Imports and download cursors commit in one transaction. An older server reports
 an AFK sync error instead of silently treating evidence as synced.
 
 Existing installs enable filtering once on upgrade; the control still allows
-inspection of raw history. Include AFK shows grouped, labeled AFK calendar blocks.
+inspection of away time. Include AFK shows grouped, labeled AFK calendar blocks;
+captured away logs remain excluded from normal activity and statistics.
 
 The Include AFK control is off by default. Displayed away periods use the same
 Timeblock detection pipeline and settings as activity blocks, separately per
 device: minimum sample duration, short-sample attachment distance, lookahead gap
 merging, and minimum observed duration. Only the display is grouped; filtering
 and synced evidence retain exact original intervals, including present gaps.
+
+Clicking an AFK block opens its recorded sources, time-weighted confidence score,
+and expandable captured-log groups. The detail query reads raw activity separately
+and intersects it with actual away evidence for that device. It excludes present
+gaps, other-device activity, and deleted logs. Scores are reconstructed from saved
+signal masks and configuration snapshots, not current detection settings.
 
 ## Measured storage
 

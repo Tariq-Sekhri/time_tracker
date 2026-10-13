@@ -282,7 +282,7 @@ export default function RenderCalendarContent({
     });
     const awaySignature=awaySpans.map(span=>`${span.device}:${span.start}:${span.end}`).join("|");
     useEffect(()=>{
-        if (!excludeAfk || !awaySignature) return;
+        if (!awaySignature) return;
         // An open calendar must also refresh when recorded away time extends.
         void queryClient.invalidateQueries({
             predicate: query=>["week","week_app_filter","week_statistics","day_statistics"].includes(String(query.queryKey[0])),
@@ -552,7 +552,7 @@ export default function RenderCalendarContent({
             displayGoogleEvents.length > 0 &&
             displayGoogleEvents.some((event: GoogleCalendarEvent) => isCalendarVisible(event.calendar_id));
         const hasManualTime = (!calendarAppFilter || isolatedProject) && manualTimeBlocks.some((block) => isManualTimeInCal(block.project_id));
-        return !!(hasTimeBlocks || hasManualTime || hasGoogleEvents);
+        return !!(hasTimeBlocks || hasManualTime || hasGoogleEvents || (!excludeAfk&&awayBlocks.length>0));
     }, [
         isolation.active,
         isLoading,
@@ -561,6 +561,8 @@ export default function RenderCalendarContent({
         error,
         filteredDataError,
         displayedTimeBlocks,
+        excludeAfk,
+        awayBlocks,
         displayGoogleEvents,
         isCalendarVisible,
         manualTimeBlocks,
@@ -831,7 +833,7 @@ export default function RenderCalendarContent({
                             <div>{info.timeText}</div>
                             <strong>(No title)</strong>
                         </div> : true}
-                        eventClick={(info) => {if (info.event.id !== MANUAL_DRAFT_ID && info.event.extendedProps.type !== "afk") handleEventClick(info);}}
+                        eventClick={(info) => {if (info.event.id !== MANUAL_DRAFT_ID) handleEventClick(info);}}
                         eventDidMount={(info) => {
                             const eventType = info.event.extendedProps?.type as string | undefined;
                             if(eventType==="afk") info.el.title=`AFK period for ${info.event.extendedProps.deviceUuid}, grouped using Timeblock detection settings. Turn off Include AFK to hide away time.`;

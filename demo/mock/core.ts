@@ -1153,7 +1153,11 @@ function demoAfkIntervals(): AfkInterval[] {
         const day=getLocalDayStartSec(log.timestamp);
         if((log.device_uuid??LOCAL_DEVICE_UUID)!==LOCAL_DEVICE_UUID||log.duration<120||seen.has(day))continue;
         seen.add(day);const start=log.timestamp+Math.floor(log.duration/3);
-        result.push({device_uuid:LOCAL_DEVICE_UUID,start_time:start,end_time:start+600,state:2,known_mask:1,active_mask:0,settings_id:1});
+        result.push(
+            {device_uuid:LOCAL_DEVICE_UUID,start_time:start,end_time:start+180,state:2,known_mask:1,active_mask:0,settings_id:1},
+            {device_uuid:LOCAL_DEVICE_UUID,start_time:start+185,end_time:start+365,state:2,known_mask:257,active_mask:256,settings_id:1},
+            {device_uuid:LOCAL_DEVICE_UUID,start_time:start+370,end_time:start+600,state:2,known_mask:17,active_mask:16,settings_id:2},
+        );
     }
     return result;
 }
@@ -1190,6 +1194,17 @@ export async function invoke<T>(
                 result.push(...blocks.map(block=>({device,start:block.start_time,end:block.end_time})));
             }
             return result as T;
+        }
+        case "get_afk_block_details": {
+            const device=String(a.deviceUuid),start=Number(a.rangeStart),end=Number(a.rangeEnd);
+            const evidence=demoAfkIntervals().filter(e=>e.device_uuid===device&&e.start_time<end&&e.end_time>start).map(e=>({...e,start_time:Math.max(start,e.start_time),end_time:Math.min(end,e.end_time)}));
+            const logs=rawLogs.filter(log=>(log.device_uuid??LOCAL_DEVICE_UUID)===device&&log.timestamp<end&&log.timestamp+log.duration>start).map(log=>({...log,device_uuid:device,timestamp:Math.max(log.timestamp,start),duration:Math.min(end,log.timestamp+log.duration)-Math.max(start,log.timestamp)}));
+            const present=subtractAfk(logs,evidence);
+            const gaps=present.map(log=>({device_uuid:device,start_time:log.timestamp,end_time:log.timestamp+log.duration,state:2,known_mask:0,active_mask:0,settings_id:0}));
+            return {device_uuid:device,evidence:evidence.map(e=>{
+                const settings=defaultAfkSettings();if(e.settings_id===2)settings.sources[4].weight=10;
+                return {...e,settings};
+            }),logs:subtractAfk(logs,gaps)} as T;
         }
         case "get_afk_storage":
             return {intervals:demoAfkIntervals().length,afk_seconds:demoAfkIntervals().reduce((sum,i)=>sum+i.end_time-i.start_time,0),allocated_bytes:null,activity_rows:rawLogs.length} as T;

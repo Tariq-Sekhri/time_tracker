@@ -7,6 +7,7 @@
 - Show grouped AFK blocks when Include AFK is enabled.
 - Use Include AFK to inspect away time, hidden by default. AFK periods follow the Timeblock detection rules in Settings.
 - Preserve normal activity merging while excluding AFK, and keep other devices' activity and sync independent.
+- Inspect an AFK block's recorded sources, confidence, and captured logs. AFK logs stay inside those blocks instead of normal activity.
 
 ## [1.12.1] - 2026-10-13
 

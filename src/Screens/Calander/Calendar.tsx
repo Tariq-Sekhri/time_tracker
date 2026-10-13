@@ -28,6 +28,7 @@ import {get_running_manual_timer} from "../../api/ManualTimeBlock.ts";
 import {useManualProjectFilters} from "../../hooks/useManualProjectFilters.ts";
 import {useCalendarIsolation} from "../../hooks/useCalendarIsolation.ts";
 import {ManualTimerControl} from "./ManualTimer.tsx";
+import {useAfkFilter} from "../../stores/afkFilterStore";
 
 const INCLUDE_GOOGLE_IN_STATS_KEY = "time-tracker:include-google-in-stats";
 const MANUAL_TIME_IN_CAL_KEY = "time-tracker:manual-time-in-calendar";
@@ -58,6 +59,12 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [selectedEvent, setSelectedEvent] = useState<CalendarEvent>(null);
     const [selectedEventLogs, setSelectedEventLogs] = useState<EventLogs>([]);
+    const excludeAfk=useAfkFilter(state=>state.excludeAfk);
+    useEffect(()=>{
+        if(excludeAfk&&selectedEvent?.afkDeviceUuid) {
+            setSelectedEvent(null);setSelectedEventLogs([]);setRightSideBarView("Week");
+        }
+    },[excludeAfk,selectedEvent]);
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [isLoadingCategory, setIsLoadingCategory] = useState(false);
     const calenderRef = useRef<any>(null);
@@ -314,7 +321,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
             return;
         }
 
-        if (selectedEvent?.googleCalendarEventId) {
+        if (selectedEvent?.googleCalendarEventId || selectedEvent?.afkDeviceUuid) {
             return;
         }
 
@@ -458,7 +465,11 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         if (clickInfo.event.start && clickInfo.event.end) {
             const eventType = clickInfo.event.extendedProps?.type as string | undefined;
 
-            if (eventType === "google_calendar") {
+            if (eventType === "afk") {
+                const uuid=String(clickInfo.event.extendedProps.deviceUuid);
+                setSelectedEvent({title:"AFK",start:clickInfo.event.start,end:clickInfo.event.end,apps:[],afkDeviceUuid:uuid,afkDeviceName:calendarDevices.find(device=>device.uuid===uuid)?.name??"This device"});
+                setSelectedDate(null);setSelectedEventLogs([]);setRightSideBarView("Event");
+            } else if (eventType === "google_calendar") {
                 const event = {
                     title: clickInfo.event.title,
                     start: clickInfo.event.start,

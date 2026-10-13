@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { getAppMetadata, setAppMetadata } from "../../../api/appMetadata.ts";
 import { useBackendSettings } from "../../../hooks/useBackendSettings.ts";
 import ManualTimeBlockView from "./ManualTimeBlockView.tsx";
+import AfkBlockView from "./AfkBlockView.tsx";
 
 const RIGHT_SIDEBAR_COLLAPSED_KEY = "time-tracker:right-sidebar-collapsed";
 
@@ -59,6 +60,7 @@ export function RightSideBar({
     const { date } = useDateStore();
     const { rightSidebarWidth } = useBackendSettings();
     const [isCollapsed, setIsCollapsed] = useState(false);
+    useEffect(()=>{if(selectedEvent?.afkDeviceUuid)setIsCollapsed(false);},[selectedEvent?.afkDeviceUuid,selectedEvent?.start]);
 
     useEffect(() => {
         getAppMetadata(RIGHT_SIDEBAR_COLLAPSED_KEY)
@@ -132,7 +134,9 @@ export function RightSideBar({
                         trailingToolbar={collapseSidebarButton}
                     />}
                     {view === "Event" && selectedEvent && (
-                        selectedEvent.manualTimeBlockId != null ? (
+                        selectedEvent.afkDeviceUuid ? (
+                            <AfkBlockView event={selectedEvent} onClose={()=>{setSelectedEvent(null);setView("Week");}} trailingToolbar={collapseSidebarButton}/>
+                        ) : selectedEvent.manualTimeBlockId != null ? (
                             <ManualTimeBlockView
                                 selectedEvent={selectedEvent}
                                 setSelectedEvent={setSelectedEvent}
