@@ -96,7 +96,8 @@ export function validateRegexPattern(pattern: string, cmd: string): void {
         throw new DemoInvokeError(cmd, "Regex pattern cannot be empty");
     }
     try {
-        new RegExp(pattern);
+        const insensitive = pattern.startsWith("(?i)");
+        new RegExp(insensitive ? pattern.slice(4) : pattern, insensitive ? "i" : undefined);
     } catch (e) {
         const msg = e instanceof Error ? e.message : "invalid pattern";
         throw new DemoInvokeError(cmd, `Invalid regex: ${msg}`);

@@ -27,11 +27,12 @@ import { useToast } from "../../Componants/Toast.tsx";
 import { getAppMetadata, setAppMetadata } from "../../api/appMetadata.ts";
 import { useCalendarAppFilterActive } from "../../stores/calendarAppFilterStore.ts";
 import { useBackendSettings } from "../../hooks/useBackendSettings.ts";
+import SourceEditor, {type EditableSource} from "../../Componants/SourceEditor.tsx";
 import LeftSideBar, { SidebarSection } from "./LeftSideBar.tsx";
 import { Device } from "../../api/sync.ts";
 import {get_manual_time_blocks, MANUAL_TIME_COLOR} from "../../api/ManualTimeBlock.ts";
 
-import {getManualProjects, MANUAL_PROJECTS_QUERY_KEY} from "../../api/ManualProject.ts";
+import {getManualCategories, MANUAL_CATEGORIES_QUERY_KEY} from "../../api/ManualProject.ts";
 import {ManualProjectFilter} from "../../hooks/useManualProjectFilters.ts";
 
 import {CalendarIsolation} from "../../hooks/useCalendarIsolation.ts";
@@ -132,8 +133,8 @@ export default function RenderCalendarContent({
     onTimeBlockContextMenu,
 }: RenderCalendarContentProps) {
     const queryClient = useQueryClient();
-    const {data: manualProjects = [], error: manualProjectsError} = useQuery({queryKey: MANUAL_PROJECTS_QUERY_KEY, queryFn: getManualProjects});
-    const manualSources = [{id: null, name: "No category"}, ...manualProjects];
+    const {data: manualSources = [], error: manualProjectsError} = useQuery({queryKey: MANUAL_CATEGORIES_QUERY_KEY, queryFn: getManualCategories});
+    const [editingCategory, setEditingCategory] = useState<{source: EditableSource; anchor: HTMLElement} | null>(null);
     const manualSourceIds = manualSources.map((project) => project.id);
     const { showToast, updateToast, removeToast } = useToast();
     const lastGoogleEventsErrorToastRef = useRef<string | null>(null);
@@ -490,8 +491,8 @@ export default function RenderCalendarContent({
                     title: `${block.title} (${formatDuration(durationSec)})`,
                     start: new Date(block.start_time * 1000).toISOString(),
                     end: new Date(block.end_time * 1000).toISOString(),
-                    backgroundColor: MANUAL_TIME_COLOR,
-                    borderColor: MANUAL_TIME_COLOR,
+                    backgroundColor: block.project_color ?? MANUAL_TIME_COLOR,
+                    borderColor: block.project_color ?? MANUAL_TIME_COLOR,
                     textColor: "#ffffff",
                     extendedProps: {
                         type: "manual_time",
@@ -669,6 +670,7 @@ export default function RenderCalendarContent({
                 name: category.name,
                 priority: category.priority,
                 color: getCategoryColor(category.name, categoryColorMap.get(category.name)),
+                onEdit: (anchor: HTMLElement) => setEditingCategory({source: {kind: "category", value: {...category, color: getCategoryColor(category.name, categoryColorMap.get(category.name))}}, anchor}),
                 inCal: isolation.category !== null ? isolation.category === category.id : category.is_visible,
                 inStats: isolation.category !== null ? isolation.category === category.id : category.in_stats,
                 isolated: isolation.category === category.id,
@@ -705,7 +707,8 @@ export default function RenderCalendarContent({
             items: manualSources.map((project) => ({
                 key: String(project.id ?? "none"),
                 name: project.name,
-                color: MANUAL_TIME_COLOR,
+                color: project.color,
+                onEdit: (anchor: HTMLElement) => setEditingCategory({source: {kind: "manual", value: project}, anchor}),
                 inCal: isManualTimeInCal(project.id),
                 inStats: isManualTimeInStats(project.id),
                 isolated: isolatedProject?.id === project.id,
@@ -730,6 +733,7 @@ export default function RenderCalendarContent({
                 key: String(calendar.id),
                 name: calendar.name,
                 color: calendar.color,
+                onEdit: (anchor: HTMLElement) => setEditingCategory({source: {kind: "google", value: calendar}, anchor}),
                 inCal: isCalendarVisible(calendar.id),
                 inStats: isolation.calendar !== null ? isolation.calendar === calendar.id : calendar.in_stats,
                 isolated: isolation.calendar === calendar.id,
@@ -742,6 +746,8 @@ export default function RenderCalendarContent({
     ];
 
     return (
+        <>
+        {editingCategory && <SourceEditor key={`${editingCategory.source.kind}:${editingCategory.source.value.id ?? "none"}`} source={editingCategory.source} anchor={editingCategory.anchor} onClose={() => {setEditingCategory(null); editingCategory.anchor.focus();}} />}
         <div className="flex flex-1 overflow-hidden h-full min-h-0 flex flex-col">
             {isAuthExpired && (
                 <div className="flex-shrink-0 px-4 py-2 bg-red-900/50 border-b border-red-700/50 text-red-200 text-sm flex items-center justify-between">
@@ -900,5 +906,6 @@ export default function RenderCalendarContent({
             </div>
 
         </div>
+        </>
     );
 }

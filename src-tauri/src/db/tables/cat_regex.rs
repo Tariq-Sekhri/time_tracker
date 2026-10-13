@@ -15,6 +15,51 @@ pub struct NewCategoryRegex {
     regex: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct MatchingCategoryRule {
+    pub rule: Option<CategoryRegex>,
+    pub category_name: String,
+}
+
+fn matching_rule(app: &str, categories: &[super::category::Category], rules: Vec<CategoryRegex>) -> Result<MatchingCategoryRule, Error> {
+    let mut compiled = Vec::new();
+    for rule in rules {
+        let category = categories.iter().find(|category| category.id == rule.cat_id)
+            .ok_or_else(|| anyhow::anyhow!("Category not found"))?;
+        let pattern = regex::Regex::new(&rule.regex).map_err(anyhow::Error::new)?;
+        compiled.push((category.priority, category.name.clone(), pattern, rule));
+    }
+    // The calendar and statistics both choose the first match after a stable priority sort.
+    compiled.sort_by_key(|row| std::cmp::Reverse(row.0));
+    for (_, category_name, pattern, rule) in compiled {
+        if pattern.is_match(app) { return Ok(MatchingCategoryRule {rule: Some(rule), category_name}); }
+    }
+    Ok(MatchingCategoryRule {rule: None, category_name: "Miscellaneous".into()})
+}
+
+#[tauri::command]
+pub async fn get_matching_category_rule(app_name: String) -> Result<MatchingCategoryRule, Error> {
+    matching_rule(&app_name, &super::category::get_categories().await?, get_cat_regex().await?)
+}
+
+#[cfg(test)]
+mod matching_rule_tests {
+    use super::*;
+    fn category(id: i32, priority: i32) -> super::super::category::Category {
+        super::super::category::Category {id, name: format!("Category {id}"), priority, color: None, regex_enabled: true, is_visible: true, in_stats: true, is_collapsed: false}
+    }
+    fn rule(id: i32, cat_id: i32, pattern: &str) -> CategoryRegex {CategoryRegex {id, cat_id, regex: pattern.into()}}
+    #[test]
+    fn identifies_the_calendar_winner_by_priority_stable_ties_and_rust_regex_syntax() {
+        let categories = [category(1, 500), category(2, 400)];
+        let result = matching_rule("Windows Explorer", &categories, vec![rule(10, 2, "^Windows Explorer$"), rule(20, 1, "(?i)windows")]).unwrap();
+        assert_eq!(result.rule.unwrap().id, 20);
+        let result = matching_rule("Windows Explorer", &[category(1, 500), category(2, 500)], vec![rule(10, 2, "Explorer"), rule(20, 1, "Windows")]).unwrap();
+        assert_eq!(result.rule.unwrap().id, 10);
+        assert!(matching_rule("No match", &categories, vec![rule(10, 1, "Windows")]).unwrap().rule.is_none());
+    }
+}
+
 pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS category_regex (
@@ -334,6 +379,8 @@ pub async fn insert_cat_regex(new_category_regex: NewCategoryRegex) -> Result<i6
 
 #[tauri::command]
 pub async fn update_cat_regex_by_id(cat_regex: CategoryRegex) -> Result<(), Error> {
+    if cat_regex.regex.trim().is_empty() { return Err(anyhow::anyhow!("Pattern cannot be empty").into()); }
+    regex::Regex::new(&cat_regex.regex).map_err(anyhow::Error::new)?;
     let pool = db::get_pool().await?;
     
     let current = sqlx::query_as!(

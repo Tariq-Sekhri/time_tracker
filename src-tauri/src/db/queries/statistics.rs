@@ -88,10 +88,8 @@ fn statistics_now() -> i64 {
 }
 
 async fn add_manual_category_colors(colors: &mut HashMap<String, Option<String>>) -> Result<(), Error> {
-    let palette = ["#0ea5e9", "#a78bfa", "#34d399", "#fbbf24", "#fb7185", "#22d3ee"];
-    colors.insert(MANUAL_CATEGORY.into(), Some(palette[0].into()));
-    for project in crate::db::tables::manual_project::get_manual_projects().await? {
-        colors.entry(project.name).or_insert_with(|| Some(palette[(project.id as usize) % palette.len()].into()));
+    for category in crate::db::tables::manual_project::get_manual_categories().await? {
+        colors.entry(category.name).or_insert(Some(category.color));
     }
     Ok(())
 }

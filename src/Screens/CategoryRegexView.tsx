@@ -1,3 +1,4 @@
+import {useRegexNavigation} from "../stores/regexNavigationStore.ts";
 import {useQuery, useMutation, useQueryClient} from "@tanstack/react-query";
 import {useEffect, useMemo, useRef, useState} from "react";
 import {get_categories, Category, update_category_by_id} from "../api/Category.ts";
@@ -30,6 +31,9 @@ function validateRegex(pattern: string): string | null {
 
 export default function CategoryRegexView() {
     const queryClient = useQueryClient();
+    const requestedRuleId = useRegexNavigation((state) => state.targetId);
+    const [focusedRuleId, setFocusedRuleId] = useState<number | null>(null);
+    const focusedInputRef = useRef<HTMLInputElement>(null);
     const {showToast} = useToast();
     const [editingRegex, setEditingRegex] = useState<CategoryRegex | null>(null);
     const [newRegexCatId, setNewRegexCatId] = useState<number | "">("");
@@ -52,10 +56,30 @@ export default function CategoryRegexView() {
         queryFn: get_categories,
     });
 
-    const {data: regexes = []} = useQuery({
+    const {data: regexes = [], isSuccess: regexesLoaded} = useQuery({
         queryKey: ["cat_regex"],
         queryFn: get_cat_regex,
     });
+
+    useEffect(() => {
+        if (requestedRuleId === null || !regexesLoaded || !categories.length) return;
+        const rule = regexes.find((rule) => rule.id === requestedRuleId);
+        if (rule) {
+            setFocusedRuleId(rule.id);
+            const category = categories.find((category) => category.id === rule.cat_id);
+            if (!(category?.name === "Miscellaneous" && rule.regex === ".*")) setEditingRegex({...rule});
+        } else showToast("That regex no longer exists", "error");
+        useRegexNavigation.getState().clear();
+    }, [requestedRuleId, regexesLoaded, regexes, categories, showToast]);
+    useEffect(() => {
+        if (focusedRuleId === null) return;
+        const frame = requestAnimationFrame(() => {
+            const row = document.querySelector<HTMLElement>(`[data-regex-id="${focusedRuleId}"]`);
+            row?.scrollIntoView({block: "center"});
+            (focusedInputRef.current ?? row)?.focus({preventScroll: true});
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [focusedRuleId, editingRegex?.id, groupByCategory]);
 
     const {
         visibleCategoryIds,
@@ -68,9 +92,9 @@ export default function CategoryRegexView() {
     const filteredAndSortedRegexes = useMemo(() => {
         const visible = visibleCategoryIds;
         return [...regexes]
-            .filter((r) => visible.has(r.cat_id))
+            .filter((r) => visible.has(r.cat_id) || r.id === focusedRuleId)
             .sort((a, b) => (sortOrder === "oldest" ? a.id - b.id : b.id - a.id));
-    }, [regexes, visibleCategoryIds, sortOrder]);
+    }, [regexes, visibleCategoryIds, sortOrder, focusedRuleId]);
 
     const regexesByCategory = useMemo(() => {
         const map = new Map<number, typeof filteredAndSortedRegexes>();
@@ -254,7 +278,8 @@ export default function CategoryRegexView() {
             return;
         }
 
-        const error = validateRegex(regex.regex);
+        // Rust validates the saved pattern, including syntax such as (?i) that JS does not support.
+        const error = regex.regex.trim() ? null : "Pattern cannot be empty";
         if (error) {
             setEditRegexError(error);
             const fullError = `Validation Error: ${error}\nPattern: ${regex.regex}`;
@@ -272,7 +297,7 @@ export default function CategoryRegexView() {
     function renderRegexRow(regex: CategoryRegex, category: Category | undefined) {
         const isCatchAll = category?.name === "Miscellaneous" && regex.regex === ".*";
         return (
-            <div key={regex.id} className="p-4 bg-gray-900 rounded-lg flex items-center justify-between">
+            <div key={regex.id} data-regex-id={regex.id} tabIndex={focusedRuleId === regex.id ? -1 : undefined} className={`p-4 bg-gray-900 rounded-lg flex items-center justify-between ${focusedRuleId === regex.id ? "ring-2 ring-sky-500" : ""}`}>
                 {editingRegex?.id === regex.id && !isCatchAll ? (
                     <div className="flex gap-3 flex-1">
                         <div className="relative shrink-0 max-w-[14rem]" ref={editCatMenuRef}>
@@ -328,6 +353,8 @@ export default function CategoryRegexView() {
                         </div>
                         <div className="flex-1 flex flex-col">
                             <input
+                                ref={focusedRuleId === regex.id ? focusedInputRef : undefined}
+                                aria-label="Regex pattern"
                                 type="text"
                                 value={editingRegex.regex}
                                 onChange={(e) => {
@@ -571,7 +598,7 @@ export default function CategoryRegexView() {
                     categories.map((cat) => {
                         const groupRegexes = regexesByCategory.get(cat.id) ?? [];
                         if (groupRegexes.length === 0) return null;
-                        const isCollapsed = cat.is_collapsed;
+                        const isCollapsed = cat.is_collapsed && !groupRegexes.some((rule) => rule.id === focusedRuleId);
                         return (
                             <div key={cat.id} className="space-y-2">
                                 <button

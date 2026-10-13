@@ -1,6 +1,6 @@
 import {useEffect, useRef, useState} from "react";
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
-import {createManualProject, deleteManualProject, getManualProjects, MANUAL_PROJECTS_QUERY_KEY, updateManualProject} from "../api/ManualProject.ts";
+import {createManualProject, deleteManualProject, getManualProjects, MANUAL_PROJECTS_QUERY_KEY, getManualCategories, MANUAL_CATEGORIES_QUERY_KEY, updateManualProject} from "../api/ManualProject.ts";
 import ManualPopover from "./ManualPopover.tsx";
 
 type ProjectAction = {type: "create"; name: string} | {type: "edit"; id: number; name: string} | {type: "delete"; id: number};
@@ -12,6 +12,7 @@ export default function ProjectSelector({value, onChange, disabled = false}: {
 }) {
     const queryClient = useQueryClient();
     const {data: projects = [], isLoading, error: loadError} = useQuery({queryKey: MANUAL_PROJECTS_QUERY_KEY, queryFn: getManualProjects});
+    const {data: categories = []} = useQuery({queryKey: MANUAL_CATEGORIES_QUERY_KEY, queryFn: getManualCategories});
     const selectRef = useRef<HTMLSelectElement>(null);
     const manageRef = useRef<HTMLButtonElement>(null);
     const dialogRef = useRef<HTMLDivElement>(null);
@@ -32,6 +33,7 @@ export default function ProjectSelector({value, onChange, disabled = false}: {
         },
         onSuccess: async (id, action) => {
             await queryClient.invalidateQueries({queryKey: MANUAL_PROJECTS_QUERY_KEY});
+            await queryClient.invalidateQueries({queryKey: MANUAL_CATEGORIES_QUERY_KEY});
             if (action.type === "create") {
                 setName("");
                 if (typeof id === "number") onChange(id);
@@ -79,7 +81,7 @@ export default function ProjectSelector({value, onChange, disabled = false}: {
     return <>
         <div className="flex min-w-0 items-center gap-1">
             <select ref={selectRef} aria-label="Category" value={projects.some((project) => project.id === value) ? String(value) : ""} disabled={disabled || isLoading || Boolean(loadError)} onChange={(event) => onChange(event.target.value ? Number(event.target.value) : null)} className="min-w-0 flex-1 rounded-lg border border-gray-700 bg-gray-950 px-2.5 py-2 text-sm text-gray-200 outline-none focus:border-sky-500 disabled:opacity-50">
-                <option value="">{isLoading ? "Loading categories…" : loadError ? "Categories unavailable" : "No category"}</option>
+                <option value="">{isLoading ? "Loading categories…" : loadError ? "Categories unavailable" : categories.find((category) => category.id === null)?.name ?? "Uncategorized"}</option>
                 {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
             </select>
             <button ref={manageRef} type="button" disabled={disabled} onClick={() => {setError(null); setOpen(true);}} aria-label="Manage categories" title="Create, edit, or delete categories" className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:opacity-50">

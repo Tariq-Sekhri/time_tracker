@@ -21,7 +21,7 @@ use db::tables::app_metadata_kv::{
     get_notes_state, get_server_ip, set_notes_enabled, set_notes_text, set_server_ip,
 };
 use db::tables::cat_regex::{
-    delete_cat_regex_by_id, get_cat_regex, get_cat_regex_by_id, insert_cat_regex,
+    delete_cat_regex_by_id, get_cat_regex, get_cat_regex_by_id, insert_cat_regex, get_matching_category_rule,
     update_cat_regex_by_id,
 };
 use db::tables::category::{
@@ -43,7 +43,7 @@ use db::tables::manual_time_block::{
     get_running_manual_timer, insert_manual_time_block, start_manual_timer, stop_manual_timer,
     update_manual_time_block, update_manual_timer_title, update_manual_timer_details,
 };
-use db::tables::manual_project::{get_manual_projects, create_manual_project, update_manual_project, delete_manual_project};
+use db::tables::manual_project::{get_manual_projects, create_manual_project, update_manual_project, delete_manual_project, get_manual_categories, update_manual_category};
 use db::tables::settings::{flip_lock_by_key, get_settings, reset_val_by_key, update_val_by_key};
 use db::tables::skipped_app::{
     count_matching_logs, delete_skipped_app_by_id, get_skipped_apps,
@@ -385,6 +385,7 @@ pub fn run() {
                     insert_category,
                     update_category_by_id,
                     get_cat_regex,
+                    get_matching_category_rule,
                     get_cat_regex_by_id,
                     delete_cat_regex_by_id,
                     insert_cat_regex,
@@ -411,6 +412,8 @@ pub fn run() {
                     update_manual_timer_title,
                     update_manual_timer_details,
                     get_manual_projects,
+                    get_manual_categories,
+                    update_manual_category,
                     create_manual_project,
                     update_manual_project,
                     delete_manual_project,

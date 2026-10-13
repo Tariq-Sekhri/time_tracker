@@ -107,7 +107,7 @@ pub async fn get_manual_time_blocks(
         return Err(anyhow::anyhow!("Range end must be after range start").into());
     }
     let pool = db::get_pool().await?;
-    Ok(sqlx::query_as::<_, ManualTimeBlock>(
+    let mut blocks = sqlx::query_as::<_, ManualTimeBlock>(
         "SELECT b.id, b.title, b.notes, b.project_id, p.name AS project_name, b.start_time, b.end_time, b.created_at, b.updated_at
          FROM manual_time_blocks b LEFT JOIN manual_projects p ON p.id = b.project_id
          WHERE b.end_time > ?1 AND b.start_time < ?2
@@ -116,7 +116,11 @@ pub async fn get_manual_time_blocks(
     .bind(range_start)
     .bind(range_end)
     .fetch_all(&pool)
-    .await?)
+    .await?;
+    for block in &mut blocks {
+        if block.project_id.is_none() { block.project_name = Some("Uncategorized".into()); }
+    }
+    Ok(blocks)
 }
 
 #[tauri::command]

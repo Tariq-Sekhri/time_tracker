@@ -2,10 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useToast } from "../Componants/Toast.tsx";
 import { get_categories } from "../api/Category.ts";
-import { get_cat_regex, insert_cat_regex, update_cat_regex_by_id } from "../api/CategoryRegex.ts";
+import { get_cat_regex, insert_cat_regex, update_cat_regex_by_id, getMatchingCategoryRule, type CategoryRegex } from "../api/CategoryRegex.ts";
 import { count_matching_logs, insert_skipped_app_and_delete_logs } from "../api/SkippedApp.ts";
 import { exactAppRegexPattern } from "../utils/exactAppRegexPattern.ts";
-import { resolveCategoryRuleForApp } from "../utils/resolveCategoryRuleForApp.ts";
+import CategoryRuleEditor from "../Componants/CategoryRuleEditor.tsx";
+import {useRegexNavigation} from "../stores/regexNavigationStore.ts";
 
 const ASSIGN_INVALIDATIONS: string[][] = [
     ["cat_regex"],
@@ -57,11 +58,23 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
         queryFn: get_cat_regex,
     });
 
-    const menuRuleInfo = useMemo(() => {
-        if (!menu) return null;
-        if (menu.appNames.length !== 1) return null;
-        return resolveCategoryRuleForApp(menu.appNames[0], categories, catRegexRows);
-    }, [menu, categories, catRegexRows]);
+    const triggerRef = useRef<HTMLElement | null>(null);
+    const [ruleDialog, setRuleDialog] = useState<{rule: CategoryRegex; mode: "edit" | "delete"; anchor: HTMLElement | null} | null>(null);
+    const {data: matchedRules = [], isLoading: rulesLoading, error: rulesError} = useQuery({
+        queryKey: ["matchingCategoryRules", menu?.appNames, catRegexRows, categories],
+        enabled: !!menu,
+        queryFn: () => Promise.all((menu?.appNames ?? []).map(async (app) => ({app, ...await getMatchingCategoryRule(app)}))),
+    });
+    const responsibleRules = matchedRules.filter((match, index, rows) => match.rule && rows.findIndex((row) => row.rule?.id === match.rule?.id) === index);
+    const editRule = (rule: CategoryRegex, mode: "edit" | "delete") => {
+        setRuleDialog({rule, mode, anchor: triggerRef.current});
+        setMenu(null);
+    };
+    const ruleSaved = () => {
+        invalidateKeys(queryClient, [["cat_regex"], ["matchingCategoryRules"], ["week"], ["week_app_filter"], ["week_statistics"], ["day_statistics"], ["range_statistics"], ["total_statistics"], ["category_app_logs"], ...extra]);
+        setRuleDialog(null);
+        showToast("Category rule updated", "success");
+    };
 
     const handleCopyFromMenu = async () => {
         if (!menu || menu.appNames.length === 0) return;
@@ -191,6 +204,7 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
     const openFromContextMenuMany = (e: ReactMouseEvent | globalThis.MouseEvent, appNames: string[]) => {
         e.preventDefault();
         e.stopPropagation();
+        triggerRef.current = e.currentTarget instanceof HTMLElement ? e.currentTarget : e.target instanceof HTMLElement ? e.target : null;
         const pad = 8;
         const estimated = lastMenuSizeRef.current ?? { width: 288, height: 256 };
         const viewportW = window.innerWidth;
@@ -239,7 +253,7 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
                     >
                         <div className="flex items-center justify-between gap-2 min-w-0">
                             <div className="text-gray-300 font-mono truncate min-w-0 flex-1 leading-snug">
-                                {isBatchMenu ? `${menu.appNames.length} apps selected` : `Regex: ${menu.appNames[0]}`}
+                                {isBatchMenu ? `${menu.appNames.length} apps selected` : `App: ${menu.appNames[0]}`}
                             </div>
                             <button
                                 type="button"
@@ -259,9 +273,25 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
                             </button>
                         </div>
                         <div className="text-gray-400 break-words leading-snug min-w-0">
-                            category: {isBatchMenu ? "Assign all selected apps" : (menuRuleInfo?.categoryName ?? "—")}
+                            category: {isBatchMenu ? "Assign all selected apps" : (matchedRules[0]?.category_name ?? (rulesLoading ? "Loading…" : "—"))}
                         </div>
                     </div>
+                    {rulesError && <p className="px-3 py-2 text-xs text-red-300">Couldn’t identify the matching rule.</p>}
+                    {responsibleRules.map((match) => {
+                        const rule = match.rule!;
+                        const protectedRule = match.category_name === "Miscellaneous" && rule.regex === ".*";
+                        return <div key={rule.id} className="border-b border-gray-700 py-1">
+                            <button type="button" onClick={() => {useRegexNavigation.getState().openRule(rule.id); setMenu(null);}} title="Open and focus this regex in App Rules" className="block w-full px-3 py-2 text-left text-xs text-sky-300 hover:bg-gray-800">
+                                <span className="block text-gray-400">Matching regex · {match.category_name}</span>
+                                <span className="block break-all font-mono">{rule.regex}</span>
+                                <span className="mt-1 block">Open in App Rules →</span>
+                            </button>
+                            {!protectedRule && <div className="flex gap-1 px-2">
+                                <button type="button" onClick={() => editRule(rule, "edit")} aria-label={`Edit matching regex ${rule.regex}`} className="flex-1 rounded px-2 py-1.5 text-left text-xs text-gray-200 hover:bg-gray-800">Edit regex</button>
+                                <button type="button" onClick={() => editRule(rule, "delete")} aria-label={`Delete matching regex ${rule.regex}`} className="flex-1 rounded px-2 py-1.5 text-left text-xs text-red-300 hover:bg-gray-800">Delete regex</button>
+                            </div>}
+                        </div>;
+                    })}
                     {sortedCategories.map((cat) => (
                         <button
                             key={cat.id}
@@ -291,6 +321,8 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
                     </button>
                 </div>
             )}
+
+            {ruleDialog && <CategoryRuleEditor {...ruleDialog} categories={categories} onClose={() => setRuleDialog(null)} onSaved={ruleSaved} />}
 
             {skipConfirmOpen && skipPendingRegexes.length > 0 && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[250]">

@@ -2,15 +2,15 @@
 
 ## [Unreleased]
 
-- Hide tracked activity during recorded AFK time by default, separately for each device.
-- Sync AFK history with the server, including ongoing away periods.
-- Show grouped AFK blocks when Include AFK is enabled.
-- Use Include AFK to inspect away time, hidden by default. AFK periods follow the Timeblock detection rules in Settings.
-- Preserve normal activity merging while excluding AFK, and keep other devices' activity and sync independent.
-- Inspect an AFK block's recorded sources, confidence, and captured logs. AFK logs stay inside those blocks instead of normal activity.
-- Show captured logs directly inside AFK calendar blocks, with expandable log fragments.
-- Prevent short AFK recorder gaps from appearing as overnight activity, and keep title drill-downs AFK-filtered.
-- Keep AFK cards within their actual calendar times; captured logs scroll inside shorter blocks.
+- Right-click an app log to see the regex that categorized it, then edit or delete it right there, or jump to it in App Rules with the rule focused.
+
+## [1.12.2] - 2026-10-13
+
+- Edit names and colors for categories, manual categories, and Google Calendars directly from the Sources sidebar; Uncategorized has an editable color and a fixed name.
+- Adjust tracked category priority, with editors kept beside their source and inside the viewport even at increased UI scale.
+- Hide tracked activity during recorded AFK time by default, separately for each device, and sync AFK history across devices.
+- Use Include AFK to inspect grouped away blocks, their recorded sources, confidence, and captured logs without mixing those logs into normal activity.
+- Fix overnight activity caused by short AFK recording gaps and keep AFK cards and captured logs within their calendar times.
 
 ## [1.12.1] - 2026-10-13
 

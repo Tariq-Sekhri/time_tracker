@@ -13,7 +13,7 @@ export default function ManualPopover({anchor, onClose, labelledBy, children, wi
     suspended?: boolean;
 }) {
     const panelRef = useRef<HTMLDivElement>(null);
-    const [position, setPosition] = useState({top: 0, left: 0, width});
+    const [position, setPosition] = useState({top: 0, left: 0, width, maxHeight: window.innerHeight - 24});
     useLayoutEffect(() => {
         const positionPanel = () => {
             if (!anchor || !panelRef.current) return;
@@ -23,13 +23,15 @@ export default function ManualPopover({anchor, onClose, labelledBy, children, wi
             const viewWidth = window.innerWidth / zoom;
             const viewHeight = window.innerHeight / zoom;
             const panelWidth = Math.min(width, viewWidth - 24);
-            const panelHeight = panelRef.current.getBoundingClientRect().height / zoom;
+            const maxHeight = Math.max(0, viewHeight - 24);
+            const panelHeight = Math.min(panelRef.current.getBoundingClientRect().height / zoom, maxHeight);
             const below = rect.bottom / zoom + 8;
             const above = rect.top / zoom - panelHeight - 8;
             setPosition({
                 top: beside ? Math.max(12, Math.min(rect.top / zoom, viewHeight - panelHeight - 12)) : below + panelHeight <= viewHeight - 12 ? below : Math.max(12, above),
                 left: beside ? Math.max(12, Math.min(rect.right / zoom + panelWidth + 8 <= viewWidth - 12 ? rect.right / zoom + 8 : rect.left / zoom - panelWidth - 8, viewWidth - panelWidth - 12)) : Math.max(12, Math.min(rect.right / zoom - panelWidth, viewWidth - panelWidth - 12)),
                 width: panelWidth,
+                maxHeight,
             });
         };
         positionPanel();
@@ -64,7 +66,7 @@ export default function ManualPopover({anchor, onClose, labelledBy, children, wi
         role="dialog"
         aria-labelledby={labelledBy}
         data-manual-popover
-        style={{...position, visibility: suspended ? "hidden" : undefined, pointerEvents: suspended ? "none" : undefined, maxHeight: "calc(100vh - 24px)"}}
+        style={{...position, visibility: suspended ? "hidden" : undefined, pointerEvents: suspended ? "none" : undefined}}
         className="fixed z-[300] overflow-y-auto rounded-xl border border-gray-700 bg-gray-950 p-5 text-white shadow-2xl shadow-black/70 nice-scrollbar"
         onKeyDown={(event) => {
             if (event.key === "Escape") {event.stopPropagation(); onClose(); anchor?.focus();}

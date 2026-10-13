@@ -77,7 +77,7 @@ describe("manual time statistics", () => {
         expect(stats.total_time - before.total_time).toBe(1800);
         expect(stats.categories).toContainEqual(expect.objectContaining({category: "Client alpha", total_duration: 600}));
         expect(stats.categories).toContainEqual(expect.objectContaining({category: "Client beta", total_duration: 900}));
-        expect(stats.categories.find((row) => row.category === "Manual time")!.total_duration - (before.categories.find((row) => row.category === "Manual time")?.total_duration ?? 0)).toBe(300);
+        expect(stats.categories.find((row) => row.category === "Uncategorized")!.total_duration - (before.categories.find((row) => row.category === "Uncategorized")?.total_duration ?? 0)).toBe(300);
         await invoke("update_manual_project", {id: first, name: "Renamed alpha"});
         const renamed = await invoke<Stats>("get_week_statistics", args);
         expect(renamed.categories).toContainEqual(expect.objectContaining({category: "Renamed alpha", total_duration: 600}));
@@ -85,7 +85,7 @@ describe("manual time statistics", () => {
         await invoke("delete_manual_project", {id: first});
         const deleted = await invoke<Stats>("get_week_statistics", args);
         expect(deleted.total_time).toBe(stats.total_time);
-        expect(deleted.categories.find((row) => row.category === "Manual time")!.total_duration - (before.categories.find((row) => row.category === "Manual time")?.total_duration ?? 0)).toBe(900);
+        expect(deleted.categories.find((row) => row.category === "Uncategorized")!.total_duration - (before.categories.find((row) => row.category === "Uncategorized")?.total_duration ?? 0)).toBe(900);
         for (const id of ids) await invoke("delete_manual_time_block", {id});
         await invoke("delete_manual_project", {id: second});
     });
@@ -104,11 +104,11 @@ describe("manual time statistics", () => {
             }));
             const after = await invoke<Stats>("get_week_statistics", args);
             expect(after.total_time - before.total_time).toBe(7200);
-            expect(after.categories.find((c) => c.category === "Manual time")!.total_duration - (before.categories.find((c) => c.category === "Manual time")?.total_duration ?? 0)).toBe(7200);
+            expect(after.categories.find((c) => c.category === "Uncategorized")!.total_duration - (before.categories.find((c) => c.category === "Uncategorized")?.total_duration ?? 0)).toBe(7200);
             expect(after.all_apps.find((a) => a.app === "Manual time: Overlap statistics test")?.total_duration).toBe(7200);
             expect(after.hourly_distribution.reduce((sum, h) => sum + h.total_duration, 0) - before.hourly_distribution.reduce((sum, h) => sum + h.total_duration, 0)).toBe(7200);
             expect((await invoke<Stats>("get_total_statistics")).total_time_all_time - lifetime.total_time_all_time).toBe(9000);
-            expect((await invoke<Stats>("get_week_statistics", {...args, includeManual: false})).categories.some((c) => c.category === "Manual time")).toBe(false);
+            expect((await invoke<Stats>("get_week_statistics", {...args, includeManual: false})).categories.some((c) => c.category === "Uncategorized")).toBe(false);
             await invoke("update_manual_time_block", {manualTimeBlock: {id: ids[0], title: "Edited manual title", notes: "Important notes", start_time: start, end_time: start + 1800}});
             const edited = await invoke<Stats>("get_week_statistics", args);
             expect(edited.total_time - before.total_time).toBe(5400);

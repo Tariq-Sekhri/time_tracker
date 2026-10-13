@@ -251,6 +251,12 @@ let googleCalendars: GoogleCal[] = [];
 let googleEvents: GoogleEv[] = [];
 let manualTimeBlocks: ManualTimeBlock[] = [];
 let runningManualTimer: RunningManualTimer | null = null;
+function demoManualCategories() {
+    const palette = ["#0ea5e9", "#a78bfa", "#34d399", "#fbbf24", "#fb7185", "#22d3ee"];
+    return [{id: null, name: "Uncategorized", color: appMetadata["manual_category_color:none"] ?? palette[0]},
+        ...manualProjects.map((project) => ({...project, color: appMetadata[`manual_category_color:${project.id}`] ?? palette[project.id % palette.length]}))];
+}
+
 let manualProjects: Array<{id: number; name: string}> = [];
 let nextManualProjectId = 1;
 let notesState = {enabled: false, text: ""};
@@ -941,7 +947,7 @@ function buildCategoryStats(
     const dayTotals = new Map<number, number>();
 
     const catColor = (name: string) =>
-        name === "Manual time" ? "#0ea5e9" : categories.find((c) => c.name === name)?.color ?? (manualProjects.some((p) => p.name === name) ? ["#0ea5e9", "#a78bfa", "#34d399", "#fbbf24", "#fb7185", "#22d3ee"][manualProjects.find((p) => p.name === name)!.id % 6] : null);
+        categories.find((c) => c.name === name)?.color ?? demoManualCategories().find((category) => category.name === name)?.color ?? null;
 
     for (const b of blocks) {
         const od = overlapSec(b, ws, we);
@@ -991,7 +997,7 @@ function manualStatsBlocks(start: number, end: number): TimeBlockRow[] {
         while (cursor < stop) {
             const date = new Date(cursor * 1000);
             const next = Math.min(stop, cursor + 3600 - date.getMinutes() * 60 - date.getSeconds());
-            blocks.push({id: block.id, category: manualProjects.find((project) => project.id === block.project_id)?.name ?? "Manual time", start_time: cursor, end_time: next,
+            blocks.push({id: block.id, category: demoManualCategories().find((category) => category.id === (block.project_id ?? null))!.name, start_time: cursor, end_time: next,
                 apps: [{app: `Manual time: ${block.title}`, total_duration: next - cursor}]});
             cursor = next;
         }
@@ -1271,8 +1277,25 @@ export async function invoke<T>(
             await emit("sync-successful");
             await emit("count_down_to_sync", 60);
             return null as T;
+        case "get_manual_categories":
+            return demoManualCategories() as T;
+        case "update_manual_category": {
+            const {id, name: rawName, color} = a as {id: number | null; name: string; color: string};
+            const name = rawName.trim();
+            if (!name || name.length > 100) throw new DemoInvokeError(cmd, "Project name must be between 1 and 100 characters");
+            if (id == null && name !== "Uncategorized") throw new DemoInvokeError(cmd, "Uncategorized cannot be renamed");
+            if (!/^#[0-9a-f]{6}$/i.test(color)) throw new DemoInvokeError(cmd, "Choose a valid hex color");
+            if (id != null) {
+                const project = manualProjects.find((project) => project.id === id);
+                if (!project) throw new DemoInvokeError(cmd, "Project no longer exists");
+                if (manualProjects.some((project) => project.id !== id && project.name.toLowerCase() === name.toLowerCase())) throw new DemoInvokeError(cmd, "A project with this name already exists");
+                project.name = name;
+            }
+            appMetadata[`manual_category_color:${id ?? "none"}`] = color.toLowerCase();
+            return null as T;
+        }
         case "get_manual_projects":
-            return [...manualProjects].sort((left, right) => left.name.localeCompare(right.name)) as T;
+            return manualProjects.map((project) => ({...project})).sort((left, right) => left.name.localeCompare(right.name)) as T;
         case "create_manual_project":
         case "update_manual_project": {
             const name = String((a as {name?: string}).name ?? "").trim();
@@ -1394,7 +1417,7 @@ export async function invoke<T>(
             return id as T;
         }
         case "get_categories":
-            return categories as unknown as T;
+            return categories.map((category) => ({...category})) as unknown as T;
         case "get_category_by_id": {
             const id = Number((a as { id?: number }).id);
             const c = categories.find((x) => x.id === id);
@@ -1437,8 +1460,17 @@ export async function invoke<T>(
             }
             return null as T;
         }
+        case "get_matching_category_rule": {
+            const app = String((a as {appName: string}).appName);
+            const ordered = [...catRegex].sort((left, right) => (categories.find(c => c.id === right.cat_id)?.priority ?? 0) - (categories.find(c => c.id === left.cat_id)?.priority ?? 0));
+            const rule = ordered.find(row => {
+                const insensitive = row.regex.startsWith("(?i)");
+                return new RegExp(insensitive ? row.regex.slice(4) : row.regex, insensitive ? "i" : undefined).test(app);
+            });
+            return {rule: rule ? {...rule} : null, category_name: categories.find(c => c.id === rule?.cat_id)?.name ?? "Miscellaneous"} as T;
+        }
         case "get_cat_regex":
-            return catRegex as unknown as T;
+            return catRegex.map((rule) => ({...rule})) as unknown as T;
         case "get_cat_regex_by_id": {
             const id = Number((a as { id?: number }).id);
             const r = catRegex.find((x) => x.id === id);
@@ -1832,7 +1864,7 @@ export async function invoke<T>(
                 email: googleLoggedIn ? "demo.user@gmail.com" : undefined,
             } as unknown as T;
         case "get_google_calendars":
-            return googleCalendars as unknown as T;
+            return googleCalendars.map((calendar) => ({...calendar})) as unknown as T;
         case "get_google_calendar_by_id": {
             const id = Number((a as { id?: number }).id);
             const c = googleCalendars.find((x) => x.id === id);
@@ -1998,7 +2030,7 @@ export async function invoke<T>(
                 ),
             })) as unknown as T;
         case "get_app_version":
-            return "1.12.1-demo" as unknown as T;
+            return "1.12.2-demo" as unknown as T;
         case "refresh_tray_menu":
             return null as T;
         case "check_update_cmd":

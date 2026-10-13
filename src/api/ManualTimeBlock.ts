@@ -1,3 +1,4 @@
+import {getManualCategories} from "./ManualProject.ts";
 import {invokeOrThrow} from "../utils.ts";
 
 export const MANUAL_TIME_COLOR = "#0ea5e9";
@@ -9,6 +10,7 @@ export type ManualTimeBlock = {
     notes: string | null;
     project_id?: number | null;
     project_name?: string | null;
+    project_color?: string;
     start_time: number;
     end_time: number;
     created_at: number;
@@ -39,7 +41,14 @@ export async function get_manual_time_blocks(
     rangeStart: number,
     rangeEnd: number,
 ): Promise<ManualTimeBlock[]> {
-    return invokeOrThrow<ManualTimeBlock[]>("get_manual_time_blocks", {rangeStart, rangeEnd});
+    const [blocks, categories] = await Promise.all([
+        invokeOrThrow<ManualTimeBlock[]>("get_manual_time_blocks", {rangeStart, rangeEnd}),
+        getManualCategories(),
+    ]);
+    return blocks.map((block) => {
+        const category = categories.find((category) => category.id === (block.project_id ?? null));
+        return {...block, project_name: category?.name ?? block.project_name, project_color: category?.color};
+    });
 }
 
 export async function insert_manual_time_block(block: NewManualTimeBlock): Promise<number> {
@@ -106,7 +115,7 @@ export function manualTimeCategoryStats(blocks: ManualTimeBlock[], start: number
         if (!duration) continue;
         const category = block.project_name || MANUAL_TIME_LABEL;
         const current = categories.get(category);
-        categories.set(category, {category, total_duration: (current?.total_duration ?? 0) + duration, color: colors[(block.project_id ?? 0) % colors.length]});
+        categories.set(category, {category, total_duration: (current?.total_duration ?? 0) + duration, color: block.project_color ?? colors[(block.project_id ?? 0) % colors.length]});
     }
     return [...categories.values()];
 }

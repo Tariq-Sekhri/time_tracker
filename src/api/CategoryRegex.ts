@@ -11,6 +11,10 @@ export type NewCategoryRegex = {
     regex: string;
 };
 
+export type MatchingCategoryRule = {rule: CategoryRegex | null; category_name: string};
+export const getMatchingCategoryRule = (appName: string) =>
+    invokeOrThrow<MatchingCategoryRule>("get_matching_category_rule", {appName});
+
 export async function get_cat_regex(): Promise<CategoryRegex[]> {
     return invokeOrThrow<CategoryRegex[]>("get_cat_regex");
 }

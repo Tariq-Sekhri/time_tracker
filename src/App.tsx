@@ -1,3 +1,4 @@
+import {useRegexNavigation} from "./stores/regexNavigationStore.ts";
 import WhatsNew from "./Componants/WhatsNew.tsx";
 import "./App.css";
 import {useState, useEffect} from "react";
@@ -43,6 +44,8 @@ function AppInner() {
     const syncTimer = useSyncTimer();
     const {data: notesState} = useQuery({queryKey: ["notes"], queryFn: getNotesState});
     const [currentView, setCurrentView] = useState<View>("calendar");
+    const requestedRegexId = useRegexNavigation((state) => state.targetId);
+    useEffect(() => {if (requestedRegexId !== null) setCurrentView("regex");}, [requestedRegexId]);
     const [statisticsTab, setStatisticsTab] = useState<StatisticsTab>("dailyAvg");
     useEffect(() => {
         const storageKey = "time-tracker:ui-zoom";

@@ -9,6 +9,63 @@ pub struct ManualProject {
     pub name: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct ManualCategory {
+    pub id: Option<i64>,
+    pub name: String,
+    pub color: String,
+}
+
+#[tauri::command]
+pub async fn get_manual_categories() -> Result<Vec<ManualCategory>, Error> {
+    let pool = db::get_pool().await?;
+    categories_for_pool(&pool).await
+}
+
+async fn categories_for_pool(pool: &SqlitePool) -> Result<Vec<ManualCategory>, Error> {
+    let metadata = sqlx::query_as::<_, (String, String)>(
+        "SELECT key, value FROM app_metadata WHERE key LIKE 'manual_category_%'",
+    ).fetch_all(pool).await?.into_iter().collect::<std::collections::HashMap<_, _>>();
+    let palette = ["#0ea5e9", "#a78bfa", "#34d399", "#fbbf24", "#fb7185", "#22d3ee"];
+    let mut categories = vec![ManualCategory {
+        id: None,
+        name: "Uncategorized".into(),
+        color: metadata.get("manual_category_color:none").cloned().unwrap_or_else(|| palette[0].into()),
+    }];
+    for project in sqlx::query_as::<_, ManualProject>("SELECT id, name FROM manual_projects ORDER BY name COLLATE NOCASE, id").fetch_all(pool).await? {
+        categories.push(ManualCategory {
+            id: Some(project.id), name: project.name,
+            color: metadata.get(&format!("manual_category_color:{}", project.id)).cloned().unwrap_or_else(|| palette[project.id as usize % palette.len()].into()),
+        });
+    }
+    Ok(categories)
+}
+
+#[tauri::command]
+pub async fn update_manual_category(id: Option<i64>, name: String, color: String) -> Result<(), Error> {
+    let pool = db::get_pool().await?;
+    save_category(&pool, id, &name, &color).await
+}
+
+async fn save_category(pool: &SqlitePool, id: Option<i64>, name: &str, color: &str) -> Result<(), Error> {
+    let name = validate_name(name)?;
+    if id.is_none() && name != "Uncategorized" {
+        return Err(anyhow::anyhow!("Uncategorized cannot be renamed").into());
+    }
+    if color.len() != 7 || !color.starts_with('#') || !color[1..].bytes().all(|c| c.is_ascii_hexdigit()) {
+        return Err(anyhow::anyhow!("Choose a valid hex color").into());
+    }
+    let mut tx = pool.begin().await?;
+    if let Some(id) = id {
+        let result = sqlx::query("UPDATE manual_projects SET name = ?1 WHERE id = ?2").bind(name).bind(id).execute(&mut *tx).await?;
+        if result.rows_affected() == 0 { return Err(anyhow::anyhow!("Project no longer exists").into()); }
+    }
+    let key = format!("manual_category_color:{}", id.map(|id| id.to_string()).unwrap_or_else(|| "none".into()));
+    sqlx::query("INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?1, ?2)").bind(key).bind(color.to_ascii_lowercase()).execute(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
 pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     sqlx::query("CREATE TABLE IF NOT EXISTS manual_projects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE UNIQUE)")
         .execute(pool).await?;
@@ -119,6 +176,26 @@ async fn delete_project(pool: &SqlitePool, id: i64) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn category_edits_persist_and_duplicate_names_do_not_partially_save() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        create_table(&pool).await.unwrap();
+        sqlx::query("CREATE TABLE app_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)").execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO manual_projects (id, name) VALUES (1, 'Client'), (2, 'Other')").execute(&pool).await.unwrap();
+        save_category(&pool, Some(1), "Renamed", "#FB7185").await.unwrap();
+        assert!(save_category(&pool, None, "Personal", "#34d399").await.is_err());
+        save_category(&pool, None, "Uncategorized", "#34d399").await.unwrap();
+        assert!(save_category(&pool, Some(1), "Other", "#22d3ee").await.is_err());
+        assert!(save_category(&pool, Some(1), "Renamed", "invalid").await.is_err());
+        let categories = categories_for_pool(&pool).await.unwrap();
+        let category = categories.iter().find(|category| category.id == Some(1)).unwrap();
+        assert_eq!(category.name, "Renamed");
+        assert_eq!(category.color, "#fb7185");
+        assert_eq!(categories[0].id, None);
+        assert_eq!(categories[0].name, "Uncategorized");
+        assert_eq!(categories[0].color, "#34d399");
+    }
 
     #[tokio::test]
     async fn deleting_a_project_keeps_recorded_and_running_time() {

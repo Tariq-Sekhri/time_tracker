@@ -21,6 +21,7 @@ export type SidebarSource = SidebarToggleState & {
     color: string;
     isolated?: boolean;
     onToggleIsolate?: () => void;
+    onEdit?: (anchor: HTMLElement) => void;
     /** Higher sorts first among sources in the same on/off group (categories only). */
     priority?: number;
 };
@@ -218,10 +219,15 @@ function ColourRow({source}: { source: SidebarSource }) {
     return (
         <div role="button" tabIndex={source.disabled ? -1 : 0} aria-pressed={bothOn}
              onClick={toggleBoth}
-             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleBoth(); } }}
+             onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleBoth(); } }}
              title={bothOn ? "Click to hide in week view and stats" : "Click to show in week view and stats"}
              className={`group relative mb-0.5 flex cursor-pointer items-center gap-2 rounded-md py-0.5 pl-2 pr-1 transition-colors hover:bg-white/[0.04] ${source.isolated ? "ring-1 ring-inset ring-blue-400" : ""} ${source.disabled ? "cursor-not-allowed opacity-50" : ""}`}>
             <span className={`min-w-0 flex-1 truncate text-[13px] ${source.inCal ? "text-gray-100" : "text-gray-600"}`}>{source.name}</span>
+            {source.onEdit && <button type="button" aria-label={`Edit ${source.name}`} title={source.priority !== undefined ? "Edit name, color, and priority" : "Edit name and color"}
+                onClick={(event) => {event.stopPropagation(); source.onEdit?.(event.currentTarget);}}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-gray-500 opacity-0 transition hover:bg-gray-800 hover:text-white group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 focus-visible:opacity-100">
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m16 3 5 5-12 12-6 1 1-6L16 3Z M14 5l5 5"/></svg>
+            </button>}
             <IsolateButton source={source}/>
             <CheckCell on={source.inCal} onClick={source.onToggleCal} disabled={source.disabled} color={source.color} kind="week" label={`Show ${source.name} in week view`}/>
             <CheckCell on={source.inStats} onClick={source.onToggleStats} disabled={source.disabled} color={source.color} kind="stats" label={`Include ${source.name} in statistics`}/>

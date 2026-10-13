@@ -54,7 +54,7 @@ const STATS_TOOLBAR_BUTTON = `${STATS_TOOLBAR_CONTROL_HEIGHT} px-3 bg-gray-800 b
 import FilterCategories, {useFilterCategories} from "../../Componants/FilterCategories.tsx";
 import {getAppMetadata, setAppMetadata} from "../../api/appMetadata.ts";
 import {get_manual_time_blocks, manualTimeAppStats, MANUAL_TIME_LABEL} from "../../api/ManualTimeBlock.ts";
-import {getManualProjects, MANUAL_PROJECTS_QUERY_KEY} from "../../api/ManualProject.ts";
+import {getManualCategories, MANUAL_CATEGORIES_QUERY_KEY} from "../../api/ManualProject.ts";
 import {get_categories} from "../../api/Category.ts";
 import {
     adjustInstantToCalendarDayBoundary, // snap "now" to which calendar day we're in
@@ -361,7 +361,7 @@ export default function DetailedStatistics({activeTab}: {
         : ["category_app_logs", "none"]; // placeholder key when nothing selected
 
     // QUERY: per-app totals within selected category (sidebar drill-down)
-    const {data: manualProjects = []} = useQuery({queryKey: MANUAL_PROJECTS_QUERY_KEY, queryFn: getManualProjects});
+    const {data: manualProjects = []} = useQuery({queryKey: MANUAL_CATEGORIES_QUERY_KEY, queryFn: getManualCategories});
     const trendVisibleCategoryNames = useMemo(
         () => new Set([...visibleCategoryNames, MANUAL_TIME_LABEL, ...manualProjects.map((project) => project.name)]),
         [visibleCategoryNames, manualProjects],
