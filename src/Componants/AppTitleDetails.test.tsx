@@ -45,13 +45,16 @@ describe("exact title drill-down", () => {
     });
 
     it("uses only the selected block IDs instead of pulling other activity in its range", async () => {
-        vi.mocked(get_log_by_id).mockResolvedValue({id: 7, device_uuid: "desktop", app: "Video B - YouTube", timestamp: new Date(), duration: 30, is_deleted: false});
+        vi.mocked(get_logs_for_app_in_time_range).mockResolvedValue([
+            {id:7,device_uuid:"desktop",app:"Video B - YouTube",timestamp:110,duration:30},
+            {id:8,device_uuid:"desktop",app:"Video A - YouTube",timestamp:140,duration:30},
+        ]);
         mount({ids: [7, 7]});
         await userEvent.click(screen.getByRole("button", {name: "View exact titles for YouTube"}));
         expect(await screen.findByText("Video B - YouTube")).toBeTruthy();
-        expect(get_log_by_id).toHaveBeenCalledTimes(1);
-        expect(get_log_by_id).toHaveBeenCalledWith(7);
-        expect(get_logs_for_app_in_time_range).not.toHaveBeenCalled();
+        expect(get_log_by_id).not.toHaveBeenCalled();
+        expect(get_logs_for_app_in_time_range).toHaveBeenCalledWith("YouTube",100,200,1);
+        expect(screen.queryByText("Video A - YouTube")).toBeNull();
     });
 
     it("shows a recoverable error without losing the selected group", async () => {

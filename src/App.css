@@ -155,12 +155,12 @@ body {
 }
 /* Grouped away periods are visible calendar blocks when Include AFK is enabled. */
 .tt-afk-evidence { opacity: 1; border-left-width: 3px !important; }
-.fc-timegrid-event.tt-afk-evidence { min-height: 64px; }
+.fc-timegrid-event.tt-afk-evidence { min-height: 0; overflow: hidden; }
 .tt-afk-evidence .fc-event-main { height: 100%; overflow: hidden; }
-.tt-afk-card { height: 100%; display: flex; flex-direction: column; padding: 2px 4px; font-size: 11px; line-height: 1.3; }
-.tt-afk-card-heading { flex-shrink: 0; display: flex; flex-wrap: wrap; gap: 2px 8px; }
+.tt-afk-card { height: 100%; box-sizing: border-box; overflow: auto; overscroll-behavior: contain; padding: 0 4px; font-size: 11px; line-height: 1.3; }
+.tt-afk-card-heading { display: flex; flex-wrap: wrap; gap: 2px 8px; }
 .tt-afk-card-heading > span { font-size: 10px; opacity: .8; }
-.tt-afk-card-logs { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; margin-top: 3px; }
+.tt-afk-card-logs { margin-top: 3px; }
 .tt-afk-child-log { border-left: 2px solid #f59e0b; background: #0003; margin: 2px 0; padding: 3px 4px; }
 .tt-afk-child-log > summary { cursor: pointer; display: flex; justify-content: space-between; gap: 6px; }
 .tt-afk-child-log > summary > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

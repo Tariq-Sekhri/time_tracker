@@ -530,12 +530,41 @@ mod afk_calendar_tests {
         let path=std::path::PathBuf::from(std::env::var("APPDATA").unwrap()).join("time-tracker-dev/apptest.db");
         let options=sqlx::sqlite::SqliteConnectOptions::new().filename(path).read_only(true);
         let pool=sqlx::sqlite::SqlitePoolOptions::new().max_connections(1).connect_with(options).await.unwrap();
-        let evidence=sqlx::query_as::<_,crate::afk::storage::Interval>("SELECT device_uuid,start_time,end_time,state,known_mask,active_mask,settings_id FROM afk_intervals WHERE state=2 ORDER BY device_uuid,start_time").fetch_all(&pool).await.unwrap();
+        let evidence=sqlx::query_as::<_,crate::afk::storage::Interval>("SELECT device_uuid,start_time,end_time,state,known_mask,active_mask,settings_id FROM afk_intervals ORDER BY device_uuid,start_time").fetch_all(&pool).await.unwrap();
         let rows=sqlx::query_as::<_,(String,i64)>("SELECT key,val FROM settings WHERE key IN ('minLogDuration','maxAttachDistance','lookaheadWindow','minDuration')").fetch_all(&pool).await.unwrap().into_iter().collect::<HashMap<_,_>>();
         let settings=TimeBlockSettings{min_log_duration:rows["minLogDuration"],max_attach_distance:rows["maxAttachDistance"],lookahead_window:rows["lookaheadWindow"],min_duration:rows["minDuration"]};
         let blocks=afk_display_blocks(&evidence,0,i64::MAX,&settings).unwrap();
         println!("AFK snapshot: {} evidence rows -> {} visible merged blocks",evidence.len(),blocks.len());
         assert!(!blocks.is_empty());assert!(blocks.len()<evidence.len());
+        let away=crate::afk::storage::continuous_away(&evidence);
+        let first=&away[0];
+        let logs=sqlx::query_as::<_,Log>("SELECT id,device_uuid,app,timestamp,duration,is_deleted FROM logs WHERE device_uuid=? AND is_deleted=0 AND timestamp<? AND timestamp+duration>?")
+            .bind(&first.device_uuid).bind(first.end_time).bind(first.start_time).fetch_all(&pool).await.unwrap();
+        let before=crate::afk::storage::subtract(logs.clone(),&evidence);
+        let after=crate::afk::storage::subtract(logs,&away);
+        let overlap=|logs:&[Log]|logs.iter().map(|l|(l.timestamp+l.duration).min(first.end_time)-l.timestamp.max(first.start_time)).map(|s|s.max(0)).sum::<i64>();
+        println!("Continuous overnight AFK: {} seconds; leaked normal activity before={} seconds, after={} seconds",first.end_time-first.start_time,overlap(&before),overlap(&after));
+        assert_eq!(overlap(&after),0);
+        let before_blocks=transform_time_blocks(get_time_blocks(&before,&[],&[],&settings).unwrap(),&settings).unwrap();
+        let after_blocks=transform_time_blocks(get_time_blocks(&after,&[],&[],&settings).unwrap(),&settings).unwrap();
+        println!("Longest normal block before={} seconds, after={} seconds",before_blocks.iter().map(|b|b.end_time-b.start_time).max().unwrap_or(0),after_blocks.iter().map(|b|b.end_time-b.start_time).max().unwrap_or(0));
+        assert!(after_blocks.iter().all(|b|b.end_time<=first.start_time||b.start_time>=first.end_time));
+        let raw=sqlx::query_as::<_,Log>("SELECT id,device_uuid,app,timestamp,duration,is_deleted FROM logs WHERE is_deleted=0 AND timestamp>=? AND timestamp<? ORDER BY timestamp")
+            .bind(1791907200_i64).bind(1791928800_i64).fetch_all(&pool).await.unwrap();
+        let filtered=crate::afk::storage::subtract(raw.clone(),&away);
+        for span in away.iter().filter(|s|s.start_time>=1791907200) {
+            let same_device_overlap=filtered.iter().filter(|l|l.device_uuid.as_deref()==Some(span.device_uuid.as_str())).map(|l|((l.timestamp+l.duration).min(span.end_time)-l.timestamp.max(span.start_time)).max(0)).sum::<i64>();
+            println!("AFK {} - {}: remaining same-device overlap={} seconds",Local.timestamp_opt(span.start_time,0).unwrap(),Local.timestamp_opt(span.end_time,0).unwrap(),same_device_overlap);
+            assert_eq!(same_device_overlap,0);
+        }
+        for log in raw.iter().filter(|l|l.device_uuid.as_deref()!=Some(first.device_uuid.as_str())) { assert!(filtered.contains(log)); }
+        let categories=sqlx::query_as::<_,Category>("SELECT * FROM category").fetch_all(&pool).await.unwrap();
+        let regexes=sqlx::query_as::<_,CategoryRegex>("SELECT * FROM category_regex").fetch_all(&pool).await.unwrap();
+        let regexes=build_regex_table(&categories,&regexes).unwrap();
+        let normal=transform_time_blocks(get_time_blocks(&filtered,&regexes,&[],&settings).unwrap(),&settings).unwrap();
+        for block in normal.iter().filter(|b|b.start_time>=1791918000) {
+            println!("NORMAL {} - {}: {}",Local.timestamp_opt(block.start_time,0).unwrap(),Local.timestamp_opt(block.end_time,0).unwrap(),block.category);
+        }
         pool.close().await;
     }
     #[test]

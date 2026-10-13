@@ -13,9 +13,21 @@ export function afkSpans(intervals: AfkInterval[], start: number, end: number) {
     return spans;
 }
 
+export function continuousAway(intervals:AfkInterval[]):AfkInterval[] {
+    const ordered=[...intervals].sort((a,b)=>a.device_uuid.localeCompare(b.device_uuid)||a.start_time-b.start_time);
+    const result:AfkInterval[]=[];let previousAway=false;
+    for(const interval of ordered) {
+        if(interval.state!==2){previousAway=false;continue;}
+        const previous=result[result.length-1];
+        if(previousAway&&previous?.device_uuid===interval.device_uuid&&interval.start_time<=previous.end_time+5){previous.end_time=Math.max(previous.end_time,interval.end_time);continue;}
+        result.push({...interval});previousAway=true;
+    }
+    return result;
+}
+
 export function subtractAfk<T extends {device_uuid?: string | null; timestamp:number; duration:number}>(logs:T[],intervals:AfkInterval[]):T[] {
     const byDevice=new Map<string,ReturnType<typeof afkSpans>>();
-    for(const span of afkSpans(intervals,-Number.MAX_SAFE_INTEGER,Number.MAX_SAFE_INTEGER)) {
+    for(const span of afkSpans(continuousAway(intervals),-Number.MAX_SAFE_INTEGER,Number.MAX_SAFE_INTEGER)) {
         const spans=byDevice.get(span.device)??[];spans.push(span);byDevice.set(span.device,spans);
     }
     return logs.flatMap(log=>{

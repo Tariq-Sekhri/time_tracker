@@ -1155,7 +1155,9 @@ function demoAfkIntervals(): AfkInterval[] {
         seen.add(day);const start=log.timestamp+Math.floor(log.duration/3);
         result.push(
             {device_uuid:LOCAL_DEVICE_UUID,start_time:start,end_time:start+180,state:2,known_mask:1,active_mask:0,settings_id:1},
+            {device_uuid:LOCAL_DEVICE_UUID,start_time:start+180,end_time:start+185,state:1,known_mask:1,active_mask:1,settings_id:1},
             {device_uuid:LOCAL_DEVICE_UUID,start_time:start+185,end_time:start+365,state:2,known_mask:257,active_mask:256,settings_id:1},
+            {device_uuid:LOCAL_DEVICE_UUID,start_time:start+365,end_time:start+370,state:1,known_mask:1,active_mask:1,settings_id:1},
             {device_uuid:LOCAL_DEVICE_UUID,start_time:start+370,end_time:start+600,state:2,known_mask:17,active_mask:16,settings_id:2},
         );
     }
@@ -1201,13 +1203,13 @@ export async function invoke<T>(
             const logs=rawLogs.filter(log=>(log.device_uuid??LOCAL_DEVICE_UUID)===device&&log.timestamp<end&&log.timestamp+log.duration>start).map(log=>({...log,device_uuid:device,timestamp:Math.max(log.timestamp,start),duration:Math.min(end,log.timestamp+log.duration)-Math.max(start,log.timestamp)}));
             const present=subtractAfk(logs,evidence);
             const gaps=present.map(log=>({device_uuid:device,start_time:log.timestamp,end_time:log.timestamp+log.duration,state:2,known_mask:0,active_mask:0,settings_id:0}));
-            return {device_uuid:device,evidence:evidence.map(e=>{
+            return {device_uuid:device,evidence:evidence.filter(e=>e.state===2).map(e=>{
                 const settings=defaultAfkSettings();if(e.settings_id===2)settings.sources[4].weight=10;
                 return {...e,settings};
             }),logs:subtractAfk(logs,gaps)} as T;
         }
         case "get_afk_storage":
-            return {intervals:demoAfkIntervals().length,afk_seconds:demoAfkIntervals().reduce((sum,i)=>sum+i.end_time-i.start_time,0),allocated_bytes:null,activity_rows:rawLogs.length} as T;
+            return {intervals:demoAfkIntervals().length,afk_seconds:demoAfkIntervals().reduce((sum,i)=>sum+(i.state===2?i.end_time-i.start_time:0),0),allocated_bytes:null,activity_rows:rawLogs.length} as T;
         case "query_afk": {
             const command=String(a.command);
             if(!["get_logs","get_week","get_week_for_app_filter","get_week_statistics","get_day_statistics","get_total_statistics","get_trend_statistics","get_statistics_bounds","get_logs_by_category","get_logs_for_time_block","get_logs_for_app_in_time_range"].includes(command))throw new DemoInvokeError(cmd,"Unsupported AFK query");

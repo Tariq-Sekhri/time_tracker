@@ -1,7 +1,7 @@
 import {type ManualTimeDraft} from "./manualCalendarEditing.ts";
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 import {get_categories, Category, update_category_by_id} from "../../api/Category.ts";
-import {get_logs_for_time_block, get_logs_by_category, get_log_by_id} from "../../api/Log.ts";
+import {get_logs_for_time_block, get_logs_by_category} from "../../api/Log.ts";
 import {get_week, get_week_for_app_filter} from "../../api/week.ts";
 import {adjustInstantToCalendarDayBoundary, getCalendarDayRangeUnix, getWeekRange} from "../../utils.ts";
 import {useState, useMemo, useEffect, useRef, useCallback} from "react";
@@ -522,19 +522,20 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                 const sourceLogIds = clickInfo.event.extendedProps?.sourceLogIds as number[] | undefined;
                 if (sourceLogIds?.length) {
                     const minSec = timeBlockSettings.minLogDuration;
-                    const rows = await Promise.all(sourceLogIds.map((id) => get_log_by_id(id)));
+                    const allowedIds=new Set(sourceLogIds);
+                    const rows = await get_logs_for_time_block({
+                        app_names:Array.from(new Set(event.apps.flatMap(app=>app.appNames))),
+                        start_time:Math.floor(event.start.getTime()/1000),end_time:Math.floor(event.end.getTime()/1000),min_log_duration:minSec,
+                    });
                     const logs = rows
-                        .filter((row) => row.duration >= minSec)
+                        .filter((row) => row.duration >= minSec&&row.ids.some(id=>allowedIds.has(id)))
                         .map((row) => {
-                            const tsSec =
-                                row.timestamp instanceof Date
-                                    ? Math.floor(row.timestamp.getTime() / 1000)
-                                    : Number(row.timestamp as unknown as number);
+                            const tsSec = row.timestamp;
                             return {
-                                ids: [row.id],
+                                ids: row.ids,
                                 device_uuid: row.device_uuid,
                                 app: row.app,
-                                app_names: [row.app],
+                                app_names: row.app_names,
                                 timestamp: new Date(tsSec * 1000),
                                 duration: row.duration,
                             };

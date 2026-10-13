@@ -13,6 +13,12 @@ export function formatDuration(seconds: number): string {
     return `${minutes}m`;
 }
 
+export function trackedBlockDuration(block:{startTime:number;endTime:number;apps:{totalDuration:number}[]}):number {
+    // A merged block's bounding range can include gaps/away time. Its label
+    // must not count that time as activity, or double-count overlapping devices.
+    return Math.min(Math.max(0,block.endTime-block.startTime),block.apps.reduce((sum,app)=>sum+Math.max(0,app.totalDuration),0));
+}
+
 export function formatLocalDateYMD(d: Date): string {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");

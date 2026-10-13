@@ -9,6 +9,8 @@
 - Preserve normal activity merging while excluding AFK, and keep other devices' activity and sync independent.
 - Inspect an AFK block's recorded sources, confidence, and captured logs. AFK logs stay inside those blocks instead of normal activity.
 - Show captured logs directly inside AFK calendar blocks, with expandable log fragments.
+- Prevent short AFK recorder gaps from appearing as overnight activity, and keep title drill-downs AFK-filtered.
+- Keep AFK cards within their actual calendar times; captured logs scroll inside shorter blocks.
 
 ## [1.12.1] - 2026-10-13
 

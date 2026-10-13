@@ -52,6 +52,12 @@ the calendar event content. Hiding AFK unmounts that content; it never restores
 captured away logs to ordinary activity. Source/confidence inspection remains
 available by clicking the AFK block header.
 
+Filtering bridges missing samples of at most five seconds when both neighboring
+records are AFK for the same device. Explicit present or unknown samples always
+break that continuity, as do longer gaps. This avoids treating recorder scheduling
+holes as activity and merging those tiny holes into overnight activity blocks.
+Raw evidence is unchanged, and the same continuity rule selects nested AFK logs.
+
 ## Measured storage
 
 Run `python scripts/measure-afk-storage.py`. It creates SQLite databases in

@@ -1,6 +1,6 @@
 import {describe,expect,it} from "vitest";
 import {defaultAfkSettings,evaluateAfk,AFK_SOURCES,type Observation} from "./model";
-import {afkSpans,subtractAfk} from "./intervals";
+import {afkSpans,subtractAfk,continuousAway} from "./intervals";
 const idle=()=>AFK_SOURCES.map((_,i):Observation=>({available:i===0,active:false,idle_seconds:i===0?600:null,detail:"test"}));
 describe("AFK decisions",()=>{
     it("lets media and video weights protect passive watching independently",()=>{
@@ -35,4 +35,12 @@ it("subtracts only matching AFK spans and preserves original data",()=>{
     expect(subtractAfk(logs,evidence).reduce((sum,l)=>sum+l.duration,0)).toBe(140);
     expect(logs[0].duration).toBe(100);
     expect(subtractAfk(logs,evidence.map(i=>({...i,state:0})))).toEqual(logs);
+});
+it("closes small missing recorder gaps but preserves observed presence, unknown samples, and other devices",()=>{
+    const row=(start:number,end:number,state=2)=>({device_uuid:"a",start_time:start,end_time:end,state,known_mask:1,active_mask:0,settings_id:1});
+    const evidence=[row(120,160),row(162,200)];
+    const logs=[{id:1,device_uuid:"a",timestamp:100,duration:120},{id:1,device_uuid:"b",timestamp:100,duration:120}];
+    expect(subtractAfk(logs,evidence)).toEqual([{...logs[0],duration:20},{...logs[0],timestamp:200,duration:20},logs[1]]);
+    for(const state of [0,1])expect(continuousAway([...evidence,row(160,162,state)])).toHaveLength(2);
+    expect(continuousAway([row(120,160),row(166,200)])).toHaveLength(2);
 });

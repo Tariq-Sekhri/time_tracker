@@ -2,7 +2,7 @@ import {useEffect, useRef, useState} from "react";
 import {useRenderPerf} from "../perf.ts";
 import {createPortal} from "react-dom";
 import {useQuery} from "@tanstack/react-query";
-import {get_log_by_id, get_logs_for_app_in_time_range} from "../api/Log.ts";
+import {get_logs_for_app_in_time_range} from "../api/Log.ts";
 import {formatDuration} from "../Screens/Calander/utils.ts";
 import {toErrorString} from "../types/common.ts";
 
@@ -26,12 +26,13 @@ export default function AppTitleDetails({app, appNames, start, end, ids, deviceU
         queryKey: ["app_title_details", app, appNames, start, end, ids, deviceUuids, minDuration],
         enabled: open,
         queryFn: async () => {
-            // Block IDs preserve the precise block and device membership, including attached logs.
-            const logs = ids
-                ? await Promise.all([...new Set(ids)].map((id) => get_log_by_id(id)))
-                : await get_logs_for_app_in_time_range(app, start, end, minDuration);
+            // Read filtered fragments first. Fetching original rows by ID would
+            // restore their excluded AFK seconds in the title drill-down.
+            const logs = await get_logs_for_app_in_time_range(app, start, end, minDuration);
+            const allowedIds=ids?new Set(ids):null;
             const totals = new Map<string, number>();
             for (const log of logs) {
+                if(allowedIds&&!allowedIds.has(log.id))continue;
                 if (appNames && !appNames.includes(log.app)) continue;
                 if (deviceUuids && (!log.device_uuid || !deviceUuids.includes(log.device_uuid))) continue;
                 totals.set(log.app, (totals.get(log.app) ?? 0) + log.duration);

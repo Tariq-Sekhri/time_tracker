@@ -1,5 +1,5 @@
 use super::{
-    storage::{subtract, Interval},
+    storage::{continuous_away, subtract, Interval, SAMPLING_GAP_SECONDS},
     AfkSettings,
 };
 use crate::db::{get_pool, tables::log::Log, Error};
@@ -69,18 +69,10 @@ async fn details_from_pool(
         log.timestamp = log.timestamp.max(start);
         log.duration = stop - log.timestamp;
     }
-    let intervals = evidence
-        .iter()
-        .map(|e| Interval {
-            device_uuid: device.clone(),
-            start_time: e.start_time,
-            end_time: e.end_time,
-            state: 2,
-            known_mask: e.known_mask,
-            active_mask: e.active_mask,
-            settings_id: 0,
-        })
-        .collect::<Vec<_>>();
+    let padding=SAMPLING_GAP_SECONDS+1;
+    let intervals=sqlx::query_as::<_,Interval>("SELECT device_uuid,start_time,end_time,state,known_mask,active_mask,settings_id FROM afk_intervals WHERE device_uuid=? AND start_time<? AND end_time>? ORDER BY start_time")
+        .bind(&device).bind(end.saturating_add(padding)).bind(start.saturating_sub(padding)).fetch_all(pool).await?;
+    let intervals=continuous_away(&intervals);
     // The complement of away evidence is present/unknown time. Remove that
     // complement to retain only captured logs inside exact away intervals.
     let present = subtract(logs.clone(), &intervals);

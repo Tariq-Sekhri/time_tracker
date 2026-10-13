@@ -29,7 +29,7 @@ export default function AfkBlockView({event,onClose,trailingToolbar}:{event:NonN
                 source.voting===0?"Not used in score":null,
             ].filter(Boolean).join(" · ")}</div></div>)}{!summary.sources.length&&<p className="text-sm text-gray-400">No recorded source evidence.</p>}</div>
             <h3 className="mt-5 font-semibold">Logs captured while away <span className="text-sm text-gray-400">({query.data.logs.length})</span></h3>
-            <p className="mt-1 text-xs text-gray-400">Only this device's logs during recorded AFK seconds. Gaps between merged AFK periods are excluded.</p>
+            <p className="mt-1 text-xs text-gray-400">Only this device's AFK logs. Recorded present time, unavailable-source intervals, and long recording gaps are excluded.</p>
             <div className="mt-3 space-y-2">{[...groups].sort((a,b)=>b[1].reduce((sum,l)=>sum+l.duration,0)-a[1].reduce((sum,l)=>sum+l.duration,0)).map(([app,logs])=><details key={app} className="rounded bg-gray-900 p-3"><summary className="cursor-pointer text-sm"><span className="break-words">{app}</span><span className="ml-2 text-gray-400">{formatDuration(logs.reduce((sum,log)=>sum+log.duration,0))}</span></summary><ul className="mt-2 space-y-1 text-xs text-gray-400">{logs.map((log,index)=><li key={`${log.id}-${log.timestamp}-${index}`}>{clock(log.timestamp)}–{clock(log.timestamp+log.duration)} · {formatDuration(log.duration)}</li>)}</ul></details>)}{!query.data.logs.length&&<p className="text-sm text-gray-400">No activity logs were captured during this away period.</p>}</div>
         </>}
     </section>;

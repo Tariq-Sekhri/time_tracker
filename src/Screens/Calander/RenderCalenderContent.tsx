@@ -10,7 +10,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
-import { getCategoryColor, getWeekStart, formatDuration, formatLocalDateYMD } from "./utils.ts";
+import { getCategoryColor, getWeekStart, formatDuration, formatLocalDateYMD, trackedBlockDuration } from "./utils.ts";
 import { Category } from "../../api/Category.ts";
 import { EventClickArg, DatesSetArg, EventChangeArg } from "@fullcalendar/core";
 import interactionPlugin from '@fullcalendar/interaction';
@@ -460,7 +460,7 @@ export default function RenderCalendarContent({
                     ? block.apps.find((app) => app.app === calendarAppFilter)?.app
                     : null;
 
-                const blockDurationSec = block.endTime - block.startTime;
+                const blockDurationSec = trackedBlockDuration(block);
                 return {
                     id: `timeblock-${block.id}`,
                     title: `${filteredApp ?? block.category} (${formatDuration(blockDurationSec)})`,
