@@ -279,8 +279,8 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
                         const protectedRule = match.category_name === "Miscellaneous" && rule.regex === ".*";
                         return <div key={rule.id} className="flex items-center gap-1 pl-3 pr-1 py-1 text-xs border-b border-gray-700 min-w-0" title={isBatchMenu ? match.app : `${menu.appNames[0]}
 ${rule.regex}`}>
-                            <span className="font-mono text-gray-200 truncate min-w-0 flex-1">{rule.regex}</span>
-                            <button type="button" onClick={() => {useRegexNavigation.getState().openRule(rule.id); setMenu(null);}} title="Open this regex in App Rules" aria-label={`Matching regex · ${match.category_name}: ${rule.regex} — open in App Rules`} className="shrink-0 rounded px-1.5 py-0.5 text-sky-300 hover:bg-gray-800 hover:underline">{match.category_name} →</button>
+                            <button type="button" onClick={() => {useRegexNavigation.getState().openRule(rule.id); setMenu(null);}} title="Open this regex in App Rules" aria-label={`Matching regex · ${match.category_name}: ${rule.regex} — open in App Rules`} className="min-w-0 flex-1 truncate rounded px-1 py-0.5 -ml-1 text-left font-mono text-sky-300 hover:bg-gray-800 hover:underline">{rule.regex}</button>
+                            <span className="shrink-0 px-1 text-gray-400">{match.category_name}</span>
                             {!protectedRule && <>
                                 <button type="button" onClick={() => editRule(rule, "edit")} title="Edit regex" aria-label={`Edit matching regex ${rule.regex}`} className="shrink-0 rounded p-1 text-gray-400 hover:bg-gray-800 hover:text-white">
                                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.232-6.232a2.5 2.5 0 113.536 3.536L12.536 16.536 8 18l1.464-4.536z" /></svg>
