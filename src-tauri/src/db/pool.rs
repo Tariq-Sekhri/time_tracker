@@ -393,6 +393,9 @@ async fn create_pool() -> Result<SqlitePool, sqlx::Error> {
 
     run_schema_repair(&pool).await?;
 
+    // Also cover restored databases whose legacy migration checksum differs.
+    sqlx::raw_sql(include_str!("../../migrations/0014_afk_evidence.sql")).execute(&pool).await?;
+
     crate::logger::Log::info("Database ready; migrations and schema validation completed");
 
     Ok(pool)

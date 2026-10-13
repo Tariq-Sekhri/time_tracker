@@ -244,7 +244,7 @@ pub async fn get_logs() -> Result<Vec<Log>, Error> {
     perf.stage("query");
     perf.note("rows", logs.len());
     perf.done();
-    Ok(logs)
+    crate::afk::filter_logs(logs).await
 }
 
 /// Calendar/statistics windows should not deserialize the entire activity history.
@@ -283,7 +283,7 @@ pub async fn get_logs_in_time_range(start: i64, end: i64) -> Result<Vec<Log>, Er
     perf.stage("query");
     perf.note("rows", logs.len());
     perf.done();
-    Ok(logs)
+    crate::afk::filter_logs(logs).await
 }
 
 /// Preserve calendar's history-wide skipped-app cleanup without transferring every
@@ -482,6 +482,7 @@ pub async fn get_logs_for_time_block(
 
     perf.stage("query");
     perf.note("range_logs", logs.len());
+    let logs = crate::afk::filter_logs(logs).await?;
     let filtered_logs: Vec<Log> = logs
         .into_iter()
         .filter(|log| request.app_names.contains(&log.app))
@@ -716,6 +717,7 @@ pub async fn get_logs_by_category(
     .await?;
     perf.stage("query");
     perf.note("range_logs", logs.len());
+    logs = crate::afk::filter_logs(logs).await?;
 
     let skipped_apps = get_skipped_apps().await?;
     let mut skipped_regexes: Vec<Regex> = Vec::new();
@@ -810,6 +812,7 @@ pub async fn get_logs_for_app_in_time_range(
     .await?;
     perf.stage("query");
     perf.note("range_logs", logs.len());
+    let logs = crate::afk::filter_logs(logs).await?;
 
     let groups = crate::db::tables::app_group::get_app_groups().await?;
     let matchers = crate::db::tables::app_group::build_app_group_matchers(&groups)?;

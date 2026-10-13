@@ -81,7 +81,7 @@ fn format_window_output(title: &str, task_manager_name: &str, exe_name: &str) ->
     }
 }
 
-unsafe fn query_process_path(pid: u32) -> Option<String> {
+pub(crate) unsafe fn query_process_path(pid: u32) -> Option<String> {
     let process = crate::logger::Log::result(
         "Open foreground process",
         OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid),

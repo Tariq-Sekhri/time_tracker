@@ -245,6 +245,17 @@ async fn aggregate_statistics_logs_from_pool(pool: &sqlx::SqlitePool) -> Result<
 }
 
 async fn tracking_totals(skipped: &[Regex], today_start: i64) -> Result<(i64, i64), Error> {
+    if crate::afk::filter_requested() {
+        let logs = log::get_logs().await?;
+        let mut total = 0; let mut today = 0;
+        for sample in logs.iter().filter(|l| !skipped.iter().any(|r| r.is_match(&l.app))) {
+            total += sample.duration;
+            let start = sample.timestamp.max(today_start);
+            let end = sample.timestamp.saturating_add(sample.duration).min(today_start + 86400);
+            today += (end - start).max(0);
+        }
+        return Ok((total, today));
+    }
     let pool = db::get_pool().await?;
     let rows: Vec<(String, i64, i64)> = sqlx::query_as(
         "SELECT app, SUM(duration), SUM(CASE WHEN timestamp >= ?1 AND timestamp < ?2 THEN duration ELSE 0 END)
@@ -265,9 +276,11 @@ async fn tracking_totals(skipped: &[Regex], today_start: i64) -> Result<(i64, i6
 pub async fn get_statistics_bounds(include_manual: Option<bool>) -> Result<StatisticsBounds, Error> {
     let mut perf = crate::perf::Perf::new("get_statistics_bounds");
     let pool = db::get_pool().await?;
-    let rows: Vec<(String, i64, i64)> = sqlx::query_as(
+    let rows: Vec<(String, i64, i64)> = if crate::afk::filter_requested() {
+        log::get_logs().await?.into_iter().map(|l| (l.app, l.timestamp, l.duration)).collect()
+    } else { sqlx::query_as(
         "SELECT app, MIN(timestamp), SUM(duration) FROM logs WHERE is_deleted = 0 GROUP BY app"
-    ).fetch_all(&pool).await?;
+    ).fetch_all(&pool).await? };
     let skipped = skip_matchers().await?;
     let mut first = None::<i64>;
     let mut total = 0;

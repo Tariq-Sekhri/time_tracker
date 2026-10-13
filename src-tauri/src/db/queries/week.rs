@@ -368,13 +368,8 @@ pub async fn get_week(
     let is_skipped =
         |app_name: &str| -> bool { skipped_regexes.iter().any(|regex| regex.is_match(app_name)) };
 
-    let deleted = crate::logger::Log::result(
-        "Mark skipped activity deleted",
-        clean_skipped_logs(&skipped_regexes).await,
-    )
-    .unwrap_or(0);
-    perf.stage("skip_cleanup");
-    perf.note("skipped_deleted", deleted);
+    // Calendar filters are read-only. Skipped titles are hidden below without
+    // marking original activity deleted merely because a view was opened.
 
     logs.retain(|log| !is_skipped(&log.app));
 
@@ -399,6 +394,9 @@ pub async fn get_week(
         return Ok(Vec::new());
     }
 
+    if crate::afk::filter_requested() {
+        return afk_time_blocks(&logs, &regex, &app_groups, &time_block_settings).await;
+    }
     let blocks = get_time_blocks(&logs, &regex, &app_groups, &time_block_settings)?;
     perf.stage("build_blocks");
     perf.note("raw_blocks", blocks.len());
@@ -462,6 +460,9 @@ pub async fn get_week_for_app_filter(
         return Ok(Vec::new());
     }
 
+    if crate::afk::filter_requested() {
+        return afk_time_blocks(&logs, &regex, &app_groups, &time_block_settings).await;
+    }
     let blocks = get_time_blocks(&logs, &regex, &app_groups, &time_block_settings)?;
     perf.stage("build_blocks");
     let blocks = transform_time_blocks(blocks, &time_block_settings)?;
@@ -469,6 +470,65 @@ pub async fn get_week_for_app_filter(
     perf.note("blocks", blocks.len());
     perf.done();
     Ok(blocks)
+}
+
+// AFK boundaries must not be joined back together by the normal gap-attachment
+// rules. Activity from another selected device can still cover the same period.
+async fn afk_time_blocks(logs: &[Log], regex: &[CachedCategoryRegex], groups: &[CachedAppGroup], settings: &TimeBlockSettings) -> Result<Vec<TimeBlock>, Error> {
+    if logs.is_empty() { return Ok(Vec::new()); }
+    let start=logs.iter().map(|l|l.timestamp).min().unwrap();
+    let end=logs.iter().map(|l|l.timestamp.saturating_add(l.duration)).max().unwrap();
+    let evidence=crate::afk::storage::get_afk_intervals(start,end,None).await?;
+    let barriers=afk_barriers(logs,&evidence);
+    let mut ordered=logs.to_vec(); ordered.sort_by_key(|l|l.timestamp);
+    let mut result=Vec::new(); let mut from=0;
+    for (_, stop) in barriers {
+        let to=ordered.partition_point(|l|l.timestamp<stop);
+        if to>from {
+            result.extend(transform_time_blocks(get_time_blocks(&ordered[from..to],regex,groups,settings)?,settings)?);
+        }
+        from=to;
+    }
+    result.extend(transform_time_blocks(get_time_blocks(&ordered[from..],regex,groups,settings)?,settings)?);
+    for (i,block) in result.iter_mut().enumerate() {block.id=i as i32;}
+    Ok(result)
+}
+fn merge_spans(mut spans: Vec<(i64,i64)>) -> Vec<(i64,i64)> {
+    spans.sort_unstable(); let mut result=Vec::<(i64,i64)>::new();
+    for (start,end) in spans {
+        if let Some(previous)=result.last_mut() {if previous.1>=start {previous.1=previous.1.max(end);continue;}}
+        result.push((start,end));
+    } result
+}
+fn afk_barriers(logs: &[Log], evidence: &[crate::afk::storage::Interval]) -> Vec<(i64,i64)> {
+    let devices=logs.iter().filter_map(|l|l.device_uuid.as_deref()).collect::<std::collections::HashSet<_>>();
+    let away=merge_spans(evidence.iter().filter(|i|i.state==2&&devices.contains(i.device_uuid.as_str())).map(|i|(i.start_time,i.end_time)).collect());
+    let present=merge_spans(logs.iter().map(|l|(l.timestamp,l.timestamp.saturating_add(l.duration))).collect());
+    let mut gaps=Vec::new();
+    for (start,stop) in away {
+        let mut cursor=start;
+        for &(a,b) in &present[present.partition_point(|&(_,b)|b<=start)..] {
+            if a>=stop {break;}
+            if a>cursor {gaps.push((cursor,a.min(stop)));}
+            cursor=cursor.max(b);
+            if cursor>=stop {break;}
+        }
+        if cursor<stop {gaps.push((cursor,stop));}
+    } gaps
+}
+
+#[cfg(test)]
+mod afk_calendar_tests {
+    use super::*;
+    #[test]
+    fn afk_barriers_preserve_activity_on_other_selected_devices() {
+        let sample=|device:&str,start,duration|Log {id:1,device_uuid:Some(device.into()),app:"Movie".into(),timestamp:start,duration,is_deleted:false};
+        let mut logs=vec![sample("a",100,20),sample("a",180,20)];
+        let evidence=vec![crate::afk::storage::Interval {device_uuid:"a".into(),start_time:120,end_time:180,state:2,known_mask:1,active_mask:0,settings_id:1}];
+        assert_eq!(afk_barriers(&logs,&evidence),vec![(120,180)]);
+        logs.push(sample("b",100,100));assert!(afk_barriers(&logs,&evidence).is_empty());
+        let unrelated=vec![sample("b",100,20),sample("b",180,20)];assert!(afk_barriers(&unrelated,&evidence).is_empty());
+    }
 }
 
 fn ensure_non_overlapping(mut blocks: Vec<TimeBlock>) -> Vec<TimeBlock> {

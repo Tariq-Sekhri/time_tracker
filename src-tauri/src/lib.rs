@@ -1,4 +1,5 @@
 mod app_prefs;
+mod afk;
 mod commands;
 mod core;
 mod db;
@@ -268,6 +269,7 @@ pub fn run() {
             });
 
             tauri::async_runtime::spawn(supervisor(app.handle().clone()));
+            tauri::async_runtime::spawn(afk::recorder());
 
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -360,6 +362,12 @@ pub fn run() {
             let handler: Box<dyn Fn(tauri::ipc::Invoke) -> bool + Send + Sync> =
                 Box::new(tauri::generate_handler![
                     logger::log_frontend,
+                    afk::get_afk_settings,
+                    afk::set_afk_settings,
+                    afk::get_afk_status,
+                    afk::storage::get_afk_intervals,
+                    afk::storage::get_afk_storage,
+                    afk::storage::query_afk,
                     logger::get_support_log_info,
                     logger::open_support_log_folder,
                     get_categories,

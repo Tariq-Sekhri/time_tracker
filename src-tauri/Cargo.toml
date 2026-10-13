@@ -1,6 +1,6 @@
 [package]
 name = "time-tracker"
-version = "1.11.11"
+version = "1.12.0"
 description = "A Windows Auto Time Tracking App"
 authors = ["Tariq Sekhri"]
 edition = "2021"
@@ -25,7 +25,7 @@ sqlx = { version = "0.9.0", features = [
     "sqlite",
     "macros",
     "migrate",
-    "chrono"
+    "chrono",
 ] }
 tokio = { version = "1", features = ["full"] }
 chrono = { version = "0.4", features = ["clock"] }
@@ -44,6 +44,7 @@ uuid = { version = "1", features = ["v4"] }
 
 # Platform-specific dependencies
 [target.'cfg(target_os = "windows")'.dependencies]
+windows-future = "0.3"
 windows = { version = "0.62.2", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
@@ -52,7 +53,21 @@ windows = { version = "0.62.2", features = [
     "Win32_Security",
     "Win32_System_WindowsProgramming",
     "Win32_Storage_FileSystem",
-    "Win32_System_Registry"
+    "Win32_System_Registry",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Input_XboxController",
+    "Win32_System_StationsAndDesktops",
+    "Win32_System_SystemInformation",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
+    "Win32_System_RemoteDesktop",
+    "Win32_System_WinRT",
+    "Win32_Media_Audio",
+    "Win32_Media_Audio_Endpoints",
+    "Win32_Graphics_Gdi",
+    "Media_Control",
+    "Foundation",
 ] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -63,7 +78,7 @@ core-foundation = "0.10.1"
 core-graphics = "0.25.0"
 objc2-app-kit = { version = "=0.3.1", default-features = false, features = [
     "NSRunningApplication",
-    "NSWorkspace"
+    "NSWorkspace",
 ] }
 [features]
 dev-warnings = []

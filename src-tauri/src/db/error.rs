@@ -38,6 +38,7 @@ impl_from!(
     reqwest::Error,
     std::io::Error,
     regex::Error,
+    serde_json::Error,
     std::time::SystemTimeError,
     AuthExpiredError
 );

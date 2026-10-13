@@ -3,7 +3,7 @@ mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "windows")]
-mod windows;
+pub(crate) mod windows;
 
 use crate::db::tables::log::{self, increase_duration, NewLog, PENDING_LOCAL_DEVICE_UUID};
 use crate::db::tables::skipped_app;
