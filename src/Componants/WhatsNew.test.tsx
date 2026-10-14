@@ -1,7 +1,8 @@
 /* @vitest-environment jsdom */
 import {cleanup, render, screen} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import {afterEach, expect, it} from "vitest";
+import {afterEach, expect, it, vi} from "vitest";
+vi.mock("../../CHANGELOG.md?raw", () => ({default: "# Changelog\n\n## [Unreleased]\n\n- Not released yet.\n\n## [9.0.0] - 2026-10-14\n\n- Latest release note.\n\n## [8.0.0] - 2026-10-13\n\n- Previous release note.\n"}));
 import WhatsNew from "./WhatsNew.tsx";
 afterEach(() => {cleanup(); localStorage.clear();});
 it("shows release notes after an upgrade and remembers dismissal", async () => {
@@ -9,11 +10,7 @@ it("shows release notes after an upgrade and remembers dismissal", async () => {
     const view = render(<WhatsNew/>);
     expect(screen.getByRole("dialog")).toBeTruthy();
     expect(screen.getAllByRole("listitem").map(item => item.textContent)).toEqual([
-        "Edit names and colors for categories, manual categories, and Google Calendars directly from the Sources sidebar; Uncategorized has an editable color and a fixed name.",
-        "Adjust tracked category priority, with editors kept beside their source and inside the viewport even at increased UI scale.",
-        "Hide tracked activity during recorded AFK time by default, separately for each device, and sync AFK history across devices.",
-        "Use Include AFK to inspect grouped away blocks, their recorded sources, confidence, and captured logs without mixing those logs into normal activity.",
-        "Fix overnight activity caused by short AFK recording gaps and keep AFK cards and captured logs within their calendar times.",
+        "Latest release note.",
     ]);
     await userEvent.click(screen.getByRole("button", {name: "Got it"}));
     expect(screen.queryByRole("dialog")).toBeNull();

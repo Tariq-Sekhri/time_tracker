@@ -9,6 +9,7 @@ mod logger;
 mod manual_sync;
 mod perf;
 mod sync;
+mod notes_sync;
 mod tray;
 
 use commands::{apply_update_cmd, check_update_cmd};

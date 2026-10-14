@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Sync notes between desktop and mobile, keep both versions of conflicting edits, and retain previous versions on the server.
+
 ## [1.12.3] - 2026-10-14
 
 - Right-click an app log to see the regex that categorized it, then edit or delete it right there, or jump to it in App Rules with the rule focused.

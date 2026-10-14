@@ -75,8 +75,7 @@ pub async fn set_notes_enabled(enabled: bool) -> Result<(), Error> {
 }
 
 #[tauri::command]
-pub async fn set_notes_text(text: String) -> Result<(), Error> {
+pub async fn set_notes_text(text: String, expected_text: Option<String>) -> Result<String, Error> {
     let pool = get_pool().await?;
-    metadata_set(&pool, META_NOTES_TEXT, &text).await?;
-    Ok(())
+    Ok(crate::notes_sync::save(&pool, &text, expected_text.as_deref()).await?)
 }

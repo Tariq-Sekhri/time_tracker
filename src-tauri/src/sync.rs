@@ -512,6 +512,7 @@ async fn sync_impl() -> Result<(), Error> {
     if let Some(max) = logs.iter().map(|log| log.id).max() {
         set_last_sync_id(&device.uuid, max).await?;
     }
+    crate::notes_sync::sync(&device.uuid, &token, &server_ip).await?;
     upload_afk_evidence(&device.uuid, &token, &server_ip, false).await?;
     perf.stage("finalize");
     perf.done();

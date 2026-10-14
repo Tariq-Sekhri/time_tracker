@@ -13,6 +13,6 @@ export function setNotesEnabled(enabled: boolean): Promise<void> {
     return invokeOrThrow("set_notes_enabled", { enabled });
 }
 
-export function setNotesText(text: string): Promise<void> {
-    return invokeOrThrow("set_notes_text", { text });
+export function setNotesText(text: string, expectedText?: string): Promise<string> {
+    return invokeOrThrow("set_notes_text", { text, expectedText });
 }

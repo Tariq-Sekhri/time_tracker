@@ -49,43 +49,47 @@ function toEditorHtml(value: string): string {
 export default function Notes() {
     const { showToast } = useToast();
     const queryClient = useQueryClient();
-    const { data } = useQuery({ queryKey: NOTES_QUERY_KEY, queryFn: getNotesState });
+    const { data } = useQuery({ queryKey: NOTES_QUERY_KEY, queryFn: getNotesState, refetchInterval: 5000 });
     const editorRef = useRef<HTMLDivElement>(null);
-    const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const saveQueue = useRef<Promise<void>>(Promise.resolve());
     const saveVersion = useRef(0);
+    const loadedText = useRef("");
+    const pendingSave = useRef(false);
     const [saveStatus, setSaveStatus] = useState("Saved");
 
     useEffect(() => {
-        if (editorRef.current && document.activeElement !== editorRef.current) {
-            editorRef.current.innerHTML = toEditorHtml(data?.text ?? "");
+        if (editorRef.current && !pendingSave.current && data && loadedText.current !== data.text) {
+            loadedText.current = data.text;
+            editorRef.current.innerHTML = toEditorHtml(data.text);
         }
     }, [data?.text]);
 
-    useEffect(() => () => {
-        if (saveTimer.current) clearTimeout(saveTimer.current);
-    }, []);
-
     const save = useCallback((html: string) => {
-        if (saveTimer.current) clearTimeout(saveTimer.current);
         const version = ++saveVersion.current;
         const nextText = `${RICH_NOTES_PREFIX}${sanitizeRichHtml(html)}`;
-        setSaveStatus("Saving…");
-        saveTimer.current = setTimeout(() => {
-            void setNotesText(nextText)
-                .then(() => {
-                    if (version === saveVersion.current) {
-                        queryClient.setQueryData(NOTES_QUERY_KEY, (previous: { enabled: boolean; text: string } | undefined) => ({
-                            enabled: previous?.enabled ?? true,
-                            text: nextText,
-                        }));
-                        setSaveStatus("Saved");
-                    }
-                })
-                .catch((error) => {
-                    if (version === saveVersion.current) setSaveStatus("Save failed");
-                    showToast("Could not save notes", "error", 5000, toErrorString(error));
-                });
-        }, 400);
+        const expectedText = loadedText.current;
+        loadedText.current = nextText;
+        pendingSave.current = true;
+        setSaveStatus("Saving...");
+        // Persist every edit in order, including edits immediately before leaving Notes.
+        saveQueue.current = saveQueue.current.catch(() => {}).then(() => setNotesText(nextText, expectedText))
+            .then((savedText) => {
+                if (version === saveVersion.current) {
+                    pendingSave.current = false;
+                    const canonicalText = savedText ?? nextText;
+                    loadedText.current = canonicalText;
+                    if (canonicalText !== nextText && editorRef.current) editorRef.current.innerHTML = toEditorHtml(canonicalText);
+                    queryClient.setQueryData(NOTES_QUERY_KEY, (previous: { enabled: boolean; text: string } | undefined) => ({
+                        enabled: previous?.enabled ?? true,
+                        text: canonicalText,
+                    }));
+                    setSaveStatus("Saved");
+                }
+            })
+            .catch((error) => {
+                if (version === saveVersion.current) { pendingSave.current = false; setSaveStatus("Save failed"); }
+                showToast("Could not save notes", "error", 5000, toErrorString(error));
+            });
     }, [queryClient, showToast]);
 
     const format = (command: string, value?: string) => {
@@ -138,6 +142,7 @@ export default function Notes() {
                 aria-multiline="true"
                 data-placeholder="Write notes about the app… Paste an image to add it."
                 onInput={(event) => save(event.currentTarget.innerHTML)}
+                onBlur={() => { void saveQueue.current.then(() => queryClient.invalidateQueries({queryKey: NOTES_QUERY_KEY})); }}
                 onPaste={(event) => {
                     const image = Array.from(event.clipboardData.items).find((item) => item.type.startsWith("image/"));
                     if (image) {
