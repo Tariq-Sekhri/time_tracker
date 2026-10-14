@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Right-click an app log to see the regex that categorized it, then edit or delete it right there, or jump to it in App Rules with the rule focused.
+- The manual timer now syncs live across your devices: start it on your phone and stop it on your desktop, or the other way round. Entries finished on another device appear in your calendar automatically. Requires an updated sync server; manual tracking still works offline.
 
 ## [1.12.2] - 2026-10-13
 
