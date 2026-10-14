@@ -22,7 +22,7 @@ pub async fn get_manual_categories() -> Result<Vec<ManualCategory>, Error> {
     categories_for_pool(&pool).await
 }
 
-async fn categories_for_pool(pool: &SqlitePool) -> Result<Vec<ManualCategory>, Error> {
+pub(crate) async fn categories_for_pool(pool: &SqlitePool) -> Result<Vec<ManualCategory>, Error> {
     let metadata = sqlx::query_as::<_, (String, String)>(
         "SELECT key, value FROM app_metadata WHERE key LIKE 'manual_category_%'",
     ).fetch_all(pool).await?.into_iter().collect::<std::collections::HashMap<_, _>>();
@@ -44,7 +44,9 @@ async fn categories_for_pool(pool: &SqlitePool) -> Result<Vec<ManualCategory>, E
 #[tauri::command]
 pub async fn update_manual_category(id: Option<i64>, name: String, color: String) -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    save_category(&pool, id, &name, &color).await
+    save_category(&pool, id, &name, &color).await?;
+    crate::manual_sync::projects_changed_locally();
+    Ok(())
 }
 
 async fn save_category(pool: &SqlitePool, id: Option<i64>, name: &str, color: &str) -> Result<(), Error> {
@@ -112,6 +114,7 @@ pub async fn create_manual_project(name: String) -> Result<i64, Error> {
         .bind(name)
         .execute(&pool)
         .await?;
+    crate::manual_sync::projects_changed_locally();
     Ok(result.last_insert_rowid())
 }
 
@@ -127,6 +130,7 @@ pub async fn update_manual_project(id: i64, name: String) -> Result<(), Error> {
     if result.rows_affected() == 0 {
         return Err(anyhow::anyhow!("Project no longer exists").into());
     }
+    crate::manual_sync::projects_changed_locally();
     Ok(())
 }
 
@@ -219,6 +223,7 @@ mod tests {
             project_id: Some(1),
             start_time: 250,
             end_time: None,
+            ..Default::default()
         };
         sqlx::query("INSERT INTO app_metadata (key, value) VALUES (?1, ?2)")
             .bind(RUNNING_TIMER_KEY)

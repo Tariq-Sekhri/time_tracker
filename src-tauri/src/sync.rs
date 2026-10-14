@@ -37,7 +37,7 @@ fn ensure_sync_enabled() -> Result<(), Error> {
     Ok(())
 }
 
-fn sync_http_client() -> Result<&'static reqwest::Client, Error> {
+pub(crate) fn sync_http_client() -> Result<&'static reqwest::Client, Error> {
     ensure_sync_enabled()?;
     Ok(SYNC_HTTP_CLIENT.get_or_init(|| {
         reqwest::Client::builder()
@@ -91,7 +91,7 @@ fn normalize_server_ip(server_ip: &str) -> String {
     ip.to_string()
 }
 
-fn sync_server_url(server_ip: &str, path: &str) -> String {
+pub(crate) fn sync_server_url(server_ip: &str, path: &str) -> String {
     let ip = normalize_server_ip(server_ip);
     let path = path.trim_start_matches('/');
     format!("http://{ip}:8765/v1/{path}")
@@ -122,7 +122,7 @@ pub async fn check(ip: String) -> Result<String, Error> {
     }
 }
 
-async fn require_authenticated_success(
+pub(crate) async fn require_authenticated_success(
     response: reqwest::Response,
     device_uuid: &str,
 ) -> Result<reqwest::Response, Error> {

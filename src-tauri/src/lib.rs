@@ -6,6 +6,7 @@ mod db;
 mod google_oauth;
 mod instance;
 mod logger;
+mod manual_sync;
 mod perf;
 mod sync;
 mod tray;
@@ -270,6 +271,7 @@ pub fn run() {
 
             tauri::async_runtime::spawn(supervisor(app.handle().clone()));
             tauri::async_runtime::spawn(afk::recorder());
+            tauri::async_runtime::spawn(manual_sync::run(app.handle().clone()));
 
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {

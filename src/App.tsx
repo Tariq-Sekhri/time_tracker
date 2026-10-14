@@ -46,6 +46,23 @@ function AppInner() {
     const [currentView, setCurrentView] = useState<View>("calendar");
     const requestedRegexId = useRegexNavigation((state) => state.targetId);
     useEffect(() => {if (requestedRegexId !== null) setCurrentView("regex");}, [requestedRegexId]);
+    // Manual timers started, edited, or stopped on other devices arrive from the sync server.
+    useEffect(() => {
+        const unlisteners = [
+            // A remote timer may name a project this device had not seen yet.
+            listen("manual-timer-changed", () => {
+                for (const key of ["runningManualTimer", "manualCategories", "manualProjects"]) {
+                    void queryClient.invalidateQueries({queryKey: [key]});
+                }
+            }),
+            listen("manual-entries-changed", () => {
+                for (const key of ["manualTimeBlocks", "manualCategories", "manualProjects", "week_statistics", "day_statistics", "range_statistics", "total_statistics", "category_app_logs"]) {
+                    void queryClient.invalidateQueries({queryKey: [key]});
+                }
+            }),
+        ];
+        return () => {for (const unlisten of unlisteners) void unlisten.then((stop) => stop());};
+    }, [queryClient]);
     const [statisticsTab, setStatisticsTab] = useState<StatisticsTab>("dailyAvg");
     useEffect(() => {
         const storageKey = "time-tracker:ui-zoom";

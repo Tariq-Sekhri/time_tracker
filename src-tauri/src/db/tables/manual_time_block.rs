@@ -3,7 +3,7 @@ use crate::db::Error;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
 
-pub(super) const RUNNING_TIMER_KEY: &str = "running_manual_time_timer_v1";
+pub(crate) const RUNNING_TIMER_KEY: &str = "running_manual_time_timer_v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct ManualTimeBlock {
@@ -39,7 +39,7 @@ pub struct UpdateManualTimeBlock {
     pub end_time: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RunningManualTimer {
     pub title: String,
     pub notes: Option<String>,
@@ -48,6 +48,15 @@ pub struct RunningManualTimer {
     pub start_time: i64,
     #[serde(default)]
     pub end_time: Option<i64>,
+    /// Identifies this timer on the sync server so every device can stop it.
+    #[serde(default)]
+    pub session_id: Option<String>,
+    /// The sync server holds this exact state; false while local edits are unsent.
+    #[serde(default)]
+    pub synced: bool,
+    /// Last server version applied, so stale pushes never undo newer edits.
+    #[serde(default)]
+    pub version: i64,
 }
 
 pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
@@ -60,7 +69,9 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             start_time INTEGER NOT NULL,
             end_time INTEGER NOT NULL,
             created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL
+            updated_at INTEGER NOT NULL,
+            session_id TEXT,
+            pending_upload INTEGER NOT NULL DEFAULT 0
         )",
     )
     .execute(pool)
@@ -180,6 +191,9 @@ pub async fn start_manual_timer(
         project_id,
         start_time: chrono::Utc::now().timestamp(),
         end_time: None,
+        session_id: Some(uuid::Uuid::new_v4().to_string()),
+        synced: false,
+        version: 0,
     };
     let pool = db::get_pool().await?;
     super::manual_project::validate_project_id(&pool, project_id).await?;
@@ -196,6 +210,7 @@ pub async fn start_manual_timer(
         .bind(value)
         .execute(&pool)
         .await?;
+    crate::manual_sync::timer_changed_locally();
     Ok(timer)
 }
 
@@ -229,12 +244,14 @@ pub async fn update_manual_timer_details(
     }
     timer.title = title.to_string();
     timer.project_id = project_id;
+    timer.synced = false;
     sqlx::query("UPDATE app_metadata SET value = ?1 WHERE key = ?2")
         .bind(serde_json::to_string(&timer).map_err(anyhow::Error::new)?)
         .bind(RUNNING_TIMER_KEY)
         .execute(&mut *transaction)
         .await?;
     transaction.commit().await?;
+    crate::manual_sync::timer_changed_locally();
     Ok(timer)
 }
 
@@ -253,12 +270,14 @@ pub async fn update_manual_timer_title(title: String) -> Result<RunningManualTim
         .ok_or_else(|| anyhow::anyhow!("No manual timer is running"))?;
     let mut timer: RunningManualTimer = serde_json::from_str(&value).map_err(anyhow::Error::new)?;
     timer.title = title.to_string();
+    timer.synced = false;
     let value = serde_json::to_string(&timer).map_err(anyhow::Error::new)?;
     sqlx::query("UPDATE app_metadata SET value = ?1 WHERE key = ?2")
         .bind(value)
         .bind(RUNNING_TIMER_KEY)
         .execute(&pool)
         .await?;
+    crate::manual_sync::timer_changed_locally();
     Ok(timer)
 }
 
@@ -297,10 +316,11 @@ pub async fn finish_manual_timer() -> Result<i64, Error> {
         .end_time
         .ok_or_else(|| anyhow::anyhow!("Stop the timer before recording it"))?;
     let now = chrono::Utc::now().timestamp();
+    // The session ID lets other devices recognise this block when it syncs back.
     let result = sqlx::query(
         "INSERT INTO manual_time_blocks
-         (title, notes, start_time, end_time, created_at, updated_at, project_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6)",
+         (title, notes, start_time, end_time, created_at, updated_at, project_id, session_id, pending_upload)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6, ?7, ?8)",
     )
     .bind(if timer.title.trim().is_empty() { "Unnamed" } else { timer.title.trim() })
     .bind(timer.notes)
@@ -308,6 +328,8 @@ pub async fn finish_manual_timer() -> Result<i64, Error> {
     .bind(end_time)
     .bind(now)
     .bind(timer.project_id)
+    .bind(&timer.session_id)
+    .bind(timer.session_id.is_some())
     .execute(&mut *transaction)
     .await?;
     sqlx::query("DELETE FROM app_metadata WHERE key = ?1")
@@ -315,6 +337,7 @@ pub async fn finish_manual_timer() -> Result<i64, Error> {
         .execute(&mut *transaction)
         .await?;
     transaction.commit().await?;
+    crate::manual_sync::entries_changed_locally();
     Ok(result.last_insert_rowid())
 }
 
