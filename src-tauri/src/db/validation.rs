@@ -401,6 +401,7 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
             columns: vec![
                 ExpectedColumn { name: "id", sql_type: "INTEGER", not_null: true, default_value: None },
                 ExpectedColumn { name: "name", sql_type: "TEXT", not_null: true, default_value: None },
+                ExpectedColumn { name: "parent_id", sql_type: "INTEGER", not_null: false, default_value: None },
             ],
         },
         ExpectedTable {

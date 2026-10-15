@@ -77,7 +77,7 @@ describe("demo manual timer control", () => {
             </QueryClientProvider>,
         );
 
-        await waitFor(() => expect((screen.getByRole("combobox", {name: "Category"}) as HTMLSelectElement).disabled).toBe(false));
+        await waitFor(() => expect((screen.getByRole("button", {name: "Category"}) as HTMLButtonElement).disabled).toBe(false));
         const input = screen.getByRole("textbox", {name: "Timer task name"});
         await user.click(input);
         await user.tab();
@@ -86,8 +86,9 @@ describe("demo manual timer control", () => {
         await user.type(input, "Planning");
         await expect(invoke("get_running_manual_timer")).resolves.toBeNull();
         await user.tab();
-        expect(document.activeElement).toBe(screen.getByRole("combobox", {name: "Category"}));
-        await user.selectOptions(screen.getByRole("combobox", {name: "Category"}), String(projectId));
+        expect(document.activeElement).toBe(screen.getByRole("button", {name: "Category"}));
+        await user.click(screen.getByRole("button", {name: "Category"}));
+        await user.click(await screen.findByRole("option", {name: "Focus project"}));
         await waitFor(async () => {
             await expect(invoke("get_running_manual_timer")).resolves.toMatchObject({title: "Planning", project_id: projectId, end_time: null});
         });

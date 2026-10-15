@@ -7,6 +7,7 @@ use sqlx::{FromRow, SqlitePool};
 pub struct ManualProject {
     pub id: i64,
     pub name: String,
+    pub parent_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -14,6 +15,7 @@ pub struct ManualCategory {
     pub id: Option<i64>,
     pub name: String,
     pub color: String,
+    pub parent_id: Option<i64>,
 }
 
 #[tauri::command]
@@ -31,12 +33,15 @@ pub(crate) async fn categories_for_pool(pool: &SqlitePool) -> Result<Vec<ManualC
         id: None,
         name: "Uncategorized".into(),
         color: metadata.get("manual_category_color:none").cloned().unwrap_or_else(|| palette[0].into()),
+        parent_id: None,
     }];
-    for project in sqlx::query_as::<_, ManualProject>("SELECT id, name FROM manual_projects ORDER BY name COLLATE NOCASE, id").fetch_all(pool).await? {
-        categories.push(ManualCategory {
-            id: Some(project.id), name: project.name,
-            color: metadata.get(&format!("manual_category_color:{}", project.id)).cloned().unwrap_or_else(|| palette[project.id as usize % palette.len()].into()),
-        });
+    let color_for = |id: i64| metadata.get(&format!("manual_category_color:{id}")).cloned();
+    for project in sqlx::query_as::<_, ManualProject>("SELECT id, name, parent_id FROM manual_projects ORDER BY name COLLATE NOCASE, id").fetch_all(pool).await? {
+        // Subcategories share their parent's color until given their own.
+        let color = color_for(project.id)
+            .or_else(|| project.parent_id.and_then(color_for))
+            .unwrap_or_else(|| palette[project.parent_id.unwrap_or(project.id) as usize % palette.len()].into());
+        categories.push(ManualCategory { id: Some(project.id), name: project.name, color, parent_id: project.parent_id });
     }
     Ok(categories)
 }
@@ -69,7 +74,7 @@ async fn save_category(pool: &SqlitePool, id: Option<i64>, name: &str, color: &s
 }
 
 pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    sqlx::query("CREATE TABLE IF NOT EXISTS manual_projects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE UNIQUE)")
+    sqlx::query("CREATE TABLE IF NOT EXISTS manual_projects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE UNIQUE, parent_id INTEGER)")
         .execute(pool).await?;
     Ok(())
 }
@@ -100,21 +105,38 @@ pub async fn validate_project_id(pool: &SqlitePool, project_id: Option<i64>) -> 
 pub async fn get_manual_projects() -> Result<Vec<ManualProject>, Error> {
     let pool = db::get_pool().await?;
     Ok(sqlx::query_as::<_, ManualProject>(
-        "SELECT id, name FROM manual_projects ORDER BY name COLLATE NOCASE, id",
+        "SELECT id, name, parent_id FROM manual_projects ORDER BY name COLLATE NOCASE, id",
     )
     .fetch_all(&pool)
     .await?)
 }
 
 #[tauri::command]
-pub async fn create_manual_project(name: String) -> Result<i64, Error> {
-    let name = validate_name(&name)?;
+pub async fn create_manual_project(name: String, parent_id: Option<i64>) -> Result<i64, Error> {
     let pool = db::get_pool().await?;
-    let result = sqlx::query("INSERT INTO manual_projects (name) VALUES (?1)")
-        .bind(name)
-        .execute(&pool)
-        .await?;
+    let id = create_project(&pool, &name, parent_id).await?;
     crate::manual_sync::projects_changed_locally();
+    Ok(id)
+}
+
+async fn create_project(pool: &SqlitePool, name: &str, parent_id: Option<i64>) -> Result<i64, Error> {
+    let name = validate_name(name)?;
+    if let Some(parent_id) = parent_id {
+        // Only one level of nesting: a parent must itself be top-level.
+        let parent = sqlx::query_scalar::<_, Option<i64>>("SELECT parent_id FROM manual_projects WHERE id = ?1")
+            .bind(parent_id)
+            .fetch_optional(pool)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Parent category no longer exists"))?;
+        if parent.is_some() {
+            return Err(anyhow::anyhow!("Subcategories cannot have their own subcategories").into());
+        }
+    }
+    let result = sqlx::query("INSERT INTO manual_projects (name, parent_id) VALUES (?1, ?2)")
+        .bind(name)
+        .bind(parent_id)
+        .execute(pool)
+        .await?;
     Ok(result.last_insert_rowid())
 }
 
@@ -140,15 +162,34 @@ pub async fn delete_manual_project(id: i64) -> Result<(), Error> {
     delete_project(&pool, id).await
 }
 
+/// Deleting a subcategory moves its time to the parent category; deleting a
+/// category also removes its subcategories and leaves all of that time uncategorized.
 async fn delete_project(pool: &SqlitePool, id: i64) -> Result<(), Error> {
     let mut transaction = pool.begin().await?;
-    sqlx::query(
-        "UPDATE manual_time_blocks SET project_id = NULL, updated_at = ?1 WHERE project_id = ?2",
-    )
-    .bind(chrono::Utc::now().timestamp())
-    .bind(id)
-    .execute(&mut *transaction)
-    .await?;
+    let parent_id = sqlx::query_scalar::<_, Option<i64>>("SELECT parent_id FROM manual_projects WHERE id = ?1")
+        .bind(id)
+        .fetch_optional(&mut *transaction)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Project no longer exists"))?;
+    let mut removed = sqlx::query_scalar::<_, i64>("SELECT id FROM manual_projects WHERE parent_id = ?1")
+        .bind(id)
+        .fetch_all(&mut *transaction)
+        .await?;
+    removed.push(id);
+    for removed_id in &removed {
+        sqlx::query(
+            "UPDATE manual_time_blocks SET project_id = ?1, updated_at = ?2 WHERE project_id = ?3",
+        )
+        .bind(parent_id)
+        .bind(chrono::Utc::now().timestamp())
+        .bind(removed_id)
+        .execute(&mut *transaction)
+        .await?;
+        sqlx::query("DELETE FROM manual_projects WHERE id = ?1")
+            .bind(removed_id)
+            .execute(&mut *transaction)
+            .await?;
+    }
     if let Some(value) =
         sqlx::query_scalar::<_, String>("SELECT value FROM app_metadata WHERE key = ?1")
             .bind(RUNNING_TIMER_KEY)
@@ -157,21 +198,14 @@ async fn delete_project(pool: &SqlitePool, id: i64) -> Result<(), Error> {
     {
         let mut timer: RunningManualTimer =
             serde_json::from_str(&value).map_err(anyhow::Error::new)?;
-        if timer.project_id == Some(id) {
-            timer.project_id = None;
+        if timer.project_id.is_some_and(|project_id| removed.contains(&project_id)) {
+            timer.project_id = parent_id;
             sqlx::query("UPDATE app_metadata SET value = ?1 WHERE key = ?2")
                 .bind(serde_json::to_string(&timer).map_err(anyhow::Error::new)?)
                 .bind(RUNNING_TIMER_KEY)
                 .execute(&mut *transaction)
                 .await?;
         }
-    }
-    let result = sqlx::query("DELETE FROM manual_projects WHERE id = ?1")
-        .bind(id)
-        .execute(&mut *transaction)
-        .await?;
-    if result.rows_affected() == 0 {
-        return Err(anyhow::anyhow!("Project no longer exists").into());
     }
     transaction.commit().await?;
     Ok(())
@@ -254,6 +288,35 @@ mod tests {
         assert_eq!(current.title, "Current work");
         assert_eq!(current.notes.as_deref(), Some("Timer notes"));
         assert!(validate_project_id(&pool, Some(1)).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn subcategories_nest_one_level_and_fold_into_their_parent_on_delete() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        create_table(&pool).await.unwrap();
+        super::super::manual_time_block::create_table(&pool).await.unwrap();
+        sqlx::query("CREATE TABLE app_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)").execute(&pool).await.unwrap();
+        let school = create_project(&pool, "School", None).await.unwrap();
+        let homework = create_project(&pool, "Homework", Some(school)).await.unwrap();
+        let study = create_project(&pool, "Study", Some(school)).await.unwrap();
+        assert!(create_project(&pool, "Too deep", Some(homework)).await.is_err());
+        assert!(create_project(&pool, "Orphan", Some(999)).await.is_err());
+        save_category(&pool, Some(school), "School", "#fb7185").await.unwrap();
+        let categories = categories_for_pool(&pool).await.unwrap();
+        let child = categories.iter().find(|category| category.id == Some(homework)).unwrap();
+        assert_eq!((child.parent_id, child.color.as_str()), (Some(school), "#fb7185"));
+
+        sqlx::query("INSERT INTO manual_time_blocks (title, project_id, start_time, end_time, created_at, updated_at) VALUES ('Essay', ?1, 100, 200, 1, 1), ('Flashcards', ?2, 200, 300, 1, 1)")
+            .bind(homework).bind(study).execute(&pool).await.unwrap();
+        delete_project(&pool, homework).await.unwrap();
+        let essay: Option<i64> = sqlx::query_scalar("SELECT project_id FROM manual_time_blocks WHERE title = 'Essay'").fetch_one(&pool).await.unwrap();
+        assert_eq!(essay, Some(school));
+
+        delete_project(&pool, school).await.unwrap();
+        let remaining: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM manual_projects").fetch_one(&pool).await.unwrap();
+        assert_eq!(remaining, 0);
+        let orphaned: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM manual_time_blocks WHERE project_id IS NULL").fetch_one(&pool).await.unwrap();
+        assert_eq!(orphaned, 2);
     }
 
     #[test]

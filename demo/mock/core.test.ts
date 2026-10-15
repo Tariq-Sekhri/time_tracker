@@ -32,7 +32,7 @@ describe("demo manual time commands", () => {
         const blockId = await invoke<number>("insert_manual_time_block", {newManualTimeBlock: {title: "Past work", notes: "Keep these notes", project_id: id, start_time: start, end_time: start + 300}});
         await invoke("start_manual_timer", {title: "Current work", projectId: id});
         await invoke("update_manual_project", {id, name: "Renamed project"});
-        await expect(invoke("get_manual_projects")).resolves.toContainEqual({id, name: "Renamed project"});
+        await expect(invoke("get_manual_projects")).resolves.toContainEqual({id, name: "Renamed project", parent_id: null});
         await invoke("delete_manual_project", {id});
         await expect(invoke("get_manual_time_blocks", {rangeStart: start, rangeEnd: start + 600})).resolves.toContainEqual(expect.objectContaining({id: blockId, title: "Past work", notes: "Keep these notes", project_id: null, end_time: start + 300}));
         await expect(invoke("get_running_manual_timer")).resolves.toMatchObject({title: "Current work", project_id: null, end_time: null});

@@ -122,7 +122,7 @@ export function ManualTimerControl({timer, onAddPastTime}: {timer: RunningManual
             onKeyDown={(event) => {
                 if (event.key === "Enter") {
                     event.preventDefault();
-                    projectContainerRef.current?.querySelector("select")?.focus();
+                    projectContainerRef.current?.querySelector("button")?.focus();
                 }
                 if (event.key === "Escape" && timerRef.current) setTitle(timerRef.current.title);
             }}

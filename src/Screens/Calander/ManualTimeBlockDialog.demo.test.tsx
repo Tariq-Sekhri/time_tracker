@@ -20,8 +20,9 @@ it("saves the clicked calendar time as manual tracking with notes and a project"
     expect(new Date((screen.getByLabelText("End") as HTMLInputElement).value).getTime()).toBe(start.getTime() + 3600000);
     await user.type(screen.getByLabelText("Name (optional)"), "Calendar entry");
     await user.type(screen.getByLabelText("Description or notes"), "From calendar");
-    await waitFor(() => expect(screen.getByRole("option", {name: "Calendar click test"})).toBeTruthy());
-    await user.selectOptions(screen.getByRole("combobox", {name: "Category"}), String(projectId));
+    await waitFor(() => expect((screen.getByRole("button", {name: "Category"}) as HTMLButtonElement).disabled).toBe(false));
+    await user.click(screen.getByRole("button", {name: "Category"}));
+    await user.click(await screen.findByRole("option", {name: "Calendar click test"}));
     fireEvent.change(screen.getByLabelText("End"), {target: {value: startInput.value}});
     await user.click(screen.getByRole("button", {name: "Save"}));
     expect(screen.getByText("End time must be after start time.")).toBeTruthy();
@@ -47,8 +48,9 @@ it("keeps title, project and notes while the future draft is moved or resized", 
     const view = render(<ManualTimeBlockDialog open initialStart={start} initialEnd={new Date(start.getTime()+7200000)} anchor={null} onClose={close} onPreviewChange={preview}/>, {wrapper});
     await user.type(screen.getByLabelText("Name (optional)"), "Planning");
     await user.type(screen.getByLabelText("Description or notes"), "Keep these notes");
-    await waitFor(() => expect(screen.getByRole("option", {name: "Planned work"})).toBeTruthy());
-    await user.selectOptions(screen.getByRole("combobox", {name: "Category"}), String(projectId));
+    await waitFor(() => expect((screen.getByRole("button", {name: "Category"}) as HTMLButtonElement).disabled).toBe(false));
+    await user.click(screen.getByRole("button", {name: "Category"}));
+    await user.click(await screen.findByRole("option", {name: "Planned work"}));
     const moved = new Date(start.getTime() + 86400000);
     const resized = new Date(moved.getTime() + 10800000);
     view.rerender(<ManualTimeBlockDialog open initialStart={moved} initialEnd={resized} anchor={null} onClose={close} onPreviewChange={preview}/>);

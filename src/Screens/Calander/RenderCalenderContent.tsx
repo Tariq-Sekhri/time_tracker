@@ -34,7 +34,7 @@ import LeftSideBar, { SidebarSection } from "./LeftSideBar.tsx";
 import { Device } from "../../api/sync.ts";
 import {get_manual_time_blocks, MANUAL_TIME_COLOR} from "../../api/ManualTimeBlock.ts";
 
-import {getManualCategories, MANUAL_CATEGORIES_QUERY_KEY} from "../../api/ManualProject.ts";
+import {getManualCategories, MANUAL_CATEGORIES_QUERY_KEY, manualCategoryLabel, nestManualCategories} from "../../api/ManualProject.ts";
 import {ManualProjectFilter} from "../../hooks/useManualProjectFilters.ts";
 
 import {CalendarIsolation} from "../../hooks/useCalendarIsolation.ts";
@@ -723,9 +723,9 @@ export default function RenderCalendarContent({
                 onToggleStats: () => toggleAllManualTimeInStats(manualSourceIds),
                 disabled: !manualProjectFiltersLoaded,
             },
-            items: manualSources.map((project) => ({
+            items: nestManualCategories(manualSources).map((project) => ({
                 key: String(project.id ?? "none"),
-                name: project.name,
+                name: manualCategoryLabel(project, manualSources),
                 color: project.color,
                 onEdit: (anchor: HTMLElement) => setEditingCategory({source: {kind: "manual", value: project}, anchor}),
                 inCal: isManualTimeInCal(project.id),

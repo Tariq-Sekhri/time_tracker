@@ -254,10 +254,12 @@ let runningManualTimer: RunningManualTimer | null = null;
 function demoManualCategories() {
     const palette = ["#0ea5e9", "#a78bfa", "#34d399", "#fbbf24", "#fb7185", "#22d3ee"];
     return [{id: null, name: "Uncategorized", color: appMetadata["manual_category_color:none"] ?? palette[0]},
-        ...manualProjects.map((project) => ({...project, color: appMetadata[`manual_category_color:${project.id}`] ?? palette[project.id % palette.length]}))];
+        ...manualProjects.map((project) => ({...project, color: appMetadata[`manual_category_color:${project.id}`]
+            ?? (project.parent_id != null ? appMetadata[`manual_category_color:${project.parent_id}`] : undefined)
+            ?? palette[(project.parent_id ?? project.id) % palette.length]}))];
 }
 
-let manualProjects: Array<{id: number; name: string}> = [];
+let manualProjects: Array<{id: number; name: string; parent_id: number | null}> = [];
 let nextManualProjectId = 1;
 let notesState = {enabled: false, text: ""};
 
@@ -1303,7 +1305,13 @@ export async function invoke<T>(
             if (!name || name.length > 100) throw new DemoInvokeError(cmd, "Project name must be between 1 and 100 characters");
             if (manualProjects.some((project) => project.id !== id && project.name.toLowerCase() === name.toLowerCase())) throw new DemoInvokeError(cmd, "A project with this name already exists");
             if (cmd === "create_manual_project") {
-                manualProjects.push({id: nextManualProjectId++, name});
+                const parentId = (a as {parentId?: number | null}).parentId ?? null;
+                if (parentId != null) {
+                    const parent = manualProjects.find((project) => project.id === parentId);
+                    if (!parent) throw new DemoInvokeError(cmd, "Parent category no longer exists");
+                    if (parent.parent_id != null) throw new DemoInvokeError(cmd, "Subcategories cannot have their own subcategories");
+                }
+                manualProjects.push({id: nextManualProjectId++, name, parent_id: parentId});
                 return id as T;
             }
             const project = manualProjects.find((item) => item.id === id);
@@ -1313,10 +1321,13 @@ export async function invoke<T>(
         }
         case "delete_manual_project": {
             const id = Number((a as {id?: number}).id);
-            if (!manualProjects.some((project) => project.id === id)) throw new DemoInvokeError(cmd, "Project no longer exists");
-            manualProjects = manualProjects.filter((project) => project.id !== id);
-            manualTimeBlocks.forEach((block) => {if (block.project_id === id) block.project_id = null;});
-            if (runningManualTimer?.project_id === id) runningManualTimer = {...runningManualTimer, project_id: null};
+            const deleted = manualProjects.find((project) => project.id === id);
+            if (!deleted) throw new DemoInvokeError(cmd, "Project no longer exists");
+            // Subcategory time moves to its parent; a category takes its subcategories with it.
+            const removed = new Set([id, ...manualProjects.filter((project) => project.parent_id === id).map((project) => project.id)]);
+            manualProjects = manualProjects.filter((project) => !removed.has(project.id));
+            manualTimeBlocks.forEach((block) => {if (block.project_id != null && removed.has(block.project_id)) block.project_id = deleted.parent_id;});
+            if (runningManualTimer?.project_id != null && removed.has(runningManualTimer.project_id)) runningManualTimer = {...runningManualTimer, project_id: deleted.parent_id};
             return null as T;
         }
         case "get_manual_time_blocks": {
