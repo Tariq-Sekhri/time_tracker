@@ -1,5 +1,5 @@
 /* @vitest-environment jsdom */
-import {cleanup, render, screen, waitFor, within} from "@testing-library/react";
+import {cleanup, fireEvent, render, screen, waitFor, within} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {QueryClient, QueryClientProvider} from "@tanstack/react-query";
 import {afterEach, expect, it, vi} from "vitest";
@@ -48,4 +48,21 @@ it("browser Settings loads without native-only requests and supports Notes and n
     await user.click(within(row).getByRole("button", {name: "Reset to default"}));
     await waitFor(() => expect(input.value).toBe("6"));
     expect(screen.queryByText("Failed to load database location")).toBeNull();
+});
+
+it("keeps unsaved tracking changes when navigating settings sections", async () => {
+    const user = userEvent.setup();
+    const client = new QueryClient({defaultOptions: {queries: {retry: false}}});
+    render(<QueryClientProvider client={client}><ToastProvider><Settings /></ToastProvider></QueryClientProvider>);
+    expect(screen.getByRole("tabpanel", {name: "General"})).toBeTruthy();
+    await user.click(screen.getByRole("tab", {name: "Tracking"}));
+    const threshold = await screen.findByRole("spinbutton", {name: "Away score threshold (%)"});
+    fireEvent.change(threshold, {target: {value: "83"}});
+    await user.click(screen.getByRole("tab", {name: "Appearance"}));
+    expect(screen.queryByRole("spinbutton", {name: "Away score threshold (%)"})).toBeNull();
+    expect(screen.getByRole("button", {name: "Customize colors"})).toBeTruthy();
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByRole("tab", {name: "Tracking"}).getAttribute("aria-selected")).toBe("true");
+    expect((screen.getByRole("spinbutton", {name: "Away score threshold (%)"}) as HTMLInputElement).value).toBe("83");
+    expect(screen.queryByRole("tab", {name: "Data & support"})).toBeNull();
 });
