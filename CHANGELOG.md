@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.12.5] - 2026-10-15
+
+- Share the Notes editor and usage charts with the redesigned Android app.
+
 ## [1.12.4] - 2026-10-15
 
 - Choose from six desktop themes, including light mode and extra-dark options, or create and share your own with detailed color controls.
