@@ -46,7 +46,7 @@ function toEditorHtml(value: string): string {
         : "";
 }
 
-export default function Notes({requestLink}: {requestLink?: () => Promise<string | null>} = {}) {
+export default function Notes({requestLink, showHeading = true}: {requestLink?: () => Promise<string | null>; showHeading?: boolean} = {}) {
     const { showToast } = useToast();
     const queryClient = useQueryClient();
     const { data } = useQuery({ queryKey: NOTES_QUERY_KEY, queryFn: getNotesState, refetchInterval: 5000 });
@@ -139,8 +139,8 @@ export default function Notes({requestLink}: {requestLink?: () => Promise<string
 
     return (
         <div className="flex h-full min-h-0 flex-col p-6">
-            <div className="mb-4 flex items-center justify-between">
-                <h1 className="text-2xl font-bold">Notes</h1>
+            <div className={`mb-4 flex items-center ${showHeading ? "justify-between" : "justify-end"}`}>
+                {showHeading && <h1 className="text-2xl font-bold">Notes</h1>}
                 <span className="text-xs text-gray-400" aria-live="polite">{saveStatus}</span>
             </div>
             <div className="mb-2 flex flex-wrap gap-1 rounded-lg border border-gray-700 bg-gray-900 p-2" role="toolbar" aria-label="Note formatting">

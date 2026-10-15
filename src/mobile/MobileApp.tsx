@@ -120,7 +120,7 @@ function MobileNotes() {
     const resolve = useRef<((value: string | null) => void) | null>(null);
     useEffect(() => () => { resolve.current?.(null); }, []);
     const finish = (value: string | null) => { resolve.current?.(value); resolve.current = null; setLink(null); };
-    return <><Notes requestLink={() => new Promise<string | null>(done => { resolve.current = done; setLink(""); })} />
+    return <><Notes showHeading={false} requestLink={() => new Promise<string | null>(done => { resolve.current = done; setLink(""); })} />
         {link !== null && <Modal title="Add link" close={() => finish(null)}><form onSubmit={event => { event.preventDefault(); finish(link); }}><label>Link address<input type="url" required autoFocus placeholder="https://example.com" value={link} onChange={event => setLink(event.target.value)} /></label><button className="primary">Insert link</button></form></Modal>}
     </>;
 }
