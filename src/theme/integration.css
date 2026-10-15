@@ -240,3 +240,6 @@ a[href] {color:var(--tt-link);}
 :root[data-theme-color-overrides~="messageSurface"] [role=alert] {background-color:var(--tt-messageSurface);}
 :root[data-theme-color-overrides~="subtleSurface"] .settings-secondary-button {background:var(--tt-subtleSurface);}
 :root[data-theme-color-overrides~="highlightSurface"] :is(.settings-tabs button[aria-selected=true],mark) {background:var(--tt-highlightSurface);}
+
+/* Source visibility indicators must stay readable independently of the borders. */
+:root[data-theme-color-overrides~="disabledText"] .theme-sidebar :is(.text-gray-600,.text-gray-700) {color:var(--tt-disabledText);}

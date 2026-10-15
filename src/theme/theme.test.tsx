@@ -2,7 +2,7 @@
 import {act, cleanup, fireEvent, render, screen} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {afterEach, beforeEach, expect, it} from "vitest";
-import {COLOR_FIELDS, normalizeColor, parseTheme, PRESETS, STORAGE_KEY} from "./model";
+import {COLOR_FIELDS, contrastRatio, normalizeColor, parseTheme, PRESETS, STORAGE_KEY} from "./model";
 import {activeTheme, initializeTheme, useThemeStore} from "./store";
 import ThemeSettings from "./ThemeSettings";
 
@@ -57,4 +57,15 @@ it("keeps additional context overrides off for the original theme and clears the
     expect(document.documentElement.dataset.themeColorOverrides).toContain("sidebarControls");
     store.select("dark");
     expect(document.documentElement.dataset.themeColorOverrides).toBe("");
+});
+
+it("keeps inactive sources readable on the black surfaces independently of faint borders",()=>{
+    for(const id of ["oled","obsidian","deep-forest","black-cherry"]){
+        const theme=PRESETS.find(p=>p.id===id)!;
+        expect(contrastRatio(theme.colors.disabledText,theme.colors.sidebar)).toBeGreaterThanOrEqual(4.5);
+        expect(theme.colors.sidebarSelection).toBe("#00000000");
+        expect(theme.colors.sidebarControls).toBe("#00000000");
+        useThemeStore.getState().select(id);
+        expect(document.documentElement.dataset.themeColorOverrides).toContain("disabledText");
+    }
 });

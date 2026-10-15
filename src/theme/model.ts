@@ -1,5 +1,6 @@
 export const STORAGE_KEY = "time-tracker:themes:v1";
 export const COLOR_FIELDS = [
+  {key:"disabledText",label:"Disabled source text and icons",group:"Text",default:"#4b5563"},
   {key:"googleFallback",label:"Default calendar color",group:"Calendar",default:"#4285f4"},
   {key:"sourceControls",label:"Source toggle color",group:"Context",default:"#94a3b8"},
   {key:"subtleSurface",label:"Subtle surface",group:"Context",default:"#0d1421"},
@@ -371,7 +372,7 @@ function preset(id: string, name: string, mode: Theme["mode"], colors: Partial<C
 }
 function palette(app:string,panel:string,raised:string,text:string,muted:string,border:string,accent:string): Partial<Colors> {
     return {app,header:app,sidebar:app,panel,settings:panel,raised,deep:app,input:raised,dialog:panel,tooltip:panel,
-        subtleSurface:panel,highlightSurface:accent+"22",action:accent,messageSurface:panel,codeSurface:app,sidebarControls:raised,sidebarSelection:accent+"22",
+        disabledText:muted,subtleSurface:panel,highlightSurface:accent+"22",action:accent,messageSurface:panel,codeSurface:app,sidebarControls:raised,sidebarSelection:accent+"22",
         onAccent:contrastRatio("#ffffff",accent)!>=4.5?"#ffffff":app,hover:border,scrollTrack:panel,scrollThumb:muted,text,heading:text,secondary:text,muted,subtle:muted,placeholder:muted,
         border,borderSubtle:border,borderStrong:muted,focus:accent,accent,accentHover:accent,accentStrong:accent,link:accent,
         accentSoft:accent+"22",accentText:accent,selection:accent+"55",calendar:panel,calendarHeader:raised,calendarText:muted,
@@ -426,21 +427,23 @@ THEME_FAMILIES.slice(1).forEach((family,index)=>{
         afk:"#fef3c7",afkText:"#78350f",afkBorder:"#d97706",
     }));
 });
-function superDark(app:string,panel:string,raised:string,text:string,muted:string,border:string,accent:string): Partial<Colors> {
-    return {...palette(app,panel,raised,text,muted,border,accent),
-        borderStrong:border,hover:raised,scrollThumb:border,
-        action:raised,accentHover:raised,accentStrong:raised,onAccent:text,
-        accentSoft:raised,sidebarSelection:raised,highlightSurface:raised,
-        successBg:"#020805",warningBg:"#090601",dangerBg:"#0b0203",infoBg:"#02060a",
-        afk:"#090601",afkBorder:"#30200b",afkText:"#b39b75",
+function superDark(text:string,muted:string,border:string,accent:string): Partial<Colors> {
+    return {...palette("#000000","#000000","#000000",text,muted,border,accent),
+        disabledText:"#85858d",borderStrong:border,hover:"#000000",scrollThumb:border,
+        action:"#000000",accentHover:"#000000",accentStrong:"#000000",onAccent:text,
+        accentSoft:"#000000",highlightSurface:"#000000",
+        // Source toggles use aria-pressed for visibility, not a filled selection row.
+        sidebarControls:"#00000000",sidebarSelection:"#00000000",
+        successBg:"#000000",warningBg:"#000000",dangerBg:"#000000",infoBg:"#000000",
+        afk:"#000000",afkBorder:"#30200b",afkText:"#b39b75",
     };
 }
 // Keep older palettes available to saved themes without filling the picker with light variants.
 PRESETS.push(
-    preset("oled", "OLED", "dark", superDark("#000000","#000000","#040404","#c6c6cc","#707075","#101010","#888890")),
-    preset("obsidian", "Obsidian", "dark", superDark("#000000","#020203","#060609","#c7c3ce","#77717f","#111116","#9783b0")),
-    preset("deep-forest", "Deep Forest", "dark", superDark("#000000","#010302","#030704","#c2cdc6","#6c8174","#0c140f","#729984")),
-    preset("black-cherry", "Black Cherry", "dark", superDark("#000000","#030102","#080306","#d0c1ca","#886e7e","#160c12","#af7d99")),
+    preset("oled", "OLED", "dark", superDark("#c6c6cc","#707075","#080808","#888890")),
+    preset("obsidian", "Obsidian", "dark", superDark("#c7c3ce","#77717f","#0b0910","#9783b0")),
+    preset("deep-forest", "Deep Forest", "dark", superDark("#c2cdc6","#6c8174","#080e0a","#729984")),
+    preset("black-cherry", "Black Cherry", "dark", superDark("#d0c1ca","#886e7e","#10080c","#af7d99")),
 );
 export const INCLUDED_PRESETS = PRESETS.filter(theme => theme.mode === "dark" || theme.id === "light" || theme.id === "ocean-light");
 export function normalizeColor(value: unknown): string | null {
@@ -465,7 +468,7 @@ export function parseTheme(value: unknown): Theme {
 }
 export function applyTheme(theme:Theme, root:HTMLElement = document.documentElement) {
     for(const field of COLOR_FIELDS) root.style.setProperty(`--tt-${field.key}`, theme.colors[field.key]);
-    root.dataset.themeColorOverrides = ["subtleSurface","highlightSurface","action","messageSurface","codeSurface","sidebarControls","sidebarSelection"].filter(key=>theme.colors[key as ColorKey]!==DEFAULT_COLORS[key as ColorKey]).join(" ");
+    root.dataset.themeColorOverrides = ["disabledText","subtleSurface","highlightSurface","action","messageSurface","codeSurface","sidebarControls","sidebarSelection"].filter(key=>theme.colors[key as ColorKey]!==DEFAULT_COLORS[key as ColorKey]).join(" ");
     root.style.colorScheme = theme.mode;
     root.dataset.theme = theme.id;
 }
