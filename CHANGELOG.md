@@ -2,14 +2,17 @@
 
 ## [Unreleased]
 
-- Fix new manual time blocks snapping back when dragged to another time or day.
-
 ## [1.12.4] - 2026-10-15
 
-- Choose from six desktop themes, including light mode, or create and share your own with detailed color controls.
-
+- Choose from six desktop themes, including light mode and extra-dark options, or create and share your own with detailed color controls.
+- Settings is now organized into sections you can jump between.
+- Add subcategories to manual categories (for example School › Homework, Study, In class). Pick them from a searchable picker; clicking a category opens its subcategories.
+- Subcategory time counts toward its category in statistics, with the subcategory shown in the breakdown.
+- Different categories can now have subcategories with the same name, and subcategories sync between devices. Requires an updated sync server.
 - Sync notes between desktop and mobile, keep both versions of conflicting edits, and retain previous versions on the server.
 - Select and copy images in notes, including with a right-click.
+- What's New now picks up corrections made after a release.
+- Fix new manual time blocks snapping back when dragged to another time or day.
 
 ## [1.12.3] - 2026-10-14
 
