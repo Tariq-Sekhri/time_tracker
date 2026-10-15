@@ -4,6 +4,9 @@
   "version": "1.12.4",
   "type": "module",
   "scripts": {
+    "dev:mobile": "vite --config vite.mobile.config.ts",
+    "build:mobile": "tsc --noEmit && vite build --config vite.mobile.config.ts",
+    "check:mobile": "tsc --noEmit && vitest run src/mobile",
     "tauri": "tauri",
     "start": "node scripts/start-dev.mjs",
     "build": "tsc && vite build",
