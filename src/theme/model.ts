@@ -426,6 +426,14 @@ THEME_FAMILIES.slice(1).forEach((family,index)=>{
         afk:"#fef3c7",afkText:"#78350f",afkBorder:"#d97706",
     }));
 });
+// Keep older palettes available to saved themes without filling the picker with light variants.
+PRESETS.push(
+    preset("oled", "OLED", "dark", palette("#000000","#050505","#101010","#e4e4e7","#919196","#252525","#a1a1aa")),
+    preset("obsidian", "Obsidian", "dark", palette("#030305","#09090d","#14131b","#e2dfeb","#96909f","#292531","#a08acb")),
+    preset("deep-forest", "Deep Forest", "dark", palette("#010503","#050c08","#0b1710","#d7e7dd","#81988a","#1d3025","#73ab8b")),
+    preset("black-cherry", "Black Cherry", "dark", palette("#060204","#0d060a","#190e15","#e7d8e2","#a18b99","#30212a","#c17b9f")),
+);
+export const INCLUDED_PRESETS = PRESETS.filter(theme => theme.mode === "dark" || theme.id === "light" || theme.id === "ocean-light");
 export function normalizeColor(value: unknown): string | null {
     if(typeof value !== "string" || !/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value)) return null;
     return (value.length <= 5 ? "#" + [...value.slice(1)].map(c=>c+c).join("") : value).toLowerCase();

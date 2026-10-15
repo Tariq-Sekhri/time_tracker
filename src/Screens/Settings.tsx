@@ -398,71 +398,78 @@ export default function Settings() {
             onReset={() => resetField(def.key)} onInvalid={message => showToast(message, "error")} />)}
     </div>;
 
-    return <div ref={pageRef} className="settings-page nice-scrollbar">
-        <div className="settings-content">
-            <header className="settings-page-header">
-                <div><h1>Settings</h1><p>Make the tracker work the way you do.</p></div>
-                {(section === "general" || section === "tracking") && <button type="button" disabled={!hasFields || allLocked} onClick={resetSettings}
-                    title="Resets unlocked calendar, display, and timeblock settings. AFK settings have their own reset."
-                    className="settings-secondary-button">Reset view settings</button>}
-            </header>
+    return <div className="settings-shell">
+        <div className="theme-header shrink-0 border-b border-gray-700">
+            <nav className="flex min-w-0 items-center justify-start overflow-x-auto border-t border-gray-800/70 bg-gray-950/60 px-5 py-2 nice-scrollbar sm:justify-center" aria-label="Settings sections">
+                <div className={`grid w-full max-w-[620px] shrink-0 ${sections.length === 4 ? "min-w-[420px] grid-cols-4" : "min-w-[300px] grid-cols-3"}`} role="tablist" aria-label="Settings sections"
+                    onKeyDown={event => {
+                        const index = sections.findIndex(item => item.id === section);
+                        let next: number;
+                        if (event.key === "ArrowRight") next = (index + 1) % sections.length;
+                        else if (event.key === "ArrowLeft") next = (index + sections.length - 1) % sections.length;
+                        else if (event.key === "Home") next = 0;
+                        else if (event.key === "End") next = sections.length - 1;
+                        else return;
+                        event.preventDefault();
+                        selectSection(sections[next].id);
+                    }}>
+                    {sections.map(item => <button key={item.id} type="button" role="tab" id={"settings-tab-" + item.id}
+                        className={`w-full border-b-2 px-4 py-3 text-center text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70 ${section === item.id
+                            ? "border-blue-400 text-blue-200"
+                            : "border-transparent text-gray-500 hover:text-gray-300"
+                        }`}
+                        aria-selected={section === item.id} aria-controls={"settings-section-" + item.id}
+                        tabIndex={section === item.id ? 0 : -1} onClick={() => selectSection(item.id)}>{item.label}</button>)}
+                </div>
+            </nav>
+        </div>
+        <div ref={pageRef} className="settings-page nice-scrollbar">
+            <div className="settings-content">
+                <div className="settings-section-stack" role="tabpanel" id="settings-section-appearance" aria-labelledby="settings-tab-appearance" hidden={section !== "appearance"}>
+                    <ThemeSettings />
+                </div>
 
-            <div className="settings-tabs settings-subheader" role="tablist" aria-label="Settings sections"
-                onKeyDown={event => {
-                    const index = sections.findIndex(item => item.id === section);
-                    let next: number;
-                    if (event.key === "ArrowRight") next = (index + 1) % sections.length;
-                    else if (event.key === "ArrowLeft") next = (index + sections.length - 1) % sections.length;
-                    else if (event.key === "Home") next = 0;
-                    else if (event.key === "End") next = sections.length - 1;
-                    else return;
-                    event.preventDefault();
-                    selectSection(sections[next].id);
-                }}>
-                {sections.map(item => <button key={item.id} type="button" role="tab" id={"settings-tab-" + item.id}
-                    aria-selected={section === item.id} aria-controls={"settings-section-" + item.id}
-                    tabIndex={section === item.id ? 0 : -1} onClick={() => selectSection(item.id)}>{item.label}</button>)}
+                <div className="settings-section-stack" role="tabpanel" id="settings-section-general" aria-labelledby="settings-tab-general" hidden={section !== "general"}>
+
+                    <section className="settings-panel" aria-labelledby="calendar-settings-title">
+                        <div className="settings-section-heading"><div><h2 id="calendar-settings-title">Calendar</h2><p>Layout and sidebar.</p></div></div>
+                        {renderFields(SETTINGS_LAYOUT[0])}
+                    </section>
+
+                    <section className="settings-panel" aria-labelledby="display-settings-title">
+                        <div className="settings-section-heading"><div><h2 id="display-settings-title">Display</h2><p>Keep the interface focused.</p></div></div>
+                        <div className="settings-field-grid">
+                            <label className="settings-toggle-row"><span>Show Notes</span><input type="checkbox" checked={notesEnabled}
+                                onChange={event => {void setNotesEnabled(event.target.checked).catch(error => showToast("Could not update Notes", "error", 5000, toErrorString(error)));}}
+                                aria-label="Enable Notes" /></label>
+                            {renderFields(SETTINGS_LAYOUT[2])}
+                        </div>
+                    </section>
+
+                </div>
+
+                <div className="settings-section-stack" role="tabpanel" id="settings-section-tracking" aria-labelledby="settings-tab-tracking" hidden={section !== "tracking"}>
+                    <details className="settings-panel settings-disclosure">
+                        <summary><span><strong>Timeblock detection</strong><span className="settings-summary-note">Activity and AFK grouping rules</span></span></summary>
+                        <p className="text-sm text-gray-400">These rules also group AFK periods when Include AFK is enabled. Grouping stays separate for each device and does not change recorded evidence or the exact time hidden by the AFK filter.</p>
+                        <div className="settings-disclosure-content">{renderFields(SETTINGS_LAYOUT[1])}</div>
+                    </details>
+
+                    <AfkSettings />
+                </div>
+
+                {isDesktopApp() && <div className="settings-section-stack" role="tabpanel" id="settings-section-data" aria-labelledby="settings-tab-data" hidden={section !== "data"}>
+                    <section className="settings-panel" aria-label="Data and support">
+                        <div className="settings-section-heading"><div><h2>Data &amp; support</h2><p>Database location and diagnostic logs.</p></div></div>
+                        <div className="space-y-4"><DatabaseLocationSetting /><SupportLogsSetting /></div>
+                    </section>
+                </div>}
+                {(section === "general" || section === "tracking") && <div className="settings-view-actions">
+                    <button type="button" disabled={!hasFields || allLocked} onClick={resetSettings}
+                        title="Resets unlocked calendar, display, and timeblock settings. AFK settings have their own reset."
+                        className="settings-secondary-button">Reset view settings</button>
+                </div>}
             </div>
-
-            <div className="settings-section-stack" role="tabpanel" id="settings-section-appearance" aria-labelledby="settings-tab-appearance" hidden={section !== "appearance"}>
-                <ThemeSettings />
-            </div>
-
-            <div className="settings-section-stack" role="tabpanel" id="settings-section-general" aria-labelledby="settings-tab-general" hidden={section !== "general"}>
-
-                <section className="settings-panel" aria-labelledby="calendar-settings-title">
-                    <div className="settings-section-heading"><div><h2 id="calendar-settings-title">Calendar</h2><p>Layout and sidebar.</p></div></div>
-                    {renderFields(SETTINGS_LAYOUT[0])}
-                </section>
-
-                <section className="settings-panel" aria-labelledby="display-settings-title">
-                    <div className="settings-section-heading"><div><h2 id="display-settings-title">Display</h2><p>Keep the interface focused.</p></div></div>
-                    <div className="settings-field-grid">
-                        <label className="settings-toggle-row"><span>Show Notes</span><input type="checkbox" checked={notesEnabled}
-                            onChange={event => {void setNotesEnabled(event.target.checked).catch(error => showToast("Could not update Notes", "error", 5000, toErrorString(error)));}}
-                            aria-label="Enable Notes" /></label>
-                        {renderFields(SETTINGS_LAYOUT[2])}
-                    </div>
-                </section>
-
-            </div>
-
-            <div className="settings-section-stack" role="tabpanel" id="settings-section-tracking" aria-labelledby="settings-tab-tracking" hidden={section !== "tracking"}>
-                <details className="settings-panel settings-disclosure">
-                    <summary><span><strong>Timeblock detection</strong><span className="settings-summary-note">Activity and AFK grouping rules</span></span></summary>
-                    <p className="text-sm text-gray-400">These rules also group AFK periods when Include AFK is enabled. Grouping stays separate for each device and does not change recorded evidence or the exact time hidden by the AFK filter.</p>
-                    <div className="settings-disclosure-content">{renderFields(SETTINGS_LAYOUT[1])}</div>
-                </details>
-
-                <AfkSettings />
-            </div>
-
-            {isDesktopApp() && <div className="settings-section-stack" role="tabpanel" id="settings-section-data" aria-labelledby="settings-tab-data" hidden={section !== "data"}>
-                <section className="settings-panel" aria-label="Data and support">
-                    <div className="settings-section-heading"><div><h2>Data &amp; support</h2><p>Database location and diagnostic logs.</p></div></div>
-                    <div className="space-y-4"><DatabaseLocationSetting /><SupportLogsSetting /></div>
-                </section>
-            </div>}
         </div>
     </div>;
 }

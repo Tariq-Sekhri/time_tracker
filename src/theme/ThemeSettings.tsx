@@ -1,6 +1,6 @@
 import {useEffect, useRef, useState} from "react";
 import {activeTheme, useThemeStore} from "./store";
-import {COLOR_FIELDS, contrastRatio, normalizeColor, PRESETS, type ColorKey} from "./model";
+import {COLOR_FIELDS, contrastRatio, normalizeColor, PRESETS, INCLUDED_PRESETS, type ColorKey} from "./model";
 import "./editor.css";
 
 function ColorField({field, value, original, onChange}:{field:typeof COLOR_FIELDS[number];value:string;original:string;onChange:(key:ColorKey,value:string)=>void}) {
@@ -41,7 +41,7 @@ export default function ThemeSettings() {
             <button type="button" className="settings-secondary-button" onClick={()=>state.select("dark")}>Use default dark</button>
         </div>
         <div className="theme-presets" role="group" aria-label="Theme presets">
-            {PRESETS.map(p=><button key={p.id} type="button" className="theme-preset" aria-pressed={theme.id===p.id} onClick={()=>state.select(p.id)}>
+            {INCLUDED_PRESETS.map(p=><button key={p.id} type="button" className="theme-preset" aria-pressed={theme.id===p.id} onClick={()=>state.select(p.id)}>
                 <span className="theme-preset-image" style={{background:p.colors.app,borderColor:p.colors.border}} aria-hidden="true">
                     <i style={{background:p.colors.raised}}/><span style={{background:p.colors.panel}}><b style={{background:p.colors.accent}}/><b style={{background:p.colors.border}}/><b style={{background:p.colors.muted}}/></span>
                 </span><span>{p.name}</span><small>{p.mode === "light"?"Light":"Dark"}</small>
@@ -49,7 +49,8 @@ export default function ThemeSettings() {
         </div>
         <div className="theme-custom-bar">
             <label>Current theme<select aria-label="Current theme" value={theme.id} onChange={e=>state.select(e.target.value)}>
-                <optgroup label="Built-in themes">{PRESETS.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>
+                {!custom && !INCLUDED_PRESETS.some(p=>p.id===theme.id) && <option value={theme.id}>{theme.name}</option>}
+                <optgroup label="Built-in themes">{INCLUDED_PRESETS.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>
                 {state.customThemes.length>0 && <optgroup label="Your themes">{state.customThemes.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>}
             </select></label>
             <button className="settings-primary-button" type="button" onClick={()=>{setExpanded(!expanded);}}>{expanded?"Close editor":"Customize colors"}</button>
