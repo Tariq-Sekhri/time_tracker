@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Choose from six desktop themes, including light mode, or create and share your own with detailed color controls.
+
 - Sync notes between desktop and mobile, keep both versions of conflicting edits, and retain previous versions on the server.
 
 ## [1.12.3] - 2026-10-14

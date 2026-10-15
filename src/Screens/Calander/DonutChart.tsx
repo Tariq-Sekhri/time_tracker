@@ -53,7 +53,7 @@ export function DonutChart({data, colors, totalDuration, periodLabel = "this wee
             <div className="relative w-full flex justify-center">
                 <svg width="160" height="160" viewBox="0 0 160 160">
                     <circle {...segmentProps(item)} cx={centerX} cy={centerY} r={radius} fill={fill} className="hover:opacity-80 transition-opacity" />
-                    <circle cx={centerX} cy={centerY} r={innerR} fill="#111827"/>
+                    <circle cx={centerX} cy={centerY} r={innerR} fill="var(--tt-panel)"/>
                     <text x={centerX} y={centerY} textAnchor="middle" dominantBaseline="middle" fill="white" fontSize="14"
                           fontWeight="bold">
                         {formatDuration(total)}
@@ -98,7 +98,7 @@ export function DonutChart({data, colors, totalDuration, periodLabel = "this wee
         <div className="relative w-full flex justify-center">
             <svg width="160" height="160" viewBox="0 0 160 160">
                 {paths}
-                <circle cx={centerX} cy={centerY} r={innerR} fill="#111827"/>
+                <circle cx={centerX} cy={centerY} r={innerR} fill="var(--tt-panel)"/>
                 <text x={centerX} y={centerY} textAnchor="middle" dominantBaseline="middle" fill="white" fontSize="14"
                       fontWeight="bold">
                     {formatDuration(total)}

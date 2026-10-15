@@ -32,7 +32,7 @@ export type TrendAppRanking = "weekly" | "range";
 
 const TOTAL_WEEK_DATA_KEY = "__week_total__";
 const WEEK_INDEX_DATA_KEY = "__week_index__";
-const TOTAL_LINE_COLOR = "#f3f4f6";
+const TOTAL_LINE_COLOR = "var(--tt-chartTotal)";
 const TOTAL_LINE_NAME = "Total";
 
 type ChartRow = { label: string; week_start: number } & Record<string, number | string | null>;
@@ -220,33 +220,33 @@ function CategoryWeekTrendChart({
                             margin={{top: 10, right: 16, bottom: 8, left: 8}}
                             style={{outline: "none"}}
                         >
-                            <CartesianGrid stroke="#374151" strokeDasharray="6 6" vertical={false}/>
+                            <CartesianGrid stroke="var(--tt-chartGrid)" strokeDasharray="6 6" vertical={false}/>
                             <XAxis
                                 dataKey={WEEK_INDEX_DATA_KEY}
                                 tickFormatter={(index) => columns[Number(index)]?.label ?? ""}
                                 interval="preserveStartEnd"
                                 minTickGap={16}
-                                tick={{fill: "#9ca3af", fontSize: 11}}
+                                tick={{fill: "var(--tt-chartText)", fontSize: 11}}
                                 tickLine={false}
-                                axisLine={{stroke: "#4b5563"}}
+                                axisLine={{stroke: "var(--tt-chartAxis)"}}
                             />
                             <YAxis
-                                tick={{fill: "#9ca3af", fontSize: 11}}
+                                tick={{fill: "var(--tt-chartText)", fontSize: 11}}
                                 tickFormatter={(sec) =>
                                     typeof sec === "number" ? formatDuration(Math.round(sec * displayScale)) : String(sec)
                                 }
                                 tickLine={false}
-                                axisLine={{stroke: "#4b5563"}}
+                                axisLine={{stroke: "var(--tt-chartAxis)"}}
                                 width={72}
                                 domain={[0, "auto"]}
                             />
                             <Tooltip
-                                cursor={{stroke: "#6b7280", strokeWidth: 1, strokeDasharray: "4 4"}}
+                                cursor={{stroke: "var(--tt-chartAxis)", strokeWidth: 1, strokeDasharray: "4 4"}}
                                 contentStyle={{
-                                    backgroundColor: "#111827",
-                                    border: "1px solid #374151",
+                                    backgroundColor: "var(--tt-tooltip)",
+                                    border: "1px solid var(--tt-chartGrid)",
                                     borderRadius: "8px",
-                                    color: "#e5e7eb",
+                                    color: "var(--tt-text)",
                                     fontSize: "12px",
                                 }}
                                 formatter={(value, name) => {

@@ -1,7 +1,7 @@
 import type {AppStat, TrendWeekStatistics} from "../../api/statistics.ts";
 import {adjustInstantToCalendarDayBoundary} from "../../utils.ts";
 import type {WeekTrendColumn, CategoryWeekSeries, TrendValueMode, TrendAppRanking} from "./CategoryWeekTrendChart.tsx";
-const APP_LINE_COLORS = ["#60a5fa","#f472b6","#34d399","#fbbf24","#a78bfa","#fb923c","#22d3ee","#f87171","#a3e635","#c084fc"];
+const APP_LINE_COLORS = Array.from({length: 10}, (_, i) => `var(--tt-chart${i + 1})`);
 function countDaysInTrackedWeekPeriod(
     weekStartUnix: number,
     weekEndUnix: number,

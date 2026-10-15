@@ -426,7 +426,7 @@ export default function RenderCalendarContent({
                           end: end.toISOString(),
                           backgroundColor: color,
                           borderColor: color,
-                          textColor: "#ffffff",
+                          textColor: "var(--tt-eventText)",
                           extendedProps: {
                               type: "google_calendar",
                               eventId: event.event_id,
@@ -469,7 +469,7 @@ export default function RenderCalendarContent({
                     end: end.toISOString(),
                     backgroundColor: color,
                     borderColor: color,
-                    textColor: "#ffffff",
+                    textColor: "var(--tt-eventText)",
                     extendedProps: {
                         apps: block.apps,
                         type: "timeblock",
@@ -493,7 +493,7 @@ export default function RenderCalendarContent({
                     end: new Date(block.end_time * 1000).toISOString(),
                     backgroundColor: block.project_color ?? MANUAL_TIME_COLOR,
                     borderColor: block.project_color ?? MANUAL_TIME_COLOR,
-                    textColor: "#ffffff",
+                    textColor: "var(--tt-eventText)",
                     extendedProps: {
                         type: "manual_time",
                         manualTimeBlockId: block.id,
@@ -511,14 +511,14 @@ export default function RenderCalendarContent({
             end: manualDraft.end,
             editable: true,
             backgroundColor: MANUAL_TIME_COLOR,
-            borderColor: "#7dd3fc",
-            textColor: "#ffffff",
+            borderColor: "var(--tt-calendarDraftBorder)",
+            textColor: "var(--tt-eventText)",
             classNames: ["tt-manual-draft"],
             extendedProps: {type: "manual_draft"},
         }] : [];
         const awayEvents=!excludeAfk&&isolation.showTracked&&!isolatedProject ? awayBlocks.map(span=>({
             id:`afk-${span.device}-${span.start}`,title:`AFK (${formatDuration(span.end-span.start)})`,start:new Date(span.start*1000),end:new Date(span.end*1000),
-            editable:false,display:"auto",backgroundColor:"#78350f",borderColor:"#f59e0b",textColor:"#fde68a",
+            editable:false,display:"auto",backgroundColor:"var(--tt-afk)",borderColor:"var(--tt-afkBorder)",textColor:"var(--tt-afkText)",
             classNames:["tt-afk-evidence"],extendedProps:{type:"afk",deviceUuid:span.device},
         })) : [];
         return [...timeBlockEvents, ...manualEvents, ...googleEvents, ...draftEvents, ...awayEvents];

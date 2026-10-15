@@ -848,8 +848,8 @@ export default function DetailedStatistics({activeTab}: {
                                     <defs>
                                         {/* Orange fill under the curve */}
                                         <linearGradient id="hourlyGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                                            <stop offset="0%" stopColor="#f97316" stopOpacity="0.8"/>
-                                            <stop offset="100%" stopColor="#f97316" stopOpacity="0.2"/>
+                                            <stop offset="0%" stopColor="var(--tt-chartUsage)" stopOpacity="0.8"/>
+                                            <stop offset="100%" stopColor="var(--tt-chartUsage)" stopOpacity="0.2"/>
                                         </linearGradient>
                                     </defs>
                                     {/* Vertical grid lines — one per hourly slot (0..24) */}
@@ -860,7 +860,7 @@ export default function DetailedStatistics({activeTab}: {
                                             y1="10"
                                             x2={(h.slot / 24) * 700 + 50}
                                             y2="190"
-                                            stroke="#374151"
+                                            stroke="var(--tt-chartGrid)"
                                             strokeWidth="1"
                                             strokeDasharray="2,2"
                                         />
@@ -871,7 +871,7 @@ export default function DetailedStatistics({activeTab}: {
                                             key={val}
                                             x="45"
                                             y={190 - (val * 40)}
-                                            fill="#9ca3af"
+                                            fill="var(--tt-chartText)"
                                             fontSize="10"
                                             textAnchor="end"
                                         >
@@ -886,7 +886,7 @@ export default function DetailedStatistics({activeTab}: {
                                                 key={h.slot}
                                                 x={x}
                                                 y="200"
-                                                fill="#9ca3af"
+                                                fill="var(--tt-chartText)"
                                                 fontSize="9"
                                                 textAnchor="end"
                                                 transform={`rotate(-45 ${x} 200)`}
@@ -899,7 +899,7 @@ export default function DetailedStatistics({activeTab}: {
                                     <path
                                         d={hourlyLinePath}
                                         fill="none"
-                                        stroke="#f97316"
+                                        stroke="var(--tt-chartUsage)"
                                         strokeWidth="2"
                                     />
                                     {/* Filled area from baseline up to line */}

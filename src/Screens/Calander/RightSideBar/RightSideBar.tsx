@@ -85,7 +85,7 @@ export function RightSideBar({
 
     return (
         <div
-            className={`h-full min-h-0 overflow-hidden flex-shrink-0 bg-black transition-all duration-200 ease-in-out flex flex-col ${
+            className={`theme-sidebar h-full min-h-0 overflow-hidden flex-shrink-0 bg-black transition-all duration-200 ease-in-out flex flex-col ${
                 isCollapsed ? "border-l border-gray-700 items-center p-2" : ""
             }`}
             style={{ width: isCollapsed ? 64 : rightSidebarWidth }}

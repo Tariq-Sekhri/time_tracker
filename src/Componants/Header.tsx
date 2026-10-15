@@ -93,7 +93,7 @@ export default function Header({currentView, setCurrentView, notesEnabled, stati
         setUpdateStatus("idle");
     };
     return (
-        <div className="flex min-w-0 shrink-0 flex-col border-b border-gray-700">
+        <div className="theme-header flex min-w-0 shrink-0 flex-col border-b border-gray-700">
           <div className="flex min-w-0 items-center 2xl:grid 2xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
             <div className="flex min-w-0 flex-1 justify-start overflow-x-auto p-2.5 nice-scrollbar sm:justify-center 2xl:col-start-2 2xl:flex-none">
               <div className="inline-flex shrink-0 items-center gap-1.5">

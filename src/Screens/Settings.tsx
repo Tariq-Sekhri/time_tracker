@@ -1,3 +1,4 @@
+import ThemeSettings from "../theme/ThemeSettings";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "../Componants/Toast.tsx";
@@ -391,6 +392,8 @@ export default function Settings() {
                     title="Resets unlocked calendar, display, and timeblock settings. AFK settings have their own reset."
                     className="settings-secondary-button">Reset view settings</button>
             </header>
+
+            <ThemeSettings />
 
             <section className="settings-panel" aria-labelledby="calendar-settings-title">
                 <div className="settings-section-heading"><div><h2 id="calendar-settings-title">Calendar</h2><p>Layout and sidebar.</p></div></div>

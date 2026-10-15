@@ -1,3 +1,4 @@
+import {initializeTheme} from "./theme/store";
 import "./suppress-react-devtools-banner";
 import React from "react";
 import ReactDOM from "react-dom/client";
@@ -9,6 +10,7 @@ import {installDiagnostics, logMessage, reportError} from "./diagnostics.ts";
 import ErrorBoundary from "./Componants/ErrorBoundary.tsx";
 import {installLongTaskObserver} from "./perf.ts";
 
+initializeTheme();
 installDiagnostics();
 installLongTaskObserver();
 const queryClient = new QueryClient({

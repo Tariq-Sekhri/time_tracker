@@ -53,7 +53,7 @@ export default function LeftSideBar(props: VariantProps) {
 
 // ---------------------------------------------------------------- shared bits
 
-const shell = "h-full border-r border-gray-800 bg-black overflow-y-auto overflow-x-hidden nice-scrollbar";
+const shell = "theme-sidebar h-full border-r border-gray-800 bg-black overflow-y-auto overflow-x-hidden nice-scrollbar";
 
 function IconWeekGrid({className}: { className?: string }) {
     return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
