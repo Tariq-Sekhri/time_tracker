@@ -253,7 +253,7 @@ let manualTimeBlocks: ManualTimeBlock[] = [];
 let runningManualTimer: RunningManualTimer | null = null;
 function demoManualCategories() {
     const palette = ["#0ea5e9", "#a78bfa", "#34d399", "#fbbf24", "#fb7185", "#22d3ee"];
-    return [{id: null, name: "Uncategorized", color: appMetadata["manual_category_color:none"] ?? palette[0]},
+    return [{id: null, name: "Uncategorized", color: appMetadata["manual_category_color:none"] ?? palette[0], parent_id: null as number | null},
         ...manualProjects.map((project) => ({...project, color: appMetadata[`manual_category_color:${project.id}`]
             ?? (project.parent_id != null ? appMetadata[`manual_category_color:${project.parent_id}`] : undefined)
             ?? palette[(project.parent_id ?? project.id) % palette.length]}))];
@@ -999,8 +999,12 @@ function manualStatsBlocks(start: number, end: number): TimeBlockRow[] {
         while (cursor < stop) {
             const date = new Date(cursor * 1000);
             const next = Math.min(stop, cursor + 3600 - date.getMinutes() * 60 - date.getSeconds());
-            blocks.push({id: block.id, category: demoManualCategories().find((category) => category.id === (block.project_id ?? null))!.name, start_time: cursor, end_time: next,
-                apps: [{app: `Manual time: ${block.title}`, total_duration: next - cursor}]});
+            // Subcategory time rolls up into its category, labelled with the subcategory.
+            const categories = demoManualCategories();
+            const project = categories.find((category) => category.id === (block.project_id ?? null))!;
+            const parent = project.parent_id != null ? categories.find((category) => category.id === project.parent_id) : undefined;
+            blocks.push({id: block.id, category: (parent ?? project).name, start_time: cursor, end_time: next,
+                apps: [{app: parent ? `Manual time: ${project.name} · ${block.title}` : `Manual time: ${block.title}`, total_duration: next - cursor}]});
             cursor = next;
         }
     }
@@ -1290,7 +1294,7 @@ export async function invoke<T>(
             if (id != null) {
                 const project = manualProjects.find((project) => project.id === id);
                 if (!project) throw new DemoInvokeError(cmd, "Project no longer exists");
-                if (manualProjects.some((project) => project.id !== id && project.name.toLowerCase() === name.toLowerCase())) throw new DemoInvokeError(cmd, "A project with this name already exists");
+                if (manualProjects.some((other) => other.id !== id && other.parent_id === project.parent_id && other.name.toLowerCase() === name.toLowerCase())) throw new DemoInvokeError(cmd, "A category with this name already exists here");
                 project.name = name;
             }
             appMetadata[`manual_category_color:${id ?? "none"}`] = color.toLowerCase();
@@ -1303,9 +1307,12 @@ export async function invoke<T>(
             const name = String((a as {name?: string}).name ?? "").trim();
             const id = cmd === "create_manual_project" ? nextManualProjectId : Number((a as {id?: number}).id);
             if (!name || name.length > 100) throw new DemoInvokeError(cmd, "Project name must be between 1 and 100 characters");
-            if (manualProjects.some((project) => project.id !== id && project.name.toLowerCase() === name.toLowerCase())) throw new DemoInvokeError(cmd, "A project with this name already exists");
+            if (name.includes("›")) throw new DemoInvokeError(cmd, "Category names cannot contain ›");
+            const parentId = cmd === "create_manual_project"
+                ? (a as {parentId?: number | null}).parentId ?? null
+                : manualProjects.find((project) => project.id === id)?.parent_id ?? null;
+            if (manualProjects.some((project) => project.id !== id && project.parent_id === parentId && project.name.toLowerCase() === name.toLowerCase())) throw new DemoInvokeError(cmd, "A category with this name already exists here");
             if (cmd === "create_manual_project") {
-                const parentId = (a as {parentId?: number | null}).parentId ?? null;
                 if (parentId != null) {
                     const parent = manualProjects.find((project) => project.id === parentId);
                     if (!parent) throw new DemoInvokeError(cmd, "Parent category no longer exists");
@@ -1338,7 +1345,11 @@ export async function invoke<T>(
             }
             return manualTimeBlocks
                 .filter((block) => block.end_time > rangeStart && block.start_time < rangeEnd)
-                .map((block) => ({...block, project_name: manualProjects.find((project) => project.id === block.project_id)?.name ?? null}))
+                .map((block) => {
+                    const project = manualProjects.find((project) => project.id === block.project_id);
+                    const parent = manualProjects.find((parent) => parent.id === project?.parent_id);
+                    return {...block, project_name: project?.name ?? null, parent_project_name: parent?.name ?? null};
+                })
                 .sort((left, right) => left.start_time - right.start_time || left.id - right.id) as T;
         }
         case "insert_manual_time_block": {

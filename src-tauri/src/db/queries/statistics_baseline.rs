@@ -114,8 +114,11 @@ fn manual_segments(
             let segment_end = next_hour.min(stop);
             segments.push(Log {
                 id: block.id,
-                device_uuid: Some(block.project_name.as_ref().map(|name| format!("{MANUAL_DEVICE}:{name}")).unwrap_or_else(|| MANUAL_DEVICE.into())),
-                app: format!("Manual time: {}", block.title),
+                device_uuid: Some(block.parent_project_name.as_ref().or(block.project_name.as_ref()).map(|name| format!("{MANUAL_DEVICE}:{name}")).unwrap_or_else(|| MANUAL_DEVICE.into())),
+                app: match (&block.parent_project_name, &block.project_name) {
+                    (Some(_), Some(subcategory)) => format!("Manual time: {subcategory} · {}", block.title),
+                    _ => format!("Manual time: {}", block.title),
+                },
                 timestamp: cursor,
                 duration: segment_end - cursor,
                 is_deleted: false,
@@ -960,6 +963,7 @@ mod manual_statistics_tests {
             notes: Some("Keep notes".into()),
             project_id: None,
             project_name: None,
+            parent_project_name: None,
             start_time: start,
             end_time: start + 7200,
             created_at: start,

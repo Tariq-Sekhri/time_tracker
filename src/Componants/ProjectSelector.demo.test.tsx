@@ -41,6 +41,17 @@ it("creates, finds and selects subcategories under their category", async () => 
     await user.keyboard("{ArrowDown}{Enter}");
     await waitFor(() => expect(trigger.textContent).toContain("School › Study"));
 
+    await user.click(trigger);
+    await user.click(screen.getByRole("option", {name: "School"}));
+    expect(trigger.textContent).not.toContain("›");
+    await user.click(screen.getByRole("option", {name: "Homework"}));
+    await waitFor(() => expect(trigger.textContent).toContain("School › Homework"));
+    expect(screen.queryByRole("listbox")).toBeNull();
+
+    const coding = await invoke<number>("create_manual_project", {name: "Coding"});
+    await expect(invoke("create_manual_project", {name: "homework", parentId: coding})).resolves.toEqual(expect.any(Number));
+    await expect(invoke("create_manual_project", {name: "HOMEWORK", parentId: school})).rejects.toThrow("already exists");
+    await invoke("delete_manual_project", {id: coding});
     await invoke("delete_manual_project", {id: school});
     expect(await invoke<unknown[]>("get_manual_projects")).toEqual([]);
     client.clear();

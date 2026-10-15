@@ -64,7 +64,7 @@ async fn save_category(pool: &SqlitePool, id: Option<i64>, name: &str, color: &s
     }
     let mut tx = pool.begin().await?;
     if let Some(id) = id {
-        let result = sqlx::query("UPDATE manual_projects SET name = ?1 WHERE id = ?2").bind(name).bind(id).execute(&mut *tx).await?;
+        let result = sqlx::query("UPDATE manual_projects SET name = ?1 WHERE id = ?2").bind(name).bind(id).execute(&mut *tx).await.map_err(name_taken)?;
         if result.rows_affected() == 0 { return Err(anyhow::anyhow!("Project no longer exists").into()); }
     }
     let key = format!("manual_category_color:{}", id.map(|id| id.to_string()).unwrap_or_else(|| "none".into()));
@@ -73,10 +73,42 @@ async fn save_category(pool: &SqlitePool, id: Option<i64>, name: &str, color: &s
     Ok(())
 }
 
+/// Joins a category and subcategory into the single name used for sync, e.g. "School › Homework".
+pub(crate) const PATH_SEPARATOR: &str = " › ";
+
 pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    sqlx::query("CREATE TABLE IF NOT EXISTS manual_projects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE UNIQUE, parent_id INTEGER)")
+    sqlx::query("CREATE TABLE IF NOT EXISTS manual_projects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE, parent_id INTEGER)")
+        .execute(pool).await?;
+    ensure_schema(pool).await
+}
+
+/// Names only need to be unique among siblings, so "School › Homework" and
+/// "Coding › Homework" can coexist. Older databases made every name unique.
+pub async fn ensure_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    let sql: Option<String> = sqlx::query_scalar("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'manual_projects'")
+        .fetch_optional(pool).await?;
+    if sql.is_some_and(|sql| sql.to_ascii_uppercase().contains("UNIQUE")) {
+        let mut transaction = pool.begin().await?;
+        sqlx::query("CREATE TABLE manual_projects_rebuild (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE, parent_id INTEGER)")
+            .execute(&mut *transaction).await?;
+        sqlx::query("INSERT INTO manual_projects_rebuild (id, name, parent_id) SELECT id, name, parent_id FROM manual_projects")
+            .execute(&mut *transaction).await?;
+        sqlx::query("DROP TABLE manual_projects").execute(&mut *transaction).await?;
+        sqlx::query("ALTER TABLE manual_projects_rebuild RENAME TO manual_projects").execute(&mut *transaction).await?;
+        transaction.commit().await?;
+    }
+    sqlx::query("CREATE UNIQUE INDEX IF NOT EXISTS idx_manual_projects_sibling_name ON manual_projects (IFNULL(parent_id, 0), name COLLATE NOCASE)")
         .execute(pool).await?;
     Ok(())
+}
+
+fn name_taken(error: sqlx::Error) -> Error {
+    match &error {
+        sqlx::Error::Database(database) if database.is_unique_violation() => {
+            anyhow::anyhow!("A category with this name already exists here").into()
+        }
+        _ => error.into(),
+    }
 }
 
 fn validate_name(name: &str) -> Result<&str, Error> {
@@ -84,7 +116,46 @@ fn validate_name(name: &str) -> Result<&str, Error> {
     if name.is_empty() || name.chars().count() > 100 {
         return Err(anyhow::anyhow!("Project name must be between 1 and 100 characters").into());
     }
+    if name.contains('›') {
+        return Err(anyhow::anyhow!("Category names cannot contain ›").into());
+    }
     Ok(name)
+}
+
+/// The name other devices know this category by: "Parent › Child" for subcategories.
+pub(crate) async fn sync_name(pool: &SqlitePool, id: Option<i64>) -> Result<Option<String>, Error> {
+    let Some(id) = id else { return Ok(None) };
+    Ok(sqlx::query_scalar(
+        "SELECT CASE WHEN parent.name IS NULL THEN p.name ELSE parent.name || ?2 || p.name END
+         FROM manual_projects p LEFT JOIN manual_projects parent ON parent.id = p.parent_id WHERE p.id = ?1",
+    )
+    .bind(id)
+    .bind(PATH_SEPARATOR)
+    .fetch_optional(pool)
+    .await?)
+}
+
+/// Resolves a synced name, creating the category and subcategory when missing.
+pub(crate) async fn id_for_sync_name(pool: &SqlitePool, name: Option<&str>) -> Result<Option<i64>, Error> {
+    let Some(name) = name.map(str::trim).filter(|name| !name.is_empty()) else {
+        return Ok(None);
+    };
+    let (parent, child) = match name.split_once(PATH_SEPARATOR.trim()) {
+        Some((parent, child)) if !parent.trim().is_empty() && !child.trim().is_empty() => (Some(parent.trim()), child.trim()),
+        _ => (None, name),
+    };
+    let parent_id = match parent {
+        Some(parent) => Some(find_or_create(pool, parent, None).await?),
+        None => None,
+    };
+    Ok(Some(find_or_create(pool, child, parent_id).await?))
+}
+
+async fn find_or_create(pool: &SqlitePool, name: &str, parent_id: Option<i64>) -> Result<i64, Error> {
+    sqlx::query("INSERT OR IGNORE INTO manual_projects (name, parent_id) VALUES (?1, ?2)")
+        .bind(name).bind(parent_id).execute(pool).await?;
+    Ok(sqlx::query_scalar("SELECT id FROM manual_projects WHERE name = ?1 AND parent_id IS ?2")
+        .bind(name).bind(parent_id).fetch_one(pool).await?)
 }
 
 pub async fn validate_project_id(pool: &SqlitePool, project_id: Option<i64>) -> Result<(), Error> {
@@ -136,7 +207,8 @@ async fn create_project(pool: &SqlitePool, name: &str, parent_id: Option<i64>) -
         .bind(name)
         .bind(parent_id)
         .execute(pool)
-        .await?;
+        .await
+        .map_err(name_taken)?;
     Ok(result.last_insert_rowid())
 }
 
@@ -148,7 +220,8 @@ pub async fn update_manual_project(id: i64, name: String) -> Result<(), Error> {
         .bind(name)
         .bind(id)
         .execute(&pool)
-        .await?;
+        .await
+        .map_err(name_taken)?;
     if result.rows_affected() == 0 {
         return Err(anyhow::anyhow!("Project no longer exists").into());
     }
@@ -317,6 +390,32 @@ mod tests {
         assert_eq!(remaining, 0);
         let orphaned: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM manual_time_blocks WHERE project_id IS NULL").fetch_one(&pool).await.unwrap();
         assert_eq!(orphaned, 2);
+    }
+
+    #[tokio::test]
+    async fn sibling_names_are_unique_and_sync_names_round_trip() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query("CREATE TABLE manual_projects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE UNIQUE)").execute(&pool).await.unwrap();
+        sqlx::query("ALTER TABLE manual_projects ADD COLUMN parent_id INTEGER").execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO manual_projects (id, name) VALUES (4, 'School')").execute(&pool).await.unwrap();
+        create_table(&pool).await.unwrap();
+        create_table(&pool).await.unwrap();
+
+        let coding = create_project(&pool, "Coding", None).await.unwrap();
+        let school_homework = create_project(&pool, "Homework", Some(4)).await.unwrap();
+        let coding_homework = create_project(&pool, "homework", Some(coding)).await.unwrap();
+        assert_ne!(school_homework, coding_homework);
+        assert!(create_project(&pool, "HOMEWORK", Some(4)).await.is_err());
+        assert!(create_project(&pool, "school", None).await.is_err());
+        assert!(create_project(&pool, "A › B", None).await.is_err());
+
+        assert_eq!(sync_name(&pool, Some(school_homework)).await.unwrap().as_deref(), Some("School › Homework"));
+        assert_eq!(sync_name(&pool, Some(4)).await.unwrap().as_deref(), Some("School"));
+        assert_eq!(id_for_sync_name(&pool, Some("School › Homework")).await.unwrap(), Some(school_homework));
+        assert_eq!(id_for_sync_name(&pool, Some("school")).await.unwrap(), Some(4));
+        let created = id_for_sync_name(&pool, Some("Gym › Legs")).await.unwrap().unwrap();
+        assert_eq!(sync_name(&pool, Some(created)).await.unwrap().as_deref(), Some("Gym › Legs"));
+        assert_eq!(id_for_sync_name(&pool, Some("  ")).await.unwrap(), None);
     }
 
     #[test]

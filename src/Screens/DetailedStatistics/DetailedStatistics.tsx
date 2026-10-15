@@ -53,7 +53,7 @@ const STATS_TOOLBAR_BUTTON = `${STATS_TOOLBAR_CONTROL_HEIGHT} px-3 bg-gray-800 b
 // Checkbox dropdown to show/hide category lines on trend chart
 import FilterCategories, {useFilterCategories} from "../../Componants/FilterCategories.tsx";
 import {getAppMetadata, setAppMetadata} from "../../api/appMetadata.ts";
-import {get_manual_time_blocks, manualTimeAppStats, MANUAL_TIME_LABEL} from "../../api/ManualTimeBlock.ts";
+import {get_manual_time_blocks, manualStatsCategory, manualTimeAppStats, MANUAL_TIME_LABEL} from "../../api/ManualTimeBlock.ts";
 import {getManualCategories, MANUAL_CATEGORIES_QUERY_KEY} from "../../api/ManualProject.ts";
 import {get_categories} from "../../api/Category.ts";
 import {
@@ -372,7 +372,7 @@ export default function DetailedStatistics({activeTab}: {
         queryFn: async () => {
             if (!selectedCategory) return [];
             const blocks = await get_manual_time_blocks(categoryStartTime, categoryEndTime + 1);
-            const manualRows = manualTimeAppStats(blocks.filter((block) => (block.project_name || MANUAL_TIME_LABEL) === selectedCategory), categoryStartTime, Math.min(categoryEndTime + 1, Math.floor(Date.now() / 1000) + 1));
+            const manualRows = manualTimeAppStats(blocks.filter((block) => manualStatsCategory(block) === selectedCategory), categoryStartTime, Math.min(categoryEndTime + 1, Math.floor(Date.now() / 1000) + 1));
             const result: MergedLog[] = await get_logs_by_category({
                 category: selectedCategory,
                 start_time: categoryStartTime,

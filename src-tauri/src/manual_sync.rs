@@ -158,28 +158,13 @@ async fn write_timer(pool: &SqlitePool, timer: Option<&RunningManualTimer>) -> R
 }
 
 async fn project_name(pool: &SqlitePool, id: Option<i64>) -> Result<Option<String>, Error> {
-    let Some(id) = id else { return Ok(None) };
-    Ok(sqlx::query_scalar("SELECT name FROM manual_projects WHERE id = ?1")
-        .bind(id)
-        .fetch_optional(pool)
-        .await?)
+    crate::db::tables::manual_project::sync_name(pool, id).await
 }
 
-/// Projects are matched by name across devices; unknown names are created.
+/// Projects are matched by name across devices ("Parent › Child" for
+/// subcategories); unknown names are created.
 async fn project_id(pool: &SqlitePool, name: Option<&str>) -> Result<Option<i64>, Error> {
-    let Some(name) = name.map(str::trim).filter(|name| !name.is_empty()) else {
-        return Ok(None);
-    };
-    sqlx::query("INSERT OR IGNORE INTO manual_projects (name) VALUES (?1)")
-        .bind(name)
-        .execute(pool)
-        .await?;
-    Ok(Some(
-        sqlx::query_scalar("SELECT id FROM manual_projects WHERE name = ?1")
-            .bind(name)
-            .fetch_one(pool)
-            .await?,
-    ))
+    crate::db::tables::manual_project::id_for_sync_name(pool, name).await
 }
 
 async fn session_recorded(pool: &SqlitePool, session_id: &str) -> Result<bool, Error> {
@@ -342,14 +327,15 @@ async fn upload_pending() -> Result<(), Error> {
 async fn upload_pending_locked(conn: &Connection) -> Result<(), Error> {
     let pool = db::get_pool().await?;
     let device = get_local_device().await?.ok_or(anyhow!("Local device not found"))?;
-    let pending: Vec<(i64, String, String, Option<String>, i64, i64)> = sqlx::query_as(
-        "SELECT b.id, b.session_id, b.title, p.name, b.start_time, b.end_time
-         FROM manual_time_blocks b LEFT JOIN manual_projects p ON p.id = b.project_id
-         WHERE b.pending_upload = 1 AND b.session_id IS NOT NULL ORDER BY b.id",
+    let pending: Vec<(i64, String, String, Option<i64>, i64, i64)> = sqlx::query_as(
+        "SELECT id, session_id, title, project_id, start_time, end_time
+         FROM manual_time_blocks
+         WHERE pending_upload = 1 AND session_id IS NOT NULL ORDER BY id",
     )
     .fetch_all(&pool)
     .await?;
-    for (id, session_id, title, project_name, start_time, end_time) in pending {
+    for (id, session_id, title, project_id, start_time, end_time) in pending {
+        let project_name = project_name(&pool, project_id).await?;
         let entry = ServerEntry { id: 0, session_id, title, project_name, start_time, end_time };
         let response = sync_http_client()?
             .post(sync_server_url(&conn.server_ip, "manual/entries"))
@@ -438,13 +424,21 @@ async fn push_projects() -> Result<(), Error> {
 async fn push_projects_with(conn: &Connection) -> Result<(), Error> {
     let pool = db::get_pool().await?;
     let device = get_local_device().await?.ok_or(anyhow!("Local device not found"))?;
-    let projects: Vec<ServerProject> =
-        crate::db::tables::manual_project::categories_for_pool(&pool)
-            .await?
-            .into_iter()
-            .filter(|category| category.id.is_some())
-            .map(|category| ServerProject { name: category.name, color: category.color })
-            .collect();
+    let categories = crate::db::tables::manual_project::categories_for_pool(&pool).await?;
+    let projects: Vec<ServerProject> = categories
+        .iter()
+        .filter(|category| category.id.is_some())
+        .map(|category| {
+            let parent = category.parent_id.and_then(|id| categories.iter().find(|parent| parent.id == Some(id)));
+            ServerProject {
+                name: match parent {
+                    Some(parent) => format!("{}{}{}", parent.name, crate::db::tables::manual_project::PATH_SEPARATOR, category.name),
+                    None => category.name.clone(),
+                },
+                color: category.color.clone(),
+            }
+        })
+        .collect();
     let response = sync_http_client()?
         .put(sync_server_url(&conn.server_ip, "manual/projects"))
         .bearer_auth(&conn.token)

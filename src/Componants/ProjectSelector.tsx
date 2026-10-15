@@ -116,7 +116,15 @@ export default function ProjectSelector({value, onChange, disabled = false}: {
     });
     const showUncategorized = !search || uncategorizedName.toLowerCase().includes(search);
     const options: (number | null)[] = [...(showUncategorized ? [null] : []), ...rows.map((row) => row.project.id)];
-    const pick = (id: number | null) => {onChange(id); closePicker();};
+    const pick = (id: number | null) => {
+        onChange(id);
+        // Picking a category with subcategories opens them so one can be chosen next; picking it again closes.
+        if (id != null && projects.some((project) => project.parent_id === id) && !(value === id && expanded.has(id))) {
+            setExpanded((current) => new Set(current).add(id));
+            return;
+        }
+        closePicker();
+    };
     const toggleExpanded = (id: number) => setExpanded((current) => {
         const next = new Set(current);
         if (next.has(id)) next.delete(id); else next.add(id);

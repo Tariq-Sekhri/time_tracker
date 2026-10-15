@@ -14,6 +14,10 @@ pub struct ManualTimeBlock {
     #[sqlx(default)]
     #[serde(default)]
     pub project_name: Option<String>,
+    /// Set for subcategories; statistics roll their time up into this category.
+    #[sqlx(default)]
+    #[serde(default)]
+    pub parent_project_name: Option<String>,
     pub start_time: i64,
     pub end_time: i64,
     pub created_at: i64,
@@ -119,8 +123,9 @@ pub async fn get_manual_time_blocks(
     }
     let pool = db::get_pool().await?;
     let mut blocks = sqlx::query_as::<_, ManualTimeBlock>(
-        "SELECT b.id, b.title, b.notes, b.project_id, p.name AS project_name, b.start_time, b.end_time, b.created_at, b.updated_at
+        "SELECT b.id, b.title, b.notes, b.project_id, p.name AS project_name, parent.name AS parent_project_name, b.start_time, b.end_time, b.created_at, b.updated_at
          FROM manual_time_blocks b LEFT JOIN manual_projects p ON p.id = b.project_id
+         LEFT JOIN manual_projects parent ON parent.id = p.parent_id
          WHERE b.end_time > ?1 AND b.start_time < ?2
          ORDER BY b.start_time, b.id",
     )

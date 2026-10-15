@@ -11,6 +11,9 @@ export type ManualTimeBlock = {
     project_id?: number | null;
     project_name?: string | null;
     project_color?: string;
+    /** Set for subcategories: the category their time rolls up into in statistics. */
+    parent_project_name?: string | null;
+    parent_project_color?: string;
     start_time: number;
     end_time: number;
     created_at: number;
@@ -47,7 +50,9 @@ export async function get_manual_time_blocks(
     ]);
     return blocks.map((block) => {
         const category = categories.find((category) => category.id === (block.project_id ?? null));
-        return {...block, project_name: category?.name ?? block.project_name, project_color: category?.color};
+        const parent = category?.parent_id == null ? undefined : categories.find((parent) => parent.id === category.parent_id);
+        return {...block, project_name: category?.name ?? block.project_name, project_color: category?.color,
+            parent_project_name: parent?.name ?? null, parent_project_color: parent?.color};
     });
 }
 
@@ -100,11 +105,16 @@ export function manualTimeAppStats(blocks: ManualTimeBlock[], start: number, end
     for (const block of blocks) {
         const duration = manualTimeDurationInRange(block, start, end);
         if (duration > 0) {
-            const app = `Manual time: ${block.title}`;
+            const app = block.parent_project_name && block.project_name ? `Manual time: ${block.project_name} · ${block.title}` : `Manual time: ${block.title}`;
             durations.set(app, (durations.get(app) ?? 0) + duration);
         }
     }
     return [...durations].map(([app, total_duration]) => ({app, app_names: [] as string[], total_duration, percentage_change: null}));
+}
+
+/** Statistics group subcategory time under its parent category. */
+export function manualStatsCategory(block: Pick<ManualTimeBlock, "project_name" | "parent_project_name">): string {
+    return block.parent_project_name || block.project_name || MANUAL_TIME_LABEL;
 }
 
 export function manualTimeCategoryStats(blocks: ManualTimeBlock[], start: number, end: number) {
@@ -113,9 +123,10 @@ export function manualTimeCategoryStats(blocks: ManualTimeBlock[], start: number
     for (const block of blocks) {
         const duration = manualTimeDurationInRange(block, start, end);
         if (!duration) continue;
-        const category = block.project_name || MANUAL_TIME_LABEL;
+        const category = manualStatsCategory(block);
         const current = categories.get(category);
-        categories.set(category, {category, total_duration: (current?.total_duration ?? 0) + duration, color: block.project_color ?? colors[(block.project_id ?? 0) % colors.length]});
+        const color = block.parent_project_name ? block.parent_project_color : block.project_color;
+        categories.set(category, {category, total_duration: (current?.total_duration ?? 0) + duration, color: color ?? colors[(block.project_id ?? 0) % colors.length]});
     }
     return [...categories.values()];
 }

@@ -564,6 +564,10 @@ pub async fn validate_and_repair_database(pool: &SqlitePool) -> Result<Validatio
 
     migrate_legacy_category_prefs(pool).await?;
 
+    crate::db::tables::manual_project::ensure_schema(pool)
+        .await
+        .map_err(Error::from)?;
+
     crate::db::tables::log::ensure_logs_schema(pool)
         .await
         .map_err(Error::from)?;
