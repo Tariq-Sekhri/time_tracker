@@ -5,7 +5,6 @@
 ## [1.12.6] - 2026-10-15
 
 - Added new default sorting for more games, including Counter-Strike 2, Warframe, ARK: Survival Ascended, and LinkedIn games.
-- Swipe between screens in the mobile app with smoother transitions.
 
 ## [1.12.5] - 2026-10-15
 
