@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fix new manual time blocks snapping back when dragged to another time or day.
+
 ## [1.12.4] - 2026-10-15
 
 - Choose from six desktop themes, including light mode, or create and share your own with detailed color controls.

@@ -1,4 +1,5 @@
 import {MANUAL_DRAFT_ID, MANUAL_HOLD_MS, manualTimeQueryKeys, persistManualEventRange, type ManualTimeDraft} from "./manualCalendarEditing.ts";
+import {useManualDragDiagnostics} from "./useManualDragDiagnostics";
 import AfkEventContent from "./AfkEventContent";
 import {calendarDateAtPoint, isManualRangeDrag, MANUAL_DRAG_DISTANCE, useHoldToCreate} from "./useHoldToCreate.ts";
 import { toErrorString } from "../../types/common.ts";
@@ -8,6 +9,7 @@ import { get_week, get_week_for_app_filter, TimeBlock } from "../../api/week.ts"
 import CalendarSkeleton from "./CalanderSkeletion.tsx";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import FullCalendar from "@fullcalendar/react";
+import InteractionSafeCalendar from "./InteractionSafeCalendar";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getCategoryColor, getWeekStart, formatDuration, formatLocalDateYMD, trackedBlockDuration } from "./utils.ts";
@@ -145,22 +147,39 @@ export default function RenderCalendarContent({
         if (start) ref.current?.getApi().select(start, new Date(start.getTime() + 3600000));
     }, onPlainCalendarClick);
     const pendingManualEdits = useRef(new Set<string>());
+    const manualDragDiagnostics = useManualDragDiagnostics(manualDraft);
+    const interactionLock = useRef(false);
+    const interactionRelease = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [, refreshAfterInteraction] = useState(0);
+    const finishInteraction = () => {
+        // Stop fires before FullCalendar commits the drop. Release only after
+        // its handlers and any draft state updates have finished.
+        interactionRelease.current = setTimeout(() => {
+            interactionLock.current = false;
+            refreshAfterInteraction(value => value + 1);
+        }, 0);
+    };
+    useEffect(() => () => {if (interactionRelease.current !== null) clearTimeout(interactionRelease.current);}, []);
     const changeManualRange = async (info: EventChangeArg) => {
         const {event} = info;
-        if (!event.start || !event.end) {info.revert(); return;}
+        if (!event.start || !event.end) {manualDragDiagnostics.outcome(event, "reverted-missing-range"); info.revert(); return;}
         if (event.id === MANUAL_DRAFT_ID && manualDraft) {
+            manualDragDiagnostics.outcome(event, "draft-applied");
             onManualDraftChange({...manualDraft, start: event.start, end: event.end});
             return;
         }
         if (event.extendedProps.type !== "manual_time" || pendingManualEdits.current.has(event.id)) {
+            manualDragDiagnostics.outcome(event, "reverted-wrong-type-or-pending");
             info.revert(); return;
         }
         pendingManualEdits.current.add(event.id);
         try {
             await persistManualEventRange(event);
+            manualDragDiagnostics.outcome(event, "saved");
             onManualTimeChanged(event.extendedProps.manualTimeBlockId, event.start, event.end);
             await Promise.all(manualTimeQueryKeys.map((key) => queryClient.invalidateQueries({queryKey: [key]})));
         } catch (error) {
+            manualDragDiagnostics.outcome(event, "reverted-save-error", error);
             info.revert();
             showToast("Couldn't change manual time", "error", 5000, String(error));
         } finally {
@@ -787,7 +806,8 @@ export default function RenderCalendarContent({
                             </div>
                         </div>
                     ) : showFullCalendarGrid ? (
-                    <FullCalendar
+                    <InteractionSafeCalendar
+                        interactionLock={interactionLock}
                         key={`calendar-${calendarStartHour}-${slotMinHeightPx}`}
                         height="100%"
                         expandRows={false}
@@ -826,13 +846,17 @@ export default function RenderCalendarContent({
                             info.view.calendar.unselect();
                             onCreateManualTime(info.date, new Date(info.date.getTime() + 3600000));
                         }}
-                        eventDragStart={(info) => {if (info.event.id === MANUAL_DRAFT_ID) onManualDraftManipulating(true);}}
-                        eventDragStop={() => onManualDraftManipulating(false)}
-                        eventResizeStart={(info) => {if (info.event.id === MANUAL_DRAFT_ID) onManualDraftManipulating(true);}}
-                        eventResizeStop={() => onManualDraftManipulating(false)}
+                        eventDragStart={(info) => {interactionLock.current = true; manualDragDiagnostics.start(info.event, "move", info.jsEvent); if (info.event.id === MANUAL_DRAFT_ID) onManualDraftManipulating(true);}}
+                        eventDragStop={(info) => {manualDragDiagnostics.stop(info.event, info.jsEvent); onManualDraftManipulating(false); finishInteraction();}}
+                        eventResizeStart={(info) => {interactionLock.current = true; manualDragDiagnostics.start(info.event, "resize", info.jsEvent); if (info.event.id === MANUAL_DRAFT_ID) onManualDraftManipulating(true);}}
+                        eventResizeStop={(info) => {manualDragDiagnostics.stop(info.event, info.jsEvent); onManualDraftManipulating(false); finishInteraction();}}
                         eventDrop={changeManualRange}
                         eventResize={changeManualRange}
-                        eventAllow={(_range, event) => !!event && !pendingManualEdits.current.has(event.id)}
+                        eventAllow={(range, event) => {
+                            const allowed = !!event && !pendingManualEdits.current.has(event.id);
+                            manualDragDiagnostics.candidate(range, allowed);
+                            return allowed;
+                        }}
                         eventResizableFromStart={true}
                         dragScroll={true}
                         eventClassNames={(info) => info.isMirror && !info.event.id ? ["tt-selection-preview"] : []}
