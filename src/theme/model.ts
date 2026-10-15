@@ -426,12 +426,21 @@ THEME_FAMILIES.slice(1).forEach((family,index)=>{
         afk:"#fef3c7",afkText:"#78350f",afkBorder:"#d97706",
     }));
 });
+function superDark(app:string,panel:string,raised:string,text:string,muted:string,border:string,accent:string): Partial<Colors> {
+    return {...palette(app,panel,raised,text,muted,border,accent),
+        borderStrong:border,hover:raised,scrollThumb:border,
+        action:raised,accentHover:raised,accentStrong:raised,onAccent:text,
+        accentSoft:raised,sidebarSelection:raised,highlightSurface:raised,
+        successBg:"#020805",warningBg:"#090601",dangerBg:"#0b0203",infoBg:"#02060a",
+        afk:"#090601",afkBorder:"#30200b",afkText:"#b39b75",
+    };
+}
 // Keep older palettes available to saved themes without filling the picker with light variants.
 PRESETS.push(
-    preset("oled", "OLED", "dark", palette("#000000","#050505","#101010","#e4e4e7","#919196","#252525","#a1a1aa")),
-    preset("obsidian", "Obsidian", "dark", palette("#030305","#09090d","#14131b","#e2dfeb","#96909f","#292531","#a08acb")),
-    preset("deep-forest", "Deep Forest", "dark", palette("#010503","#050c08","#0b1710","#d7e7dd","#81988a","#1d3025","#73ab8b")),
-    preset("black-cherry", "Black Cherry", "dark", palette("#060204","#0d060a","#190e15","#e7d8e2","#a18b99","#30212a","#c17b9f")),
+    preset("oled", "OLED", "dark", superDark("#000000","#000000","#040404","#c6c6cc","#707075","#101010","#888890")),
+    preset("obsidian", "Obsidian", "dark", superDark("#000000","#020203","#060609","#c7c3ce","#77717f","#111116","#9783b0")),
+    preset("deep-forest", "Deep Forest", "dark", superDark("#000000","#010302","#030704","#c2cdc6","#6c8174","#0c140f","#729984")),
+    preset("black-cherry", "Black Cherry", "dark", superDark("#000000","#030102","#080306","#d0c1ca","#886e7e","#160c12","#af7d99")),
 );
 export const INCLUDED_PRESETS = PRESETS.filter(theme => theme.mode === "dark" || theme.id === "light" || theme.id === "ocean-light");
 export function normalizeColor(value: unknown): string | null {
