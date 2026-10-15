@@ -808,7 +808,7 @@ export default function DetailedStatistics({activeTab}: {
                                         <div className="flex items-center gap-2">
                                             <div
                                                 className="w-3 h-3 rounded-full"
-                                                style={{backgroundColor: cat.color || "#6b7280"}}
+                                                style={{backgroundColor: cat.color || "var(--tt-subtle)"}}
                                             />
                                             <span className="text-sm text-gray-200">{cat.category}</span>
                                         </div>
@@ -825,7 +825,7 @@ export default function DetailedStatistics({activeTab}: {
                                             className="h-full"
                                             style={{
                                                 width: `${cat.percentage}%`,
-                                                backgroundColor: cat.color || "#6b7280",
+                                                backgroundColor: cat.color || "var(--tt-subtle)",
                                             }}
                                         />
                                     </div>
@@ -924,7 +924,7 @@ export default function DetailedStatistics({activeTab}: {
                         <div className="flex items-center gap-2">
                             <div
                                 className="w-3 h-3 rounded-full"
-                                style={{backgroundColor: selectedCategoryStat?.color || "#6b7280"}}
+                                style={{backgroundColor: selectedCategoryStat?.color || "var(--tt-subtle)"}}
                             />
                             <h2 className="text-xl font-bold">
                                 {selectedCategory ? `Apps in ${selectedCategory}` : "Top Apps"}

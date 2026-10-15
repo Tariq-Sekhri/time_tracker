@@ -231,3 +231,12 @@ a[href] {color:var(--tt-link);}
 :is(button,a)[class~="bg-cyan-700"],
 :is(button,a)[class~="bg-cyan-800"],
 :is(button,a)[class~="bg-cyan-900"] {background-color:var(--tt-infoBg);color:var(--tt-info);}
+
+/* New roles only replace component colors when customized. */
+:root[data-theme-color-overrides~="sidebarControls"] .theme-sidebar :is(button,select,input) {background-color:var(--tt-sidebarControls);}
+:root[data-theme-color-overrides~="sidebarSelection"] .theme-sidebar :is([aria-pressed=true],[aria-selected=true]) {background-color:var(--tt-sidebarSelection);}
+:root[data-theme-color-overrides~="codeSurface"] :is(code,pre) {background-color:var(--tt-codeSurface)!important;}
+:root[data-theme-color-overrides~="action"] .settings-primary-button {background:var(--tt-action);}
+:root[data-theme-color-overrides~="messageSurface"] [role=alert] {background-color:var(--tt-messageSurface);}
+:root[data-theme-color-overrides~="subtleSurface"] .settings-secondary-button {background:var(--tt-subtleSurface);}
+:root[data-theme-color-overrides~="highlightSurface"] :is(.settings-tabs button[aria-selected=true],mark) {background:var(--tt-highlightSurface);}

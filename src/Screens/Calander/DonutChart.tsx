@@ -48,7 +48,7 @@ export function DonutChart({data, colors, totalDuration, periodLabel = "this wee
 
     if (positive.length === 1) {
         const item = positive[0];
-        const fill = item.color || colors.get(item.label) || "#6b7280";
+        const fill = item.color || colors.get(item.label) || "var(--tt-subtle)";
         return (
             <div className="relative w-full flex justify-center">
                 <svg width="160" height="160" viewBox="0 0 160 160">
@@ -88,7 +88,7 @@ export function DonutChart({data, colors, totalDuration, periodLabel = "this wee
                 {...segmentProps(item)}
                 key={index}
                 d={pathData}
-                fill={item.color || colors.get(item.label) || "#6b7280"}
+                fill={item.color || colors.get(item.label) || "var(--tt-subtle)"}
                 className="hover:opacity-80 transition-opacity"
             />
         );

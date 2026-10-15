@@ -144,7 +144,7 @@ export default function DayStatisticsSidebar({
         return sorted.map(([calendarId, dur]) => {
             const cal = calendarMap.get(calendarId);
             const name = cal?.name ?? `Calendar ${calendarId}`;
-            const color = cal?.color ?? "#4285f4";
+            const color = cal?.color ?? "var(--tt-googleFallback)";
             return {
                 category: name,
                 total_duration: dur,
@@ -192,7 +192,7 @@ export default function DayStatisticsSidebar({
         return topCategories.map((cat) => ({
             label: cat.category,
             value: cat.total_duration,
-            color: cat.color || "#6b7280",
+            color: cat.color || "var(--tt-subtle)",
         }));
     }, [topCategories]);
 
@@ -379,7 +379,7 @@ export default function DayStatisticsSidebar({
                                     <div className="flex items-center gap-2">
                                         <div
                                             className="w-3 h-3 rounded-full"
-                                            style={{ backgroundColor: cat.color || "#6b7280" }}
+                                            style={{ backgroundColor: cat.color || "var(--tt-subtle)" }}
                                         />
                                         <span className="text-sm text-gray-200">{cat.category}</span>
                                     </div>
@@ -390,7 +390,7 @@ export default function DayStatisticsSidebar({
                                         className="h-full"
                                         style={{
                                             width: `${(cat.total_duration / maxCategoryDuration) * 100}%`,
-                                            backgroundColor: cat.color || "#6b7280",
+                                            backgroundColor: cat.color || "var(--tt-subtle)",
                                         }}
                                     />
                                 </div>

@@ -177,7 +177,7 @@ function CheckCell({on, onClick, label, disabled, color, kind}: {
     );
 }
 
-const ALL_COLOR = "#94a3b8";
+const ALL_COLOR = "var(--tt-sourceControls)";
 
 function AllCells({section}: { section: SidebarSection }) {
     const all = section.all;

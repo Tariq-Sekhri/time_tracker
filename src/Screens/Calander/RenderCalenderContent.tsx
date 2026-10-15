@@ -435,7 +435,7 @@ export default function RenderCalendarContent({
                       }
 
                       const calendar = googleCalendarMap.get(event.calendar_id);
-                      const color = calendar?.color || "#4285f4";
+                      const color = calendar?.color || "var(--tt-googleFallback)";
                       const eventDurationSec = event.end - event.start;
 
                       return {
@@ -704,7 +704,7 @@ export default function RenderCalendarContent({
             items: calendarDevices.map((device) => ({
                 key: device.uuid,
                 name: device.name,
-                color: "#6b7280",
+                color: "var(--tt-subtle)",
                 inCal: isolation.device !== null ? isolation.device === device.uuid : device.in_cal,
                 inStats: isolation.device !== null ? isolation.device === device.uuid : device.in_stats,
                 isolated: isolation.device === device.uuid,

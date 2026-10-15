@@ -67,3 +67,7 @@
   --tt-chart9: #a3e635;
   --tt-chart10: #c084fc;
 }
+
+:root {--tt-subtleSurface:#0d1421;--tt-highlightSurface:#172554;--tt-action:#3b82f6;--tt-messageSurface:#111827;--tt-codeSurface:#030712;--tt-sidebarControls:#1f2937;--tt-sidebarSelection:#172554;}
+
+:root {--tt-googleFallback:#4285f4;--tt-sourceControls:#94a3b8;}

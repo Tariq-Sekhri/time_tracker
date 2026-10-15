@@ -48,3 +48,13 @@ it("applies every calendar and chart token independently",()=>{
     const style=document.documentElement.style;
     expect(style.getPropertyValue("--tt-calendar")).toBe("#fffafa");expect(style.getPropertyValue("--tt-chartTotal")).toBe("#123456");expect(style.getPropertyValue("--tt-onAccent")).toBe("#121212");
 });
+
+it("keeps additional context overrides off for the original theme and clears them when restored",()=>{
+    const store=useThemeStore.getState();store.select("dark");
+    expect(document.documentElement.dataset.themeColorOverrides).toBe("");
+    expect(document.documentElement.style.getPropertyValue("--tt-accent")).toBe("#3b82f6");
+    store.edit("sidebarControls","#351535");
+    expect(document.documentElement.dataset.themeColorOverrides).toContain("sidebarControls");
+    store.select("dark");
+    expect(document.documentElement.dataset.themeColorOverrides).toBe("");
+});

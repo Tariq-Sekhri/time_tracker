@@ -76,7 +76,7 @@ export function buildSeries(
                 const values = new Array(weeks.length).fill(0);
                 values[weekIdx] = value;
                 categoryMeta.set(cat.category, {
-                    color: cat.color || "#6b7280",
+                    color: cat.color || "var(--tt-subtle)",
                     values,
                 });
             }
