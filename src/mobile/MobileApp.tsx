@@ -7,6 +7,7 @@ import {Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis} from "rechart
 import Notes from "../Screens/Notes";
 import {DonutChart} from "../Screens/Calander/DonutChart";
 import {useToast} from "../Componants/Toast";
+import CategoryPicker from "./CategoryPicker";
 import {request, type MobileLog, type MobileState, type Settings, type Usage} from "./api";
 import {calendarBlocks, clipLog, colorFor, dateAtHour, dateValue, dayStart, duration, nextDay, rangeFor} from "./model";
 
@@ -47,6 +48,11 @@ export default function MobileApp() {
     const {showToast} = useToast();
     const [page, setPage] = useState<Page>("Usage");
     const [busy, setBusy] = useState(false);
+    const swipe = useRef<{x: number; y: number; time: number; horizontal: boolean} | null>(null);
+    const viewport = useRef<HTMLDivElement>(null);
+    const [drag, setDrag] = useState<{offset: number; target: Page | null; settling: boolean}>({offset: 0, target: null, settling: false});
+    const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => () => { if (settleTimer.current) clearTimeout(settleTimer.current); }, []);
     useEffect(() => {
         history.replaceState({page: "Usage"}, "", "#usage");
         const changed = (event: PopStateEvent) => setPage(pages.includes(event.state?.page) ? event.state.page : "Usage");
@@ -56,6 +62,8 @@ export default function MobileApp() {
     useEffect(() => {
         const mobileWindow = window as Window & {__TIME_TRACKER_BACK__?: () => boolean};
         mobileWindow.__TIME_TRACKER_BACK__ = () => {
+            const popover = document.querySelector("[data-manual-popover]");
+            if (popover) { popover.dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", bubbles: true})); return true; }
             const dialog = document.querySelector<HTMLDialogElement>("dialog[open]");
             if (dialog) { dialog.dispatchEvent(new Event("cancel", {cancelable: true})); return true; }
             if (page !== "Usage") { history.back(); return true; }
@@ -64,7 +72,7 @@ export default function MobileApp() {
         return () => { delete mobileWindow.__TIME_TRACKER_BACK__; };
     }, [page]);
     const navigate = (next: Page) => {
-        if (next === page) return;
+        if (next === page || drag.settling) return;
         history.pushState({page: next}, "", `#${next.toLowerCase()}`);
         setPage(next);
     };
@@ -96,24 +104,74 @@ export default function MobileApp() {
     useEffect(() => { if (state.data?.settings.notes_enabled === false && page === "Notes") setPage("Usage"); }, [state.data?.settings.notes_enabled, page]);
     if (!state.data) return <main className="startup"><h1>Time Tracker</h1>{state.error ? <><p role="alert">Could not connect to Android tracking: {String(state.error)}</p><button onClick={() => void state.refetch()}>Try again</button></> : <p role="status">Opening your activity…</p>}</main>;
     const shared = {state: state.data, act, busy};
+    const visiblePages = pages.filter(item => item !== "Notes" || state.data.settings.notes_enabled);
+    const settle = (commit: boolean) => {
+        const next = commit ? drag.target : null;
+        const width = viewport.current?.clientWidth || 1;
+        setDrag(current => ({...current, offset: next ? (visiblePages.indexOf(next) > visiblePages.indexOf(page) ? -width : width) : 0, settling: true}));
+        settleTimer.current = setTimeout(() => {
+            if (next) { history.pushState({page: next}, "", `#${next.toLowerCase()}`); setPage(next); }
+            setDrag({offset: 0, target: null, settling: false});
+            settleTimer.current = null;
+        }, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 240);
+    };
     return <div className="mobile-shell">
         <header className="app-header"><div><small>TIME TRACKER</small><h1>{page}</h1></div><span className={`status ${state.data.permissions.usage ? "active" : ""}`}>{state.data.permissions.usage ? "Tracking" : "Setup needed"}</span></header>
         {state.error && <div className="error" role="alert">Could not refresh app status. <button onClick={() => void state.refetch()}>Retry</button></div>}
-        <main className={page === "Notes" ? "notes-page" : "page-content"} key={page}>
-            {!state.data.permissions.usage && page !== "Settings" && <Card><h2>Enable app usage tracking</h2><p>Allow Usage Access to record app activity. Browser and media tracking are optional.</p><button className="primary" disabled={busy} onClick={() => void act(() => request("permission", {kind: "usage"}))}>Open Usage Access</button></Card>}
-            {page === "Usage" && <UsageScreen {...shared} />}
-            {page === "Logs" && <LogsScreen {...shared} />}
-            {page === "Calendar" && <CalendarScreen {...shared} />}
-            {page === "Statistics" && <UsageScreen {...shared} statistics />}
-            {page === "Sync" && <SyncScreen {...shared} />}
-            {page === "Notes" && <MobileNotes />}
-            {page === "Settings" && <SettingsScreen {...shared} />}
-        </main>
-        <nav className="bottom-nav" aria-label="Main navigation">{pages.filter(item => item !== "Notes" || state.data.settings.notes_enabled).map(item => <button key={item} aria-current={page === item ? "page" : undefined} onClick={() => navigate(item)}><NavIcon page={item} /><span>{item === "Statistics" ? "Stats" : item}</span></button>)}</nav>
+        <div ref={viewport} className="page-viewport"
+            onTouchStart={event => {
+                swipe.current = null;
+                const target = event.target as HTMLElement;
+                if (drag.settling || event.touches.length !== 1 || target.closest('dialog, input, textarea, select, [role="slider"]')) return;
+                const touch = event.touches[0];
+                swipe.current = {x: touch.clientX, y: touch.clientY, time: Date.now(), horizontal: false};
+            }}
+            onTouchMove={event => {
+                const start = swipe.current;
+                if (!start) return;
+                if (event.touches.length !== 1) { swipe.current = null; settle(false); return; }
+                const touch = event.touches[0];
+                const dx = touch.clientX - start.x, dy = touch.clientY - start.y;
+                if (!start.horizontal) {
+                    if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { swipe.current = null; return; }
+                    if (Math.abs(dx) < 10 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+                    start.horizontal = true;
+                }
+                const target = visiblePages[visiblePages.indexOf(page) + (dx < 0 ? 1 : -1)] ?? null;
+                const width = viewport.current?.clientWidth || 1;
+                setDrag({offset: target ? Math.max(-width, Math.min(width, dx)) : dx * 0.15, target, settling: false});
+            }}
+            onTouchCancel={() => { if (swipe.current?.horizontal) settle(false); swipe.current = null; }}
+            onTouchEnd={() => {
+                const start = swipe.current;
+                swipe.current = null;
+                if (!start?.horizontal) return;
+                const distance = Math.abs(drag.offset), width = viewport.current?.clientWidth || 1;
+                settle(!!drag.target && (distance > width * 0.28 || (Date.now() - start.time < 300 && distance > 45)));
+            }}
+            onClickCapture={event => { if (drag.offset || drag.settling) { event.preventDefault(); event.stopPropagation(); } }}>
+            {visiblePages.filter(item => item === page || item === drag.target).map(item => {
+                const side = item === page ? 0 : visiblePages.indexOf(item) > visiblePages.indexOf(page) ? 100 : -100;
+                return <main key={item} className={`swipe-page ${item === "Notes" ? "notes-page" : "page-content"}`}
+                    aria-hidden={item !== page} inert={item !== page}
+                    style={{transform: `translateX(calc(${side}% + ${drag.offset}px))`, transition: drag.settling ? "transform 240ms cubic-bezier(0.22, 1, 0.36, 1)" : "none"}}>
+            {!state.data.permissions.usage && item !== "Settings" && <Card><h2>Enable app usage tracking</h2><p>Allow Usage Access to record app activity. Browser and media tracking are optional.</p><button className="primary" disabled={busy} onClick={() => void act(() => request("permission", {kind: "usage"}))}>Open Usage Access</button></Card>}
+            {item === "Usage" && <UsageScreen {...shared} />}
+            {item === "Logs" && <LogsScreen {...shared} />}
+            {item === "Calendar" && <CalendarScreen {...shared} />}
+            {item === "Statistics" && <UsageScreen {...shared} statistics />}
+            {item === "Sync" && <SyncScreen {...shared} />}
+            {item === "Notes" && <MobileNotes />}
+            {item === "Settings" && <SettingsScreen {...shared} />}
+                </main>;
+            })}
+        </div>
+        <nav className="bottom-nav" aria-label="Main navigation">{visiblePages.map(item => <button key={item} aria-current={page === item ? "page" : undefined} onClick={() => navigate(item)}><NavIcon page={item} /><span>{item === "Statistics" ? "Stats" : item}</span></button>)}</nav>
     </div>;
 }
 
 type ScreenProps = {state: MobileState; busy: boolean; act: (work: () => Promise<unknown>, message?: string) => Promise<boolean>};
+type ManualBlock = MobileState["manualEntries"][number] & {running: boolean};
 
 function MobileNotes() {
     const [link, setLink] = useState<string | null>(null);
@@ -129,15 +187,24 @@ function TimerCard({state, act, busy}: ScreenProps) {
     const [title, setTitle] = useState(state.timer?.title ?? "");
     const [project, setProject] = useState(state.timer?.project_name ?? "");
     const [editing, setEditing] = useState(false);
-    useEffect(() => { if (!editing) { setTitle(state.timer?.title ?? ""); setProject(state.timer?.project_name ?? ""); } }, [state.timer?.session_id, state.timer?.title, state.timer?.project_name, editing]);
+    useEffect(() => { if (!editing) { setTitle(state.timer?.title ?? ""); setProject(state.timer?.project_name ?? ""); } }, [state.timer?.session_id, state.timer?.title, state.timer?.project_name]);
+    const createCategory = async (name: string, parent: string | null) => {
+        let saved: string | null = null;
+        await act(async () => { saved = await request("manual.category.create", {name, parent}); }, "Category created");
+        return saved;
+    };
     return <Card><div className="row"><h2>Manual timer</h2><span className="muted">{state.timer ? duration(Date.now() / 1000 - state.timer.start_time) : "Ready"}</span></div>
-        {!state.sync.active ? <p>Connect and approve this device in Sync to use the shared timer.</p> : <>
-            {state.timerStatus !== "CONNECTED" && <p role="status">{state.timerStatus === "OLD_SERVER" ? "Update the server to use shared timers." : "Connecting to the shared timer…"}</p>}
+        <>
+            {state.timerStatus !== "CONNECTED" && <p role="status">Timers are saved on this phone. Recorded sessions will upload when sync connects.</p>}
             <label>What are you working on?<input value={title} onFocus={() => setEditing(true)} onBlur={() => setEditing(false)} onChange={event => setTitle(event.target.value)} /></label>
-            <label>Project<select value={project} onFocus={() => setEditing(true)} onBlur={() => setEditing(false)} onChange={event => setProject(event.target.value)}><option value="">No project</option>{state.projects.map(item => <option key={item.name}>{item.name}</option>)}</select></label>
-            <div className="actions"><button className="primary" disabled={busy || state.timerStatus !== "CONNECTED"} onClick={() => void act(() => request("timer.save", {title, project: project || null}), state.timer ? "Timer updated" : "Timer started")}>{state.timer ? "Save details" : "Start timer"}</button>
-                {state.timer && <button disabled={busy || state.timerStatus !== "CONNECTED"} onClick={() => void act(() => request("timer.stop", {title, project: project || null}), "Time recorded")}>Stop and record</button>}</div>
-        </>}
+            <div className="field">Category<CategoryPicker categories={state.projects} value={project} onChange={setProject} onCreate={createCategory} /></div>
+            <div className="actions"><button className="primary" disabled={busy} onClick={() => void act(() => request("timer.save", {title, project: project || null}), state.timer ? "Timer updated" : "Timer started")}>{state.timer ? "Save details" : "Start timer"}</button>
+                {state.timer && <button disabled={busy} onClick={() => void act(() => request("timer.stop", {title, project: project || null}), "Time recorded")}>Stop and record</button>}</div>
+        </>
+        {(state.manualEntries?.length ?? 0) > 0 && <div className="manual-history"><h3>Recorded sessions</h3>{state.manualEntries.slice(-5).reverse().map(entry => <div className="usage-row" key={entry.session_id}>
+            <div className="row"><strong>{entry.title || "Untitled session"}</strong><span>{duration(entry.end_time - entry.start_time)}</span></div>
+            <small>{new Date(entry.start_time * 1000).toLocaleString()}{entry.project_name ? ` / ${entry.project_name}` : ""} / {entry.synced ? "Synced" : "Saved on phone / Waiting to sync"}</small>
+        </div>)}</div>}
     </Card>;
 }
 
@@ -235,10 +302,22 @@ function CalendarScreen(props: ScreenProps) {
         }
     }, refetchInterval: 15000});
     const blocks = calendarBlocks(logs.data ?? [], +start, +end, props.state.settings);
+    const [manual, setManual] = useState<ManualBlock | null>(null);
+    const {timer, manualEntries = [], projects} = props.state;
+    const manualBlocks: ManualBlock[] = [...manualEntries.map(entry => ({...entry, running: false})), ...(timer ? [{...timer, end_time: Date.now() / 1000, synced: false, running: true}] : [])]
+        .filter(entry => entry.end_time * 1000 > +start && entry.start_time * 1000 < +end);
+    const manualColor = (project: string | null) => project ? projects.find(item => item.name === project)?.color ?? "#a78bfa" : "#64748b";
+    const events = [
+        ...blocks.map(block => ({id: block.id, title: `${block.title} · ${duration(block.activeSeconds)}`, start: new Date(block.start), end: new Date(block.end), backgroundColor: colorFor(block.packageName), borderColor: "transparent", textColor: "#111318", extendedProps: {logs: block.logs}})),
+        ...manualBlocks.map(entry => ({id: `manual-${entry.session_id}`, title: `${entry.running ? "● " : ""}${entry.title || "Untitled session"}${entry.project_name ? ` · ${entry.project_name}` : ""} · ${duration(entry.end_time - entry.start_time)}`, start: new Date(Math.max(+start, entry.start_time * 1000)), end: new Date(Math.min(+end, entry.end_time * 1000)), backgroundColor: manualColor(entry.project_name), borderColor: "#f2f3f7", textColor: "#111318", classNames: ["manual-event"], extendedProps: {manual: entry}})),
+    ];
     return <><DayPicker day={day} setDay={setDay} hour={hour} /><div className="row"><p className="muted">Tap a time block for its activity</p><div className="actions"><button aria-label="Zoom out" disabled={zoom <= 1} onClick={() => setZoom(value => value - 0.5)}>−</button><button aria-label="Zoom in" disabled={zoom >= 3} onClick={() => setZoom(value => value + 0.5)}>+</button></div></div>
         {logs.error && <p role="alert">Could not load calendar. <button onClick={() => void logs.refetch()}>Retry</button></p>}
-        {logs.isPending ? <Empty>Loading calendar…</Empty> : <div className="mobile-calendar" style={{"--slot-height": `${28 * zoom}px`} as React.CSSProperties}><FullCalendar key={`${day}:${hour}`} plugins={[timeGridPlugin, interactionPlugin]} initialView="timeGridDay" initialDate={day} headerToolbar={false} allDaySlot={false} dayHeaders={false} height="auto" slotMinTime={`${String(hour).padStart(2, "0")}:00:00`} slotMaxTime={`${hour + 24}:00:00`} scrollTime={`${hour}:00:00`} nowIndicator events={blocks.map(block => ({id: block.id, title: `${block.title} · ${duration(block.activeSeconds)}`, start: new Date(block.start), end: new Date(block.end), backgroundColor: colorFor(block.packageName), borderColor: "transparent", textColor: "#111318", extendedProps: {logs: block.logs}}))} eventClick={event => setSelected(event.event.extendedProps.logs as MobileLog[])} /></div>}
-        {!logs.isPending && !blocks.length && <p className="muted">No time blocks match the detection settings for this day.</p>}
+        {logs.isPending ? <Empty>Loading calendar…</Empty> : <div className="mobile-calendar" style={{"--slot-height": `${28 * zoom}px`} as React.CSSProperties}><FullCalendar key={`${day}:${hour}`} plugins={[timeGridPlugin, interactionPlugin]} initialView="timeGridDay" initialDate={day} headerToolbar={false} allDaySlot={false} dayHeaders={false} height="auto" slotMinTime={`${String(hour).padStart(2, "0")}:00:00`} slotMaxTime={`${hour + 24}:00:00`} scrollTime={`${hour}:00:00`} nowIndicator events={events} eventClick={event => { const entry = event.event.extendedProps.manual as ManualBlock | undefined; if (entry) setManual(entry); else setSelected(event.event.extendedProps.logs as MobileLog[]); }} /></div>}
+        {!logs.isPending && !events.length && <p className="muted">No time blocks match the detection settings for this day.</p>}
+        {manual && <Modal title={manual.running ? "Running timer" : "Manual time"} close={() => setManual(null)}><dl className="log-details">
+            {([["Title", manual.title || "Untitled session"], ["Category", manual.project_name || "Uncategorized"], ["Start", new Date(manual.start_time * 1000).toLocaleString()], ["End", manual.running ? "Running" : new Date(manual.end_time * 1000).toLocaleString()], ["Duration", duration(manual.end_time - manual.start_time)], ["Status", manual.running ? "Recording" : manual.synced ? "Synced" : "Saved on phone / Waiting to sync"]] as const).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+        </dl></Modal>}
         {selected && !detail && <Modal title="Time block activity" close={() => setSelected(null)}>{selected.map(log => <button className="log-row" key={log.id} onClick={() => setDetail(log)}><span className="app-label">{log.app_label || log.app_name}<small>{new Date(log.start_timestamp).toLocaleTimeString()}</small></span><span>{duration(log.duration)}</span></button>)}</Modal>}
         {detail && <LogDetails log={detail} close={() => { setDetail(null); setSelected(null); }} {...props} />}
     </>;

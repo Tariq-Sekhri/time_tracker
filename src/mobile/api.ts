@@ -9,6 +9,7 @@ export type Timer = {session_id: string; title: string; project_name: string | n
 export type MobileState = {
     permissions: {usage: boolean; browser: boolean; media: boolean}; settings: Settings;
     sync: {server: string | null; registered: boolean; active: boolean; uuid: string | null; name: string; nextSyncSeconds: number | null};
+    manualEntries: (Timer & {end_time: number; synced: boolean})[];
     timer: Timer | null; timerStatus: string; projects: {name: string; color: string}[];
     version: string; firstLogMs: number | null;
 };
@@ -40,6 +41,7 @@ type Requests = {
     "sync.reupload": [undefined, string];
     "sync.devices": [undefined, {uuid: string; name: string}[]];
     "timer.save": [{title: string; project: string | null}, null];
+    "manual.category.create": [{name: string; parent: string | null}, string];
     "timer.stop": [{title: string; project: string | null}, null];
 };
 
