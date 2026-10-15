@@ -326,6 +326,7 @@ function AppInner() {
     };
 
     const handleSetCurrentView = (newView: View) => {
+        void logMessage("info", `Navigation requested from=${currentView} to=${newView}`);
         if (newView === "detailed") {
             void queryClient.fetchQuery({
                 queryKey: ["total_statistics", "bounds"],

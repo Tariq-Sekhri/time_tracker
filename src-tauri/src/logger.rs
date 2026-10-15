@@ -154,14 +154,11 @@ fn install_panic_hook() {
 }
 
 pub fn init() {
-    // Dev builds log to the terminal only; support log files belong to the production app.
-    if cfg!(debug_assertions) {
-        log::set_logger(&LIBRARY_LOGGER).ok();
-        log::set_max_level(log::LevelFilter::Warn);
-        install_panic_hook();
-        return;
-    }
-    let directory = log_dir();
+    init_in(&log_dir());
+}
+
+fn init_in(directory: &Path) {
+    // data_dir() separates development and production sessions. Both retain files.
     let result = (|| -> std::io::Result<SupportLogger> {
         fs::create_dir_all(&directory)?;
         let path = directory.join(format!(
@@ -340,18 +337,12 @@ mod tests {
             uuid::Uuid::new_v4()
         ));
         fs::create_dir_all(&directory).unwrap();
-        let path = directory.join("session.log");
-        let file = OpenOptions::new()
-            .create_new(true)
-            .append(true)
-            .open(&path)
-            .unwrap();
-        assert!(LOGGER
-            .set(Mutex::new(SupportLogger {
-                path: path.clone(),
-                file
-            }))
-            .is_ok());
+        // Exercise the real initializer, including the development build path.
+        init_in(&directory);
+        let path = current_path();
+        assert!(path.starts_with(&directory));
+        assert!(path.is_file());
+        assert!(get_support_log_info().available);
         Log::info("backend operation");
         log_frontend("error".into(), "frontend caught error".into());
         let previous_hook = std::panic::take_hook();
