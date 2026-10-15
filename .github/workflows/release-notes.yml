@@ -1,0 +1,20 @@
+name: Sync Release Notes
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - CHANGELOG.md
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Match published release notes to CHANGELOG.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/sync-release-notes.mjs

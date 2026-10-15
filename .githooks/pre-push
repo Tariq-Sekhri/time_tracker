@@ -1,0 +1,10 @@
+#!/bin/sh
+# Pushing master publishes a release, so its What's New must not be empty.
+# Installed by `npm install` (package.json "prepare" sets core.hooksPath).
+zero=0000000000000000000000000000000000000000
+while read -r local_ref local_sha remote_ref remote_sha; do
+    [ "$remote_ref" = "refs/heads/master" ] || continue
+    [ "$local_sha" = "$zero" ] && continue
+    node scripts/check-whats-new.mjs "$local_sha" || exit 1
+done
+exit 0

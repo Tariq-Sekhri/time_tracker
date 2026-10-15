@@ -12,7 +12,9 @@
     "test": "vitest run",
     "test:demo": "vitest run demo/mock/core.test.ts demo/mock/sync.test.ts demo/network-guard.test.ts src/Screens/Calander/ManualTimer.demo.test.tsx src/Screens/Calander/ManualTimeBlockDialog.demo.test.tsx src/Screens/Calander/manualCalendarEditing.demo.test.ts src/Screens/Calander/useHoldToCreate.test.tsx src/Componants/WhatsNew.test.tsx src/Screens/Settings.demo.test.tsx src/Screens/Sync.demo.test.tsx src/afk/model.test.ts src/Componants/AfkSettings.demo.test.tsx",
     "test:watch": "vitest",
-    "bump": "node scripts/bump.mjs"
+    "bump": "node scripts/bump.mjs",
+    "prepare": "git config core.hooksPath .githooks",
+    "check:whats-new": "node scripts/check-whats-new.mjs"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.20",

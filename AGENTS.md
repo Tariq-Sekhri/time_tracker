@@ -18,3 +18,5 @@
 - Before actually pushing, show the user the exact What's New text and wait for their explicit confirmation. A request to push alone does not skip this review.
 - Only push after the user confirms the displayed What's New. Include those approved notes in the release so the in-app What's New and GitHub release notes match.
 - If the release scope or notes change after confirmation, show the updated What's New and get confirmation again before pushing.
+- A `pre-push` hook (`.githooks/`, enabled by `npm install`) blocks pushing `master` when the What's New for the `package.json` version is empty. Never bypass it with `--no-verify`.
+- Released notes can be corrected after the fact: edit that version's section in `CHANGELOG.md` and push (same confirmation rules). Installed apps read What's New from GitHub, and the release notes are updated to match; changelog-only pushes don't rebuild a release.

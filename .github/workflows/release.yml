@@ -11,6 +11,9 @@ on:
   push:
     branches:
       - master
+    # Changelog-only pushes fix What's New after the fact; they must not rebuild a release.
+    paths-ignore:
+      - CHANGELOG.md
   release:
     types: [published]
 
