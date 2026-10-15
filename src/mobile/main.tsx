@@ -10,5 +10,5 @@ import "./mobile.css";
 installDiagnostics();
 const client = new QueryClient({defaultOptions: {queries: {retry: 1, refetchOnWindowFocus: true}}});
 ReactDOM.createRoot(document.getElementById("root")!).render(
-    <React.StrictMode><QueryClientProvider client={client}><ToastProvider><ErrorBoundary><MobileApp /></ErrorBoundary></ToastProvider></QueryClientProvider></React.StrictMode>,
+    <React.StrictMode><QueryClientProvider client={client}><ToastProvider><ErrorBoundary showLogFolder={false}><MobileApp /></ErrorBoundary></ToastProvider></QueryClientProvider></React.StrictMode>,
 );

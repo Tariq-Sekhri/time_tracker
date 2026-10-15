@@ -1,4 +1,4 @@
-import {useEffect, useState, type ReactNode} from "react";
+import {useEffect, useRef, useState, type ReactNode} from "react";
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -47,6 +47,27 @@ export default function MobileApp() {
     const {showToast} = useToast();
     const [page, setPage] = useState<Page>("Usage");
     const [busy, setBusy] = useState(false);
+    useEffect(() => {
+        history.replaceState({page: "Usage"}, "", "#usage");
+        const changed = (event: PopStateEvent) => setPage(pages.includes(event.state?.page) ? event.state.page : "Usage");
+        window.addEventListener("popstate", changed);
+        return () => window.removeEventListener("popstate", changed);
+    }, []);
+    useEffect(() => {
+        const mobileWindow = window as Window & {__TIME_TRACKER_BACK__?: () => boolean};
+        mobileWindow.__TIME_TRACKER_BACK__ = () => {
+            const dialog = document.querySelector<HTMLDialogElement>("dialog[open]");
+            if (dialog) { dialog.dispatchEvent(new Event("cancel", {cancelable: true})); return true; }
+            if (page !== "Usage") { history.back(); return true; }
+            return false;
+        };
+        return () => { delete mobileWindow.__TIME_TRACKER_BACK__; };
+    }, [page]);
+    const navigate = (next: Page) => {
+        if (next === page) return;
+        history.pushState({page: next}, "", `#${next.toLowerCase()}`);
+        setPage(next);
+    };
     const state = useQuery({queryKey: ["mobile-state"], queryFn: () => request("state"), refetchInterval: 2000});
     useEffect(() => {
         let running = false;
@@ -85,14 +106,24 @@ export default function MobileApp() {
             {page === "Calendar" && <CalendarScreen {...shared} />}
             {page === "Statistics" && <UsageScreen {...shared} statistics />}
             {page === "Sync" && <SyncScreen {...shared} />}
-            {page === "Notes" && <Notes />}
+            {page === "Notes" && <MobileNotes />}
             {page === "Settings" && <SettingsScreen {...shared} />}
         </main>
-        <nav className="bottom-nav" aria-label="Main navigation">{pages.filter(item => item !== "Notes" || state.data.settings.notes_enabled).map(item => <button key={item} aria-current={page === item ? "page" : undefined} onClick={() => setPage(item)}><NavIcon page={item} /><span>{item === "Statistics" ? "Stats" : item}</span></button>)}</nav>
+        <nav className="bottom-nav" aria-label="Main navigation">{pages.filter(item => item !== "Notes" || state.data.settings.notes_enabled).map(item => <button key={item} aria-current={page === item ? "page" : undefined} onClick={() => navigate(item)}><NavIcon page={item} /><span>{item === "Statistics" ? "Stats" : item}</span></button>)}</nav>
     </div>;
 }
 
 type ScreenProps = {state: MobileState; busy: boolean; act: (work: () => Promise<unknown>, message?: string) => Promise<boolean>};
+
+function MobileNotes() {
+    const [link, setLink] = useState<string | null>(null);
+    const resolve = useRef<((value: string | null) => void) | null>(null);
+    useEffect(() => () => { resolve.current?.(null); }, []);
+    const finish = (value: string | null) => { resolve.current?.(value); resolve.current = null; setLink(null); };
+    return <><Notes requestLink={() => new Promise<string | null>(done => { resolve.current = done; setLink(""); })} />
+        {link !== null && <Modal title="Add link" close={() => finish(null)}><form onSubmit={event => { event.preventDefault(); finish(link); }}><label>Link address<input type="url" required autoFocus placeholder="https://example.com" value={link} onChange={event => setLink(event.target.value)} /></label><button className="primary">Insert link</button></form></Modal>}
+    </>;
+}
 
 function TimerCard({state, act, busy}: ScreenProps) {
     const [title, setTitle] = useState(state.timer?.title ?? "");
@@ -170,11 +201,19 @@ function LogsScreen(props: ScreenProps) {
     const [limit, setLimit] = useState(100);
     const [selected, setSelected] = useState<MobileLog | null>(null);
     const start = dateAtHour(day, hour), end = nextDay(start);
-    const logs = useQuery({queryKey: ["mobile-data", "logs", day, hour, limit], queryFn: () => request("logs", {startMs: +start, endMs: +end, limit: limit + 1}), refetchInterval: 5000});
+    const logs = useQuery({queryKey: ["mobile-data", "logs", day, hour, limit], queryFn: async () => {
+        const rows: MobileLog[] = [];
+        while (rows.length <= limit) {
+            const batch = await request("logs", {startMs: +start, endMs: +end, offset: rows.length, limit: Math.min(500, limit + 1 - rows.length)});
+            rows.push(...batch);
+            if (batch.length === 0 || rows.length > limit) break;
+        }
+        return rows;
+    }, refetchInterval: 5000});
     return <><DayPicker day={day} setDay={value => { setDay(value); setLimit(100); }} hour={hour} /><div className="row"><p className="muted">Local app, browser, and media activity</p><button disabled={props.busy} onClick={() => void props.act(() => request("import"))}>Refresh</button></div>
         {logs.error && <p role="alert">Could not load logs. <button onClick={() => void logs.refetch()}>Retry</button></p>}
         {logs.isPending ? <Empty>Loading activity…</Empty> : !logs.data?.length ? <Empty>No activity recorded for this day.</Empty> : <div className="log-list">{logs.data.slice(0, limit).map(log => <button key={log.id} className="log-row" onClick={() => setSelected(log)}><span className="dot" style={{background: colorFor(log.package_name)}} /><span className="app-label"><strong>{log.app_label || log.app_name}</strong><small>{log.app_name} · {new Date(log.start_timestamp).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})}</small></span><span>{duration(clipLog(log, +start, +end).duration)}</span></button>)}</div>}
-        {(logs.data?.length ?? 0) > limit && <button onClick={() => setLimit(Math.min(499, limit + 100))}>Show more logs</button>}
+        {(logs.data?.length ?? 0) > limit && <button onClick={() => setLimit(limit + 100)}>Show more logs</button>}
         {selected && <LogDetails log={selected} close={() => setSelected(null)} {...props} />}
     </>;
 }

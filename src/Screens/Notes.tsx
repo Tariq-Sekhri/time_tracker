@@ -46,7 +46,7 @@ function toEditorHtml(value: string): string {
         : "";
 }
 
-export default function Notes() {
+export default function Notes({requestLink}: {requestLink?: () => Promise<string | null>} = {}) {
     const { showToast } = useToast();
     const queryClient = useQueryClient();
     const { data } = useQuery({ queryKey: NOTES_QUERY_KEY, queryFn: getNotesState, refetchInterval: 5000 });
@@ -147,8 +147,15 @@ export default function Notes() {
                 {([["Bold", "bold"], ["Italic", "italic"], ["Underline", "underline"], ["Bullets", "insertUnorderedList"], ["Numbered list", "insertOrderedList"]] as const).map(([label, command]) => (
                     <button key={command} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => format(command)} className="rounded px-2.5 py-1.5 text-sm text-gray-200 hover:bg-gray-700 focus-visible:outline focus-visible:outline-blue-400" aria-label={label} title={label}>{label}</button>
                 ))}
-                <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => {
-                    const href = window.prompt("Link address (https://…)");
+                <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={async () => {
+                    const selection = window.getSelection();
+                    const range = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+                    const href = requestLink ? await requestLink() : window.prompt("Link address (https://…)");
+                    if (range && editorRef.current?.contains(range.commonAncestorContainer)) {
+                        editorRef.current.focus();
+                        selection?.removeAllRanges();
+                        selection?.addRange(range);
+                    }
                     if (href && /^https?:\/\//i.test(href)) format("createLink", href);
                 }} className="rounded px-2.5 py-1.5 text-sm text-gray-200 hover:bg-gray-700">Link</button>
             </div>
