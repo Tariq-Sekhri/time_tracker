@@ -98,6 +98,25 @@ export default function Notes() {
         if (editorRef.current) save(editorRef.current.innerHTML);
     };
 
+    const copyImage = async (img: HTMLImageElement) => {
+        try {
+            const canvas = document.createElement("canvas");
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            canvas.getContext("2d")?.drawImage(img, 0, 0);
+            const blob = await new Promise<Blob>((resolve, reject) =>
+                canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Could not encode image"))), "image/png"));
+            await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+        } catch (error) {
+            showToast("Could not copy image", "error", 5000, toErrorString(error));
+        }
+    };
+
+    const selectImage = (img: HTMLImageElement | null) => {
+        editorRef.current?.querySelectorAll("img.selected").forEach((el) => el.classList.remove("selected"));
+        img?.classList.add("selected");
+    };
+
     const insertImage = (file: File) => {
         if (!file.type.startsWith("image/")) return;
         if (file.size > 4 * 1024 * 1024) {
@@ -143,9 +162,28 @@ export default function Notes() {
                 data-placeholder="Write notes about the app… Paste an image to add it."
                 onInput={(event) => save(event.currentTarget.innerHTML)}
                 onBlur={() => { void saveQueue.current.then(() => queryClient.invalidateQueries({queryKey: NOTES_QUERY_KEY})); }}
+                onClick={(event) => selectImage(event.target instanceof HTMLImageElement ? event.target : null)}
+                onContextMenu={(event) => {
+                    if (!(event.target instanceof HTMLImageElement)) return;
+                    event.preventDefault();
+                    selectImage(event.target);
+                    void copyImage(event.target);
+                }}
+                onCopy={(event) => {
+                    const selection = window.getSelection();
+                    const editor = editorRef.current;
+                    if (!selection || !editor) return;
+                    const selected = editor.querySelector<HTMLImageElement>("img.selected");
+                    const images = Array.from(editor.querySelectorAll("img")).filter((img) => !selection.isCollapsed && selection.containsNode(img, true));
+                    if (!images.length && selected && !selection.toString()) images.push(selected);
+                    if (!images.length) return;
+                    event.preventDefault();
+                    void copyImage(images[0]);
+                }}
                 onPaste={(event) => {
                     const image = Array.from(event.clipboardData.items).find((item) => item.type.startsWith("image/"));
-                    if (image) {
+                    const hasHtmlImage = /<img\b[^>]*src="data:image\//i.test(event.clipboardData.getData("text/html"));
+                    if (image && !hasHtmlImage) {
                         event.preventDefault();
                         const file = image.getAsFile();
                         if (file) insertImage(file);
