@@ -233,9 +233,9 @@ a[href] {color:var(--tt-link);}
 :is(button,a)[class~="bg-cyan-900"] {background-color:var(--tt-infoBg);color:var(--tt-info);}
 
 /* New roles only replace component colors when customized. */
-/* Sources convey visibility through icon color, with no persistent row or control fill. */
-:root[data-theme-color-overrides~="sidebarControls"] .theme-sidebar:not(.theme-source-list) :is(button,select,input) {background-color:var(--tt-sidebarControls);}
-:root[data-theme-color-overrides~="sidebarSelection"] .theme-sidebar:not(.theme-source-list) :is([aria-pressed=true],[aria-selected=true]) {background-color:var(--tt-sidebarSelection);}
+/* Only recolor controls that already have a fill; text actions stay transparent. */
+:root[data-theme-color-overrides~="sidebarControls"] .theme-sidebar:not(.theme-source-list) :is(button[class~="bg-gray-800"],button[class~="bg-gray-900"],select,input) {background-color:var(--tt-sidebarControls);}
+:root[data-theme-color-overrides~="sidebarSelection"] .theme-sidebar:not(.theme-source-list) :is(button[class~="bg-gray-700"],button[class~="bg-gray-800"],button[class~="bg-gray-900"]):is([aria-pressed=true],[aria-selected=true]) {background-color:var(--tt-sidebarSelection);}
 :root[data-theme-color-overrides~="codeSurface"] :is(code,pre) {background-color:var(--tt-codeSurface)!important;}
 :root[data-theme-color-overrides~="action"] .settings-primary-button {background:var(--tt-action);}
 :root[data-theme-color-overrides~="messageSurface"] [role=alert] {background-color:var(--tt-messageSurface);}
