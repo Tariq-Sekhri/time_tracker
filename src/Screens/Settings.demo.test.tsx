@@ -58,7 +58,7 @@ it("keeps unsaved tracking changes when navigating settings sections", async () 
     await user.click(screen.getByRole("tab", {name: "Tracking"}));
     const threshold = await screen.findByRole("spinbutton", {name: "Away score threshold (%)"});
     fireEvent.change(threshold, {target: {value: "83"}});
-    await user.click(screen.getByRole("tab", {name: "Appearance"}));
+    await user.click(screen.getByRole("tab", {name: "General"}));
     expect(screen.queryByRole("spinbutton", {name: "Away score threshold (%)"})).toBeNull();
     expect(screen.getByRole("button", {name: "Customize colors"})).toBeTruthy();
     await user.keyboard("{ArrowRight}");

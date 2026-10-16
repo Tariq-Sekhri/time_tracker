@@ -381,7 +381,6 @@ export default function Settings() {
     const pageRef = useRef<HTMLDivElement>(null);
     const sections = [
         {id: "general", label: "General"},
-        {id: "appearance", label: "Appearance"},
         {id: "tracking", label: "Tracking"},
         ...(isDesktopApp() ? [{id: "data", label: "Data & support"}] : []),
     ];
@@ -401,7 +400,7 @@ export default function Settings() {
     return <div className="settings-shell">
         <div className="theme-header shrink-0 border-b border-gray-700">
             <nav className="flex min-w-0 items-center justify-start overflow-x-auto border-t border-gray-800/70 bg-gray-950/60 px-5 py-2 nice-scrollbar sm:justify-center" aria-label="Settings sections">
-                <div className={`grid w-full max-w-[620px] shrink-0 ${sections.length === 4 ? "min-w-[420px] grid-cols-4" : "min-w-[300px] grid-cols-3"}`} role="tablist" aria-label="Settings sections"
+                <div className={`grid w-full max-w-[620px] shrink-0 ${sections.length === 3 ? "min-w-[300px] grid-cols-3" : "min-w-[200px] grid-cols-2"}`} role="tablist" aria-label="Settings sections"
                     onKeyDown={event => {
                         const index = sections.findIndex(item => item.id === section);
                         let next: number;
@@ -425,11 +424,8 @@ export default function Settings() {
         </div>
         <div ref={pageRef} className="settings-page nice-scrollbar">
             <div className="settings-content">
-                <div className="settings-section-stack" role="tabpanel" id="settings-section-appearance" aria-labelledby="settings-tab-appearance" hidden={section !== "appearance"}>
-                    <ThemeSettings />
-                </div>
-
                 <div className="settings-section-stack" role="tabpanel" id="settings-section-general" aria-labelledby="settings-tab-general" hidden={section !== "general"}>
+                    <ThemeSettings />
 
                     <section className="settings-panel" aria-labelledby="calendar-settings-title">
                         <div className="settings-section-heading"><div><h2 id="calendar-settings-title">Calendar</h2><p>Layout and sidebar.</p></div></div>
