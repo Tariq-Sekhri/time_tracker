@@ -5,15 +5,20 @@ import "./editor.css";
 
 function BrightnessValue({value,onChange}:{value:number;onChange:(value:number)=>void}) {
     const [draft,setDraft]=useState(String(value));
+    const [editing,setEditing]=useState(false);
+    const cancelled=useRef(false);
     useEffect(()=>setDraft(String(value)),[value]);
     const commit=()=>{
+        setEditing(false);
+        if(cancelled.current){cancelled.current=false;setDraft(String(value));return;}
         const parsed=Number(draft.trim().replace(/%$/,""));
         if(draft.trim() && Number.isFinite(parsed)){const next=Math.round(Math.max(0,Math.min(100,parsed))*10)/10;setDraft(String(next));onChange(next);}
         else setDraft(String(value));
     };
-    return <span className="theme-brightness-number"><input className="theme-brightness-value" aria-label="Brightness percentage" inputMode="decimal" value={draft}
+    if(!editing)return <button type="button" className="theme-brightness-display" aria-label={`Brightness ${value}%, click to edit`} onClick={()=>{setDraft(String(value));setEditing(true);}}>{value}%</button>;
+    return <span className="theme-brightness-number"><input autoFocus className="theme-brightness-value" aria-label="Brightness percentage" inputMode="decimal" value={draft}
         style={{width:`${Math.max(2,draft.length)}ch`}} onChange={e=>setDraft(e.target.value)} onFocus={e=>e.target.select()} onBlur={commit}
-        onKeyDown={e=>{if(e.key==="Enter")e.currentTarget.blur();if(e.key==="Escape")setDraft(String(value));}}/><span>%</span></span>;
+        onKeyDown={e=>{if(e.key==="Enter")e.currentTarget.blur();if(e.key==="Escape"){cancelled.current=true;e.currentTarget.blur();}}}/><span>%</span></span>;
 }
 
 function ColorField({field, value, original, onChange}:{field:typeof COLOR_FIELDS[number];value:string;original:string;onChange:(key:ColorKey,value:string)=>void}) {

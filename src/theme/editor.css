@@ -8,6 +8,7 @@
 .theme-brightness label {font-weight:600;}
 .theme-brightness input[type=range] {width:100%;margin:14px 0;accent-color:var(--tt-accent);cursor:pointer;}
 .theme-brightness-number {display:inline-flex;align-items:center;}
+.theme-brightness .theme-brightness-display {appearance:none;background:none;border:0;padding:0;margin:0;color:inherit;font:inherit;line-height:inherit;border-radius:0;box-shadow:none;cursor:text;}
 .theme-brightness input.theme-brightness-value {background:transparent!important;color:inherit;padding:0;border:0;border-radius:3px;text-align:right;font:inherit;outline:0;cursor:text;}
 .theme-brightness input.theme-brightness-value:focus {background:var(--tt-input)!important;outline:1px solid var(--tt-focus);}
 .theme-brightness p {margin:10px 0 0;font-size:12px;}
