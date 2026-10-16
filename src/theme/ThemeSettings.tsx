@@ -41,17 +41,20 @@ export default function ThemeSettings() {
             <button type="button" className="settings-secondary-button" onClick={()=>state.select("dark")}>Use default dark</button>
         </div>
         <div className="theme-presets" role="group" aria-label="Theme presets">
-            {PICKER_FAMILIES.map(f=>{const p=withBrightness(PRESETS.find(p=>p.id===f.dark)!,themeBrightness(theme));return <button key={p.id} type="button" className="theme-preset" aria-pressed={themeFamily(theme).dark===p.id} onClick={()=>state.selectFamily(p.id)}>
+            {PICKER_FAMILIES.map(f=>{const p=withBrightness({...PRESETS.find(p=>p.id===f.dark)!,mode:theme.mode},themeBrightness(theme));return <button key={p.id} type="button" className="theme-preset" aria-pressed={themeFamily(theme).dark===p.id} onClick={()=>state.selectFamily(p.id)}>
                 <span className="theme-preset-image" style={{background:p.colors.app,borderColor:p.colors.border}} aria-hidden="true">
                     <i style={{background:p.colors.raised}}/><span style={{background:p.colors.panel}}><b style={{background:p.colors.accent}}/><b style={{background:p.colors.border}}/><b style={{background:p.colors.muted}}/></span>
                 </span><span>{f.name}</span><small>Dark to light</small>
             </button>;})}
         </div>
         <div className="theme-brightness">
-            <div><label htmlFor="theme-brightness">Dark to light</label><output htmlFor="theme-brightness">{themeBrightness(theme)}%</output></div>
+            <div className="theme-mode-toggle" role="group" aria-label="Appearance mode">
+                {(["dark","light"] as const).map(mode=><button key={mode} type="button" aria-pressed={theme.mode===mode} onClick={()=>state.setMode(mode)}>{mode==="dark"?"Dark":"Light"}</button>)}
+            </div>
+            <div><label htmlFor="theme-brightness">Brightness</label><output htmlFor="theme-brightness">{themeBrightness(theme)}%</output></div>
             <input id="theme-brightness" type="range" min="0" max="100" step="1" value={themeBrightness(theme)} onChange={e=>state.setBrightness(Number(e.target.value))}/>
-            <div className="settings-muted"><span>Dark</span><span>Light</span></div>
-            <p className="settings-muted">Choose a color palette, then adjust its brightness. 10% gives the super-dark look. Changes save automatically.</p>
+            <div className="settings-muted"><span>Dimmer</span><span>Brighter</span></div>
+            <p className="settings-muted">Adjust brightness within the selected mode. Dark mode at 10% gives the super-dark look. Changes save automatically.</p>
         </div>
         <div className="theme-custom-bar">
             <button className="settings-primary-button" type="button" onClick={()=>{setExpanded(!expanded);}}>{expanded?"Close editor":"Customize colors"}</button>
@@ -60,7 +63,6 @@ export default function ThemeSettings() {
             <p className="settings-muted theme-help">Editing a built-in theme creates your own copy.</p>
             <div className="theme-editor-controls">
                 <label>Theme name<input aria-label="Theme name" key={theme.id+theme.name} defaultValue={theme.name} maxLength={80} onBlur={e=>state.rename(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")e.currentTarget.blur();}}/></label>
-                <label>Native controls<select aria-label="Native controls" value={theme.mode} onChange={e=>state.setMode(e.target.value as "dark"|"light")}><option value="dark">Dark</option><option value="light">Light</option></select></label>
             </div>
             <div className="theme-editor-layout">
                 <div className="theme-fields">

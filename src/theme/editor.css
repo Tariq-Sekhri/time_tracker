@@ -8,6 +8,9 @@
 .theme-brightness label {font-weight:600;}
 .theme-brightness input {width:100%;margin:14px 0;accent-color:var(--tt-accent);cursor:pointer;}
 .theme-brightness p {margin:10px 0 0;font-size:12px;}
+.theme-brightness .theme-mode-toggle {justify-content:flex-start;margin-bottom:14px;gap:4px;}
+.theme-mode-toggle button {padding:6px 18px;border:1px solid var(--tt-border);border-radius:7px;color:var(--tt-muted);cursor:pointer;}
+.theme-mode-toggle button[aria-pressed=true] {background:var(--tt-accent);color:var(--tt-onAccent);border-color:var(--tt-accent);}
 .theme-preset {
     text-align: left;
     border: 1px solid var(--tt-borderSubtle);

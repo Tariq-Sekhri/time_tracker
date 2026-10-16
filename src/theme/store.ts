@@ -50,13 +50,13 @@ export const useThemeStore = create<State>((set,get)=>{
         selectFamily:(id)=>{
             const brightness=themeBrightness(activeTheme(get()));
             const preset=PRESETS.find(p=>p.id===id);if(!preset)return;
-            if(brightness===35){update({activeId:id});return;}
-            const theme=withBrightness({...preset,id:"custom-"+crypto.randomUUID(),name:preset.name+" custom"},brightness);
+            if(brightness===100 && activeTheme(get()).mode==="dark"){update({activeId:id});return;}
+            const theme=withBrightness({...preset,mode:activeTheme(get()).mode,id:"custom-"+crypto.randomUUID(),name:preset.name+" custom"},brightness);
             update({activeId:theme.id,customThemes:[...get().customThemes,theme]});
         },
         edit:(key,color)=>{if(activeTheme(get()).colors[key]===color)return;const current=editable();const theme=parseTheme({...current,colors:{...current.colors,[key]:color}});replace(theme);},
         rename:(name)=>{if(name.trim() && name.length<=80 && name.trim()!==activeTheme(get()).name) replace({...editable(),name:name.trim()});},
-        setMode:(mode)=>{if(activeTheme(get()).mode!==mode)replace({...editable(),mode});},
+        setMode:(mode)=>{if(activeTheme(get()).mode!==mode)replace(withBrightness({...editable(),mode},themeBrightness(activeTheme(get()))));},
         reset:()=>{const theme=activeTheme(get());if(!get().customThemes.some(t=>t.id===theme.id))return;const base=PRESETS.find(t=>t.id===theme.baseId)!;replace({...theme,brightness:undefined,mode:base.mode,colors:{...base.colors}});},
         remove:()=>{const id=get().activeId;update({activeId:"dark",customThemes:get().customThemes.filter(t=>t.id!==id)});},
         importTheme:(json)=>{if(json.length>100_000) throw new Error("Theme JSON is too large.");const parsed=parseTheme(JSON.parse(json));const theme={...parsed,id:"custom-"+crypto.randomUUID()};update({activeId:theme.id,customThemes:[...get().customThemes,theme]});},
