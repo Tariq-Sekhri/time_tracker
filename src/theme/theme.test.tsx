@@ -18,7 +18,7 @@ it("blends every palette from stable endpoints and keeps readable text",()=>{
         expect(withBrightness(dark,100).colors).toEqual(light.colors);
         const middle=withBrightness(dark,50);
         expect(withBrightness(middle,35).colors).toEqual(dark.colors);
-        for(const value of [20,40,60,80]) expect(contrastRatio(withBrightness(dark,value).colors.text,withBrightness(dark,value).colors.panel)!).toBeGreaterThan(4.5);
+        for(const value of [20,40,60,80,100]) expect(contrastRatio(withBrightness(dark,value).colors.text,withBrightness(dark,value).colors.panel)!).toBeGreaterThan(4.5);
     }
 });
 it("saves slider position and carries brightness between color palettes",()=>{
@@ -34,7 +34,7 @@ it("saves slider position and carries brightness between color palettes",()=>{
 it("keeps preset colors immutable and persists named custom themes with alpha",()=>{
     const store=useThemeStore.getState();store.select("light");store.edit("app","#12345680");store.rename("My theme");
     const theme=activeTheme(useThemeStore.getState());expect(theme.name).toBe("My theme");expect(theme.colors.app).toBe("#12345680");
-    expect(PRESETS.find(p=>p.id==="light")!.colors.app).toBe("#f4f5f7");
+    expect(PRESETS.find(p=>p.id==="light")!.colors.app).toBe("#dce2eb");
     const saved=JSON.parse(localStorage.getItem(STORAGE_KEY)!);expect(saved.customThemes[0].colors.app).toBe("#12345680");
     expect(parseTheme(saved.customThemes[0])).toEqual(theme);
     store.select("dark");expect(document.documentElement.style.getPropertyValue("--tt-app")).toBe("#000000");

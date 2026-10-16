@@ -1,6 +1,6 @@
 import {useEffect, useRef, useState} from "react";
 import {activeTheme, useThemeStore} from "./store";
-import {COLOR_FIELDS, contrastRatio, normalizeColor, PRESETS, PICKER_FAMILIES, themeFamily, themeBrightness, type ColorKey} from "./model";
+import {COLOR_FIELDS, contrastRatio, normalizeColor, PRESETS, PICKER_FAMILIES, themeFamily, themeBrightness, withBrightness, type ColorKey} from "./model";
 import "./editor.css";
 
 function ColorField({field, value, original, onChange}:{field:typeof COLOR_FIELDS[number];value:string;original:string;onChange:(key:ColorKey,value:string)=>void}) {
@@ -41,7 +41,7 @@ export default function ThemeSettings() {
             <button type="button" className="settings-secondary-button" onClick={()=>state.select("dark")}>Use default dark</button>
         </div>
         <div className="theme-presets" role="group" aria-label="Theme presets">
-            {PICKER_FAMILIES.map(f=>{const p=PRESETS.find(p=>p.id===f.dark)!;return <button key={p.id} type="button" className="theme-preset" aria-pressed={themeFamily(theme).dark===p.id} onClick={()=>state.selectFamily(p.id)}>
+            {PICKER_FAMILIES.map(f=>{const p=withBrightness(PRESETS.find(p=>p.id===f.dark)!,themeBrightness(theme));return <button key={p.id} type="button" className="theme-preset" aria-pressed={themeFamily(theme).dark===p.id} onClick={()=>state.selectFamily(p.id)}>
                 <span className="theme-preset-image" style={{background:p.colors.app,borderColor:p.colors.border}} aria-hidden="true">
                     <i style={{background:p.colors.raised}}/><span style={{background:p.colors.panel}}><b style={{background:p.colors.accent}}/><b style={{background:p.colors.border}}/><b style={{background:p.colors.muted}}/></span>
                 </span><span>{f.name}</span><small>Dark to light</small>

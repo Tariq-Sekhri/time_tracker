@@ -381,7 +381,7 @@ function palette(app:string,panel:string,raised:string,text:string,muted:string,
 }
 export const PRESETS: Theme[] = [
     preset("dark", "Default dark", "dark", {}),
-    preset("light", "Paper", "light", {...palette("#f4f5f7","#ffffff","#e9edf2","#1f2937","#64748b","#d1d5db","#2563eb"),
+    preset("light", "Paper", "light", {...palette("#dce2eb","#e6ebf2","#ccd6e3","#1f2937","#52657c","#adbdd0","#2563eb"),
         success:"#047857",successBg:"#d1fae5",warning:"#92400e",warningBg:"#fef3c7",danger:"#b91c1c",dangerBg:"#fee2e2",info:"#0369a1",infoBg:"#e0f2fe",afk:"#fef3c7",afkText:"#78350f",afkBorder:"#d97706"}),
     preset("midnight", "Midnight", "dark", palette("#0b1020","#141b32","#1d2846","#e0e7ff","#94a3c4","#334265","#818cf8")),
     preset("nord", "Hologram", "dark", palette("#11002f","#26005c","#410094","#e6ffff","#a8a4f7","#8042df","#00ffdc")),
@@ -452,10 +452,13 @@ const lightPalettes = [
     ["#eeeeff","#fafaff","#d0d1ff","#24205c","#68639a","#9a99ed","#6c20dc"],
     ["#fff6c7","#fffdea","#ffe78a","#512a00","#8a681c","#e7bd41","#9b4f00"],
 ] as const;
+function tintedLightSurface(surface:string, accent:string) {
+    return "#"+[1,3,5].map(i=>Math.round(parseInt(surface.slice(i,i+2),16)*0.78+parseInt(accent.slice(i,i+2),16)*0.18).toString(16).padStart(2,"0")).join("");
+}
 THEME_FAMILIES.slice(1).forEach((family,index)=>{
     const [app,panel,raised,text,muted,border,accent]=lightPalettes[index];
     PRESETS.push(preset(family.light,family.name+" light","light",{
-        ...palette(app,panel,raised,text,muted,border,accent),
+        ...palette(tintedLightSurface(app,accent),tintedLightSurface(panel,accent),tintedLightSurface(raised,accent),text,muted,border,accent),
         success:"#047857",successBg:"#d1fae5",warning:"#92400e",warningBg:"#fef3c7",danger:"#b91c1c",dangerBg:"#fee2e2",info:"#0369a1",infoBg:"#e0f2fe",
         afk:"#fef3c7",afkText:"#78350f",afkBorder:"#d97706",
     }));
