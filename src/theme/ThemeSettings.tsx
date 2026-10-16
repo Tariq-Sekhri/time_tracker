@@ -1,6 +1,6 @@
 import {useEffect, useRef, useState} from "react";
 import {activeTheme, useThemeStore} from "./store";
-import {COLOR_FIELDS, contrastRatio, normalizeColor, PRESETS, INCLUDED_PRESETS, PICKER_FAMILIES, themeFamily, themeBrightness, type ColorKey} from "./model";
+import {COLOR_FIELDS, contrastRatio, normalizeColor, PRESETS, PICKER_FAMILIES, themeFamily, themeBrightness, type ColorKey} from "./model";
 import "./editor.css";
 
 function ColorField({field, value, original, onChange}:{field:typeof COLOR_FIELDS[number];value:string;original:string;onChange:(key:ColorKey,value:string)=>void}) {
@@ -54,11 +54,6 @@ export default function ThemeSettings() {
             <p className="settings-muted">Choose a color palette, then adjust its brightness. 10% gives the super-dark look. Changes save automatically.</p>
         </div>
         <div className="theme-custom-bar">
-            <label>Current theme<select aria-label="Current theme" value={theme.id} onChange={e=>state.select(e.target.value)}>
-                {!custom && !INCLUDED_PRESETS.some(p=>p.id===theme.id) && <option value={theme.id}>{theme.name}</option>}
-                <optgroup label="Built-in themes">{INCLUDED_PRESETS.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>
-                {state.customThemes.length>0 && <optgroup label="Your themes">{state.customThemes.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>}
-            </select></label>
             <button className="settings-primary-button" type="button" onClick={()=>{setExpanded(!expanded);}}>{expanded?"Close editor":"Customize colors"}</button>
         </div>
         {expanded && <div className="theme-editor">

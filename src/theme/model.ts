@@ -405,6 +405,9 @@ export const THEME_FAMILIES = [
     {name:"Lavender", light:"lavender-light", dark:"lavender"},
     {name:"Terracotta", light:"terracotta-light", dark:"terracotta"},
     {name:"Slate", light:"slate-light", dark:"slate"},
+    {name:"Coral", light:"coral-light", dark:"coral"},
+    {name:"Aqua", light:"aqua-light", dark:"aqua"},
+    {name:"Sand", light:"sand-light", dark:"sand"},
 ];
 export const PICKER_FAMILIES = THEME_FAMILIES.filter(f=>f.dark!=="t3-code");
 const additions: [string,string,string,string,string,string,string,string,string][] = [
@@ -419,6 +422,9 @@ const additions: [string,string,string,string,string,string,string,string,string
     ["lavender","Lavender","#19172a","#28243f","#3b3557","#eee9ff","#afa4cd","#554b72","#baa6f2"],
     ["terracotta","Terracotta","#241512","#38231d","#50342a","#f9e4d9","#c3a08e","#704d3c","#dc9473"],
     ["slate","Slate","#141a20","#202a33","#303e49","#e1eaf0","#9aafbd","#465c6b","#9ab9ce"],
+    ["coral","Coral","#231416","#352025","#4d3036","#f9e1e2","#c5979e","#70464e","#ee8d98"],
+    ["aqua","Aqua","#0c1b20","#142d35","#20434d","#dcf3f9","#8bb8c5","#315f6d","#56cbe1"],
+    ["sand","Sand","#1e1a15","#30291f","#453b2e","#f3eadb","#b8a68b","#60513f","#d1b080"],
 ];
 for(const [id,name,...values] of additions) PRESETS.push(preset(id,name,"dark",palette(...values as [string,string,string,string,string,string,string])));
 const lightPalettes = [
@@ -437,6 +443,9 @@ const lightPalettes = [
     ["#f4f0fc","#fefbff","#e9e1f5","#36294e","#7e6d99","#d5c8e8","#7c54ad"],
     ["#fbf0e9","#fffaf6","#f3dfd1","#4b2c20","#926d58","#e4c7b5","#a95535"],
     ["#eff3f6","#fbfdff","#e0e8ee","#293b48","#697f8e","#c5d3dd","#476e88"],
+    ["#fcf0f0","#fffafa","#f6dfe2","#4c292f","#936a72","#e8c6cc","#b94d60"],
+    ["#ecf8fb","#f8feff","#d8eef4","#203d47","#5e818d","#b9dce5","#167d96"],
+    ["#f8f4ec","#fffdf8","#ede4d5","#403628","#84745e","#dcd0bd","#8d6938"],
 ] as const;
 THEME_FAMILIES.slice(1).forEach((family,index)=>{
     const [app,panel,raised,text,muted,border,accent]=lightPalettes[index];
