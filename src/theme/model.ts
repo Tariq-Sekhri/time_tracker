@@ -391,7 +391,7 @@ export const PRESETS: Theme[] = [
 export const THEME_FAMILIES = [
     {name:"Original", light:"light", dark:"dark"},
     {name:"T3 Code", light:"t3-code-light", dark:"t3-code"},
-    {name:"T3 Chat", light:"t3-chat-light", dark:"t3-chat"},
+    {name:"Plum", light:"t3-chat-light", dark:"t3-chat"},
     {name:"Grove", light:"grove-light", dark:"forest"},
     {name:"Ocean", light:"ocean-light", dark:"ocean"},
     {name:"Ember", light:"ember-light", dark:"ember"},
@@ -399,13 +399,26 @@ export const THEME_FAMILIES = [
     {name:"Nord", light:"nord-light", dark:"nord"},
     {name:"Midnight", light:"midnight-light", dark:"midnight"},
     {name:"Rose", light:"rose-light", dark:"rose"},
+    {name:"Teal", light:"teal-light", dark:"teal"},
+    {name:"Amber", light:"amber-light", dark:"amber"},
+    {name:"Sage", light:"sage-light", dark:"sage"},
+    {name:"Lavender", light:"lavender-light", dark:"lavender"},
+    {name:"Terracotta", light:"terracotta-light", dark:"terracotta"},
+    {name:"Slate", light:"slate-light", dark:"slate"},
 ];
+export const PICKER_FAMILIES = THEME_FAMILIES.filter(f=>f.dark!=="t3-code");
 const additions: [string,string,string,string,string,string,string,string,string][] = [
     ["t3-code","T3 Code","#101114","#191b22","#242732","#e4e4ef","#9b9dad","#333645","#9388ef"],
-    ["t3-chat","T3 Chat","#1c101b","#281622","#3a2032","#f4daeb","#be99b2","#533347","#d962a7"],
+    ["t3-chat","Plum","#1c101b","#281622","#3a2032","#f4daeb","#be99b2","#533347","#d962a7"],
     ["ocean","Ocean","#0c1921","#132832","#1c3946","#def1f5","#8eafb9","#30515e","#65bdd6"],
     ["ember","Ember","#201512","#30211c","#443028","#f6e6db","#c4a391","#634438","#ed9b65"],
     ["dusk","Dusk","#1a1426","#271f37","#382d4c","#ede3fa","#b1a0c8","#514164","#b39ae7"],
+    ["teal","Teal","#0c1b1a","#142d2a","#20423d","#ddf5ef","#8db9ae","#315d53","#4dc9af"],
+    ["amber","Amber","#1d190c","#2e2815","#423b20","#f8efcf","#bcb083","#5c5130","#e2bf55"],
+    ["sage","Sage","#161c14","#242e20","#34422e","#e9f0dc","#a4b497","#4b5d42","#adc68b"],
+    ["lavender","Lavender","#19172a","#28243f","#3b3557","#eee9ff","#afa4cd","#554b72","#baa6f2"],
+    ["terracotta","Terracotta","#241512","#38231d","#50342a","#f9e4d9","#c3a08e","#704d3c","#dc9473"],
+    ["slate","Slate","#141a20","#202a33","#303e49","#e1eaf0","#9aafbd","#465c6b","#9ab9ce"],
 ];
 for(const [id,name,...values] of additions) PRESETS.push(preset(id,name,"dark",palette(...values as [string,string,string,string,string,string,string])));
 const lightPalettes = [
@@ -418,6 +431,12 @@ const lightPalettes = [
     ["#eceff4","#f8fafc","#e0e5ed","#2e3440","#64748b","#c7ced9","#3c6e85"],
     ["#eef0fa","#fafbff","#e1e5f5","#252d4d","#67769c","#c9d0e6","#4f5ab7"],
     ["#fff1f5","#fffafb","#f8e0e9","#4c2839","#936b7d","#eac7d6","#b33d70"],
+    ["#edf8f4","#fafffd","#dcefe7","#193d33","#5d7f73","#bdd9ce","#167b65"],
+    ["#faf6e7","#fffdf4","#f0e8cd","#40351b","#857749","#ded2ab","#8c6c13"],
+    ["#f1f5ea","#fdfff8","#e3ebd7","#303d25","#718162","#cbd7ba","#5b773e"],
+    ["#f4f0fc","#fefbff","#e9e1f5","#36294e","#7e6d99","#d5c8e8","#7c54ad"],
+    ["#fbf0e9","#fffaf6","#f3dfd1","#4b2c20","#926d58","#e4c7b5","#a95535"],
+    ["#eff3f6","#fbfdff","#e0e8ee","#293b48","#697f8e","#c5d3dd","#476e88"],
 ] as const;
 THEME_FAMILIES.slice(1).forEach((family,index)=>{
     const [app,panel,raised,text,muted,border,accent]=lightPalettes[index];
@@ -445,7 +464,7 @@ PRESETS.push(
     preset("deep-forest", "Deep Forest", "dark", superDark("#c2cdc6","#6c8174","#080e0a","#729984")),
     preset("black-cherry", "Black Cherry", "dark", superDark("#d0c1ca","#886e7e","#10080c","#af7d99")),
 );
-export const INCLUDED_PRESETS = PRESETS.filter(theme => theme.mode === "dark" || theme.id === "light" || theme.id === "ocean-light");
+export const INCLUDED_PRESETS = PRESETS.filter(theme => theme.id!=="t3-code" && (theme.mode === "dark" || theme.id === "light" || theme.id === "ocean-light"));
 export function themeFamily(theme: Theme) {
     return THEME_FAMILIES.find(f => f.dark === theme.baseId || f.light === theme.baseId) ?? THEME_FAMILIES[0];
 }
