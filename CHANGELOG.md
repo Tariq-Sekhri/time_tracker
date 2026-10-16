@@ -4,6 +4,11 @@
 
 ## [1.12.6] - 2026-10-15
 
+- Choose from 18 color palettes with separate Dark and Light modes, a brightness slider, and a click-to-edit percentage.
+- Theme previews follow your brightness and mode, and light themes use softer, color-tinted backgrounds.
+- Appearance controls now live in General settings. Removed unwanted background fills behind source rows, app titles, and text actions.
+- App Rules now opens to Regex, with Regex before Categories.
+
 - Added new default sorting for more games, including Counter-Strike 2, Warframe, ARK: Survival Ascended, and LinkedIn games.
 
 ## [1.12.5] - 2026-10-15
