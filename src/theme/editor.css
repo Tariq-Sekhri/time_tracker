@@ -9,8 +9,8 @@
 .theme-brightness input[type=range] {width:100%;margin:14px 0;accent-color:var(--tt-accent);cursor:pointer;}
 .theme-brightness-number {display:inline-flex;align-items:center;}
 .theme-brightness .theme-brightness-display {appearance:none;background:none;border:0;padding:0;margin:0;color:inherit;font:inherit;line-height:inherit;border-radius:0;box-shadow:none;cursor:text;}
-.theme-brightness input.theme-brightness-value {background:transparent!important;color:inherit;padding:0;border:0;border-radius:3px;text-align:right;font:inherit;outline:0;cursor:text;}
-.theme-brightness input.theme-brightness-value:focus {background:var(--tt-input)!important;outline:1px solid var(--tt-focus);}
+.theme-panel .theme-brightness .theme-brightness-number input.theme-brightness-value {background:transparent!important;color:inherit;padding:0;border:0;border-radius:0;text-align:right;font:inherit;line-height:inherit;height:auto;box-sizing:content-box;outline:0;outline-offset:0;cursor:text;margin:0;flex:none;}
+.theme-panel .theme-brightness .theme-brightness-number input.theme-brightness-value:focus {background:transparent!important;outline:0;box-shadow:0 1px var(--tt-focus);}
 .theme-brightness p {margin:10px 0 0;font-size:12px;}
 .theme-brightness .theme-mode-toggle {justify-content:flex-start;margin-bottom:14px;gap:4px;}
 .theme-mode-toggle button {padding:6px 18px;border:1px solid var(--tt-border);border-radius:7px;color:var(--tt-muted);cursor:pointer;}
