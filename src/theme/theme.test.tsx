@@ -2,12 +2,33 @@
 import {act, cleanup, fireEvent, render, screen} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {afterEach, beforeEach, expect, it} from "vitest";
-import {COLOR_FIELDS, contrastRatio, normalizeColor, parseTheme, PRESETS, STORAGE_KEY} from "./model";
+import {COLOR_FIELDS, contrastRatio, normalizeColor, parseTheme, PRESETS, STORAGE_KEY, THEME_FAMILIES, withBrightness} from "./model";
 import {activeTheme, initializeTheme, useThemeStore} from "./store";
 import ThemeSettings from "./ThemeSettings";
 
 beforeEach(()=>{localStorage.clear();useThemeStore.setState({activeId:"dark",customThemes:[],storageError:false});});
 afterEach(cleanup);
+it("blends every palette from stable endpoints and keeps readable text",()=>{
+    for(const family of THEME_FAMILIES){
+        const dark=PRESETS.find(p=>p.id===family.dark)!;
+        const light=PRESETS.find(p=>p.id===family.light)!;
+        expect(withBrightness(dark,0).colors).toEqual(dark.colors);
+        expect(withBrightness(dark,100).colors).toEqual(light.colors);
+        const middle=withBrightness(dark,50);
+        expect(withBrightness(middle,0).colors).toEqual(dark.colors);
+        for(const value of [20,40,60,80]) expect(contrastRatio(withBrightness(dark,value).colors.text,withBrightness(dark,value).colors.panel)!).toBeGreaterThan(4.5);
+    }
+});
+it("saves slider position and carries brightness between color palettes",()=>{
+    const store=useThemeStore.getState();store.select("dusk");store.setBrightness(73);
+    const theme=activeTheme(useThemeStore.getState());
+    expect(theme.brightness).toBe(73);
+    const saved=JSON.parse(localStorage.getItem(STORAGE_KEY)!);
+    expect(parseTheme(saved.customThemes[0])).toEqual(theme);
+    store.setBrightness(10);expect(useThemeStore.getState().customThemes).toHaveLength(1);
+    store.selectFamily("ocean");expect(activeTheme(useThemeStore.getState()).brightness).toBe(10);
+    expect(activeTheme(useThemeStore.getState()).baseId).toBe("ocean");
+});
 it("keeps preset colors immutable and persists named custom themes with alpha",()=>{
     const store=useThemeStore.getState();store.select("light");store.edit("app","#12345680");store.rename("My theme");
     const theme=activeTheme(useThemeStore.getState());expect(theme.name).toBe("My theme");expect(theme.colors.app).toBe("#12345680");

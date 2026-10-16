@@ -365,7 +365,7 @@ export const COLOR_FIELDS = [
 {"key":"chart10","label":"App series 10","group":"Charts","default":"#c084fc"}] as const;
 export type ColorKey = typeof COLOR_FIELDS[number]["key"];
 export type Colors = Record<ColorKey, string>;
-export type Theme = {id: string; name: string; mode: "dark" | "light"; baseId: string; colors: Colors};
+export type Theme = {id: string; name: string; mode: "dark" | "light"; baseId: string; colors: Colors; brightness?: number};
 export const DEFAULT_COLORS = Object.fromEntries(COLOR_FIELDS.map(f => [f.key, f.default])) as Colors;
 function preset(id: string, name: string, mode: Theme["mode"], colors: Partial<Colors>): Theme {
     return {id, name, mode, baseId: id, colors: {...DEFAULT_COLORS, ...colors}};
@@ -446,6 +446,37 @@ PRESETS.push(
     preset("black-cherry", "Black Cherry", "dark", superDark("#d0c1ca","#886e7e","#10080c","#af7d99")),
 );
 export const INCLUDED_PRESETS = PRESETS.filter(theme => theme.mode === "dark" || theme.id === "light" || theme.id === "ocean-light");
+export function themeFamily(theme: Theme) {
+    return THEME_FAMILIES.find(f => f.dark === theme.baseId || f.light === theme.baseId) ?? THEME_FAMILIES[0];
+}
+/** Always blend from fixed endpoints so dragging back restores the exact palette. */
+export function withBrightness(theme: Theme, value: number): Theme {
+    const brightness = Math.max(0, Math.min(100, value));
+    const family = themeFamily(theme);
+    const dark = PRESETS.find(p => p.id === family.dark)!;
+    const light = PRESETS.find(p => p.id === family.light)!;
+    const amount = brightness / 100;
+    const blend = (a: string, b: string) => {
+        if(amount===0)return a;
+        if(amount===1)return b;
+        const channels = [1,3,5].map(i => Math.round(parseInt(a.slice(i,i+2),16)*(1-amount)+parseInt(b.slice(i,i+2),16)*amount).toString(16).padStart(2,"0"));
+        const alpha = a.length===9 || b.length===9 ? Math.round(parseInt(a.slice(7)||"ff",16)*(1-amount)+parseInt(b.slice(7)||"ff",16)*amount).toString(16).padStart(2,"0") : "";
+        return "#"+channels.join("")+alpha;
+    };
+    const colors = Object.fromEntries(COLOR_FIELDS.map(f => [f.key,blend(dark.colors[f.key],light.colors[f.key])])) as Colors;
+    // Keep text legible while surfaces move through the middle of the range.
+    if(brightness>0 && brightness<100) {
+        const foreground = contrastRatio(dark.colors.text,colors.panel)! >= contrastRatio(light.colors.text,colors.panel)! ? dark : light;
+        for(const field of COLOR_FIELDS) {
+            if(field.group === "Text" || ["calendarText","eventText","chartText","disabledText"].includes(field.key)) colors[field.key] = foreground.colors[field.key];
+        }
+        if(contrastRatio(colors.text,colors.panel)!<4.5) {
+            const text=contrastRatio("#000000",colors.panel)!>contrastRatio("#ffffff",colors.panel)!?"#000000":"#ffffff";
+            colors.text=text;colors.heading=text;
+        }
+    }
+    return {...theme,baseId:family.dark,brightness,mode:brightness<50?"dark":"light",colors};
+}
 export function normalizeColor(value: unknown): string | null {
     if(typeof value !== "string" || !/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value)) return null;
     return (value.length <= 5 ? "#" + [...value.slice(1)].map(c=>c+c).join("") : value).toLowerCase();
@@ -464,7 +495,7 @@ export function parseTheme(value: unknown): Theme {
         if(!normalized) throw new Error(`Invalid color for ${key}. Use a hex color such as #2563eb or #2563eb80.`);
         colors[key as ColorKey] = normalized;
     }
-    return {id: typeof input.id === "string" && /^custom-[a-z0-9-]{1,80}$/i.test(input.id) ? input.id : "custom-"+crypto.randomUUID(), name:input.name.trim(),mode:input.mode,baseId,colors};
+    return {id: typeof input.id === "string" && /^custom-[a-z0-9-]{1,80}$/i.test(input.id) ? input.id : "custom-"+crypto.randomUUID(), name:input.name.trim(),mode:input.mode,baseId,colors,...(typeof input.brightness === "number" && Number.isFinite(input.brightness) ? {brightness:Math.max(0,Math.min(100,input.brightness))} : {})};
 }
 export function applyTheme(theme:Theme, root:HTMLElement = document.documentElement) {
     for(const field of COLOR_FIELDS) root.style.setProperty(`--tt-${field.key}`, theme.colors[field.key]);

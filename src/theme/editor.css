@@ -3,6 +3,11 @@
     grid-template-columns: repeat(6,minmax(0,1fr));
     gap: 12px;
 }
+.theme-brightness {margin:20px 0;padding:16px;border:1px solid var(--tt-border);border-radius:10px;}
+.theme-brightness>div {display:flex;justify-content:space-between;gap:16px;}
+.theme-brightness label {font-weight:600;}
+.theme-brightness input {width:100%;margin:14px 0;accent-color:var(--tt-accent);cursor:pointer;}
+.theme-brightness p {margin:10px 0 0;font-size:12px;}
 .theme-preset {
     text-align: left;
     border: 1px solid var(--tt-borderSubtle);
