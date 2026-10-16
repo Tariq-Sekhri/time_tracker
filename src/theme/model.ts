@@ -409,7 +409,12 @@ export const THEME_FAMILIES = [
     {name:"Aqua", light:"aqua-light", dark:"aqua"},
     {name:"Sand", light:"sand-light", dark:"sand"},
 ];
-export const PICKER_FAMILIES = THEME_FAMILIES.filter(f=>f.dark!=="t3-code");
+const PALETTE_ORDER = [
+    "dark", "slate", "midnight", "nord", "ocean", "aqua",
+    "teal", "forest", "sage", "sand", "amber", "ember",
+    "terracotta", "t3-chat", "rose", "coral", "dusk", "lavender",
+];
+export const PICKER_FAMILIES = PALETTE_ORDER.map(id=>THEME_FAMILIES.find(f=>f.dark===id)!);
 const additions: [string,string,string,string,string,string,string,string,string][] = [
     ["t3-code","T3 Code","#101114","#191b22","#242732","#e4e4ef","#9b9dad","#333645","#9388ef"],
     ["t3-chat","Plum","#1c101b","#281622","#3a2032","#f4daeb","#be99b2","#533347","#d962a7"],
