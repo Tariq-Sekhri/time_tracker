@@ -6,7 +6,10 @@
 .theme-brightness {margin:20px 0;padding:16px;border:1px solid var(--tt-border);border-radius:10px;}
 .theme-brightness>div {display:flex;justify-content:space-between;gap:16px;}
 .theme-brightness label {font-weight:600;}
-.theme-brightness input {width:100%;margin:14px 0;accent-color:var(--tt-accent);cursor:pointer;}
+.theme-brightness input[type=range] {width:100%;margin:14px 0;accent-color:var(--tt-accent);cursor:pointer;}
+.theme-brightness-number {display:inline-flex;align-items:center;}
+.theme-brightness input.theme-brightness-value {background:transparent!important;color:inherit;padding:0;border:0;border-radius:3px;text-align:right;font:inherit;outline:0;cursor:text;}
+.theme-brightness input.theme-brightness-value:focus {background:var(--tt-input)!important;outline:1px solid var(--tt-focus);}
 .theme-brightness p {margin:10px 0 0;font-size:12px;}
 .theme-brightness .theme-mode-toggle {justify-content:flex-start;margin-bottom:14px;gap:4px;}
 .theme-mode-toggle button {padding:6px 18px;border:1px solid var(--tt-border);border-radius:7px;color:var(--tt-muted);cursor:pointer;}

@@ -13,7 +13,7 @@ it("blends every palette from stable endpoints and keeps readable text",()=>{
         const dark=PRESETS.find(p=>p.id===family.dark)!;
         const light=PRESETS.find(p=>p.id===family.light)!;
         expect(withBrightness(dark,100).colors).toEqual(dark.colors);
-        const ultra=withBrightness(dark,10);
+        const ultra=withBrightness(dark,5);
         for(const key of ["app","panel","sidebar","calendar","raised"] as const) expect(ultra.colors[key]).toBe("#000000");
         expect(withBrightness(light,100).colors).toEqual(light.colors);
         const middle=withBrightness(dark,50);

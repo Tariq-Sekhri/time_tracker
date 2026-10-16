@@ -3,6 +3,19 @@ import {activeTheme, useThemeStore} from "./store";
 import {COLOR_FIELDS, contrastRatio, normalizeColor, PRESETS, PICKER_FAMILIES, themeFamily, themeBrightness, withBrightness, type ColorKey} from "./model";
 import "./editor.css";
 
+function BrightnessValue({value,onChange}:{value:number;onChange:(value:number)=>void}) {
+    const [draft,setDraft]=useState(String(value));
+    useEffect(()=>setDraft(String(value)),[value]);
+    const commit=()=>{
+        const parsed=Number(draft.trim().replace(/%$/,""));
+        if(draft.trim() && Number.isFinite(parsed)){const next=Math.round(Math.max(0,Math.min(100,parsed))*10)/10;setDraft(String(next));onChange(next);}
+        else setDraft(String(value));
+    };
+    return <span className="theme-brightness-number"><input className="theme-brightness-value" aria-label="Brightness percentage" inputMode="decimal" value={draft}
+        style={{width:`${Math.max(2,draft.length)}ch`}} onChange={e=>setDraft(e.target.value)} onFocus={e=>e.target.select()} onBlur={commit}
+        onKeyDown={e=>{if(e.key==="Enter")e.currentTarget.blur();if(e.key==="Escape")setDraft(String(value));}}/><span>%</span></span>;
+}
+
 function ColorField({field, value, original, onChange}:{field:typeof COLOR_FIELDS[number];value:string;original:string;onChange:(key:ColorKey,value:string)=>void}) {
     const [draft,setDraft]=useState(value);
     useEffect(()=>setDraft(value),[value]);
@@ -51,10 +64,10 @@ export default function ThemeSettings() {
             <div className="theme-mode-toggle" role="group" aria-label="Appearance mode">
                 {(["dark","light"] as const).map(mode=><button key={mode} type="button" aria-pressed={theme.mode===mode} onClick={()=>state.setMode(mode)}>{mode==="dark"?"Dark":"Light"}</button>)}
             </div>
-            <div><label htmlFor="theme-brightness">Brightness</label><output htmlFor="theme-brightness">{themeBrightness(theme)}%</output></div>
+            <div><label htmlFor="theme-brightness">Brightness</label><BrightnessValue value={themeBrightness(theme)} onChange={state.setBrightness}/></div>
             <input id="theme-brightness" type="range" min="0" max="100" step="1" value={themeBrightness(theme)} onChange={e=>state.setBrightness(Number(e.target.value))}/>
             <div className="settings-muted"><span>Dimmer</span><span>Brighter</span></div>
-            <p className="settings-muted">Adjust brightness within the selected mode. Dark mode at 10% gives the super-dark look. Changes save automatically.</p>
+            <p className="settings-muted">Adjust brightness within the selected mode. Changes save automatically.</p>
         </div>
         <div className="theme-custom-bar">
             <button className="settings-primary-button" type="button" onClick={()=>{setExpanded(!expanded);}}>{expanded?"Close editor":"Customize colors"}</button>

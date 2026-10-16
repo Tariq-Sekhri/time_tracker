@@ -503,9 +503,11 @@ export function withBrightness(theme: Theme, value: number): Theme {
         softLight[key] = "#"+[1,3,5].map(i=>Math.round(parseInt(light.colors[key].slice(i,i+2),16)*0.78).toString(16).padStart(2,"0")).join("");
     }
     const isLight = theme.mode === "light";
-    const from = isLight ? softLight : brightness<=10 ? deepest : ultra;
-    const to = isLight ? light.colors : brightness<=10 ? ultra : dark.colors;
-    const amount = isLight ? brightness/100 : brightness<=10 ? brightness/10 : (brightness-10)/90;
+    // Give the darkest values more room: the former 20% is now reached at 10%.
+    const darkLevel = brightness<=10 ? brightness*2 : 20+(brightness-10)*80/90;
+    const from = isLight ? softLight : darkLevel<=10 ? deepest : ultra;
+    const to = isLight ? light.colors : darkLevel<=10 ? ultra : dark.colors;
+    const amount = isLight ? brightness/100 : darkLevel<=10 ? darkLevel/10 : (darkLevel-10)/90;
     const blend = (a: string, b: string) => {
         if(amount===0)return a;
         if(amount===1)return b;
