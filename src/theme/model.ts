@@ -449,13 +449,22 @@ export const INCLUDED_PRESETS = PRESETS.filter(theme => theme.mode === "dark" ||
 export function themeFamily(theme: Theme) {
     return THEME_FAMILIES.find(f => f.dark === theme.baseId || f.light === theme.baseId) ?? THEME_FAMILIES[0];
 }
+export function themeBrightness(theme: Theme) {
+    return theme.brightness ?? (theme.mode === "light" ? 100 : ["oled","obsidian","deep-forest","black-cherry"].includes(theme.baseId) ? 10 : 35);
+}
 /** Always blend from fixed endpoints so dragging back restores the exact palette. */
 export function withBrightness(theme: Theme, value: number): Theme {
     const brightness = Math.max(0, Math.min(100, value));
     const family = themeFamily(theme);
     const dark = PRESETS.find(p => p.id === family.dark)!;
     const light = PRESETS.find(p => p.id === family.light)!;
-    const amount = brightness / 100;
+    const legacyId = family.dark === "forest" ? "deep-forest" : family.dark === "rose" || family.dark === "t3-chat" ? "black-cherry" : family.dark === "dusk" ? "obsidian" : "oled";
+    const legacy = PRESETS.find(p=>p.id===legacyId)!;
+    const ultra = {...dark.colors,...superDark(legacy.colors.text,legacy.colors.muted,legacy.colors.border,legacyId==="oled" ? dark.colors.muted : legacy.colors.accent)};
+    const deepest = {...ultra,text:"#a0a0a8",heading:"#b5b5bd",secondary:"#898991",muted:"#606068",accent:legacy.colors.accent};
+    const from = brightness<=10 ? deepest : brightness<=35 ? ultra : dark.colors;
+    const to = brightness<=10 ? ultra : brightness<=35 ? dark.colors : light.colors;
+    const amount = brightness<=10 ? brightness/10 : brightness<=35 ? (brightness-10)/25 : (brightness-35)/65;
     const blend = (a: string, b: string) => {
         if(amount===0)return a;
         if(amount===1)return b;
@@ -463,9 +472,9 @@ export function withBrightness(theme: Theme, value: number): Theme {
         const alpha = a.length===9 || b.length===9 ? Math.round(parseInt(a.slice(7)||"ff",16)*(1-amount)+parseInt(b.slice(7)||"ff",16)*amount).toString(16).padStart(2,"0") : "";
         return "#"+channels.join("")+alpha;
     };
-    const colors = Object.fromEntries(COLOR_FIELDS.map(f => [f.key,blend(dark.colors[f.key],light.colors[f.key])])) as Colors;
+    const colors = Object.fromEntries(COLOR_FIELDS.map(f => [f.key,blend(from[f.key],to[f.key])])) as Colors;
     // Keep text legible while surfaces move through the middle of the range.
-    if(brightness>0 && brightness<100) {
+    if(brightness>35 && brightness<100) {
         const foreground = contrastRatio(dark.colors.text,colors.panel)! >= contrastRatio(light.colors.text,colors.panel)! ? dark : light;
         for(const field of COLOR_FIELDS) {
             if(field.group === "Text" || ["calendarText","eventText","chartText","disabledText"].includes(field.key)) colors[field.key] = foreground.colors[field.key];
@@ -475,7 +484,7 @@ export function withBrightness(theme: Theme, value: number): Theme {
             colors.text=text;colors.heading=text;
         }
     }
-    return {...theme,baseId:family.dark,brightness,mode:brightness<50?"dark":"light",colors};
+    return {...theme,baseId:family.dark,brightness,mode:brightness<68?"dark":"light",colors};
 }
 export function normalizeColor(value: unknown): string | null {
     if(typeof value !== "string" || !/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value)) return null;

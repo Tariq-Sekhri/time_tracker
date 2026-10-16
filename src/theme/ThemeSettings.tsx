@@ -1,6 +1,6 @@
 import {useEffect, useRef, useState} from "react";
 import {activeTheme, useThemeStore} from "./store";
-import {COLOR_FIELDS, contrastRatio, normalizeColor, PRESETS, INCLUDED_PRESETS, THEME_FAMILIES, themeFamily, type ColorKey} from "./model";
+import {COLOR_FIELDS, contrastRatio, normalizeColor, PRESETS, INCLUDED_PRESETS, THEME_FAMILIES, themeFamily, themeBrightness, type ColorKey} from "./model";
 import "./editor.css";
 
 function ColorField({field, value, original, onChange}:{field:typeof COLOR_FIELDS[number];value:string;original:string;onChange:(key:ColorKey,value:string)=>void}) {
@@ -48,10 +48,10 @@ export default function ThemeSettings() {
             </button>;})}
         </div>
         <div className="theme-brightness">
-            <div><label htmlFor="theme-brightness">Dark to light</label><output htmlFor="theme-brightness">{theme.brightness ?? (theme.mode==="light"?100:0)}%</output></div>
-            <input id="theme-brightness" type="range" min="0" max="100" step="1" value={theme.brightness ?? (theme.mode==="light"?100:0)} onChange={e=>state.setBrightness(Number(e.target.value))}/>
+            <div><label htmlFor="theme-brightness">Dark to light</label><output htmlFor="theme-brightness">{themeBrightness(theme)}%</output></div>
+            <input id="theme-brightness" type="range" min="0" max="100" step="1" value={themeBrightness(theme)} onChange={e=>state.setBrightness(Number(e.target.value))}/>
             <div className="settings-muted"><span>Dark</span><span>Light</span></div>
-            <p className="settings-muted">Choose a color palette, then adjust its brightness. Changes save automatically.</p>
+            <p className="settings-muted">Choose a color palette, then adjust its brightness. 10% gives the super-dark look. Changes save automatically.</p>
         </div>
         <div className="theme-custom-bar">
             <label>Current theme<select aria-label="Current theme" value={theme.id} onChange={e=>state.select(e.target.value)}>

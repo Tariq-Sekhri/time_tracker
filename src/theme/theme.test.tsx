@@ -12,10 +12,12 @@ it("blends every palette from stable endpoints and keeps readable text",()=>{
     for(const family of THEME_FAMILIES){
         const dark=PRESETS.find(p=>p.id===family.dark)!;
         const light=PRESETS.find(p=>p.id===family.light)!;
-        expect(withBrightness(dark,0).colors).toEqual(dark.colors);
+        expect(withBrightness(dark,35).colors).toEqual(dark.colors);
+        const ultra=withBrightness(dark,10);
+        for(const key of ["app","panel","sidebar","calendar","raised"] as const) expect(ultra.colors[key]).toBe("#000000");
         expect(withBrightness(dark,100).colors).toEqual(light.colors);
         const middle=withBrightness(dark,50);
-        expect(withBrightness(middle,0).colors).toEqual(dark.colors);
+        expect(withBrightness(middle,35).colors).toEqual(dark.colors);
         for(const value of [20,40,60,80]) expect(contrastRatio(withBrightness(dark,value).colors.text,withBrightness(dark,value).colors.panel)!).toBeGreaterThan(4.5);
     }
 });

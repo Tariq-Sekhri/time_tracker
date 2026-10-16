@@ -1,5 +1,5 @@
 import {create} from "zustand";
-import {applyTheme, parseTheme, PRESETS, STORAGE_KEY, withBrightness, type ColorKey, type Theme} from "./model";
+import {applyTheme, parseTheme, PRESETS, STORAGE_KEY, themeBrightness, withBrightness, type ColorKey, type Theme} from "./model";
 
 type Saved = {version: 1; activeId: string; customThemes: Theme[]};
 function read(): Saved {
@@ -48,9 +48,9 @@ export const useThemeStore = create<State>((set,get)=>{
         customize:()=>{const current=activeTheme(get());const theme={...current,id:"custom-"+crypto.randomUUID(),name:(current.name+" copy").slice(0,80),colors:{...current.colors}};update({activeId:theme.id,customThemes:[...get().customThemes,theme]});},
         setBrightness:(value)=>{if(!Number.isFinite(value))return;replace(withBrightness(editable(),value));},
         selectFamily:(id)=>{
-            const brightness=activeTheme(get()).brightness ?? (activeTheme(get()).mode==="light"?100:0);
+            const brightness=themeBrightness(activeTheme(get()));
             const preset=PRESETS.find(p=>p.id===id);if(!preset)return;
-            if(brightness===0){update({activeId:id});return;}
+            if(brightness===35){update({activeId:id});return;}
             const theme=withBrightness({...preset,id:"custom-"+crypto.randomUUID(),name:preset.name+" custom"},brightness);
             update({activeId:theme.id,customThemes:[...get().customThemes,theme]});
         },
