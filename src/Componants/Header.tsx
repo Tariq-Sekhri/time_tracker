@@ -200,7 +200,7 @@ export default function Header({currentView, setCurrentView, notesEnabled, stati
                     onClick={toggleTracking}
                     disabled={isDev}
                     title={isDev ? 'Activity tracking is disabled in dev mode' : undefined}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isTracking ? 'bg-green-600' : 'bg-gray-600'
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isTracking ? 'bg-[var(--tt-success)]' : 'bg-gray-600'
                     }`}
                     aria-label={isTracking ? 'Pause tracking' : 'Resume tracking'}
                 >
