@@ -1,10 +1,10 @@
 //! Local support logging, using TikTok Archiver's chronological, single-line pattern.
 //! Every level and both runtimes share the same file for the entire app launch.
-use chrono::Local;
+use chrono::{DateTime, FixedOffset, Local};
 use regex::Regex;
 use serde::Serialize;
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
@@ -98,6 +98,20 @@ impl Log {
         }
         result
     }
+
+    /// Crash-time write: never blocks on the logger lock and skips regex redaction,
+    /// so it stays usable from an exception filter with little stack left.
+    pub fn write_emergency(message: &str) {
+        let line = format!(
+            "{} ERROR [crash] {}",
+            Local::now().format("%Y-%m-%d %H:%M:%S%.3f %:z"),
+            message
+        );
+        if let Some(Ok(mut logger)) = LOGGER.get().map(|logger| logger.try_lock()) {
+            let _ = append(&mut logger.file, &line, true);
+        }
+        let _ = writeln!(std::io::stderr(), "{line}");
+    }
 }
 
 fn append(file: &mut File, line: &str, durable: bool) -> std::io::Result<()> {
@@ -154,7 +168,103 @@ fn install_panic_hook() {
 }
 
 pub fn init() {
-    init_in(&log_dir());
+    let directory = log_dir();
+    let previous = previous_session(&directory);
+    init_in(&directory);
+    if let Some(previous) = previous {
+        report_previous_session(&previous, crate::diagnostics::boot_time());
+        if previous.outcome(crate::diagnostics::boot_time()).is_unclean() {
+            crate::diagnostics::report_os_crash_records(previous.last_time);
+        }
+    }
+    crate::diagnostics::install();
+}
+
+/// How the newest earlier session log ends, read before this launch creates its own file.
+struct PreviousSession {
+    file: String,
+    last_line: String,
+    last_time: Option<DateTime<FixedOffset>>,
+}
+
+#[derive(Debug, PartialEq)]
+enum PreviousOutcome {
+    Clean,
+    Update,
+    Panic,
+    NativeCrash,
+    SystemRestart,
+    Unexpected,
+}
+
+impl PreviousOutcome {
+    fn is_unclean(&self) -> bool {
+        matches!(self, Self::Panic | Self::NativeCrash | Self::Unexpected)
+    }
+}
+
+impl PreviousSession {
+    fn outcome(&self, boot_time: Option<DateTime<Local>>) -> PreviousOutcome {
+        let line = &self.last_line;
+        if line.contains("Application exited normally") {
+            PreviousOutcome::Clean
+        } else if line.contains("Rust panic") {
+            PreviousOutcome::Panic
+        } else if line.contains("[crash]") {
+            PreviousOutcome::NativeCrash
+        } else if line.contains("Update download complete; installing") {
+            PreviousOutcome::Update
+        } else if matches!((self.last_time, boot_time), (Some(last), Some(boot)) if last < boot) {
+            PreviousOutcome::SystemRestart
+        } else {
+            PreviousOutcome::Unexpected
+        }
+    }
+}
+
+fn previous_session(directory: &Path) -> Option<PreviousSession> {
+    let path = session_files(directory).ok()?.pop()?;
+    let last_line = last_line(&path).ok()?;
+    let last_time = last_line
+        .get(..30)
+        .and_then(|stamp| DateTime::parse_from_str(stamp, "%Y-%m-%d %H:%M:%S%.3f %:z").ok());
+    Some(PreviousSession {
+        file: path.file_name()?.to_string_lossy().into_owned(),
+        last_line,
+        last_time,
+    })
+}
+
+fn last_line(path: &Path) -> std::io::Result<String> {
+    let mut file = File::open(path)?;
+    let length = file.metadata()?.len();
+    file.seek(SeekFrom::Start(length.saturating_sub(64 * 1024)))?;
+    let mut tail = Vec::new();
+    file.read_to_end(&mut tail)?;
+    Ok(String::from_utf8_lossy(&tail)
+        .lines()
+        .rev()
+        .find(|line| !line.trim().is_empty())
+        .unwrap_or_default()
+        .to_string())
+}
+
+fn report_previous_session(previous: &PreviousSession, boot_time: Option<DateTime<Local>>) {
+    let last: String = previous.last_line.chars().take(600).collect();
+    let file = &previous.file;
+    match previous.outcome(boot_time) {
+        PreviousOutcome::Clean => Log::info(format!("Previous session exited cleanly file={file}")),
+        PreviousOutcome::Update => Log::info(format!("Previous session closed to install an update file={file}")),
+        PreviousOutcome::SystemRestart => Log::warn(format!(
+            "Previous session ended by Windows shutdown, restart, or power loss boot_time={} file={file} last_line={last}",
+            boot_time.map(|t| t.to_rfc3339()).unwrap_or_default()
+        )),
+        PreviousOutcome::Panic => Log::error(format!("Previous session crashed with a Rust panic file={file} last_line={last}")),
+        PreviousOutcome::NativeCrash => Log::error(format!("Previous session crashed natively file={file} last_line={last}")),
+        PreviousOutcome::Unexpected => Log::error(format!(
+            "Previous session ended unexpectedly with no exit or crash record (killed, logged off, or an unhandled abort) file={file} last_line={last}"
+        )),
+    }
 }
 
 fn init_in(directory: &Path) {
@@ -207,7 +317,7 @@ fn init_in(directory: &Path) {
     }
 }
 
-fn retain_sessions(directory: &Path) -> std::io::Result<()> {
+fn session_files(directory: &Path) -> std::io::Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     for entry in fs::read_dir(directory)? {
         let entry = entry?;
@@ -220,6 +330,11 @@ fn retain_sessions(directory: &Path) -> std::io::Result<()> {
         }
     }
     files.sort();
+    Ok(files)
+}
+
+fn retain_sessions(directory: &Path) -> std::io::Result<()> {
+    let files = session_files(directory)?;
     let remove_count = files.len().saturating_sub(KEEP_SESSIONS);
     for path in files.into_iter().take(remove_count) {
         fs::remove_file(path)?;
@@ -282,6 +397,35 @@ pub fn open_support_log_folder(app: tauri::AppHandle) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn previous_session_outcome_comes_from_its_last_line() {
+        let directory =
+            std::env::temp_dir().join(format!("time-tracker-previous-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&directory).unwrap();
+        assert!(previous_session(&directory).is_none());
+        let boot = DateTime::parse_from_rfc3339("2026-10-21T05:00:00-04:00")
+            .unwrap()
+            .with_timezone(&Local);
+        let cases = [
+            ("2026-10-21 06:00:00.000 -04:00 INFO [backend] Application exited normally", PreviousOutcome::Clean),
+            ("2026-10-21 06:00:00.000 -04:00 ERROR [backend] Rust panic thread=main panicked", PreviousOutcome::Panic),
+            ("2026-10-21 06:00:00.000 -04:00 ERROR [crash] Native crash code=0xC00000FD", PreviousOutcome::NativeCrash),
+            ("2026-10-21 06:00:00.000 -04:00 INFO [backend] Update download complete; installing", PreviousOutcome::Update),
+            ("2026-10-21 04:35:00.000 -04:00 INFO [backend] Heartbeat", PreviousOutcome::SystemRestart),
+            ("2026-10-21 06:00:00.000 -04:00 INFO [backend] Heartbeat", PreviousOutcome::Unexpected),
+        ];
+        for (index, (line, expected)) in cases.into_iter().enumerate() {
+            let path = directory.join(format!("time-tracker-{index:02}.log"));
+            fs::write(&path, format!("2026-10-21 04:00:00.000 -04:00 INFO [backend] App launch
+{line}
+
+")).unwrap();
+            let previous = previous_session(&directory).unwrap();
+            assert_eq!(previous.last_line, line);
+            assert_eq!(previous.outcome(Some(boot)), expected, "{line}");
+        }
+        fs::remove_dir_all(directory).unwrap();
+    }
     #[test]
     fn errors_keep_details_but_secrets_are_redacted() {
         let line = format_line(LogLevel::Error, "frontend", "failed\nstack line\tBearer private-token https://example.test/oauth?code=private-code&state=private-state {\"client_secret\":\"private-secret\",\"refresh_token\":\"private-refresh\"}");

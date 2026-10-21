@@ -3,6 +3,7 @@ mod afk;
 mod commands;
 mod core;
 mod db;
+mod diagnostics;
 mod google_oauth;
 mod instance;
 mod logger;
