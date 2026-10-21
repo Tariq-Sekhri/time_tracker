@@ -1,7 +1,7 @@
 {
   "name": "time-tracker",
   "private": true,
-  "version": "1.12.6",
+  "version": "1.12.7",
   "type": "module",
   "scripts": {
     "dev:mobile": "vite --config vite.mobile.config.ts",

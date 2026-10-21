@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.12.7] - 2026-10-21
+
+- Fix the app sometimes closing unexpectedly when devices connect or go to sleep, drivers install, or VPN connections change.
+- Support logs now record how the app last closed, including crashes, to help diagnose problems.
+- The tracking toggle now matches your theme's colors.
+
 ## [1.12.6] - 2026-10-15
 
 - Choose from 18 themes with Dark and Light modes and adjustable brightness.
