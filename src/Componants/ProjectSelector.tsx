@@ -210,18 +210,20 @@ export default function ProjectSelector({value, onChange, disabled = false, show
                                     {depth === 0 && <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{backgroundColor: colorOf(project.id)}} />}
                                     <span className="truncate">{project.name}</span>
                                 </div>
-                                <button type="button" aria-label={`Edit ${project.name}`} onClick={() => {setError(null); setCreating(null); setEditId(project.id); setEditName(project.name);}} className="shrink-0 rounded px-1.5 py-1 text-xs text-gray-400 hover:bg-gray-800 hover:text-white">Edit</button>
+                                <button type="button" aria-label={`Edit ${project.name}`} title={`Edit ${project.name}`} onClick={() => {setError(null); setCreating(null); setEditId(project.id); setEditName(project.name);}} className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-gray-400 hover:bg-gray-800 hover:text-white">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m16 3 5 5-12 12-6 1 1-6L16 3Z M14 5l5 5" /></svg>
+                                </button>
                                 {depth === 0 && (childCount > 0
                                     ? <button type="button" aria-expanded={isOpen} aria-label={`${isOpen ? "Hide" : "Show"} ${project.name} subcategories`} onClick={() => toggleExpanded(project.id)} className={`mr-1 flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs ${isOpen ? "border-sky-700 text-sky-300" : "border-transparent text-gray-400 hover:border-gray-700 hover:text-white"}`}>
                                         {childCount} {childCount === 1 ? "sub" : "subs"} <Chevron open={isOpen} />
                                     </button>
-                                    : <button type="button" aria-label={`Add subcategory to ${project.name}`} onClick={() => startCreating(project.id)} className="mr-1 shrink-0 rounded-md px-2 py-1 text-xs text-sky-400 opacity-0 transition hover:bg-gray-800 hover:text-sky-300 focus-visible:opacity-100 group-hover:opacity-100">
-                                        + Subcategory
+                                    : <button type="button" aria-label={`Add subcategory to ${project.name}`} title={`Add subcategory to ${project.name}`} onClick={() => startCreating(project.id)} className="mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sky-400 transition hover:bg-gray-800 hover:text-sky-300">
+                                        <Plus />
                                     </button>)}
                             </div>}
                             {isLastChild && project.parent_id != null && expanded.has(project.parent_id) && (creating?.parentId === project.parent_id
                                 ? createForm(project.parent_id)
-                                : <button type="button" onClick={() => startCreating(project.parent_id!)} className="flex w-full items-center gap-2 rounded-md py-1.5 pl-7 text-left text-xs text-sky-400 hover:bg-gray-800/60 hover:text-sky-300"><Plus size={12} /> Add subcategory</button>)}
+                                : <button type="button" aria-label="Add subcategory" title="Add subcategory" onClick={() => startCreating(project.parent_id!)} className="ml-7 flex h-7 w-7 items-center justify-center rounded-md text-sky-400 hover:bg-gray-800/60 hover:text-sky-300"><Plus /></button>)}
                             {depth === 0 && childCount === 0 && creating?.parentId === project.id && createForm(project.id)}
                         </div>;
                     })}
