@@ -140,6 +140,10 @@ export function ManualTimerControl({timer, onAddPastTime}: {timer: RunningManual
         </div>
         {timer ? <>
             <button type="button" disabled={finishing} title="Edit start time" aria-haspopup="dialog" onClick={(event) => {
+                if (startAnchor === event.currentTarget) {
+                    setStartAnchor(null);
+                    return;
+                }
                 setStartInput(toLocalDateTimeInput(timer.start_time));
                 setStartError(null);
                 setStartAnchor(event.currentTarget);

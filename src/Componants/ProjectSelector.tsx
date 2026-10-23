@@ -167,7 +167,7 @@ export default function ProjectSelector({value, onChange, disabled = false, show
                 </span>
                 <span className="text-gray-500"><Chevron open={pickerOpen} /></span>
             </button>
-            {showManage && <button ref={manageRef} type="button" disabled={disabled} onClick={() => {setError(null); setOpen(true);}} aria-label="Manage categories" title="Rename or delete categories" className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:opacity-50">
+            {showManage && <button ref={manageRef} type="button" disabled={disabled || mutation.isPending} onClick={() => {setError(null); setOpen(previous => !previous);}} aria-label="Manage categories" title="Rename or delete categories" className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:opacity-50">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
             </button>}
         </div>

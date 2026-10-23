@@ -26,6 +26,11 @@ describe("demo manual timer control", () => {
         await user.click(screen.getByRole("button", {name: "Start"}));
         await waitFor(() => expect(screen.getByRole("button", {name: "Done"})).toBeTruthy());
         const original = (await get_running_manual_timer())!;
+        const startTimeTrigger = screen.getByRole("button", {name: "Timer running: edit start time"});
+        await user.click(startTimeTrigger);
+        expect(screen.getByRole("dialog")).toBeTruthy();
+        await user.click(startTimeTrigger);
+        expect(screen.queryByRole("dialog")).toBeNull();
         const localInput = (timestamp: number) => {
             const date = new Date(timestamp * 1000);
             return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 19);

@@ -137,6 +137,9 @@ export default function RenderCalendarContent({
     const queryClient = useQueryClient();
     const {data: manualSources = [], error: manualProjectsError} = useQuery({queryKey: MANUAL_CATEGORIES_QUERY_KEY, queryFn: getManualCategories});
     const [editingCategory, setEditingCategory] = useState<{source: EditableSource; anchor: HTMLElement} | null>(null);
+    const toggleSourceEditor = useCallback((source: EditableSource, anchor: HTMLElement) => {
+        setEditingCategory(previous => previous?.anchor === anchor ? null : {source, anchor});
+    }, []);
     const manualSourceIds = manualSources.map((project) => project.id);
     const { showToast, updateToast, removeToast } = useToast();
     const lastGoogleEventsErrorToastRef = useRef<string | null>(null);
@@ -689,7 +692,7 @@ export default function RenderCalendarContent({
                 name: category.name,
                 priority: category.priority,
                 color: getCategoryColor(category.name, categoryColorMap.get(category.name)),
-                onEdit: (anchor: HTMLElement) => setEditingCategory({source: {kind: "category", value: {...category, color: getCategoryColor(category.name, categoryColorMap.get(category.name))}}, anchor}),
+                onEdit: (anchor: HTMLElement) => toggleSourceEditor({kind: "category", value: {...category, color: getCategoryColor(category.name, categoryColorMap.get(category.name))}}, anchor),
                 inCal: isolation.category !== null ? isolation.category === category.id : category.is_visible,
                 inStats: isolation.category !== null ? isolation.category === category.id : category.in_stats,
                 isolated: isolation.category === category.id,
@@ -728,7 +731,7 @@ export default function RenderCalendarContent({
                 name: project.name,
                 parentKey: project.parent_id != null ? String(project.parent_id) : undefined,
                 color: project.color,
-                onEdit: (anchor: HTMLElement) => setEditingCategory({source: {kind: "manual", value: project}, anchor}),
+                onEdit: (anchor: HTMLElement) => toggleSourceEditor({kind: "manual", value: project}, anchor),
                 inCal: isManualTimeInCal(project.id),
                 inStats: isManualTimeInStats(project.id),
                 isolated: isolatedProject?.id === project.id,
@@ -753,7 +756,7 @@ export default function RenderCalendarContent({
                 key: String(calendar.id),
                 name: calendar.name,
                 color: calendar.color,
-                onEdit: (anchor: HTMLElement) => setEditingCategory({source: {kind: "google", value: calendar}, anchor}),
+                onEdit: (anchor: HTMLElement) => toggleSourceEditor({kind: "google", value: calendar}, anchor),
                 inCal: isCalendarVisible(calendar.id),
                 inStats: isolation.calendar !== null ? isolation.calendar === calendar.id : calendar.in_stats,
                 isolated: isolation.calendar === calendar.id,
