@@ -28,7 +28,6 @@ export type BackendSettings = {
     allLocked: boolean;
     calendarStartHour: number;
     calendarHeight: number;
-    rightSidebarWidth: number;
     categorySidebarCount: number;
     uiMinAppDuration: number;
     timeBlockSettings: TimeBlockSettings;
@@ -43,7 +42,6 @@ const SETTINGS_QUERY_KEY = ["settings"];
 const LOADING_FALLBACK: Record<string, number> = {
     calendarStartHour: 8,
     calendarHeight: 100,
-    rightSidebarWidth: 480,
     categorySidebarCount: 5,
     uiMinAppDuration: 30,
     minLogDuration: 1,
@@ -104,7 +102,6 @@ export function useBackendSettings(): BackendSettings {
         allLocked,
         calendarStartHour: valueOf("calendarStartHour"),
         calendarHeight: valueOf("calendarHeight"),
-        rightSidebarWidth: valueOf("rightSidebarWidth"),
         categorySidebarCount: valueOf("categorySidebarCount"),
         uiMinAppDuration: valueOf("uiMinAppDuration"),
         timeBlockSettings,

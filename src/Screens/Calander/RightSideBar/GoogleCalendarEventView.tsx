@@ -205,7 +205,7 @@ export default function GoogleCalendarEventView({
                             className="w-4 h-4 rounded"
                             style={{ backgroundColor: calendar.color }}
                         />
-                        <span className="text-sm text-gray-400">{calendar.name}</span>
+                        <span title={calendar.name} className="min-w-0 truncate text-sm text-gray-400">{calendar.name}</span>
                     </div>
                 )}
 
@@ -221,7 +221,7 @@ export default function GoogleCalendarEventView({
 
                             <div>
                                 <label className="text-sm text-gray-400">Title</label>
-                                <div className="text-white mt-1">{selectedEvent.title}</div>
+                                <div title={selectedEvent.title} className="truncate text-white mt-1">{selectedEvent.title}</div>
                             </div>
 
                             {selectedEvent.description && (

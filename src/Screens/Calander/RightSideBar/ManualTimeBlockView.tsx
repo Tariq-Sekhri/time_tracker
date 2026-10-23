@@ -137,8 +137,8 @@ export default function ManualTimeBlockView({
             ) : (
                 <div className="mt-5 flex flex-1 flex-col">
                     <div>
-                        <h3 className="break-words text-lg font-semibold text-white">{selectedEvent.title}</h3>
-                        <p className="mt-1 text-sm text-sky-300">{projects.find((project) => project.id === selectedEvent.projectId)?.name ?? "No category"}</p>
+                        <h3 title={selectedEvent.title} className="truncate text-lg font-semibold text-white">{selectedEvent.title}</h3>
+                        <p className="mt-1 truncate text-sm text-sky-300">{projects.find((project) => project.id === selectedEvent.projectId)?.name ?? "No category"}</p>
                         <p className="mt-2 text-sm text-gray-400">{selectedEvent.start.toLocaleString()} – {selectedEvent.end.toLocaleString()}</p>
                         <p className="mt-1 text-sm font-medium text-sky-400">{formatDuration(Math.floor((selectedEvent.end.getTime() - selectedEvent.start.getTime()) / 1000))}</p>
                         <div className="mt-5 border-t border-gray-800 pt-5">

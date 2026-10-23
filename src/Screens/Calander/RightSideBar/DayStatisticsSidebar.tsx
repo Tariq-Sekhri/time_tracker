@@ -376,14 +376,14 @@ export default function DayStatisticsSidebar({
                                     }`}
                                     onClick={onClick}
                                 >
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex min-w-0 flex-1 items-center gap-2 pr-2">
                                         <div
-                                            className="w-3 h-3 rounded-full"
+                                            className="w-3 h-3 shrink-0 rounded-full"
                                             style={{ backgroundColor: cat.color || "var(--tt-subtle)" }}
                                         />
-                                        <span className="text-sm text-gray-200">{cat.category}</span>
+                                        <span title={cat.category} className="min-w-0 truncate text-sm text-gray-200">{cat.category}</span>
                                     </div>
-                                    <span className="text-sm text-gray-400">{formatDuration(cat.total_duration)}</span>
+                                    <span className="shrink-0 text-sm text-gray-400">{formatDuration(cat.total_duration)}</span>
                                 </div>
                                 <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
                                     <div

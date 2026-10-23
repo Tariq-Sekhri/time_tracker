@@ -31,6 +31,7 @@ it("browser Settings loads without native-only requests and supports Notes and n
     expect(bridge.commands).not.toContain("get_database_location");
     expect(bridge.commands).not.toContain("get_support_log_info");
     expect(screen.queryByText("Database file")).toBeNull();
+    expect(screen.queryByText("Right sidebar width (px)")).toBeNull();
     expect(screen.queryByRole("button", {name: "Open log folder"})).toBeNull();
     expect(screen.queryByText("Failed to load database location")).toBeNull();
 
