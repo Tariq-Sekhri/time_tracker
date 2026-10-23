@@ -262,7 +262,7 @@ fn everything_request() -> ImportRequest {
                 priority: 1,
                 is_visible: true,
                 in_stats: true,
-                rules: vec!["Code".into(), "Rider".into(), "Rider".into(), "(".into(), "".into()],
+                rules: vec!["Code".into(), "Rider".into(), "Rider".into()],
             },
             ExportActivityCategory {
                 name: "Design".into(),
@@ -275,9 +275,8 @@ fn everything_request() -> ImportRequest {
         ],
         app_groups: vec![
             ExportAppGroup { name: "Editors".into(), regex: "Code|Rider".into() },
-            ExportAppGroup { name: "Broken".into(), regex: "(".into() },
         ],
-        skipped_apps: vec!["^Secret$".into(), "".into()],
+        skipped_apps: vec!["^Secret$".into()],
         devices: vec![ImportDevice { uuid: "phone".into(), name: "Phone".into() }],
         activity_logs: vec![import_log("phone", 1, "Code"), import_log("phone", 2, "Figma")],
         ..Default::default()
@@ -315,6 +314,55 @@ async fn dry_run_reports_the_real_import_without_writing() {
         .await
         .unwrap();
     assert_eq!(design, (650, Some("#ff0000".into()), false));
+}
+
+#[tokio::test]
+async fn malformed_metadata_is_rejected_in_preview_and_real_import_without_writing() {
+    let pool = pool().await;
+    let before = snapshot(&pool).await;
+    for dry_run in [true, false] {
+        for case in 0..8 {
+            let mut request = everything_request();
+            request.dry_run = dry_run;
+            let expected = match case {
+                0 => {
+                    request.activity_categories[0].rules.push("(".into());
+                    "Activity category \"coding\", rule 4"
+                }
+                1 => {
+                    request.app_groups[0].regex = "[".into();
+                    "App group \"Editors\""
+                }
+                2 => {
+                    request.skipped_apps.push("(?".into());
+                    "Skipped apps rule 2"
+                }
+                3 => {
+                    request.activity_categories[0].name = "  ".into();
+                    "Activity categories row 1: category name is empty"
+                }
+                4 => {
+                    request.app_groups[0].name = "".into();
+                    "App groups row 1: group name is empty"
+                }
+                5 => {
+                    request.manual_categories[0].name = "".into();
+                    "Manual categories row 1"
+                }
+                6 => {
+                    request.skipped_apps.push("  ".into());
+                    "Skipped apps rule 2: the regex pattern is empty"
+                }
+                _ => {
+                    request.app_groups[0].regex = "".into();
+                    "App group \"Editors\": the regex pattern is empty"
+                }
+            };
+            let error = import::import(&pool, &request, 9).await.unwrap_err();
+            assert!(error.to_string().contains(expected), "case {case}, dry_run={dry_run}: {error}");
+            assert_eq!(snapshot(&pool).await, before, "case {case}, dry_run={dry_run}");
+        }
+    }
 }
 
 #[tokio::test]

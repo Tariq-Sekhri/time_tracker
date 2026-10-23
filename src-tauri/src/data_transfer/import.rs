@@ -18,6 +18,7 @@ const MAX_CATEGORY_NAME_CHARS: usize = 100;
 /// Everything runs in one transaction; a dry run rolls it back, so the report
 /// is computed by exactly the same code that performs a real import.
 pub(crate) async fn import(pool: &SqlitePool, request: &ImportRequest, now: i64) -> Result<ImportReport, Error> {
+    validate_metadata(request)?;
     let mut report = ImportReport { dry_run: request.dry_run, ..Default::default() };
     let mut tx = pool.begin().await?;
     import_devices(&mut tx, request, &mut report).await?;
@@ -96,8 +97,45 @@ async fn import_devices(conn: &mut SqliteConnection, request: &ImportRequest, re
     Ok(())
 }
 
-fn valid_regex(pattern: &str) -> bool {
-    !pattern.trim().is_empty() && Regex::new(pattern).is_ok()
+/// Metadata has no per-row rejection report. Reject the request up front rather
+/// than reporting success after silently dropping selected rules or categories.
+fn validate_metadata(request: &ImportRequest) -> Result<(), Error> {
+    let pattern = |value: &str, section: &str| -> Result<(), Error> {
+        if value.trim().is_empty() {
+            return Err(anyhow::anyhow!("{section}: the regex pattern is empty. Correct the export file and try again.").into());
+        }
+        Regex::new(value)
+            .map_err(|error| anyhow::anyhow!("{section}: invalid regex ({error}). Correct the export file and try again."))?;
+        Ok(())
+    };
+    for (index, category) in request.activity_categories.iter().enumerate() {
+        if category.name.trim().is_empty() {
+            return Err(anyhow::anyhow!("Activity categories row {}: category name is empty.", index + 1).into());
+        }
+        for (rule_index, rule) in category.rules.iter().enumerate() {
+            pattern(rule, &format!("Activity category \"{}\", rule {}", category.name.trim(), rule_index + 1))?;
+        }
+    }
+    for (index, group) in request.app_groups.iter().enumerate() {
+        if group.name.trim().is_empty() {
+            return Err(anyhow::anyhow!("App groups row {}: group name is empty.", index + 1).into());
+        }
+        pattern(group.regex.trim(), &format!("App group \"{}\"", group.name.trim()))?;
+    }
+    for (index, rule) in request.skipped_apps.iter().enumerate() {
+        pattern(rule, &format!("Skipped apps rule {}", index + 1))?;
+    }
+    for (index, category) in request.manual_categories.iter().enumerate() {
+        if let Some(problem) = category_name_problem(category.name.trim()) {
+            return Err(anyhow::anyhow!("Manual categories row {}: {problem}", index + 1).into());
+        }
+        if let Some(parent) = category.parent_name.as_deref().map(str::trim).filter(|name| !name.is_empty()) {
+            if let Some(problem) = category_name_problem(parent) {
+                return Err(anyhow::anyhow!("Manual categories row {}, parent: {problem}", index + 1).into());
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Merged by name: existing categories keep their settings and only gain missing rules.
@@ -118,9 +156,6 @@ async fn import_activity_categories(conn: &mut SqliteConnection, request: &Impor
         .collect();
     for category in &request.activity_categories {
         let name = category.name.trim();
-        if name.is_empty() {
-            continue;
-        }
         let id = match ids.get(&fold(name)) {
             Some(id) => *id,
             None => {
@@ -142,7 +177,7 @@ async fn import_activity_categories(conn: &mut SqliteConnection, request: &Impor
             }
         };
         for rule in &category.rules {
-            if !valid_regex(rule) || !rules.insert((id, rule.clone())) {
+            if !rules.insert((id, rule.clone())) {
                 continue;
             }
             sqlx::query("INSERT INTO category_regex (cat_id, regex) VALUES (?1, ?2)")
@@ -160,9 +195,6 @@ async fn import_app_groups(conn: &mut SqliteConnection, request: &ImportRequest,
     for group in &request.app_groups {
         // Same normalization as app_group::validate.
         let (name, pattern) = (group.name.trim(), group.regex.trim());
-        if name.is_empty() || !valid_regex(pattern) {
-            continue;
-        }
         // Patterns are unique, so a group with the same pattern is never duplicated.
         report.app_groups_added += sqlx::query("INSERT OR IGNORE INTO app_groups (name, regex) VALUES (?1, ?2)")
             .bind(name)
@@ -178,9 +210,6 @@ async fn import_app_groups(conn: &mut SqliteConnection, request: &ImportRequest,
 /// existing activity that matches it.
 async fn import_skipped_apps(conn: &mut SqliteConnection, request: &ImportRequest, report: &mut ImportReport) -> Result<(), Error> {
     for pattern in &request.skipped_apps {
-        if !valid_regex(pattern) {
-            continue;
-        }
         report.skipped_apps_added += sqlx::query("INSERT OR IGNORE INTO skipped_apps (regex) VALUES (?1)")
             .bind(pattern)
             .execute(&mut *conn)
