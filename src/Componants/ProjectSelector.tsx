@@ -169,7 +169,7 @@ export default function ProjectSelector({value, onChange, disabled = false}: {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
             </button>
         </div>
-        {pickerOpen && <ManualPopover anchor={triggerRef.current} onClose={closePicker} labelledBy="manual-category-picker-search" width={340}>
+        {pickerOpen && <ManualPopover anchor={triggerRef.current} onClose={closePicker} labelledBy="manual-category-picker-search" width="anchor">
             <div className="-m-2 flex max-h-[60vh] flex-col">
                 <div className="relative mb-2">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
