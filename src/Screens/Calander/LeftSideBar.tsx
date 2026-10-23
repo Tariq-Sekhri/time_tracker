@@ -19,6 +19,7 @@ export type SidebarSource = SidebarToggleState & {
     key: string;
     name: string;
     color: string;
+    parentKey?: string;
     isolated?: boolean;
     onToggleIsolate?: () => void;
     onEdit?: (anchor: HTMLElement) => void;
@@ -209,7 +210,7 @@ function ColourSectionHeader({section, open, onToggleOpen}: { section: SidebarSe
  * A source row; its colour shows only on its week and stats icons. Clicking the row sets week and stats
  * together: both off when both are on, otherwise both on.
  */
-function ColourRow({source}: { source: SidebarSource }) {
+function ColourRow({source, expanded, onToggleExpanded}: { source: SidebarSource; expanded?: boolean; onToggleExpanded?: () => void }) {
     const bothOn = source.inCal && source.inStats;
     const toggleBoth = () => {
         if (source.disabled) return;
@@ -217,11 +218,12 @@ function ColourRow({source}: { source: SidebarSource }) {
         if (source.inStats === bothOn) source.onToggleStats();
     };
     return (
-        <div role="button" tabIndex={source.disabled ? -1 : 0} aria-pressed={bothOn}
-             onClick={toggleBoth}
-             onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleBoth(); } }}
-             title={bothOn ? "Click to hide in week view and stats" : "Click to show in week view and stats"}
+        <div role="button" tabIndex={source.disabled ? -1 : 0} aria-pressed={onToggleExpanded ? undefined : bothOn} aria-expanded={expanded}
+             onClick={onToggleExpanded ?? toggleBoth}
+             onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); (onToggleExpanded ?? toggleBoth)(); } }}
+             title={onToggleExpanded ? `${expanded ? "Collapse" : "Expand"} ${source.name}` : bothOn ? "Click to hide in week view and stats" : "Click to show in week view and stats"}
              className={`group relative mb-0.5 flex cursor-pointer items-center gap-2 rounded-md py-0.5 pl-2 pr-1 transition-colors hover:bg-white/[0.04] ${source.isolated ? "ring-1 ring-inset ring-blue-400" : ""} ${source.disabled ? "cursor-not-allowed opacity-50" : ""}`}>
+            {onToggleExpanded && <IconChevron open={!!expanded} className="h-3 w-3 shrink-0 text-gray-500"/>}
             <span className={`min-w-0 flex-1 truncate text-[13px] ${source.inCal ? "text-gray-100" : "text-gray-600"}`}>{source.name}</span>
             {source.onEdit && <button type="button" aria-label={`Edit ${source.name}`} title={source.priority !== undefined ? "Edit name, color, and priority" : "Edit name and color"}
                 onClick={(event) => {event.stopPropagation(); source.onEdit?.(event.currentTarget);}}
@@ -238,6 +240,12 @@ function ColourRow({source}: { source: SidebarSource }) {
 /** The expanded sidebar: colour icons, and section headers pinned while scrolling. */
 function ColourList({sections, collapsed, onToggleCollapsed}: VariantProps) {
     const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
+    const [expandedParents, setExpandedParents] = useState<ReadonlySet<string>>(new Set());
+    const toggleParent = (key: string) => setExpandedParents(previous => {
+        const next = new Set(previous);
+        if (next.has(key)) next.delete(key); else next.add(key);
+        return next;
+    });
     const toggleSection = (key: string) => setClosed((prev) => {
         const next = new Set(prev);
         if (next.has(key)) next.delete(key); else next.add(key);
@@ -263,7 +271,17 @@ function ColourList({sections, collapsed, onToggleCollapsed}: VariantProps) {
                         <div key={section.key}>
                             <ColourSectionHeader section={section} open={open} onToggleOpen={() => toggleSection(section.key)}/>
                             {open && <div className="px-1 py-1">
-                                {sortSources(section.items).map((source) => <ColourRow key={source.key} source={source}/>)}
+                                {sortSources(section.items.filter(source => !source.parentKey || !section.items.some(parent => parent.key === source.parentKey))).map(source => {
+                                    const children = sortSources(section.items.filter(child => child.parentKey === source.key));
+                                    const key = `${section.key}:${source.key}`;
+                                    const expanded = expandedParents.has(key);
+                                    return <div key={source.key}>
+                                        <ColourRow source={source} expanded={children.length ? expanded : undefined} onToggleExpanded={children.length ? () => toggleParent(key) : undefined}/>
+                                        {expanded && children.length > 0 && <div className="ml-4 border-l border-gray-800 pl-1">
+                                            {children.map(child => <ColourRow key={child.key} source={child}/>)}
+                                        </div>}
+                                    </div>;
+                                })}
                                 <Notes section={section}/>
                             </div>}
                         </div>
