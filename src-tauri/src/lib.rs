@@ -2,6 +2,7 @@ mod app_prefs;
 mod afk;
 mod commands;
 mod core;
+mod data_transfer;
 mod db;
 mod diagnostics;
 mod google_oauth;
@@ -362,6 +363,7 @@ pub fn run() {
         })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler({
             let handler: Box<dyn Fn(tauri::ipc::Invoke) -> bool + Send + Sync> =
                 Box::new(tauri::generate_handler![
@@ -492,6 +494,11 @@ pub fn run() {
                     device_logs,
                     get_server_ip,
                     set_server_ip,
+                    data_transfer::get_export_filter_options,
+                    data_transfer::export_dataset,
+                    data_transfer::import_dataset,
+                    data_transfer::save_export_file,
+                    data_transfer::read_import_file,
                 ]);
             move |invoke: tauri::ipc::Invoke| {
                 let command = invoke.message.command().to_string();

@@ -100,13 +100,13 @@ impl TimeBlock {
     }
 }
 
-struct CachedCategoryRegex {
+pub(crate) struct CachedCategoryRegex {
     regex: Regex,
     category: String,
     priority: i32,
 }
 
-fn derive_category(app: &str, regexes: &[CachedCategoryRegex]) -> Result<String, Error> {
+pub(crate) fn derive_category(app: &str, regexes: &[CachedCategoryRegex]) -> Result<String, Error> {
     if regexes.is_empty() {
         return Ok("Miscellaneous".to_string());
     }
@@ -118,7 +118,7 @@ fn derive_category(app: &str, regexes: &[CachedCategoryRegex]) -> Result<String,
         .ok_or_else(|| anyhow::anyhow!("Derive Category Error").into())
 }
 
-fn build_regex_table(
+pub(crate) fn build_regex_table(
     categories: &[Category],
     cat_regex: &[CategoryRegex],
 ) -> Result<Vec<CachedCategoryRegex>, Error> {
@@ -152,6 +152,17 @@ fn get_time_blocks(
     app_groups: &[CachedAppGroup],
     time_block_settings: &TimeBlockSettings,
 ) -> Result<Vec<TimeBlock>, Error> {
+    get_time_blocks_with(logs, |app| derive_category(app, regex), app_groups, time_block_settings)
+}
+
+/// Same as `get_time_blocks`, but lets callers supply the category of each
+/// title (e.g. from a per-title cache when processing long ranges).
+pub(crate) fn get_time_blocks_with(
+    logs: &[Log],
+    mut category_of: impl FnMut(&str) -> Result<String, Error>,
+    app_groups: &[CachedAppGroup],
+    time_block_settings: &TimeBlockSettings,
+) -> Result<Vec<TimeBlock>, Error> {
     if logs.is_empty() {
         return Ok(Vec::new());
     }
@@ -181,13 +192,13 @@ fn get_time_blocks(
     time_blocks.push(TimeBlock::new(
         first,
         0,
-        derive_category(&first.app, regex)?,
+        category_of(&first.app)?,
         app_groups,
     ));
 
     let mut time_block_index = 0;
     for log in &long_logs[1..] {
-        let log_cat = derive_category(&log.app, regex)?;
+        let log_cat = category_of(&log.app)?;
         let log_end_time = log.timestamp + log.duration;
 
         if let Some(current_time_block) = time_blocks.get_mut(time_block_index) {
@@ -241,7 +252,7 @@ fn get_time_blocks(
             break;
         }
 
-        let short_log_cat = derive_category(&short_log.app, regex)?;
+        let short_log_cat = category_of(&short_log.app)?;
 
         let mut best_match: Option<usize> = None;
         let mut min_distance = i64::MAX;
@@ -320,7 +331,7 @@ fn setting_val(rows: &HashMap<String, i32>, key: &str, default: i32) -> i64 {
     rows.get(key).copied().unwrap_or(default) as i64
 }
 
-async fn load_runtime_settings() -> Result<(i64, TimeBlockSettings), Error> {
+pub(crate) async fn load_runtime_settings() -> Result<(i64, TimeBlockSettings), Error> {
     let settings = get_settings().await?;
     let rows: HashMap<String, i32> = settings.into_iter().map(|s| (s.key, s.val)).collect();
     let calendar_start_hour = setting_val(&rows, "calendarStartHour", 8).clamp(0, 23);
@@ -662,7 +673,7 @@ fn ensure_non_overlapping(mut blocks: Vec<TimeBlock>) -> Vec<TimeBlock> {
     result
 }
 
-fn transform_time_blocks(
+pub(crate) fn transform_time_blocks(
     time_blocks: Vec<TimeBlock>,
     time_block_settings: &TimeBlockSettings,
 ) -> Result<Vec<TimeBlock>, Error> {
