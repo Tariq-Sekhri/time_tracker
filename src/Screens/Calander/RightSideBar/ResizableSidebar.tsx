@@ -5,7 +5,7 @@ export default function ResizableSidebar({collapsed, children, side = "right"}: 
     const WIDTH_KEY = `time-tracker:${side}-sidebar-width-px`;
     const LEGACY_WIDTH_KEY = `time-tracker:${side}-sidebar-width-percent`;
     const DEFAULT_WIDTH = side === "right" ? 460 : 280;
-    const MIN_WIDTH = side === "right" ? 400 : 240;
+    const MIN_WIDTH = side === "right" ? 360 : 240;
     const MAX_WIDTH = side === "right" ? 500 : 320;
     const collapsedWidth = side === "right" ? 64 : 56;
     const panel = useRef<HTMLDivElement>(null);
