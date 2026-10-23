@@ -49,18 +49,18 @@ it.each(["left", "right"] as const)("resizes %s using logical pixels at UI zoom 
     const handle = screen.getByRole("separator");
     handle.setPointerCapture = vi.fn();
     fireEvent.pointerDown(handle, {button: 0, pointerId: 1, clientX: 1000});
-    fireEvent.pointerMove(handle, {pointerId: 1, buttons: 1, clientX: side === "left" ? 1062.5 : 937.5});
-    expect(parseFloat(panel.style.width)).toBe(start + 50);
+    fireEvent.pointerMove(handle, {pointerId: 1, buttons: 1, clientX: side === "left" ? 1025 : 975});
+    expect(parseFloat(panel.style.width)).toBe(start + 20);
     fireEvent.pointerMove(handle, {pointerId: 1, buttons: 1, clientX: side === "left" ? 2000 : 0});
-    expect(panel.style.width).toBe(side === "left" ? "360px" : "560px");
+    expect(panel.style.width).toBe(side === "left" ? "320px" : "500px");
     fireEvent.pointerUp(handle, {pointerId: 1});
-    expect(setAppMetadata).toHaveBeenLastCalledWith(`time-tracker:${side}-sidebar-width-px`, side === "left" ? "360" : "560");
+    expect(setAppMetadata).toHaveBeenLastCalledWith(`time-tracker:${side}-sidebar-width-px`, side === "left" ? "320" : "500");
     fireEvent.keyDown(handle, {key: "Home"});
-    expect(panel.style.width).toBe(side === "left" ? "220px" : "400px");
+    expect(panel.style.width).toBe(side === "left" ? "260px" : "440px");
     fireEvent.keyDown(handle, {key: side === "left" ? "ArrowRight" : "ArrowLeft"});
-    expect(panel.style.width).toBe(side === "left" ? "230px" : "410px");
+    expect(panel.style.width).toBe(side === "left" ? "270px" : "450px");
     fireEvent.keyDown(handle, {key: "End"});
-    expect(panel.style.width).toBe(side === "left" ? "360px" : "560px");
+    expect(panel.style.width).toBe(side === "left" ? "320px" : "500px");
 });
 
 it.each(["pointerup", "pointercancel", "blur", "lostpointercapture", "released-buttons", "collapse"])("ends resizing on %s without keeping focus or changing the width afterward", async reason => {
@@ -93,7 +93,7 @@ it.each(["left", "right"] as const)("migrates a legacy %s percentage once and re
     const {container} = render(<ResizableSidebar side={side} collapsed={false}>Panel</ResizableSidebar>);
     const panel = container.firstElementChild as HTMLElement;
     measure(container, panel);
-    const migrated = side === "left" ? 288 : 400;
+    const migrated = side === "left" ? 288 : 440;
     await waitFor(() => expect(setAppMetadata).toHaveBeenCalledWith(`time-tracker:${side}-sidebar-width-px`, String(migrated)));
     expect(panel.style.width).toBe(`${migrated}px`);
     measure(container, panel, 2560);
@@ -109,5 +109,5 @@ it("ignores late saved widths after a user has started resizing", async () => {
     measure(container, panel);
     fireEvent.keyDown(screen.getByRole("separator"), {key: "End"});
     resolve("410");
-    await waitFor(() => expect(panel.style.width).toBe("560px"));
+    await waitFor(() => expect(panel.style.width).toBe("500px"));
 });

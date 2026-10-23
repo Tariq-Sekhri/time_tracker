@@ -4,9 +4,9 @@ import {getAppMetadata, setAppMetadata} from "../../../api/appMetadata";
 export default function ResizableSidebar({collapsed, children, side = "right"}: {collapsed: boolean; children: ReactNode; side?: "left" | "right"}) {
     const WIDTH_KEY = `time-tracker:${side}-sidebar-width-px`;
     const LEGACY_WIDTH_KEY = `time-tracker:${side}-sidebar-width-percent`;
-    const DEFAULT_WIDTH = side === "right" ? 420 : 256;
-    const MIN_WIDTH = side === "right" ? 400 : 220;
-    const MAX_WIDTH = side === "right" ? 560 : 360;
+    const DEFAULT_WIDTH = side === "right" ? 460 : 280;
+    const MIN_WIDTH = side === "right" ? 440 : 260;
+    const MAX_WIDTH = side === "right" ? 500 : 320;
     const collapsedWidth = side === "right" ? 64 : 56;
     const panel = useRef<HTMLDivElement>(null);
     const drag = useRef<{handle: HTMLDivElement; pointerId: number; startX: number; startWidth: number; zoom: number} | null>(null);
