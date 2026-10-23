@@ -122,7 +122,7 @@ export default function ManualTimeBlockDialog({
                     </label>
                     <div>
                         <span className="mb-1 block text-sm font-medium text-gray-300">Category</span>
-                        <ProjectSelector value={projectId} onChange={setProjectId} disabled={createMutation.isPending} />
+                        <ProjectSelector value={projectId} onChange={setProjectId} disabled={createMutation.isPending} showManage={false} />
                     </div>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <label className="block">
