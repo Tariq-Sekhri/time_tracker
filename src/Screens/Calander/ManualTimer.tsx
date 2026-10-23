@@ -112,7 +112,7 @@ export function ManualTimerControl({timer, onAddPastTime}: {timer: RunningManual
     };
 
     const elapsedEnd = timer?.end_time == null ? now : timer.end_time * 1000;
-    return <div className={`flex w-full flex-wrap items-center gap-2 rounded-xl border p-2 ${timer ? "border-sky-800/70 bg-sky-950/20" : "border-gray-800 bg-gray-950"}`}>
+    return <div className={`flex w-full flex-wrap items-center justify-center gap-2 rounded-xl border p-2 ${timer ? "border-sky-800/70 bg-sky-950/20" : "border-gray-800 bg-gray-950"}`}>
         <input
             ref={nameInputRef}
             aria-label="Timer task name"
@@ -130,9 +130,9 @@ export function ManualTimerControl({timer, onAddPastTime}: {timer: RunningManual
             placeholder="What are you working on?"
             title="Enter a name, then Tab or click away to start tracking"
             disabled={finishing}
-            className="min-w-0 flex-[1_1_14rem] rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white outline-none placeholder:text-gray-500 focus:border-sky-500 disabled:opacity-50"
+            className="w-56 max-w-full min-w-0 rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white outline-none placeholder:text-gray-500 focus:border-sky-500 disabled:opacity-50"
         />
-        <div ref={projectContainerRef} className="min-w-0 flex-[1_1_18rem]">
+        <div ref={projectContainerRef} className="w-64 max-w-full min-w-0">
             <ProjectSelector value={projectId} disabled={finishing} onChange={(id) => {
                 setProjectId(id);
                 if (timerRef.current || pendingRef.current) commit(title, id);
