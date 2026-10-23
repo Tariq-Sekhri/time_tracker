@@ -5,7 +5,13 @@ import ResizableSidebar from "./ResizableSidebar";
 import {getAppMetadata, setAppMetadata} from "../../../api/appMetadata";
 
 vi.mock("../../../api/appMetadata", () => ({getAppMetadata: vi.fn().mockResolvedValue(null), setAppMetadata: vi.fn().mockResolvedValue(undefined)}));
-afterEach(() => {cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals();});
+afterEach(() => {cleanup(); vi.resetAllMocks(); vi.mocked(getAppMetadata).mockResolvedValue(null); vi.mocked(setAppMetadata).mockResolvedValue(); vi.unstubAllGlobals();});
+
+function measure(parent: HTMLElement, panel: HTMLElement, parentWidth = 1920, zoom = 1.25) {
+    Object.defineProperty(parent, "clientWidth", {configurable: true, value: parentWidth});
+    parent.getBoundingClientRect = () => ({width: parentWidth * zoom} as DOMRect);
+    panel.getBoundingClientRect = () => ({width: parseFloat(panel.style.width) * zoom} as DOMRect);
+}
 
 function setupPointer() {
     class PointerEvent extends MouseEvent {
@@ -15,48 +21,59 @@ function setupPointer() {
     vi.stubGlobal("PointerEvent", PointerEvent);
 }
 
-function measure(parent: HTMLElement, panel: HTMLElement) {
-    Object.defineProperty(parent, "clientWidth", {configurable: true, value: 1000});
-    // A 125% UI zoom must not change the drag distance as a percentage.
-    parent.getBoundingClientRect = () => ({width: 1250} as DOMRect);
-    panel.getBoundingClientRect = () => ({width: 375} as DOMRect);
-}
-
-it("drags proportionally, enforces minimum and maximum widths, and saves on release", async () => {
-    setupPointer();
-    const {container} = render(<ResizableSidebar collapsed={false}>Statistics</ResizableSidebar>);
+it.each(["left", "right"] as const)("keeps %s width across 1080p, 1440p, narrow windows, collapse and reopening", async side => {
+    const preferred = side === "left" ? 300 : 460;
+    vi.mocked(getAppMetadata).mockImplementation(async key => key.endsWith("width-px") ? String(preferred) : null);
+    const {container, rerender} = render(<ResizableSidebar side={side} collapsed={false}>Panel</ResizableSidebar>);
     const panel = container.firstElementChild as HTMLElement;
     measure(container, panel);
-    const handle = screen.getByRole("separator", {name: "Resize right sidebar"});
-    handle.setPointerCapture = vi.fn();
-    handle.releasePointerCapture = vi.fn();
-    fireEvent.pointerDown(handle, {button: 0, pointerId: 1, clientX: 875});
-    fireEvent.pointerMove(handle, {pointerId: 1, buttons: 1, clientX: 750});
-    expect(panel.style.width).toBe("40%");
-    fireEvent.pointerMove(handle, {pointerId: 1, buttons: 1, clientX: 1250});
-    expect(parseFloat(panel.style.width)).toBeCloseTo(28);
-    fireEvent.pointerMove(handle, {pointerId: 1, buttons: 1, clientX: 0});
-    expect(panel.style.width).toBe("40%");
+    await waitFor(() => expect(panel.style.width).toBe(`${preferred}px`));
+    for (const [parentWidth, zoom] of [[2560, 1.25], [1920, 1], [2560, 1.5], [200, 1.25], [1920, 1.25]]) {
+        measure(container, panel, parentWidth, zoom);
+        fireEvent.resize(window);
+        expect(panel.style.width).toBe(`${Math.min(parentWidth, preferred)}px`);
+    }
+    rerender(<ResizableSidebar side={side} collapsed>Panel</ResizableSidebar>);
+    expect(panel.style.width).toBe(side === "left" ? "56px" : "64px");
+    rerender(<ResizableSidebar side={side} collapsed={false}>Panel</ResizableSidebar>);
+    expect(panel.style.width).toBe(`${preferred}px`);
     expect(setAppMetadata).not.toHaveBeenCalled();
-    fireEvent.pointerUp(handle, {pointerId: 1});
-    expect(setAppMetadata).toHaveBeenCalledWith("time-tracker:right-sidebar-width-percent", "40");
-    expect(panel.style.userSelect).toBe("");
-    expect(document.activeElement).not.toBe(handle);
-    fireEvent.pointerMove(handle, {pointerId: 1, buttons: 1, clientX: 750});
-    expect(panel.style.width).toBe("40%");
 });
 
-it.each(["pointerup", "pointercancel", "blur", "lostpointercapture", "released-buttons", "collapse"])("ends resizing on %s without leaving a focused highlight", async reason => {
+it.each(["left", "right"] as const)("resizes %s using logical pixels at UI zoom and enforces width limits", async side => {
+    setupPointer();
+    const {container} = render(<ResizableSidebar side={side} collapsed={false}>Panel</ResizableSidebar>);
+    const panel = container.firstElementChild as HTMLElement;
+    measure(container, panel);
+    const start = parseFloat(panel.style.width);
+    const handle = screen.getByRole("separator");
+    handle.setPointerCapture = vi.fn();
+    fireEvent.pointerDown(handle, {button: 0, pointerId: 1, clientX: 1000});
+    fireEvent.pointerMove(handle, {pointerId: 1, buttons: 1, clientX: side === "left" ? 1062.5 : 937.5});
+    expect(parseFloat(panel.style.width)).toBe(start + 50);
+    fireEvent.pointerMove(handle, {pointerId: 1, buttons: 1, clientX: side === "left" ? 2000 : 0});
+    expect(panel.style.width).toBe(side === "left" ? "360px" : "560px");
+    fireEvent.pointerUp(handle, {pointerId: 1});
+    expect(setAppMetadata).toHaveBeenLastCalledWith(`time-tracker:${side}-sidebar-width-px`, side === "left" ? "360" : "560");
+    fireEvent.keyDown(handle, {key: "Home"});
+    expect(panel.style.width).toBe(side === "left" ? "220px" : "400px");
+    fireEvent.keyDown(handle, {key: side === "left" ? "ArrowRight" : "ArrowLeft"});
+    expect(panel.style.width).toBe(side === "left" ? "230px" : "410px");
+    fireEvent.keyDown(handle, {key: "End"});
+    expect(panel.style.width).toBe(side === "left" ? "360px" : "560px");
+});
+
+it.each(["pointerup", "pointercancel", "blur", "lostpointercapture", "released-buttons", "collapse"])("ends resizing on %s without keeping focus or changing the width afterward", async reason => {
     setupPointer();
     const {container, rerender} = render(<ResizableSidebar collapsed={false}>Statistics</ResizableSidebar>);
     const panel = container.firstElementChild as HTMLElement;
     measure(container, panel);
     const handle = screen.getByRole("separator");
     handle.setPointerCapture = vi.fn();
-    handle.releasePointerCapture = vi.fn();
     handle.focus();
-    fireEvent.pointerDown(handle, {button: 0, pointerId: 1, clientX: 875});
-    fireEvent.pointerMove(handle, {pointerId: 1, buttons: 1, clientX: 750});
+    fireEvent.pointerDown(handle, {button: 0, pointerId: 1, clientX: 1000});
+    fireEvent.pointerMove(handle, {pointerId: 1, buttons: 1, clientX: 900});
+    expect(panel.style.width).toBe("500px");
     expect(panel.style.userSelect).toBe("none");
     if (reason === "collapse") rerender(<ResizableSidebar collapsed>Statistics</ResizableSidebar>);
     else if (reason === "blur") fireEvent.blur(window);
@@ -65,82 +82,32 @@ it.each(["pointerup", "pointercancel", "blur", "lostpointercapture", "released-b
     else fireEvent(window, new PointerEvent(reason, {pointerId: 1}));
     expect(panel.style.userSelect).toBe("");
     expect(document.activeElement).not.toBe(handle);
-    expect(setAppMetadata).toHaveBeenCalledExactlyOnceWith("time-tracker:right-sidebar-width-percent", "40");
+    expect(setAppMetadata).toHaveBeenCalledExactlyOnceWith("time-tracker:right-sidebar-width-px", "500");
+    if (reason === "collapse") rerender(<ResizableSidebar collapsed={false}>Statistics</ResizableSidebar>);
+    fireEvent.pointerMove(handle, {pointerId: 1, buttons: 1, clientX: 0});
+    expect(panel.style.width).toBe("500px");
 });
 
-it("resizes the left sidebar in the opposite direction and saves its width independently", async () => {
-    setupPointer();
-    const {container, rerender} = render(<ResizableSidebar side="left" collapsed={false}>Sources</ResizableSidebar>);
-    const panel = container.firstElementChild as HTMLElement;
-    measure(container, panel);
-    const handle = screen.getByRole("separator", {name: "Resize left sidebar"});
-    handle.setPointerCapture = vi.fn();
-    fireEvent.pointerDown(handle, {button: 0, pointerId: 1, clientX: 375});
-    fireEvent.pointerMove(handle, {pointerId: 1, buttons: 1, clientX: 500});
-    expect(panel.style.width).toBe("35%");
-    fireEvent.pointerUp(handle, {pointerId: 1});
-    fireEvent.keyDown(handle, {key: "ArrowLeft"});
-    expect(panel.style.width).toBe("34%");
-    expect(setAppMetadata).toHaveBeenLastCalledWith("time-tracker:left-sidebar-width-percent", "34");
-    rerender(<ResizableSidebar side="left" collapsed>Sources</ResizableSidebar>);
-    expect(panel.style.width).toBe("56px");
-    rerender(<ResizableSidebar side="left" collapsed={false}>Sources</ResizableSidebar>);
-    expect(panel.style.width).toBe("34%");
-});
-
-it("restores the saved percentage, supports keyboard resizing and retains it after collapse", async () => {
-    vi.mocked(getAppMetadata).mockResolvedValueOnce("32");
-    const {container, rerender} = render(<ResizableSidebar collapsed={false}>Statistics</ResizableSidebar>);
-    const panel = container.firstElementChild as HTMLElement;
-    measure(container, panel);
-    await waitFor(() => expect(panel.style.width).toBe("32%"));
-    fireEvent.keyDown(screen.getByRole("separator"), {key: "ArrowLeft"});
-    expect(panel.style.width).toBe("33%");
-    rerender(<ResizableSidebar collapsed>Statistics</ResizableSidebar>);
-    expect(panel.style.width).toBe("64px");
-    expect(screen.queryByRole("separator")).toBeNull();
-    rerender(<ResizableSidebar collapsed={false}>Statistics</ResizableSidebar>);
-    expect(panel.style.width).toBe("33%");
-});
-
-it.each(["left", "right"] as const)("keeps percentage caps across monitor and temporary minimum-width changes (%s)", async side => {
-    vi.mocked(getAppMetadata).mockResolvedValueOnce("60");
+it.each(["left", "right"] as const)("migrates a legacy %s percentage once and retains that pixel width on another monitor", async side => {
+    vi.mocked(getAppMetadata).mockImplementation(async key => key.endsWith("width-percent") ? "15" : null);
     const {container} = render(<ResizableSidebar side={side} collapsed={false}>Panel</ResizableSidebar>);
     const panel = container.firstElementChild as HTMLElement;
-    Object.defineProperty(container, "clientWidth", {configurable: true, value: 1920});
-    container.getBoundingClientRect = () => ({width: 2400} as DOMRect);
-    const maxPercent = side === "left" ? 35 : 40;
-    await waitFor(() => expect(parseFloat(panel.style.width)).toBeCloseTo(maxPercent));
-    const handle = screen.getByRole("separator");
-    fireEvent.keyDown(handle, {key: "End"});
-    expect(parseFloat(panel.style.width)).toBeCloseTo(maxPercent);
-    fireEvent.keyDown(handle, {key: side === "left" ? "ArrowRight" : "ArrowLeft"});
-    expect(parseFloat(panel.style.width)).toBeCloseTo(maxPercent);
-    expect(panel.style.maxWidth).toContain(`${maxPercent}%`);
-    Object.defineProperty(container, "clientWidth", {configurable: true, value: 2560});
+    measure(container, panel);
+    const migrated = side === "left" ? 288 : 400;
+    await waitFor(() => expect(setAppMetadata).toHaveBeenCalledWith(`time-tracker:${side}-sidebar-width-px`, String(migrated)));
+    expect(panel.style.width).toBe(`${migrated}px`);
+    measure(container, panel, 2560);
     fireEvent.resize(window);
-    expect(parseFloat(panel.style.width)).toBeCloseTo(maxPercent);
-    Object.defineProperty(container, "clientWidth", {configurable: true, value: 500});
-    fireEvent.resize(window);
-    // Preserve the usable minimum when a window becomes too narrow for the percentage cap.
-    expect(parseFloat(panel.style.width)).toBeCloseTo(side === "left" ? 44 : 56);
-    Object.defineProperty(container, "clientWidth", {configurable: true, value: 1920});
-    fireEvent.resize(window);
-    expect(parseFloat(panel.style.width)).toBeCloseTo(maxPercent);
-    expect(setAppMetadata).toHaveBeenLastCalledWith(`time-tracker:${side}-sidebar-width-percent`, String(maxPercent));
+    expect(panel.style.width).toBe(`${migrated}px`);
 });
 
-it.each(["left", "right"] as const)("restores a preferred percentage after a narrow initial window (%s)", async side => {
-    vi.mocked(getAppMetadata).mockResolvedValueOnce("30");
-    const {container} = render(<ResizableSidebar side={side} collapsed={false}>Panel</ResizableSidebar>);
+it("ignores late saved widths after a user has started resizing", async () => {
+    let resolve!: (value: string) => void;
+    vi.mocked(getAppMetadata).mockReturnValueOnce(new Promise<string>(done => {resolve = done;}));
+    const {container} = render(<ResizableSidebar collapsed={false}>Panel</ResizableSidebar>);
     const panel = container.firstElementChild as HTMLElement;
-    Object.defineProperty(container, "clientWidth", {configurable: true, value: 500});
-    await waitFor(() => expect(parseFloat(panel.style.width)).toBeCloseTo(side === "left" ? 44 : 56));
-    Object.defineProperty(container, "clientWidth", {configurable: true, value: 1920});
-    fireEvent.resize(window);
-    expect(panel.style.width).toBe("30%");
-    Object.defineProperty(container, "clientWidth", {configurable: true, value: 2560});
-    fireEvent.resize(window);
-    expect(panel.style.width).toBe("30%");
-    expect(setAppMetadata).not.toHaveBeenCalled();
+    measure(container, panel);
+    fireEvent.keyDown(screen.getByRole("separator"), {key: "End"});
+    resolve("410");
+    await waitFor(() => expect(panel.style.width).toBe("560px"));
 });
