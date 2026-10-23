@@ -87,6 +87,7 @@ export type ColumnDef = {
     label: string;
     /** Selected when the user has not customised columns. */
     defaultOn: boolean;
+    required?: boolean;
 };
 
 /** formats/index.ts must export these. */

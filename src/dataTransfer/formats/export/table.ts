@@ -33,7 +33,7 @@ export function columnSpecs<K extends DatasetKey>(dataset: K, framework: Framewo
 }
 
 export function columnsFor(dataset: DatasetKey, framework: FrameworkId): ColumnDef[] {
-    return columnSpecs(dataset, framework).map(({key, label, defaultOn}) => ({key, label, defaultOn}));
+    return columnSpecs(dataset, framework).map(({key, label, defaultOn, required}) => ({key, label, defaultOn, ...(required ? {required} : {})}));
 }
 
 /** Keys a framework layout needs for the target tool to accept the file. Empty for native. */
