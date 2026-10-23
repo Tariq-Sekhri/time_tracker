@@ -112,7 +112,7 @@ export function ManualTimerControl({timer, onAddPastTime}: {timer: RunningManual
     };
 
     const elapsedEnd = timer?.end_time == null ? now : timer.end_time * 1000;
-    return <div className={`flex w-full flex-wrap items-center justify-center gap-2 rounded-xl border p-2 ${timer ? "border-sky-800/70 bg-sky-950/20" : "border-gray-800 bg-gray-950"}`}>
+    return <div className={`mx-auto flex w-fit max-w-full flex-wrap items-center justify-center gap-2 rounded-xl border p-2 ${timer ? "border-sky-800/70 bg-sky-950/20" : "border-gray-800 bg-gray-950"}`}>
         <input
             ref={nameInputRef}
             aria-label="Timer task name"
