@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [1.13.1] - 2026-10-23
+
+- Track background media playback on Windows.
+- Resize both calendar sidebars and see statistics in the minimized right sidebar.
+
 ## [1.13.0] - 2026-10-23
 
 - Track background media playback on Windows.
