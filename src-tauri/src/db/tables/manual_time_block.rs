@@ -225,13 +225,26 @@ pub async fn update_manual_timer_details(
     project_id: Option<i64>,
     start_time: Option<i64>,
 ) -> Result<RunningManualTimer, Error> {
+    let pool = db::get_pool().await?;
+    let timer = update_manual_timer_details_in_pool(&pool, title, project_id, start_time).await?;
+    crate::manual_sync::timer_changed_locally();
+    Ok(timer)
+}
+
+async fn update_manual_timer_details_in_pool(
+    pool: &SqlitePool,
+    title: String,
+    project_id: Option<i64>,
+    start_time: Option<i64>,
+) -> Result<RunningManualTimer, Error> {
     let title = title.trim();
     if title.chars().count() > 200 {
         return Err(anyhow::anyhow!("Timer name must be 200 characters or fewer").into());
     }
-    let pool = db::get_pool().await?;
-    super::manual_project::validate_project_id(&pool, project_id).await?;
-    let mut transaction = pool.begin().await?;
+    super::manual_project::validate_project_id(pool, project_id).await?;
+    // Reserve the writer before reading: tracking/sync writes must not make
+    // this snapshot stale when we update it (SQLITE_BUSY_SNAPSHOT / 517).
+    let mut transaction = pool.begin_with("BEGIN IMMEDIATE").await?;
     let value = sqlx::query_scalar::<_, String>("SELECT value FROM app_metadata WHERE key = ?1")
         .bind(RUNNING_TIMER_KEY)
         .fetch_optional(&mut *transaction)
@@ -256,7 +269,6 @@ pub async fn update_manual_timer_details(
         .execute(&mut *transaction)
         .await?;
     transaction.commit().await?;
-    crate::manual_sync::timer_changed_locally();
     Ok(timer)
 }
 
@@ -310,7 +322,15 @@ pub async fn stop_manual_timer() -> Result<RunningManualTimer, Error> {
 #[tauri::command]
 pub async fn finish_manual_timer() -> Result<i64, Error> {
     let pool = db::get_pool().await?;
-    let mut transaction = pool.begin().await?;
+    let id = finish_manual_timer_in_pool(&pool).await?;
+    crate::manual_sync::entries_changed_locally();
+    Ok(id)
+}
+
+async fn finish_manual_timer_in_pool(pool: &SqlitePool) -> Result<i64, Error> {
+    // Wait for an existing writer before taking the timer snapshot. Once
+    // acquired, the insert and timer removal stay atomic with no lock upgrade.
+    let mut transaction = pool.begin_with("BEGIN IMMEDIATE").await?;
     let value = sqlx::query_scalar::<_, String>("SELECT value FROM app_metadata WHERE key = ?1")
         .bind(RUNNING_TIMER_KEY)
         .fetch_optional(&mut *transaction)
@@ -342,7 +362,6 @@ pub async fn finish_manual_timer() -> Result<i64, Error> {
         .execute(&mut *transaction)
         .await?;
     transaction.commit().await?;
-    crate::manual_sync::entries_changed_locally();
     Ok(result.last_insert_rowid())
 }
 
@@ -396,8 +415,92 @@ pub async fn delete_manual_time_block(id: i64) -> Result<(), Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::{create_table, validate, ManualTimeBlock};
+    use super::*;
+    use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
     use sqlx::SqlitePool;
+    use std::time::Duration;
+
+    async fn wal_pool() -> (SqlitePool, std::path::PathBuf) {
+        let path = std::env::temp_dir().join(format!("manual-save-{}.db", uuid::Uuid::new_v4()));
+        let pool = SqlitePoolOptions::new()
+            .max_connections(3)
+            .connect_with(SqliteConnectOptions::new().filename(&path).create_if_missing(true)
+                .journal_mode(SqliteJournalMode::Wal).busy_timeout(Duration::from_secs(5)))
+            .await.unwrap();
+        sqlx::query("CREATE TABLE app_metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            .execute(&pool).await.unwrap();
+        create_table(&pool).await.unwrap();
+        let timer = RunningManualTimer {
+            title: "Planning".into(), notes: Some("Keep notes".into()), start_time: 100,
+            end_time: Some(200), session_id: Some("test-session".into()), ..Default::default()
+        };
+        sqlx::query("INSERT INTO app_metadata VALUES (?1, ?2)")
+            .bind(RUNNING_TIMER_KEY).bind(serde_json::to_string(&timer).unwrap())
+            .execute(&pool).await.unwrap();
+        (pool, path)
+    }
+
+    async fn cleanup(pool: SqlitePool, path: std::path::PathBuf) {
+        pool.close().await;
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn deferred_read_then_write_reproduces_snapshot_error() {
+        let (pool, path) = wal_pool().await;
+        let mut tx = pool.begin().await.unwrap();
+        sqlx::query("SELECT value FROM app_metadata").fetch_all(&mut *tx).await.unwrap();
+        sqlx::query("INSERT INTO app_metadata VALUES ('background', 'write')")
+            .execute(&pool).await.unwrap();
+        let error = sqlx::query("DELETE FROM app_metadata WHERE key = ?1")
+            .bind(RUNNING_TIMER_KEY).execute(&mut *tx).await.unwrap_err();
+        assert_eq!(error.as_database_error().unwrap().code().as_deref(), Some("517"));
+        tx.rollback().await.unwrap();
+        cleanup(pool.clone(), path).await;
+    }
+
+    #[tokio::test]
+    async fn manual_save_waits_for_background_writer_and_records_once() {
+        let (pool, path) = wal_pool().await;
+        let mut writer = pool.begin_with("BEGIN IMMEDIATE").await.unwrap();
+        // Model a sync update that has not committed when the user clicks Save.
+        let raw: String = sqlx::query_scalar("SELECT value FROM app_metadata WHERE key = ?1")
+            .bind(RUNNING_TIMER_KEY).fetch_one(&mut *writer).await.unwrap();
+        let mut timer: RunningManualTimer = serde_json::from_str(&raw).unwrap();
+        timer.version = 42;
+        sqlx::query("UPDATE app_metadata SET value = ?1 WHERE key = ?2")
+            .bind(serde_json::to_string(&timer).unwrap()).bind(RUNNING_TIMER_KEY)
+            .execute(&mut *writer).await.unwrap();
+        let update = update_manual_timer_details_in_pool(&pool, "Updated".into(), None, None);
+        tokio::pin!(update);
+        assert!(tokio::time::timeout(Duration::from_millis(100), &mut update).await.is_err());
+        writer.commit().await.unwrap();
+        let updated = update.await.unwrap();
+        assert_eq!(updated.version, 42);
+        assert_eq!(updated.title, "Updated");
+        assert_eq!(updated.notes.as_deref(), Some("Keep notes"));
+
+        let mut writer = pool.begin_with("BEGIN IMMEDIATE").await.unwrap();
+        sqlx::query("INSERT INTO app_metadata VALUES ('background', 'write')")
+            .execute(&mut *writer).await.unwrap();
+        let finish = finish_manual_timer_in_pool(&pool);
+        tokio::pin!(finish);
+        assert!(tokio::time::timeout(Duration::from_millis(100), &mut finish).await.is_err());
+        writer.commit().await.unwrap();
+        let id = finish.await.unwrap();
+        let row: (String, Option<String>, i64, i64, String, i64) = sqlx::query_as(
+            "SELECT title, notes, start_time, end_time, session_id, pending_upload FROM manual_time_blocks WHERE id = ?1")
+            .bind(id).fetch_one(&pool).await.unwrap();
+        assert_eq!(row, ("Updated".into(), Some("Keep notes".into()), 100, 200, "test-session".into(), 1));
+        assert!(finish_manual_timer_in_pool(&pool).await.is_err());
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM manual_time_blocks")
+            .fetch_one(&pool).await.unwrap();
+        assert_eq!(count, 1);
+        let timer_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM app_metadata WHERE key = ?1")
+            .bind(RUNNING_TIMER_KEY).fetch_one(&pool).await.unwrap();
+        assert_eq!(timer_count, 0);
+        cleanup(pool.clone(), path).await;
+    }
 
     #[test]
     fn validates_manual_time_block_fields() {
