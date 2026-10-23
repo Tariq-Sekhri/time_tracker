@@ -48,9 +48,22 @@ it("creates, finds and selects subcategories under their category", async () => 
     await waitFor(() => expect(trigger.textContent).toContain("School › Homework"));
     expect(screen.queryByRole("listbox")).toBeNull();
 
+    await user.click(trigger);
+    const picksBeforeEdit = picked.mock.calls.length;
+    await user.click(screen.getByRole("button", {name: "Edit Homework"}));
+    const rename = screen.getByRole("textbox", {name: "Rename Homework"});
+    await user.clear(rename);
+    await user.type(rename, "Assignments");
+    await user.click(screen.getByRole("button", {name: "Save"}));
+    await waitFor(() => expect(trigger.textContent).toContain("School › Assignments"));
+    expect(screen.getByRole("listbox")).toBeTruthy();
+    expect(picked.mock.calls.length).toBe(picksBeforeEdit);
+    expect((await invoke<Array<{id: number; name: string; parent_id: number | null}>>("get_manual_projects")).find(project => project.id === homework.id)).toEqual(expect.objectContaining({name: "Assignments", parent_id: school}));
+    await user.click(trigger);
+
     const coding = await invoke<number>("create_manual_project", {name: "Coding"});
     await expect(invoke("create_manual_project", {name: "homework", parentId: coding})).resolves.toEqual(expect.any(Number));
-    await expect(invoke("create_manual_project", {name: "HOMEWORK", parentId: school})).rejects.toThrow("already exists");
+    await expect(invoke("create_manual_project", {name: "ASSIGNMENTS", parentId: school})).rejects.toThrow("already exists");
     await invoke("delete_manual_project", {id: coding});
     await invoke("delete_manual_project", {id: school});
     expect(await invoke<unknown[]>("get_manual_projects")).toEqual([]);

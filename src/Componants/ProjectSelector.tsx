@@ -73,6 +73,7 @@ export default function ProjectSelector({value, onChange, disabled = false, show
     };
     const closePicker = () => {
         setPickerOpen(false);
+        setEditId(null);
         setQuery("");
         setCreating(null);
         setError(null);
@@ -198,11 +199,18 @@ export default function ProjectSelector({value, onChange, disabled = false, show
                         const isLastChild = depth === 1 && rows.filter((row) => row.project.parent_id === project.parent_id).slice(-1)[0]?.project.id === project.id;
                         return <div key={project.id}>
                             {depth === 0 && <div className="mt-1 border-t border-gray-800/80" />}
-                            <div className={`group flex items-center gap-1 rounded-md ${isActive ? "bg-gray-800/80" : ""}`} onPointerEnter={() => setActive(options.indexOf(project.id))}>
+                            {editId === project.id ? <form className="space-y-2 rounded-md bg-gray-800/50 p-2" onSubmit={(event) => {event.preventDefault(); act({type: "edit", id: project.id, name: editName});}}>
+                                <input autoFocus aria-label={`Rename ${project.name}`} value={editName} onChange={event => setEditName(event.target.value)} onKeyDown={event => {if (event.key === "Escape") {event.stopPropagation(); setEditId(null);}}} maxLength={100} disabled={mutation.isPending} className="w-full min-w-0 rounded border border-gray-700 bg-black px-2 py-1.5 text-sm text-white outline-none focus:border-sky-500" />
+                                <div className="flex justify-end gap-3">
+                                    <button type="button" disabled={mutation.isPending} onClick={() => setEditId(null)} className="text-xs text-gray-400 hover:text-white">Cancel</button>
+                                    <button type="submit" disabled={mutation.isPending || !editName.trim()} className="rounded bg-sky-600 px-2 py-1 text-xs text-white hover:bg-sky-500 disabled:opacity-50">{mutation.isPending ? "Saving…" : "Save"}</button>
+                                </div>
+                            </form> : <div className={`group flex items-center gap-1 rounded-md ${isActive ? "bg-gray-800/80" : ""}`} onPointerEnter={() => setActive(options.indexOf(project.id))}>
                                 <div id={`manual-category-option-${project.id}`} role="option" aria-selected={value === project.id} onClick={() => pick(project.id)} className={`flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-2 text-sm ${depth ? "pl-7 pr-2" : "px-2"} ${value === project.id ? "font-medium text-sky-300" : depth ? "text-gray-300" : "text-gray-100"}`}>
                                     {depth === 0 && <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{backgroundColor: colorOf(project.id)}} />}
                                     <span className="truncate">{project.name}</span>
                                 </div>
+                                <button type="button" aria-label={`Edit ${project.name}`} onClick={() => {setError(null); setCreating(null); setEditId(project.id); setEditName(project.name);}} className="shrink-0 rounded px-1.5 py-1 text-xs text-gray-400 hover:bg-gray-800 hover:text-white">Edit</button>
                                 {depth === 0 && (childCount > 0
                                     ? <button type="button" aria-expanded={isOpen} aria-label={`${isOpen ? "Hide" : "Show"} ${project.name} subcategories`} onClick={() => toggleExpanded(project.id)} className={`mr-1 flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs ${isOpen ? "border-sky-700 text-sky-300" : "border-transparent text-gray-400 hover:border-gray-700 hover:text-white"}`}>
                                         {childCount} {childCount === 1 ? "sub" : "subs"} <Chevron open={isOpen} />
@@ -210,7 +218,7 @@ export default function ProjectSelector({value, onChange, disabled = false, show
                                     : <button type="button" aria-label={`Add subcategory to ${project.name}`} onClick={() => startCreating(project.id)} className="mr-1 shrink-0 rounded-md px-2 py-1 text-xs text-sky-400 opacity-0 transition hover:bg-gray-800 hover:text-sky-300 focus-visible:opacity-100 group-hover:opacity-100">
                                         + Subcategory
                                     </button>)}
-                            </div>
+                            </div>}
                             {isLastChild && project.parent_id != null && expanded.has(project.parent_id) && (creating?.parentId === project.parent_id
                                 ? createForm(project.parent_id)
                                 : <button type="button" onClick={() => startCreating(project.parent_id!)} className="flex w-full items-center gap-2 rounded-md py-1.5 pl-7 text-left text-xs text-sky-400 hover:bg-gray-800/60 hover:text-sky-300"><Plus size={12} /> Add subcategory</button>)}
