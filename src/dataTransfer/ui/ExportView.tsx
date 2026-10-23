@@ -9,6 +9,7 @@ import {nestManualCategories} from "../../api/ManualProject.ts";
 import {useToast} from "../../Componants/Toast.tsx";
 import {toErrorString} from "../../types/common.ts";
 import {buildExport, columnsFor, defaultExportOptions} from "../formats/index.ts";
+import {pdfText} from "../formats/export/pdf/text.ts";
 import type {ExportOptions} from "../types.ts";
 import ColumnPickerNotice from "./ColumnPickerNotice.tsx";
 import {effectiveColumns} from "./ColumnPicker.tsx";
@@ -152,6 +153,16 @@ export default function ExportView() {
     }
     const logCount = include.activity_logs ? countMap.activity_logs : undefined;
     const summary = exportSummary(include, countMap, rangeText, options.format);
+    const unsupportedPdfText = useMemo(() => {
+        if (options.format !== "pdf" || !counts.data) return false;
+        const unsupported = (value: unknown): boolean => {
+            if (typeof value === "string") return (pdfText(value).match(/\?/g)?.length ?? 0) > (value.match(/\?/g)?.length ?? 0);
+            if (Array.isArray(value)) return value.some(unsupported);
+            if (value && typeof value === "object") return Object.values(value).some(unsupported);
+            return false;
+        };
+        return includedKeys(include).some(key => unsupported(counts.data![key]));
+    }, [options.format, counts.data, include]);
 
     const savePresets = async (next: ExportPreset[]) => {
         setPresets(next);
@@ -316,6 +327,7 @@ export default function ExportView() {
 
         <Section id="dt-export-format" step={4} title="Format">
             <FormatPicker options={options} manualSelected={include.manual_entries} onChange={patchOptions} />
+            {unsupportedPdfText && <Banner tone="warning">Some selected text uses characters this PDF font cannot display. Those characters become “?”. Choose Excel, CSV, or JSON to preserve the original text.</Banner>}
             {options.format === "pdf" && include.activity_logs && <Banner tone="info">PDFs show up to 5,000 raw activity log rows. Totals include all selected logs. Use CSV, Excel, or JSON for every raw record.</Banner>}
             {options.format === "json" && selectedKeys.length < DATASETS.length && <ColumnPickerNotice onSelectAll={() => setInclude(everythingInclude())} />}
         </Section>
