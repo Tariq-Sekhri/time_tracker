@@ -77,7 +77,7 @@ export default function ResizableSidebar({collapsed, children, side = "right"}: 
             title={`Drag to resize ${side} sidebar`}
             onClick={event => event.stopPropagation()}
             tabIndex={0}
-            className={`absolute inset-y-0 ${side === "right" ? "left-0" : "right-0"} z-20 w-1.5 cursor-col-resize touch-none transition-colors hover:bg-sky-500/60 focus-visible:bg-sky-500/60 focus-visible:outline-none ${resizing ? "bg-sky-500/60" : ""}`}
+            className={`absolute inset-y-0 ${side === "right" ? "left-0" : "right-0"} z-20 w-1.5 cursor-col-resize touch-none transition-colors hover:bg-[var(--tt-accent)]/60 focus-visible:bg-[var(--tt-accent)]/60 focus-visible:outline-none ${resizing ? "bg-[var(--tt-accent)]/60" : ""}`}
             onPointerDown={event => {
                 if (event.button !== 0) return;
                 const size = dimensions();
