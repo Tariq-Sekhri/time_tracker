@@ -1,7 +1,6 @@
 import {isCurrentWeek} from "../utils.ts";
 import CalendarAppFilterIndicator from "../../../Componants/CalendarAppFilterIndicator.tsx";
 import {ReactNode} from "react";
-import AfkFilter from "../../../Componants/AfkFilter.tsx";
 
 export default function CalanderHeader(props: {
     headerTitle: string,
@@ -17,12 +16,12 @@ export default function CalanderHeader(props: {
     timerControl: ReactNode,
 }) {
     return <div className="flex-shrink-0 border-b border-gray-800 bg-black px-4 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="grid grid-cols-[1fr_auto] items-center gap-3 xl:grid-cols-[minmax(12rem,1fr)_minmax(0,56rem)_minmax(12rem,1fr)]">
             <h2 className="text-xl font-semibold text-white">{props.headerTitle}</h2>
-            <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="order-last col-span-2 mx-auto w-full max-w-4xl min-w-0 xl:order-none xl:col-span-1">
                 {props.timerControl}
-                <AfkFilter />
-                <div className="h-6 w-px bg-gray-800" aria-hidden="true" />
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
                 <CalendarAppFilterIndicator
                     onPrev={props.appJumpPrev}
                     onNext={props.appJumpNext}
