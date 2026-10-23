@@ -56,9 +56,9 @@ it.each(["left", "right"] as const)("resizes %s using logical pixels at UI zoom 
     fireEvent.pointerUp(handle, {pointerId: 1});
     expect(setAppMetadata).toHaveBeenLastCalledWith(`time-tracker:${side}-sidebar-width-px`, side === "left" ? "320" : "500");
     fireEvent.keyDown(handle, {key: "Home"});
-    expect(panel.style.width).toBe(side === "left" ? "260px" : "440px");
+    expect(panel.style.width).toBe(side === "left" ? "240px" : "400px");
     fireEvent.keyDown(handle, {key: side === "left" ? "ArrowRight" : "ArrowLeft"});
-    expect(panel.style.width).toBe(side === "left" ? "270px" : "450px");
+    expect(panel.style.width).toBe(side === "left" ? "250px" : "410px");
     fireEvent.keyDown(handle, {key: "End"});
     expect(panel.style.width).toBe(side === "left" ? "320px" : "500px");
 });
@@ -93,7 +93,7 @@ it.each(["left", "right"] as const)("migrates a legacy %s percentage once and re
     const {container} = render(<ResizableSidebar side={side} collapsed={false}>Panel</ResizableSidebar>);
     const panel = container.firstElementChild as HTMLElement;
     measure(container, panel);
-    const migrated = side === "left" ? 288 : 440;
+    const migrated = side === "left" ? 288 : 400;
     await waitFor(() => expect(setAppMetadata).toHaveBeenCalledWith(`time-tracker:${side}-sidebar-width-px`, String(migrated)));
     expect(panel.style.width).toBe(`${migrated}px`);
     measure(container, panel, 2560);
