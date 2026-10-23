@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Track playing media in the background on Windows, including its title, artist, and app. Matching foreground activity is combined into one log, retaining the site name when available.
+
 ## [1.12.7] - 2026-10-21
 
 - Fix the app sometimes closing unexpectedly when devices connect or go to sleep, drivers install, or VPN connections change.

@@ -3,9 +3,17 @@ mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "windows")]
+mod media;
+#[cfg(target_os = "windows")]
+mod segments;
+#[cfg(target_os = "windows")]
 pub(crate) mod windows;
+#[cfg(target_os = "windows")]
+mod windows_media;
 
-use crate::db::tables::log::{self, increase_duration, NewLog, PENDING_LOCAL_DEVICE_UUID};
+use crate::db::tables::log::PENDING_LOCAL_DEVICE_UUID;
+#[cfg(not(target_os = "windows"))]
+use crate::db::tables::log::{self, increase_duration, NewLog};
 use crate::db::tables::skipped_app;
 use crate::db::Error;
 
@@ -13,8 +21,6 @@ use crate::db::Error;
 use crate::core::linux::get_foreground_app;
 #[cfg(target_os = "macos")]
 use crate::core::macos::get_foreground_app;
-#[cfg(target_os = "windows")]
-use crate::core::windows::get_foreground_app;
 use crate::db::tables::device::get_local_device_uuid;
 use crate::logger::Log;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -85,6 +91,7 @@ fn sanitize_app_name(name: &str) -> String {
         .to_string()
 }
 
+#[cfg(not(target_os = "windows"))]
 async fn generate_log() -> Result<NewLog, Error> {
     let sanitized_app = sanitize_app_name(&get_foreground_app()?);
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
@@ -142,6 +149,7 @@ pub async fn supervisor(app: AppHandle) {
     }
 }
 
+#[cfg(not(target_os = "windows"))]
 async fn background_process() -> Result<(), Error> {
     let mut last_log_id: i64 = -1;
     loop {
@@ -178,6 +186,77 @@ async fn background_process() -> Result<(), Error> {
                 Log::debug(format!("Tracking segment created id={last_log_id}"));
             }
         }
+    }
+}
+
+#[cfg(target_os = "windows")]
+async fn background_process() -> Result<(), Error> {
+    let mut collector = windows_media::Collector::default();
+    let mut selector = media::Selector::default();
+    let mut segments = segments::Segments::default();
+    // Clear markers left by a previous process before sync can treat them as unfinished forever.
+    segments.clear(&crate::db::get_pool().await?).await?;
+    let mut last_media_error: Option<(String, Instant)> = None;
+    loop {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        if IS_SUSPENDED.load(Ordering::Relaxed) {
+            segments.clear(&crate::db::get_pool().await?).await?;
+            selector.clear();
+            continue;
+        }
+        let mut foreground = windows::get_foreground_snapshot()?;
+        let (returned_collector, snapshot) = tokio::task::spawn_blocking(move || {
+            let snapshot = collector.collect();
+            (collector, snapshot)
+        })
+        .await
+        .map_err(|error| anyhow::anyhow!("Windows media worker failed: {error}"))?;
+        collector = returned_collector;
+        // A pause requested while Windows was answering must prevent every subsequent write.
+        if IS_SUSPENDED.load(Ordering::Relaxed) {
+            segments.clear(&crate::db::get_pool().await?).await?;
+            selector.clear();
+            continue;
+        }
+        let (mut sessions, errors) = match snapshot {
+            Ok(snapshot) => (snapshot.sessions, snapshot.errors),
+            Err(error) => (Vec::new(), vec![error.to_string()]),
+        };
+        if errors.is_empty() {
+            last_media_error = None;
+        } else {
+            let message = errors.join("; ");
+            if last_media_error
+                .as_ref()
+                .map(|(previous, at)| {
+                    previous != &message || at.elapsed() >= Duration::from_secs(30)
+                })
+                .unwrap_or(true)
+            {
+                Log::error(format!(
+                    "Windows media sampling failed; foreground tracking continues: {message}"
+                ));
+                last_media_error = Some((message, Instant::now()));
+            }
+        }
+        foreground.name = sanitize_app_name(&foreground.name);
+        foreground.title = sanitize_app_name(&foreground.title);
+        for session in &mut sessions {
+            session.title = sanitize_app_name(&session.title);
+            session.artist = sanitize_app_name(&session.artist);
+            session.app_name = sanitize_app_name(&session.app_name);
+        }
+        let mut activities = Vec::new();
+        for activity in selector.select(&foreground, &sessions) {
+            if !skipped_app::is_skipped_app(&activity.name).await? {
+                activities.push(activity);
+            }
+        }
+        let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
+        let device = log_device_uuid(get_local_device_uuid().await?);
+        segments
+            .record(&crate::db::get_pool().await?, &device, now, &activities)
+            .await?;
     }
 }
 

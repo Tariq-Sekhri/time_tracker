@@ -14,11 +14,11 @@ use windows::{
     },
 };
 
-pub(crate) fn get_foreground_app() -> Result<String, Error> {
+pub(crate) fn get_foreground_snapshot() -> Result<super::media::Foreground, Error> {
     unsafe {
         let hwnd = ws::GetForegroundWindow();
 
-        let mut buf = [0u16; 1024];
+        let mut buf = vec![0u16; ws::GetWindowTextLengthW(hwnd).max(0) as usize + 1];
         let n = ws::GetWindowTextW(hwnd, &mut buf).max(0) as usize;
         let title = String::from_utf16_lossy(&buf[..n]);
 
@@ -36,7 +36,12 @@ pub(crate) fn get_foreground_app() -> Result<String, Error> {
             })
             .unwrap_or_else(|| exe_name.to_string());
 
-        Ok(format_window_output(&title, &task_manager_name, exe_name))
+        Ok(super::media::Foreground {
+            name: format_window_output(&title, &task_manager_name, exe_name),
+            title,
+            executable: exe_name.to_string(),
+            app_name: task_manager_name,
+        })
     }
 }
 

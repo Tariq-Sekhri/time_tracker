@@ -909,27 +909,36 @@ pub async fn get_logs_for_sync() -> Result<Vec<Log>, Error> {
     let device = get_local_device()
         .await?
         .ok_or(anyhow::anyhow!("local device not set found"))?;
+    Ok(logs_for_sync(&pool, &device.uuid, device.last_sync_id).await?)
+}
+
+pub(crate) async fn logs_for_sync(pool: &SqlitePool, uuid: &str, last_sync_id: i64) -> Result<Vec<Log>, sqlx::Error> {
     let logs = sqlx::query_as::<_, Log>(
         r#"
         SELECT *
         FROM logs
         WHERE device_uuid = ?
           AND is_deleted = 0
-          AND id != (
+          AND id < COALESCE((
+              SELECT MIN(id)
+              FROM active_tracking_logs
+              WHERE device_uuid = ?
+          ), (
               SELECT MAX(id)
               FROM logs
               WHERE device_uuid = ?
                 AND is_deleted = 0
-          )
+          ))
         and
             id > ?
         ORDER BY id ASC
         "#,
     )
-    .bind(&device.uuid)
-    .bind(&device.uuid)
-    .bind(&device.last_sync_id)
-    .fetch_all(&pool)
+    .bind(uuid)
+    .bind(uuid)
+    .bind(uuid)
+    .bind(last_sync_id)
+    .fetch_all(pool)
     .await?;
     Ok(logs)
 }
