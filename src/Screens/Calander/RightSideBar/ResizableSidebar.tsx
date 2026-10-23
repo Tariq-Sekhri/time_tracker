@@ -1,6 +1,17 @@
 import {useCallback, useEffect, useRef, useState, type ReactNode} from "react";
 import {getAppMetadata, setAppMetadata} from "../../../api/appMetadata";
 
+function cachedWidth(key: string): number | null {
+    try {
+        const value = Number(window.localStorage.getItem(key));
+        return Number.isFinite(value) && value > 0 ? value : null;
+    } catch { return null; }
+}
+
+function cacheWidth(key: string, width: number) {
+    try { window.localStorage.setItem(key, String(width)); } catch { /* Backend persistence still works. */ }
+}
+
 export default function ResizableSidebar({collapsed, children, side = "right"}: {collapsed: boolean; children: ReactNode; side?: "left" | "right"}) {
     const WIDTH_KEY = `time-tracker:${side}-sidebar-width-px`;
     const LEGACY_WIDTH_KEY = `time-tracker:${side}-sidebar-width-percent`;
@@ -11,8 +22,8 @@ export default function ResizableSidebar({collapsed, children, side = "right"}: 
     const panel = useRef<HTMLDivElement>(null);
     const drag = useRef<{handle: HTMLDivElement; pointerId: number; startX: number; startWidth: number; zoom: number} | null>(null);
     const interacted = useRef(false);
-    const preferredWidth = useRef(DEFAULT_WIDTH);
-    const [width, setWidth] = useState(DEFAULT_WIDTH);
+    const [width, setWidth] = useState(() => Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, cachedWidth(WIDTH_KEY) ?? DEFAULT_WIDTH)));
+    const preferredWidth = useRef(width);
     const [resizing, setResizing] = useState(false);
 
     const clamp = useCallback((next: number) => {
@@ -34,6 +45,8 @@ export default function ResizableSidebar({collapsed, children, side = "right"}: 
     }, []);
 
     useEffect(() => {
+        // The synchronous mirror avoids a default-width frame on every remount.
+        if (cachedWidth(WIDTH_KEY) !== null) return;
         let cancelled = false;
         const restore = async () => {
             let raw = await getAppMetadata(WIDTH_KEY);
@@ -49,6 +62,7 @@ export default function ResizableSidebar({collapsed, children, side = "right"}: 
             const saved = Number(raw);
             if (!cancelled && !interacted.current && raw !== null && Number.isFinite(saved) && saved > 0) {
                 preferredWidth.current = clamp(saved);
+                cacheWidth(WIDTH_KEY, preferredWidth.current);
                 setWidth(Math.min(preferredWidth.current, panel.current?.parentElement?.clientWidth || preferredWidth.current));
                 if (migrated) await setAppMetadata(WIDTH_KEY, String(preferredWidth.current));
             }
@@ -87,6 +101,7 @@ export default function ResizableSidebar({collapsed, children, side = "right"}: 
     const update = (next: number) => {
         interacted.current = true;
         preferredWidth.current = clamp(next);
+        cacheWidth(WIDTH_KEY, preferredWidth.current);
         setWidth(Math.min(preferredWidth.current, panel.current?.parentElement?.clientWidth || preferredWidth.current));
     };
     const save = () => { void setAppMetadata(WIDTH_KEY, String(preferredWidth.current)).catch(() => {}); };

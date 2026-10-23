@@ -5,7 +5,7 @@ import ResizableSidebar from "./ResizableSidebar";
 import {getAppMetadata, setAppMetadata} from "../../../api/appMetadata";
 
 vi.mock("../../../api/appMetadata", () => ({getAppMetadata: vi.fn().mockResolvedValue(null), setAppMetadata: vi.fn().mockResolvedValue(undefined)}));
-afterEach(() => {cleanup(); vi.resetAllMocks(); vi.mocked(getAppMetadata).mockResolvedValue(null); vi.mocked(setAppMetadata).mockResolvedValue(); vi.unstubAllGlobals();});
+afterEach(() => {cleanup(); localStorage.clear(); vi.resetAllMocks(); vi.mocked(getAppMetadata).mockResolvedValue(null); vi.mocked(setAppMetadata).mockResolvedValue(); vi.unstubAllGlobals();});
 
 function measure(parent: HTMLElement, panel: HTMLElement, parentWidth = 1920, zoom = 1.25) {
     Object.defineProperty(parent, "clientWidth", {configurable: true, value: parentWidth});
@@ -110,4 +110,29 @@ it("ignores late saved widths after a user has started resizing", async () => {
     fireEvent.keyDown(screen.getByRole("separator"), {key: "End"});
     resolve("410");
     await waitFor(() => expect(panel.style.width).toBe("500px"));
+});
+
+it.each(["left", "right"] as const)("renders remembered %s width immediately after navigating away and back", async side => {
+    vi.mocked(getAppMetadata).mockResolvedValueOnce(side === "left" ? "220" : "310");
+    const first = render(<ResizableSidebar side={side} collapsed={false}>Calendar</ResizableSidebar>);
+    const panel = first.container.firstElementChild as HTMLElement;
+    measure(first.container, panel);
+    await waitFor(() => expect(panel.style.width).toBe(side === "left" ? "220px" : "310px"));
+    const handle = screen.getByRole("separator");
+    fireEvent.keyDown(handle, {key: side === "left" ? "ArrowRight" : "ArrowLeft"});
+    const expected = side === "left" ? "230px" : "320px";
+    first.unmount();
+    vi.mocked(getAppMetadata).mockClear();
+    // Returning must not wait for a backend request, even if it never completes.
+    vi.mocked(getAppMetadata).mockReturnValue(new Promise(() => {}));
+    const second = render(<ResizableSidebar side={side} collapsed={false}>Calendar again</ResizableSidebar>);
+    expect((second.container.firstElementChild as HTMLElement).style.width).toBe(expected);
+    expect(getAppMetadata).not.toHaveBeenCalled();
+});
+
+it.each(["left", "right"] as const)("uses cached %s width on the very first render after reopening", side => {
+    localStorage.setItem(`time-tracker:${side}-sidebar-width-px`, side === "left" ? "215" : "315");
+    const {container} = render(<ResizableSidebar side={side} collapsed={false}>Calendar</ResizableSidebar>);
+    expect((container.firstElementChild as HTMLElement).style.width).toBe(side === "left" ? "215px" : "315px");
+    expect(getAppMetadata).not.toHaveBeenCalled();
 });
