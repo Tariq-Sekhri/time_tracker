@@ -56,9 +56,9 @@ it.each(["left", "right"] as const)("resizes %s using logical pixels at UI zoom 
     fireEvent.pointerUp(handle, {pointerId: 1});
     expect(setAppMetadata).toHaveBeenLastCalledWith(`time-tracker:${side}-sidebar-width-px`, side === "left" ? "320" : "500");
     fireEvent.keyDown(handle, {key: "Home"});
-    expect(panel.style.width).toBe(side === "left" ? "240px" : "250px");
+    expect(panel.style.width).toBe(side === "left" ? "200px" : "250px");
     fireEvent.keyDown(handle, {key: side === "left" ? "ArrowRight" : "ArrowLeft"});
-    expect(panel.style.width).toBe(side === "left" ? "250px" : "260px");
+    expect(panel.style.width).toBe(side === "left" ? "210px" : "260px");
     fireEvent.keyDown(handle, {key: "End"});
     expect(panel.style.width).toBe(side === "left" ? "320px" : "500px");
 });
