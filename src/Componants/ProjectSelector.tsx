@@ -8,10 +8,11 @@ type ProjectAction = {type: "create"; name: string; parentId: number | null} | {
 const Chevron = ({open}: {open: boolean}) => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={`transition-transform ${open ? "rotate-180" : ""}`}><path d="m6 9 6 6 6-6" /></svg>;
 const Plus = ({size = 14}: {size?: number}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>;
 
-export default function ProjectSelector({value, onChange, disabled = false}: {
+export default function ProjectSelector({value, onChange, disabled = false, showManage = true}: {
     value: number | null;
     onChange: (id: number | null) => void;
     disabled?: boolean;
+    showManage?: boolean;
 }) {
     const queryClient = useQueryClient();
     const {data: rawProjects = [], isLoading, error: loadError} = useQuery({queryKey: MANUAL_PROJECTS_QUERY_KEY, queryFn: getManualProjects});
@@ -72,6 +73,7 @@ export default function ProjectSelector({value, onChange, disabled = false}: {
     };
     const closePicker = () => {
         setPickerOpen(false);
+        setEditId(null);
         setQuery("");
         setCreating(null);
         setError(null);
@@ -165,11 +167,11 @@ export default function ProjectSelector({value, onChange, disabled = false}: {
                 </span>
                 <span className="text-gray-500"><Chevron open={pickerOpen} /></span>
             </button>
-            <button ref={manageRef} type="button" disabled={disabled} onClick={() => {setError(null); setOpen(true);}} aria-label="Manage categories" title="Rename or delete categories" className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:opacity-50">
+            {showManage && <button ref={manageRef} type="button" disabled={disabled || mutation.isPending} onClick={() => {setError(null); setOpen(previous => !previous);}} aria-label="Manage categories" title="Rename or delete categories" className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:opacity-50">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
-            </button>
+            </button>}
         </div>
-        {pickerOpen && <ManualPopover anchor={triggerRef.current} onClose={closePicker} labelledBy="manual-category-picker-search" width={340}>
+        {pickerOpen && <ManualPopover anchor={triggerRef.current} onClose={closePicker} labelledBy="manual-category-picker-search" width="anchor">
             <div className="-m-2 flex max-h-[60vh] flex-col">
                 <div className="relative mb-2">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
@@ -197,22 +199,31 @@ export default function ProjectSelector({value, onChange, disabled = false}: {
                         const isLastChild = depth === 1 && rows.filter((row) => row.project.parent_id === project.parent_id).slice(-1)[0]?.project.id === project.id;
                         return <div key={project.id}>
                             {depth === 0 && <div className="mt-1 border-t border-gray-800/80" />}
-                            <div className={`group flex items-center gap-1 rounded-md ${isActive ? "bg-gray-800/80" : ""}`} onPointerEnter={() => setActive(options.indexOf(project.id))}>
+                            {editId === project.id ? <form className="space-y-2 rounded-md bg-gray-800/50 p-2" onSubmit={(event) => {event.preventDefault(); act({type: "edit", id: project.id, name: editName});}}>
+                                <input autoFocus aria-label={`Rename ${project.name}`} value={editName} onChange={event => setEditName(event.target.value)} onKeyDown={event => {if (event.key === "Escape") {event.stopPropagation(); setEditId(null);}}} maxLength={100} disabled={mutation.isPending} className="w-full min-w-0 rounded border border-gray-700 bg-black px-2 py-1.5 text-sm text-white outline-none focus:border-sky-500" />
+                                <div className="flex justify-end gap-3">
+                                    <button type="button" disabled={mutation.isPending} onClick={() => setEditId(null)} className="text-xs text-gray-400 hover:text-white">Cancel</button>
+                                    <button type="submit" disabled={mutation.isPending || !editName.trim()} className="rounded bg-sky-600 px-2 py-1 text-xs text-white hover:bg-sky-500 disabled:opacity-50">{mutation.isPending ? "Saving…" : "Save"}</button>
+                                </div>
+                            </form> : <div className={`group flex items-center gap-1 rounded-md ${isActive ? "bg-gray-800/80" : ""}`} onPointerEnter={() => setActive(options.indexOf(project.id))}>
                                 <div id={`manual-category-option-${project.id}`} role="option" aria-selected={value === project.id} onClick={() => pick(project.id)} className={`flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-2 text-sm ${depth ? "pl-7 pr-2" : "px-2"} ${value === project.id ? "font-medium text-sky-300" : depth ? "text-gray-300" : "text-gray-100"}`}>
                                     {depth === 0 && <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{backgroundColor: colorOf(project.id)}} />}
                                     <span className="truncate">{project.name}</span>
                                 </div>
+                                <button type="button" aria-label={`Edit ${project.name}`} title={`Edit ${project.name}`} onClick={() => {setError(null); setCreating(null); setEditId(project.id); setEditName(project.name);}} className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-gray-400 hover:bg-gray-800 hover:text-white">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m16 3 5 5-12 12-6 1 1-6L16 3Z M14 5l5 5" /></svg>
+                                </button>
                                 {depth === 0 && (childCount > 0
                                     ? <button type="button" aria-expanded={isOpen} aria-label={`${isOpen ? "Hide" : "Show"} ${project.name} subcategories`} onClick={() => toggleExpanded(project.id)} className={`mr-1 flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs ${isOpen ? "border-sky-700 text-sky-300" : "border-transparent text-gray-400 hover:border-gray-700 hover:text-white"}`}>
                                         {childCount} {childCount === 1 ? "sub" : "subs"} <Chevron open={isOpen} />
                                     </button>
-                                    : <button type="button" aria-label={`Add subcategory to ${project.name}`} onClick={() => startCreating(project.id)} className="mr-1 shrink-0 rounded-md px-2 py-1 text-xs text-sky-400 opacity-0 transition hover:bg-gray-800 hover:text-sky-300 focus-visible:opacity-100 group-hover:opacity-100">
-                                        + Subcategory
+                                    : <button type="button" aria-label={`Add subcategory to ${project.name}`} title={`Add subcategory to ${project.name}`} onClick={() => startCreating(project.id)} className="mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sky-400 transition hover:bg-gray-800 hover:text-sky-300">
+                                        <Plus />
                                     </button>)}
-                            </div>
+                            </div>}
                             {isLastChild && project.parent_id != null && expanded.has(project.parent_id) && (creating?.parentId === project.parent_id
                                 ? createForm(project.parent_id)
-                                : <button type="button" onClick={() => startCreating(project.parent_id!)} className="flex w-full items-center gap-2 rounded-md py-1.5 pl-7 text-left text-xs text-sky-400 hover:bg-gray-800/60 hover:text-sky-300"><Plus size={12} /> Add subcategory</button>)}
+                                : <button type="button" aria-label="Add subcategory" title="Add subcategory" onClick={() => startCreating(project.parent_id!)} className="ml-7 flex h-7 w-7 items-center justify-center rounded-md text-sky-400 hover:bg-gray-800/60 hover:text-sky-300"><Plus /></button>)}
                             {depth === 0 && childCount === 0 && creating?.parentId === project.id && createForm(project.id)}
                         </div>;
                     })}

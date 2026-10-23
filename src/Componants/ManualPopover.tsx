@@ -6,14 +6,14 @@ export default function ManualPopover({anchor, onClose, labelledBy, children, wi
     onClose: () => void;
     labelledBy: string;
     children: ReactNode;
-    width?: number;
+    width?: number | "anchor";
     ignoreOutsideSelector?: string;
     beside?: boolean;
     positionKey?: string;
     suspended?: boolean;
 }) {
     const panelRef = useRef<HTMLDivElement>(null);
-    const [position, setPosition] = useState({top: 0, left: 0, width, maxHeight: window.innerHeight - 24});
+    const [position, setPosition] = useState({top: 0, left: 0, width: width === "anchor" ? 0 : width, maxHeight: window.innerHeight - 24});
     useLayoutEffect(() => {
         const positionPanel = () => {
             if (!anchor || !panelRef.current) return;
@@ -22,7 +22,7 @@ export default function ManualPopover({anchor, onClose, labelledBy, children, wi
             const rect = anchor.getBoundingClientRect();
             const viewWidth = window.innerWidth / zoom;
             const viewHeight = window.innerHeight / zoom;
-            const panelWidth = Math.min(width, viewWidth - 24);
+            const panelWidth = Math.min(width === "anchor" ? rect.width / zoom : width, viewWidth - 24);
             const maxHeight = Math.max(0, viewHeight - 24);
             const panelHeight = Math.min(panelRef.current.getBoundingClientRect().height / zoom, maxHeight);
             const below = rect.bottom / zoom + 8;

@@ -513,15 +513,15 @@ export default function StatisticsSidebar({
                                         }`}
                                     onClick={onClick}
                                 >
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex min-w-0 flex-1 items-center gap-2 pr-2">
                                         <div
-                                            className="w-3 h-3 rounded-full"
+                                            className="w-3 h-3 shrink-0 rounded-full"
                                             style={{ backgroundColor: cat.color || "var(--tt-subtle)" }}
                                         />
-                                        <span className="text-sm text-gray-200">{cat.category}</span>
+                                        <span title={cat.category} className="min-w-0 truncate text-sm text-gray-200">{cat.category}</span>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm text-gray-400">{formatDuration(cat.total_duration)}</span>
+                                    <div className="flex shrink-0 items-center gap-2">
+                                        <span className="shrink-0 text-sm text-gray-400">{formatDuration(cat.total_duration)}</span>
                                         {formatChange(cat.total_duration, cat.percentage_change) !== null && (
                                             <span
                                                 className={`text-xs min-w-[50px] text-right ${cat.percentage_change! >= 0 ? "text-green-400" : "text-red-400"

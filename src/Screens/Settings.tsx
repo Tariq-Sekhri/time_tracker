@@ -26,7 +26,6 @@ const SETTINGS_LAYOUT: CategoryDef[] = [
         fields: [
             { key: "calendarStartHour", label: "Start hour" },
             { key: "calendarHeight", label: "Calendar size (%)" },
-            { key: "rightSidebarWidth", label: "Right sidebar width (px)" },
             { key: "categorySidebarCount", label: "Categories in stats sidebar" },
         ],
     },

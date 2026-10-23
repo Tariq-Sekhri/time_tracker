@@ -94,7 +94,7 @@ export default function ManualTimeBlockDialog({
     };
 
     return (
-        <ManualPopover anchor={anchor} onClose={onClose} labelledBy="manual-time-title" width={420} suspended={manipulating} beside positionKey={`${initialStart.getTime()}-${initialEnd?.getTime()}`} ignoreOutsideSelector=".tt-manual-draft, .fc-event-mirror">
+        <ManualPopover anchor={anchor} onClose={onClose} labelledBy="manual-time-title" width={420} suspended={manipulating} beside={anchor?.tagName !== "BUTTON"} positionKey={`${initialStart.getTime()}-${initialEnd?.getTime()}`} ignoreOutsideSelector=".tt-manual-draft, .fc-event-mirror">
             <div>
                 <div className="mb-5 flex items-center justify-between gap-4">
                     <div>
@@ -122,7 +122,7 @@ export default function ManualTimeBlockDialog({
                     </label>
                     <div>
                         <span className="mb-1 block text-sm font-medium text-gray-300">Category</span>
-                        <ProjectSelector value={projectId} onChange={setProjectId} disabled={createMutation.isPending} />
+                        <ProjectSelector value={projectId} onChange={setProjectId} disabled={createMutation.isPending} showManage={false} />
                     </div>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <label className="block">

@@ -10,7 +10,7 @@ import GoogleCalendarEventView from "./GoogleCalendarEventView.tsx";
 import { GoogleCalendar } from "../../../api/GoogleCalendar.ts";
 import { useEffect, useState } from "react";
 import { getAppMetadata, setAppMetadata } from "../../../api/appMetadata.ts";
-import { useBackendSettings } from "../../../hooks/useBackendSettings.ts";
+import ResizableSidebar from "./ResizableSidebar";
 import ManualTimeBlockView from "./ManualTimeBlockView.tsx";
 import AfkBlockView from "./AfkBlockView.tsx";
 
@@ -58,7 +58,6 @@ export function RightSideBar({
     isManualTimeInStats: ManualProjectFilter,
 }) {
     const { date } = useDateStore();
-    const { rightSidebarWidth } = useBackendSettings();
     const [isCollapsed, setIsCollapsed] = useState(false);
     useEffect(()=>{if(selectedEvent?.afkDeviceUuid)setIsCollapsed(false);},[selectedEvent?.afkDeviceUuid,selectedEvent?.start]);
 
@@ -84,12 +83,7 @@ export function RightSideBar({
     );
 
     return (
-        <div
-            className={`theme-sidebar h-full min-h-0 overflow-hidden flex-shrink-0 bg-black transition-all duration-200 ease-in-out flex flex-col ${
-                isCollapsed ? "border-l border-gray-700 items-center p-2" : ""
-            }`}
-            style={{ width: isCollapsed ? 64 : rightSidebarWidth }}
-        >
+        <ResizableSidebar collapsed={isCollapsed}>
             {isCollapsed ? (
                 <button
                     type="button"
@@ -189,7 +183,7 @@ export function RightSideBar({
                             <div className="border-l border-gray-700 bg-black p-6 overflow-y-auto nice-scrollbar flex flex-col h-full min-h-0">
                                 <div className="flex justify-end shrink-0 mb-4">{collapseSidebarButton}</div>
                                 <div className="flex-1">
-                                    <h2 className="text-xl font-bold text-white mb-4">Category: {selectedCategory}</h2>
+                                    <h2 title={selectedCategory} className="truncate text-xl font-bold text-white mb-4">Category: {selectedCategory}</h2>
                                     <div className="text-gray-500">No data available for this category in the selected time period.</div>
                                     <div className="text-gray-500 text-sm mt-2">Check the browser console for details.</div>
                                 </div>
@@ -216,6 +210,6 @@ export function RightSideBar({
                     )}
                 </>
             )}
-        </div>
+        </ResizableSidebar>
     );
 }
