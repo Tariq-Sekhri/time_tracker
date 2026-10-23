@@ -51,6 +51,9 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
     const closeManualDraft = useCallback(() => {setShowManualTimeDialog(false); setManualDraft(null); setManualTimeAnchor(null); setManualDraftManipulating(false);}, []);
     const [showManualTimeDialog, setShowManualTimeDialog] = useState(false);
     const [manualTimeAnchor, setManualTimeAnchor] = useState<HTMLElement | null>(null);
+    const anchorManualDraft = useCallback((anchor: HTMLElement) => {
+        setManualTimeAnchor(previous => previous?.tagName === "BUTTON" ? previous : anchor);
+    }, []);
     const includeGoogleInStatsLoadedRef = useRef(false);
     const [appFilterPrevWeek, setAppFilterPrevWeek] = useState<Date | null>(null);
     const [appFilterNextWeek, setAppFilterNextWeek] = useState<Date | null>(null);
@@ -1054,7 +1057,7 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             onPlainCalendarClick={clearCalendarSelection}
                             manualDraft={manualDraft}
                             onManualDraftChange={updateManualDraft}
-                            onManualDraftAnchor={setManualTimeAnchor}
+                            onManualDraftAnchor={anchorManualDraft}
                             onManualDraftManipulating={setManualDraftManipulating}
                             onManualTimeChanged={(id, start, end) => setSelectedEvent((previous) => previous?.manualTimeBlockId === id ? {...previous, start, end} : previous)}
                             onCreateManualTime={(start, end) => {
