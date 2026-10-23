@@ -224,10 +224,12 @@ function ColourRow({source, expanded, onToggleExpanded}: { source: SidebarSource
              title={onToggleExpanded ? `${expanded ? "Collapse" : "Expand"} ${source.name}` : bothOn ? "Click to hide in week view and stats" : "Click to show in week view and stats"}
              className={`group relative mb-0.5 flex cursor-pointer items-center gap-2 rounded-md py-0.5 pl-2 pr-1 transition-colors hover:bg-white/[0.04] ${source.isolated ? "ring-1 ring-inset ring-blue-400" : ""} ${source.disabled ? "cursor-not-allowed opacity-50" : ""}`}>
             <span className={`min-w-0 flex-1 truncate text-[13px] ${source.inCal ? "text-gray-100" : "text-gray-600"}`}>{source.name}</span>
-            {onToggleExpanded && <span aria-hidden="true" className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${expanded ? "border-gray-600 bg-gray-800 text-gray-200" : "border-gray-700 text-gray-400 group-hover:border-gray-500 group-hover:text-white"}`}>
-                <svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                    <path d="M2 6h8"/>
-                    {!expanded && <path d="M6 2v8"/>}
+            {onToggleExpanded && <span aria-hidden="true" className={`flex h-4 w-4 shrink-0 items-center justify-center ${expanded ? "text-gray-200" : "text-gray-500 group-hover:text-white"}`}>
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                    {expanded ? <>
+                        <path d="M3 10V6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v1"/>
+                        <path d="M3 20l-1-8h21l-4 8H3Z"/>
+                    </> : <path d="M3 20V6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11H3Z"/>}
                 </svg>
             </span>}
             {source.onEdit && <button type="button" aria-label={`Edit ${source.name}`} title={source.priority !== undefined ? "Edit name, color, and priority" : "Edit name and color"}
