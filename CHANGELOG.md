@@ -5,8 +5,6 @@
 ## [1.13.0] - 2026-10-23
 
 - Track background media playback on Windows.
-- Import and export CSV, Excel, and JSON, including Clockify, Toggl, and Harvest layouts.
-- Export PDF time reports with charts.
 - Resize both calendar sidebars and see statistics in the minimized right sidebar.
 
 ## [1.12.7] - 2026-10-21

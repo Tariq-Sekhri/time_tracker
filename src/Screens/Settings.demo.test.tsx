@@ -17,7 +17,7 @@ vi.mock("@tauri-apps/api/core", async () => {
 import Settings from "./Settings";
 import {ToastProvider} from "../Componants/Toast";
 import {invoke} from "../../demo/mock/core";
-afterEach(cleanup);
+afterEach(() => {cleanup(); Reflect.deleteProperty(window, "__TAURI_INTERNALS__");});
 
 it("browser Settings loads without native-only requests and supports Notes and numeric settings", async () => {
     bridge.commands.length = 0;
@@ -66,4 +66,19 @@ it("keeps unsaved tracking changes when navigating settings sections", async () 
     expect(screen.getByRole("tab", {name: "Tracking"}).getAttribute("aria-selected")).toBe("true");
     expect((screen.getByRole("spinbutton", {name: "Away score threshold (%)"}) as HTMLInputElement).value).toBe("83");
     expect(screen.queryByRole("tab", {name: "Data & support"})).toBeNull();
+});
+
+it("hides import/export from desktop Settings while keeping the other sections available", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {configurable: true, value: {}});
+    bridge.commands.length = 0;
+    const client = new QueryClient({defaultOptions: {queries: {retry: false}}});
+    render(<QueryClientProvider client={client}><ToastProvider><Settings /></ToastProvider></QueryClientProvider>);
+    expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual(["General", "Tracking", "Data & support"]);
+    expect(document.getElementById("settings-section-transfer")).toBeNull();
+    expect(screen.queryByRole("tab", {name: /import|export/i})).toBeNull();
+    fireEvent.click(screen.getByRole("tab", {name: "Data & support"}));
+    expect(screen.getByRole("tabpanel", {name: "Data & support"})).toBeTruthy();
+    expect(bridge.commands).not.toContain("get_export_filter_options");
+    expect(bridge.commands).not.toContain("export_dataset");
+    expect(bridge.commands).not.toContain("import_dataset");
 });
