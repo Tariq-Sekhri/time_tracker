@@ -5,7 +5,8 @@ export default function ResizableSidebar({collapsed, children, side = "right"}: 
     const WIDTH_KEY = `time-tracker:${side}-sidebar-width-percent`;
     const DEFAULT_PERCENT = side === "right" ? 30 : 20;
     const MIN_WIDTH = side === "right" ? 280 : 220;
-    const MAX_PERCENT = side === "right" ? 60 : 40;
+    const MAX_PERCENT = side === "right" ? 40 : 35;
+    const MAX_WIDTH = side === "right" ? 560 : 360;
     const collapsedWidth = side === "right" ? 64 : 56;
     const panel = useRef<HTMLDivElement>(null);
     const drag = useRef<{handle: HTMLDivElement; pointerId: number; startX: number; startPercent: number; parentWidth: number; minPercent: number} | null>(null);
@@ -14,17 +15,39 @@ export default function ResizableSidebar({collapsed, children, side = "right"}: 
     const [percent, setPercent] = useState(DEFAULT_PERCENT);
     const [resizing, setResizing] = useState(false);
 
+    const clamp = useCallback((next: number) => {
+        const parentWidth = panel.current?.parentElement?.clientWidth;
+        if (!parentWidth) return Math.min(MAX_PERCENT, next);
+        const minimum = Math.min(100, MIN_WIDTH / parentWidth * 100);
+        const maximum = Math.max(minimum, Math.min(MAX_PERCENT, MAX_WIDTH / parentWidth * 100));
+        return Math.max(minimum, Math.min(maximum, next));
+    }, [MIN_WIDTH, MAX_WIDTH, MAX_PERCENT]);
+
+    useEffect(() => {
+        const parent = panel.current?.parentElement;
+        if (!parent) return;
+        const resize = () => {
+            currentPercent.current = clamp(currentPercent.current);
+            setPercent(currentPercent.current);
+        };
+        resize();
+        const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(resize);
+        observer?.observe(parent);
+        window.addEventListener("resize", resize);
+        return () => { observer?.disconnect(); window.removeEventListener("resize", resize); };
+    }, [clamp]);
+
     useEffect(() => {
         let cancelled = false;
         getAppMetadata(WIDTH_KEY).then(raw => {
             const saved = Number(raw);
             if (!cancelled && !interacted.current && raw !== null && Number.isFinite(saved) && saved > 0) {
-                currentPercent.current = Math.min(MAX_PERCENT, saved);
+                currentPercent.current = clamp(saved);
                 setPercent(currentPercent.current);
             }
         }).catch(() => {});
         return () => { cancelled = true; };
-    }, [WIDTH_KEY, MAX_PERCENT]);
+    }, [WIDTH_KEY, clamp]);
 
     const finishDrag = useCallback((pointerId?: number) => {
         const active = drag.current;
@@ -53,9 +76,9 @@ export default function ResizableSidebar({collapsed, children, side = "right"}: 
 
     useEffect(() => { if (collapsed) finishDrag(); }, [collapsed, finishDrag]);
 
-    const update = (next: number, minPercent: number) => {
+    const update = (next: number) => {
         interacted.current = true;
-        currentPercent.current = Math.max(Math.min(minPercent, 100), Math.min(Math.max(MAX_PERCENT, minPercent), next));
+        currentPercent.current = clamp(next);
         setPercent(currentPercent.current);
     };
     const save = () => { void setAppMetadata(WIDTH_KEY, String(currentPercent.current)).catch(() => {}); };
@@ -69,11 +92,11 @@ export default function ResizableSidebar({collapsed, children, side = "right"}: 
 
     return <div ref={panel}
         className={`theme-sidebar relative h-full min-h-0 flex-shrink-0 overflow-hidden bg-black flex flex-col ${collapsed && side === "right" ? "border-l border-gray-700 items-center p-2" : ""}`}
-        style={{width: collapsed ? collapsedWidth : `${percent}%`, minWidth: collapsed ? collapsedWidth : `min(${MIN_WIDTH}px, 100%)`, maxWidth: collapsed ? collapsedWidth : `max(${MIN_WIDTH}px, ${MAX_PERCENT}%)`, userSelect: resizing ? "none" : undefined}}
+        style={{width: collapsed ? collapsedWidth : `${percent}%`, minWidth: collapsed ? collapsedWidth : `min(${MIN_WIDTH}px, 100%)`, maxWidth: collapsed ? collapsedWidth : `max(${MIN_WIDTH}px, min(${MAX_WIDTH}px, ${MAX_PERCENT}%))`, userSelect: resizing ? "none" : undefined}}
     >
         {children}
         {!collapsed && <div role="separator" aria-label={`Resize ${side} sidebar`} aria-orientation="vertical"
-            aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)} aria-valuetext={`${Math.round(percent)}% width, minimum ${MIN_WIDTH} pixels`}
+            aria-valuemin={Math.round(clamp(0))} aria-valuemax={Math.round(clamp(100))} aria-valuenow={Math.round(percent)} aria-valuetext={`${Math.round(percent)}% width, ${MIN_WIDTH}–${MAX_WIDTH} pixels`}
             title={`Drag to resize ${side} sidebar`}
             onClick={event => event.stopPropagation()}
             tabIndex={0}
@@ -93,7 +116,7 @@ export default function ResizableSidebar({collapsed, children, side = "right"}: 
                 const active = drag.current;
                 if (!active || event.pointerId !== active.pointerId) return;
                 if (event.buttons === 0) { finishDrag(event.pointerId); return; }
-                update(active.startPercent + (active.startX - event.clientX) / active.parentWidth * 100 * (side === "right" ? 1 : -1), active.minPercent);
+                update(active.startPercent + (active.startX - event.clientX) / active.parentWidth * 100 * (side === "right" ? 1 : -1));
             }}
             onPointerUp={event => finishDrag(event.pointerId)}
             onPointerCancel={event => finishDrag(event.pointerId)}
@@ -103,7 +126,7 @@ export default function ResizableSidebar({collapsed, children, side = "right"}: 
                 const size = dimensions();
                 if (!size) return;
                 event.preventDefault();
-                update(event.key === "Home" ? size.minPercent : event.key === "End" ? MAX_PERCENT : Math.max(size.minPercent, percent) + (event.key === "ArrowLeft" ? 1 : -1) * (side === "right" ? 1 : -1), size.minPercent);
+                update(event.key === "Home" ? size.minPercent : event.key === "End" ? MAX_PERCENT : Math.max(size.minPercent, percent) + (event.key === "ArrowLeft" ? 1 : -1) * (side === "right" ? 1 : -1));
                 save();
             }}
         />}
