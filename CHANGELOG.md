@@ -4,12 +4,10 @@
 
 ## [1.13.0] - 2026-10-23
 
-- Track playing media in the background on Windows, including its title, artist, and app. Matching foreground activity is combined into one log, retaining the site name when available.
-- Import and export selected data in CSV, Excel, and JSON, with previews, saved export presets, and layouts for Clockify, Toggl, and Harvest. Review imports before applying them, with a safety snapshot saved first.
-- Export PDF time reports with charts and selected details, with a warning when text contains unsupported characters.
-- Resize both calendar sidebars with theme-matched highlights. Widths stay consistent between monitors and restore immediately when returning to Calendar. The minimized right sidebar now shows day/week totals, category durations, and shortcuts to details.
-- Keep manual tracking controls compact, group subcategories under expandable parents, and rename categories directly in the picker. Click an open popup's button again to close it.
-- Remove the Include AFK option from Detailed Statistics.
+- Track background media playback on Windows.
+- Import and export CSV, Excel, and JSON, including Clockify, Toggl, and Harvest layouts.
+- Export PDF time reports with charts.
+- Resize both calendar sidebars and see statistics in the minimized right sidebar.
 
 ## [1.12.7] - 2026-10-21
 
