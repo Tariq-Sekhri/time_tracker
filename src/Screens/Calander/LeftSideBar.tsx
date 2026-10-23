@@ -223,7 +223,7 @@ function ColourRow({source, expanded, onToggleExpanded}: { source: SidebarSource
              onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); (onToggleExpanded ?? toggleBoth)(); } }}
              title={onToggleExpanded ? `${expanded ? "Collapse" : "Expand"} ${source.name}` : bothOn ? "Click to hide in week view and stats" : "Click to show in week view and stats"}
              className={`group relative mb-0.5 flex cursor-pointer items-center gap-2 rounded-md py-0.5 pl-2 pr-1 transition-colors hover:bg-white/[0.04] ${source.isolated ? "ring-1 ring-inset ring-blue-400" : ""} ${source.disabled ? "cursor-not-allowed opacity-50" : ""}`}>
-            {onToggleExpanded && <IconChevron open={!!expanded} className="h-3 w-3 shrink-0 text-gray-500"/>}
+            {onToggleExpanded && <IconChevron open={!!expanded} className="absolute -left-1 h-2.5 w-2.5 text-gray-500"/>}
             <span className={`min-w-0 flex-1 truncate text-[13px] ${source.inCal ? "text-gray-100" : "text-gray-600"}`}>{source.name}</span>
             {source.onEdit && <button type="button" aria-label={`Edit ${source.name}`} title={source.priority !== undefined ? "Edit name, color, and priority" : "Edit name and color"}
                 onClick={(event) => {event.stopPropagation(); source.onEdit?.(event.currentTarget);}}
@@ -277,7 +277,7 @@ function ColourList({sections, collapsed, onToggleCollapsed}: VariantProps) {
                                     const expanded = expandedParents.has(key);
                                     return <div key={source.key}>
                                         <ColourRow source={source} expanded={children.length ? expanded : undefined} onToggleExpanded={children.length ? () => toggleParent(key) : undefined}/>
-                                        {expanded && children.length > 0 && <div className="ml-4 border-l border-gray-800 pl-1">
+                                        {expanded && children.length > 0 && <div className="ml-2 border-l border-gray-800">
                                             {children.map(child => <ColourRow key={child.key} source={child}/>)}
                                         </div>}
                                     </div>;
