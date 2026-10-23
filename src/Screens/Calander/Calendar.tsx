@@ -1027,6 +1027,10 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
                             timerControl={<ManualTimerControl
                                 timer={runningManualTimer}
                                 onAddPastTime={(anchor) => {
+                                    if (showManualTimeDialog && manualTimeAnchor === anchor) {
+                                        closeManualDraft();
+                                        return;
+                                    }
                                     const start = isCurrentWeek(date, calendarStartHour) ? new Date() : getWeekStart(date, calendarStartHour);
                                     start.setMinutes(Math.ceil(start.getMinutes() / 15) * 15, 0, 0);
                                     setManualDraft({start, end: new Date(start.getTime() + 3600000), title: ""});
