@@ -6,7 +6,6 @@ export default function ResizableSidebar({collapsed, children, side = "right"}: 
     const DEFAULT_PERCENT = side === "right" ? 30 : 20;
     const MIN_WIDTH = side === "right" ? 280 : 220;
     const MAX_PERCENT = side === "right" ? 40 : 35;
-    const MAX_WIDTH = side === "right" ? 560 : 360;
     const collapsedWidth = side === "right" ? 64 : 56;
     const panel = useRef<HTMLDivElement>(null);
     const drag = useRef<{handle: HTMLDivElement; pointerId: number; startX: number; startPercent: number; parentWidth: number; minPercent: number} | null>(null);
@@ -19,16 +18,17 @@ export default function ResizableSidebar({collapsed, children, side = "right"}: 
         const parentWidth = panel.current?.parentElement?.clientWidth;
         if (!parentWidth) return Math.min(MAX_PERCENT, next);
         const minimum = Math.min(100, MIN_WIDTH / parentWidth * 100);
-        const maximum = Math.max(minimum, Math.min(MAX_PERCENT, MAX_WIDTH / parentWidth * 100));
+        const maximum = Math.max(minimum, MAX_PERCENT);
         return Math.max(minimum, Math.min(maximum, next));
-    }, [MIN_WIDTH, MAX_WIDTH, MAX_PERCENT]);
+    }, [MIN_WIDTH, MAX_PERCENT]);
 
     useEffect(() => {
         const parent = panel.current?.parentElement;
         if (!parent) return;
         const resize = () => {
-            currentPercent.current = clamp(currentPercent.current);
-            setPercent(currentPercent.current);
+            // A minimum width may temporarily increase the displayed percentage.
+            // Keep the user's preferred ratio so moving back restores it.
+            setPercent(clamp(currentPercent.current));
         };
         resize();
         const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(resize);
@@ -42,12 +42,12 @@ export default function ResizableSidebar({collapsed, children, side = "right"}: 
         getAppMetadata(WIDTH_KEY).then(raw => {
             const saved = Number(raw);
             if (!cancelled && !interacted.current && raw !== null && Number.isFinite(saved) && saved > 0) {
-                currentPercent.current = clamp(saved);
-                setPercent(currentPercent.current);
+                currentPercent.current = Math.min(MAX_PERCENT, saved);
+                setPercent(clamp(currentPercent.current));
             }
         }).catch(() => {});
         return () => { cancelled = true; };
-    }, [WIDTH_KEY, clamp]);
+    }, [WIDTH_KEY, MAX_PERCENT, clamp]);
 
     const finishDrag = useCallback((pointerId?: number) => {
         const active = drag.current;
@@ -78,8 +78,8 @@ export default function ResizableSidebar({collapsed, children, side = "right"}: 
 
     const update = (next: number) => {
         interacted.current = true;
-        currentPercent.current = clamp(next);
-        setPercent(currentPercent.current);
+        currentPercent.current = Math.min(MAX_PERCENT, clamp(next));
+        setPercent(clamp(currentPercent.current));
     };
     const save = () => { void setAppMetadata(WIDTH_KEY, String(currentPercent.current)).catch(() => {}); };
     const dimensions = () => {
@@ -92,11 +92,11 @@ export default function ResizableSidebar({collapsed, children, side = "right"}: 
 
     return <div ref={panel}
         className={`theme-sidebar relative h-full min-h-0 flex-shrink-0 overflow-hidden bg-black flex flex-col ${collapsed && side === "right" ? "border-l border-gray-700 items-center p-2" : ""}`}
-        style={{width: collapsed ? collapsedWidth : `${percent}%`, minWidth: collapsed ? collapsedWidth : `min(${MIN_WIDTH}px, 100%)`, maxWidth: collapsed ? collapsedWidth : `max(${MIN_WIDTH}px, min(${MAX_WIDTH}px, ${MAX_PERCENT}%))`, userSelect: resizing ? "none" : undefined}}
+        style={{width: collapsed ? collapsedWidth : `${percent}%`, minWidth: collapsed ? collapsedWidth : `min(${MIN_WIDTH}px, 100%)`, maxWidth: collapsed ? collapsedWidth : `max(${MIN_WIDTH}px, ${MAX_PERCENT}%)`, userSelect: resizing ? "none" : undefined}}
     >
         {children}
         {!collapsed && <div role="separator" aria-label={`Resize ${side} sidebar`} aria-orientation="vertical"
-            aria-valuemin={Math.round(clamp(0))} aria-valuemax={Math.round(clamp(100))} aria-valuenow={Math.round(percent)} aria-valuetext={`${Math.round(percent)}% width, ${MIN_WIDTH}–${MAX_WIDTH} pixels`}
+            aria-valuemin={Math.round(clamp(0))} aria-valuemax={Math.round(clamp(100))} aria-valuenow={Math.round(percent)} aria-valuetext={`${Math.round(percent)}% width, minimum ${MIN_WIDTH} pixels, maximum ${MAX_PERCENT}%`}
             title={`Drag to resize ${side} sidebar`}
             onClick={event => event.stopPropagation()}
             tabIndex={0}

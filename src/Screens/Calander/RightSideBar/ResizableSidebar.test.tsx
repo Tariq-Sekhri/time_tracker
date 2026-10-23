@@ -103,22 +103,44 @@ it("restores the saved percentage, supports keyboard resizing and retains it aft
     expect(panel.style.width).toBe("33%");
 });
 
-it.each(["left", "right"] as const)("caps saved and keyboard widths in pixels on a wide window (%s)", async side => {
+it.each(["left", "right"] as const)("keeps percentage caps across monitor and temporary minimum-width changes (%s)", async side => {
     vi.mocked(getAppMetadata).mockResolvedValueOnce("60");
     const {container} = render(<ResizableSidebar side={side} collapsed={false}>Panel</ResizableSidebar>);
     const panel = container.firstElementChild as HTMLElement;
-    Object.defineProperty(container, "clientWidth", {configurable: true, value: 2000});
-    container.getBoundingClientRect = () => ({width: 2500} as DOMRect);
-    const maxPercent = side === "left" ? 18 : 28;
+    Object.defineProperty(container, "clientWidth", {configurable: true, value: 1920});
+    container.getBoundingClientRect = () => ({width: 2400} as DOMRect);
+    const maxPercent = side === "left" ? 35 : 40;
     await waitFor(() => expect(parseFloat(panel.style.width)).toBeCloseTo(maxPercent));
     const handle = screen.getByRole("separator");
     fireEvent.keyDown(handle, {key: "End"});
     expect(parseFloat(panel.style.width)).toBeCloseTo(maxPercent);
     fireEvent.keyDown(handle, {key: side === "left" ? "ArrowRight" : "ArrowLeft"});
     expect(parseFloat(panel.style.width)).toBeCloseTo(maxPercent);
-    expect(panel.style.maxWidth).toContain(side === "left" ? "360px" : "560px");
+    expect(panel.style.maxWidth).toContain(`${maxPercent}%`);
+    Object.defineProperty(container, "clientWidth", {configurable: true, value: 2560});
+    fireEvent.resize(window);
+    expect(parseFloat(panel.style.width)).toBeCloseTo(maxPercent);
     Object.defineProperty(container, "clientWidth", {configurable: true, value: 500});
     fireEvent.resize(window);
     // Preserve the usable minimum when a window becomes too narrow for the percentage cap.
     expect(parseFloat(panel.style.width)).toBeCloseTo(side === "left" ? 44 : 56);
+    Object.defineProperty(container, "clientWidth", {configurable: true, value: 1920});
+    fireEvent.resize(window);
+    expect(parseFloat(panel.style.width)).toBeCloseTo(maxPercent);
+    expect(setAppMetadata).toHaveBeenLastCalledWith(`time-tracker:${side}-sidebar-width-percent`, String(maxPercent));
+});
+
+it.each(["left", "right"] as const)("restores a preferred percentage after a narrow initial window (%s)", async side => {
+    vi.mocked(getAppMetadata).mockResolvedValueOnce("30");
+    const {container} = render(<ResizableSidebar side={side} collapsed={false}>Panel</ResizableSidebar>);
+    const panel = container.firstElementChild as HTMLElement;
+    Object.defineProperty(container, "clientWidth", {configurable: true, value: 500});
+    await waitFor(() => expect(parseFloat(panel.style.width)).toBeCloseTo(side === "left" ? 44 : 56));
+    Object.defineProperty(container, "clientWidth", {configurable: true, value: 1920});
+    fireEvent.resize(window);
+    expect(panel.style.width).toBe("30%");
+    Object.defineProperty(container, "clientWidth", {configurable: true, value: 2560});
+    fireEvent.resize(window);
+    expect(panel.style.width).toBe("30%");
+    expect(setAppMetadata).not.toHaveBeenCalled();
 });
