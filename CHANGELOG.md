@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.13.2] - 2026-10-23
+
+- Fix manual timer saves occasionally failing with a “database is locked” error.
+
 ## [1.13.1] - 2026-10-23
 
 - Track background media playback on Windows.
