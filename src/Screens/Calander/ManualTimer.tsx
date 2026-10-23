@@ -133,7 +133,7 @@ export function ManualTimerControl({timer, onAddPastTime}: {timer: RunningManual
             className="w-56 max-w-full min-w-0 rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white outline-none placeholder:text-gray-500 focus:border-sky-500 disabled:opacity-50"
         />
         <div ref={projectContainerRef} className="w-64 max-w-full min-w-0">
-            <ProjectSelector value={projectId} disabled={finishing} onChange={(id) => {
+            <ProjectSelector value={projectId} disabled={finishing} showManage={false} onChange={(id) => {
                 setProjectId(id);
                 if (timerRef.current || pendingRef.current) commit(title, id);
             }} />

@@ -8,10 +8,11 @@ type ProjectAction = {type: "create"; name: string; parentId: number | null} | {
 const Chevron = ({open}: {open: boolean}) => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={`transition-transform ${open ? "rotate-180" : ""}`}><path d="m6 9 6 6 6-6" /></svg>;
 const Plus = ({size = 14}: {size?: number}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>;
 
-export default function ProjectSelector({value, onChange, disabled = false}: {
+export default function ProjectSelector({value, onChange, disabled = false, showManage = true}: {
     value: number | null;
     onChange: (id: number | null) => void;
     disabled?: boolean;
+    showManage?: boolean;
 }) {
     const queryClient = useQueryClient();
     const {data: rawProjects = [], isLoading, error: loadError} = useQuery({queryKey: MANUAL_PROJECTS_QUERY_KEY, queryFn: getManualProjects});
@@ -165,9 +166,9 @@ export default function ProjectSelector({value, onChange, disabled = false}: {
                 </span>
                 <span className="text-gray-500"><Chevron open={pickerOpen} /></span>
             </button>
-            <button ref={manageRef} type="button" disabled={disabled} onClick={() => {setError(null); setOpen(true);}} aria-label="Manage categories" title="Rename or delete categories" className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:opacity-50">
+            {showManage && <button ref={manageRef} type="button" disabled={disabled} onClick={() => {setError(null); setOpen(true);}} aria-label="Manage categories" title="Rename or delete categories" className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:opacity-50">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
-            </button>
+            </button>}
         </div>
         {pickerOpen && <ManualPopover anchor={triggerRef.current} onClose={closePicker} labelledBy="manual-category-picker-search" width="anchor">
             <div className="-m-2 flex max-h-[60vh] flex-col">
