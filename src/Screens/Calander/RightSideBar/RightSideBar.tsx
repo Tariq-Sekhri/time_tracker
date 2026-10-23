@@ -59,6 +59,9 @@ export function RightSideBar({
 }) {
     const { date } = useDateStore();
     const [isCollapsed, setIsCollapsed] = useState(false);
+    const [compactPeriod, setCompactPeriod] = useState<"Week" | "Day" | null>(null);
+    useEffect(() => { setCompactPeriod(null); }, [view, selectedDate, selectedEvent]);
+    const compactDay = (compactPeriod ?? (view === "Day" ? "Day" : "Week")) === "Day";
     useEffect(()=>{if(selectedEvent?.afkDeviceUuid)setIsCollapsed(false);},[selectedEvent?.afkDeviceUuid,selectedEvent?.start]);
 
     useEffect(() => {
@@ -82,17 +85,52 @@ export function RightSideBar({
         </button>
     );
 
+    const compactStatsProps = {
+        includeGoogleInStats, googleCalendars, statsCategoryNames, statsCategoryFilter, statsDeviceUuids, isManualTimeInStats,
+        compact: true,
+        onExpand: () => {
+            setSelectedEvent(null); setSelectedEventLogs([]); setSelectedCategory(null);
+            setSelectedDate(compactDay ? selectedDate ?? date : null);
+            setView(compactDay ? "Day" : "Week"); setIsCollapsed(false);
+        },
+        onCategoryClick: (category: string) => {
+            setSelectedDate(compactDay ? selectedDate ?? date : null);
+            setSelectedCategory(category); setView("CategoryFilter"); setIsCollapsed(false);
+        },
+    };
+    const railButton = "flex h-7 w-8 shrink-0 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2";
+
     return (
         <ResizableSidebar collapsed={isCollapsed}>
             {isCollapsed ? (
+                <div className="flex h-full min-h-0 w-full flex-col items-center gap-3 overflow-y-auto overflow-x-hidden nice-scrollbar py-1">
                 <button
                     type="button"
                     onClick={() => setIsCollapsed(false)}
-                    className="shrink-0 px-2 py-1 text-sm bg-gray-800 hover:bg-gray-700 text-white rounded transition-colors"
+                    className={railButton}
                     aria-label="Expand right sidebar"
+                    title="Expand right sidebar"
                 >
-                    «
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>
                 </button>
+                <nav aria-label="Statistics period" className="flex flex-col items-center gap-2">
+                    <button type="button" aria-label="Week statistics" title="Week statistics" aria-pressed={!compactDay}
+                            onClick={() => setCompactPeriod("Week")} className={`${railButton} ${!compactDay ? "bg-white/[0.08] text-gray-100" : ""}`}>
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4M9 10v11M15 10v11"/></svg>
+                    </button>
+                    <button type="button" aria-label="Day statistics" title={`Day statistics: ${(selectedDate ?? date).toLocaleDateString()}`} aria-pressed={compactDay}
+                            onClick={() => setCompactPeriod("Day")} className={`${railButton} ${compactDay ? "bg-white/[0.08] text-gray-100" : ""}`}>
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4M9 15h6"/></svg>
+                    </button>
+                </nav>
+                {compactDay
+                    ? <DayStatisticsSidebar {...compactStatsProps} selectedDate={selectedDate ?? date} onClose={() => setCompactPeriod("Week")}/>
+                    : <StatisticsSidebar {...compactStatsProps} weekDate={date}/>}
+                {selectedEvent && <button type="button" aria-label={`Open selected ${view === "CategoryFilter" ? "category" : "event"}: ${selectedEvent.title}`} title={selectedEvent.title}
+                    className={`${railButton} mt-auto`} onClick={() => {setView(view === "CategoryFilter" ? "CategoryFilter" : "Event"); setIsCollapsed(false);}}>
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>
+                </button>}
+                </div>
             ) : (
                 <>
                     {view === "Week" && <StatisticsSidebar

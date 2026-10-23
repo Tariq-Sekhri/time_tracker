@@ -1,4 +1,5 @@
 import {ManualProjectFilter} from "../../../hooks/useManualProjectFilters.ts";
+import CompactStatistics from "./CompactStatistics";
 import AppTitleDetails from "../../../Componants/AppTitleDetails.tsx";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, type ReactNode } from "react";
@@ -36,6 +37,8 @@ interface DayStatisticsSidebarProps {
     statsDeviceUuids: string[] | null;
     isManualTimeInStats: ManualProjectFilter;
     trailingToolbar?: ReactNode;
+    compact?: boolean;
+    onExpand?: () => void;
 }
 
 type CombinedCategory = {
@@ -56,6 +59,8 @@ export default function DayStatisticsSidebar({
     statsDeviceUuids,
     isManualTimeInStats,
     trailingToolbar,
+    compact = false,
+    onExpand,
 }: DayStatisticsSidebarProps) {
     const statsCalendarIds = useMemo(
         () => new Set(googleCalendars.filter((c) => c.in_stats).map((c) => c.id)),
@@ -232,6 +237,10 @@ export default function DayStatisticsSidebar({
         dayStatsUpdatedAt,
         {categories: dayStats?.categories.length ?? 0},
     );
+
+    if (compact && onExpand) return <CompactStatistics period="Day" totalTime={totalTime} categories={topCategories}
+        loading={isLoading || isLoadingManualTime || isLoadingGoogleEvents || (!dayStats && !isError)}
+        error={isError || (includeGoogleInStats && statsCalendarIds.size > 0 && isGoogleEventsError)} onExpand={onExpand} onCategoryClick={onCategoryClick}/>;
 
     if (isLoading || isLoadingManualTime || (!dayStats && !isError)) {
         return (
