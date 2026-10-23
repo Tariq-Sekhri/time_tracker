@@ -1,14 +1,14 @@
-import {useEffect, useRef, useState, type ReactNode} from "react";
+import {useCallback, useEffect, useRef, useState, type ReactNode} from "react";
 import {getAppMetadata, setAppMetadata} from "../../../api/appMetadata";
 
-const WIDTH_KEY = "time-tracker:right-sidebar-width-percent";
-const DEFAULT_PERCENT = 30;
-const MIN_WIDTH = 280;
-const MAX_PERCENT = 60;
-
-export default function ResizableSidebar({collapsed, children}: {collapsed: boolean; children: ReactNode}) {
+export default function ResizableSidebar({collapsed, children, side = "right"}: {collapsed: boolean; children: ReactNode; side?: "left" | "right"}) {
+    const WIDTH_KEY = `time-tracker:${side}-sidebar-width-percent`;
+    const DEFAULT_PERCENT = side === "right" ? 30 : 20;
+    const MIN_WIDTH = side === "right" ? 280 : 220;
+    const MAX_PERCENT = side === "right" ? 60 : 40;
+    const collapsedWidth = side === "right" ? 64 : 56;
     const panel = useRef<HTMLDivElement>(null);
-    const drag = useRef<{pointerId: number; startX: number; startPercent: number; parentWidth: number; minPercent: number} | null>(null);
+    const drag = useRef<{handle: HTMLDivElement; pointerId: number; startX: number; startPercent: number; parentWidth: number; minPercent: number} | null>(null);
     const interacted = useRef(false);
     const currentPercent = useRef(DEFAULT_PERCENT);
     const [percent, setPercent] = useState(DEFAULT_PERCENT);
@@ -24,7 +24,34 @@ export default function ResizableSidebar({collapsed, children}: {collapsed: bool
             }
         }).catch(() => {});
         return () => { cancelled = true; };
-    }, []);
+    }, [WIDTH_KEY, MAX_PERCENT]);
+
+    const finishDrag = useCallback((pointerId?: number) => {
+        const active = drag.current;
+        if (!active || (pointerId !== undefined && active.pointerId !== pointerId)) return;
+        drag.current = null;
+        setResizing(false);
+        if (active.handle.hasPointerCapture?.(active.pointerId)) active.handle.releasePointerCapture(active.pointerId);
+        // Pointer resizing must not leave the keyboard focus highlight behind.
+        if (document.activeElement === active.handle) active.handle.blur();
+        void setAppMetadata(WIDTH_KEY, String(currentPercent.current)).catch(() => {});
+    }, [WIDTH_KEY]);
+
+    useEffect(() => {
+        const release = (event: PointerEvent) => finishDrag(event.pointerId);
+        const blur = () => finishDrag();
+        window.addEventListener("pointerup", release, true);
+        window.addEventListener("pointercancel", release, true);
+        window.addEventListener("blur", blur);
+        return () => {
+            window.removeEventListener("pointerup", release, true);
+            window.removeEventListener("pointercancel", release, true);
+            window.removeEventListener("blur", blur);
+            finishDrag();
+        };
+    }, [finishDrag]);
+
+    useEffect(() => { if (collapsed) finishDrag(); }, [collapsed, finishDrag]);
 
     const update = (next: number, minPercent: number) => {
         interacted.current = true;
@@ -41,49 +68,42 @@ export default function ResizableSidebar({collapsed, children}: {collapsed: bool
     };
 
     return <div ref={panel}
-        className={`theme-sidebar relative h-full min-h-0 flex-shrink-0 overflow-hidden bg-black flex flex-col ${collapsed ? "border-l border-gray-700 items-center p-2" : ""}`}
-        style={{width: collapsed ? 64 : `${percent}%`, minWidth: collapsed ? 64 : "min(280px, 100%)", maxWidth: collapsed ? 64 : "max(280px, 60%)", userSelect: resizing ? "none" : undefined}}
+        className={`theme-sidebar relative h-full min-h-0 flex-shrink-0 overflow-hidden bg-black flex flex-col ${collapsed && side === "right" ? "border-l border-gray-700 items-center p-2" : ""}`}
+        style={{width: collapsed ? collapsedWidth : `${percent}%`, minWidth: collapsed ? collapsedWidth : `min(${MIN_WIDTH}px, 100%)`, maxWidth: collapsed ? collapsedWidth : `max(${MIN_WIDTH}px, ${MAX_PERCENT}%)`, userSelect: resizing ? "none" : undefined}}
     >
         {children}
-        {!collapsed && <div role="separator" aria-label="Resize right sidebar" aria-orientation="vertical"
-            aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)} aria-valuetext={`${Math.round(percent)}% width, minimum 280 pixels`}
+        {!collapsed && <div role="separator" aria-label={`Resize ${side} sidebar`} aria-orientation="vertical"
+            aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)} aria-valuetext={`${Math.round(percent)}% width, minimum ${MIN_WIDTH} pixels`}
+            title={`Drag to resize ${side} sidebar`}
+            onClick={event => event.stopPropagation()}
             tabIndex={0}
-            className={`absolute inset-y-0 left-0 z-20 w-1.5 cursor-col-resize touch-none transition-colors hover:bg-sky-500/60 focus-visible:bg-sky-500/60 focus-visible:outline-none ${resizing ? "bg-sky-500/60" : ""}`}
+            className={`absolute inset-y-0 ${side === "right" ? "left-0" : "right-0"} z-20 w-1.5 cursor-col-resize touch-none transition-colors hover:bg-sky-500/60 focus-visible:bg-sky-500/60 focus-visible:outline-none ${resizing ? "bg-sky-500/60" : ""}`}
             onPointerDown={event => {
                 if (event.button !== 0) return;
                 const size = dimensions();
                 if (!size || size.parentWidth <= 0) return;
                 event.preventDefault();
-                event.currentTarget.focus();
+                event.currentTarget.blur();
                 event.currentTarget.setPointerCapture(event.pointerId);
                 interacted.current = true;
-                drag.current = {pointerId: event.pointerId, startX: event.clientX, startPercent: (panel.current!.getBoundingClientRect().width / size.parentWidth) * 100, ...size};
+                drag.current = {handle: event.currentTarget, pointerId: event.pointerId, startX: event.clientX, startPercent: (panel.current!.getBoundingClientRect().width / size.parentWidth) * 100, ...size};
                 setResizing(true);
             }}
             onPointerMove={event => {
                 const active = drag.current;
                 if (!active || event.pointerId !== active.pointerId) return;
-                update(active.startPercent + (active.startX - event.clientX) / active.parentWidth * 100, active.minPercent);
+                if (event.buttons === 0) { finishDrag(event.pointerId); return; }
+                update(active.startPercent + (active.startX - event.clientX) / active.parentWidth * 100 * (side === "right" ? 1 : -1), active.minPercent);
             }}
-            onPointerUp={event => {
-                if (drag.current?.pointerId !== event.pointerId) return;
-                drag.current = null;
-                setResizing(false);
-                event.currentTarget.releasePointerCapture(event.pointerId);
-                save();
-            }}
-            onLostPointerCapture={() => {
-                if (!drag.current) return;
-                drag.current = null;
-                setResizing(false);
-                save();
-            }}
+            onPointerUp={event => finishDrag(event.pointerId)}
+            onPointerCancel={event => finishDrag(event.pointerId)}
+            onLostPointerCapture={event => finishDrag(event.pointerId)}
             onKeyDown={event => {
                 if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
                 const size = dimensions();
                 if (!size) return;
                 event.preventDefault();
-                update(event.key === "Home" ? size.minPercent : event.key === "End" ? MAX_PERCENT : Math.max(size.minPercent, percent) + (event.key === "ArrowLeft" ? 1 : -1), size.minPercent);
+                update(event.key === "Home" ? size.minPercent : event.key === "End" ? MAX_PERCENT : Math.max(size.minPercent, percent) + (event.key === "ArrowLeft" ? 1 : -1) * (side === "right" ? 1 : -1), size.minPercent);
                 save();
             }}
         />}

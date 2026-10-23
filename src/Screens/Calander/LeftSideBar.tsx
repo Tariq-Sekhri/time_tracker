@@ -6,6 +6,7 @@
  */
 
 import {useState, type ReactNode} from "react";
+import ResizableSidebar from "./RightSideBar/ResizableSidebar";
 
 export type SidebarToggleState = {
     inCal: boolean;
@@ -46,9 +47,11 @@ type VariantProps = {
 export default function LeftSideBar(props: VariantProps) {
     return (
         // Clicks here must not reach the calendar's deselect handler.
-        <div className="relative flex h-full shrink-0" onClick={(e) => e.stopPropagation()}>
-            {props.collapsed ? <CollapsedRail {...props}/> : <ColourList {...props}/>}
-        </div>
+        <ResizableSidebar side="left" collapsed={props.collapsed}>
+            <div className="h-full min-h-0 w-full" onClick={(e) => e.stopPropagation()}>
+                {props.collapsed ? <CollapsedRail {...props}/> : <ColourList {...props}/>}
+            </div>
+        </ResizableSidebar>
     );
 }
 
@@ -260,7 +263,7 @@ function ColourList({sections, collapsed, onToggleCollapsed}: VariantProps) {
     });
 
     return (
-        <div className={`${shell} w-64`}>
+        <div className={`${shell} w-full`}>
             {/* The whole row collapses the sidebar, not just the chevron. */}
             <div className="px-1 pt-2">
                 <button type="button" onClick={onToggleCollapsed} aria-label="Collapse filter sidebar" title="Collapse"
