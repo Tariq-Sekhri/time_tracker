@@ -34,7 +34,7 @@ export default function ExportLayout({slots: s, overview, onResetScope, toolbar}
                 {STEPS.map((label, index) => <button type="button" key={label} aria-current={step === index ? "step" : undefined} onClick={() => setStep(index)}><span>{index + 1}</span>{label}</button>)}
             </nav>
             <div className="ex-focus-main">
-                <header><span className="ex-eyebrow">{String(step + 1).padStart(2, "0")} / 03</span><h3>{STEPS[step]}</h3></header>
+                <header><h3>{STEPS[step]}</h3></header>
                 <div className="ex-step-panels">
                     {pages.map((content, index) => <div key={index} hidden={step !== index} className="ex-stack">{content}</div>)}
                     <div className="ex-step-actions">
