@@ -75,6 +75,7 @@
 .ex-step-panels .settings-panel {background:transparent;border:0;padding:0}
 .ex-step-actions {display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--tt-border);padding-top:18px;margin-top:24px}
 .ex-step-actions>span {font-size:11px;color:var(--tt-muted)}
+.ex-root .ex-step-actions>.dt-button {min-width:96px;min-height:44px;padding:10px 22px;font-size:14px}
 .ex-scope-control {border:1px solid var(--tt-border);border-radius:8px;background:var(--tt-panel)}
 .ex-scope-control>summary {display:flex;align-items:center;gap:12px;cursor:pointer;list-style:none;padding:11px 14px;font-size:12px}
 .ex-scope-control>summary::-webkit-details-marker {display:none}
