@@ -41,7 +41,7 @@ describe("hourly invoice", () => {
         expect(invoiceErrors({...DEFAULT_INVOICE, issuedOn: "2026-03-10", dueOn: "2026-03-01"}).length).toBeGreaterThan(0);
     });
     it("preserves invoice details and category selection in saved presets", () => {
-        const preset = builtInExportPresets().find(item => item.name === "Manual exporter")!;
+        const preset = builtInExportPresets().find(item => item.name === "Project report")!;
         const settings = {...preset, options: invoiceOptions("125.50")};
         settings.scopeTemplate.filters.manualCategories = [2];
         settings.options.pdf.invoice.number = "INV-123";

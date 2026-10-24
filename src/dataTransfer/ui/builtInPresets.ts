@@ -28,7 +28,7 @@ export function builtInExportPresets(): BuiltInExportPreset[] {
     };
     return [
         {...preset("Archiver", "all_time", everythingInclude(), {format: "json"}), group: "confirmed"},
-        {...preset("Manual exporter", "this_month", {...manual}, {
+        {...preset("Project report", "this_month", {...manual}, {
             format: "pdf", pdf: {...pdf("Invoice"), layout: "invoice", invoice: {...DEFAULT_INVOICE}},
         }), scopeTemplate: {range: {preset: "this_month", customStart: "", customEnd: ""}, filters: {...ALL_FILTERS, manualCategories: []}, include: {...manual}}, group: "confirmed"},
         preset("Submit a timesheet", "last_week", {...manual}, {summaryGrouping: "day"}),
