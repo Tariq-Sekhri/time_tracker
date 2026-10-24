@@ -554,6 +554,7 @@ export function applyTheme(theme:Theme, root:HTMLElement = document.documentElem
     root.dataset.themeColorOverrides = ["disabledText","subtleSurface","highlightSurface","action","messageSurface","codeSurface","sidebarControls","sidebarSelection"].filter(key=>theme.colors[key as ColorKey]!==DEFAULT_COLORS[key as ColorKey]).join(" ");
     root.style.colorScheme = theme.mode;
     root.dataset.theme = theme.id;
+    root.dataset.themeBase = theme.baseId;
 }
 export function contrastRatio(a:string,b:string):number | null {
     if(a.length !== 7 || b.length !== 7) return null;
