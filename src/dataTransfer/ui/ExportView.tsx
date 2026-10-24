@@ -22,6 +22,7 @@ import FormatPicker from "./FormatPicker.tsx";
 import {IconDownload, IconEye, IconFolderOpen, IconX, Spinner} from "./icons.tsx";
 import MultiSelect, {type MultiSelectOption} from "./MultiSelect.tsx";
 import PresetBar from "./PresetBar.tsx";
+import {builtInExportPresets} from "./builtInPresets.ts";
 import {
     deserializePresets, deserializeSettings, LAST_SETTINGS_METADATA_KEY, PRESETS_METADATA_KEY, removePreset, sameSettings,
     serializePresets, serializeSettings, upsertPreset, type ExportPreset, type ExportSettings,
@@ -60,6 +61,7 @@ function filterPickerOptions(data: ExportFilterOptions | undefined) {
 export default function ExportView() {
     const {showToast} = useToast();
     const initial = useMemo(defaultSettings, []);
+    const builtIns = useMemo(builtInExportPresets, []);
     const [include, setInclude] = useState<ExportInclude>(initial.scopeTemplate.include);
     const [range, setRange] = useState<RangeSelection>(initial.scopeTemplate.range);
     const [filters, setFilters] = useState<ExportFilters>(initial.scopeTemplate.filters);
@@ -127,7 +129,9 @@ export default function ExportView() {
     const countMap = datasetCounts(counts.data);
     const countsLoading = counts.isFetching || countScope !== debouncedCountScope;
 
-    const activePreset = presets.find((preset) => sameSettings(preset, settings))?.name ?? null;
+    const savedMatch = presets.find(preset => sameSettings(preset, settings));
+    const builtInMatch = builtIns.find(preset => sameSettings(preset, settings));
+    const activePreset = savedMatch ? `saved:${savedMatch.name}` : builtInMatch ? `builtin:${builtInMatch.name}` : null;
     const selectedKeys = includedKeys(include);
     const tabular = options.format === "csv" || options.format === "xlsx";
     const patchOptions = (patch: Partial<ExportOptions>) => setOptions((current) => ({...current, ...patch}));
@@ -285,7 +289,7 @@ export default function ExportView() {
     const manualApply = filterApplies("manualCategories", include);
 
     return <div className="dt-root">
-        <PresetBar presets={presets} active={activePreset}
+        <PresetBar presets={presets} builtIns={builtIns} active={activePreset}
             onApply={(preset) => applySettings({scopeTemplate: structuredClone(preset.scopeTemplate), options: structuredClone(preset.options)})}
             onSave={async (name) => {
                 if (await savePresets(upsertPreset(presets, {name, ...structuredClone(settings)}))) showToast(`Saved preset “${name}”`, "success");

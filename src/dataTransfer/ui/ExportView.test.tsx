@@ -73,6 +73,26 @@ async function readyCsv(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("ExportView", () => {
+    it("applies common-use presets without writing files and lets users save their own version", async () => {
+        const user = mount();
+        await readyCsv(user);
+        const picker = screen.getByRole("combobox", {name: "Preset"});
+        expect(within(picker).getAllByRole("option")).toHaveLength(13);
+        await user.selectOptions(picker, "builtin:Keep a portable copy");
+        expect(screen.getByRole("radio", {name: /^JSON/}).getAttribute("aria-checked")).toBe("true");
+        expect(screen.queryByRole("button", {name: /^Delete preset/})).toBeNull();
+        await user.selectOptions(picker, "builtin:Submit a timesheet");
+        expect(screen.getByRole("radio", {name: /^Excel/}).getAttribute("aria-checked")).toBe("true");
+        await user.click(screen.getByRole("button", {name: /Save as preset/}));
+        const name = screen.getByRole("textbox", {name: "Preset name"});
+        await user.clear(name);
+        await user.type(name, "My weekly timesheet");
+        await user.click(screen.getByRole("button", {name: "Save"}));
+        expect(await screen.findByRole("button", {name: "Delete preset My weekly timesheet"})).toBeTruthy();
+        expect(mocks.save).not.toHaveBeenCalled();
+        expect(mocks.write).not.toHaveBeenCalled();
+    });
+
     it("blocks preview and export until filter options load", async () => {
         mocks.filters.mockReturnValue(new Promise(() => {}));
         mount();
