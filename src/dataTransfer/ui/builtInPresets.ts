@@ -20,8 +20,6 @@ function preset(name: string, range: RangePreset, include: ExportInclude, patch:
 /** Starting points for common jobs. Kept separate from the user's saved presets. */
 export function builtInExportPresets(): BuiltInExportPreset[] {
     const manual = timesheetInclude();
-    const activity = {...emptyInclude(), activity_sessions: true};
-    const combined = {...manual, ...activity, manual_entries: true};
     const pdf = (title: string, signature = false): ExportOptions["pdf"] => {
         const defaults = defaultExportOptions().pdf;
         return {...defaults, title, sections: {...defaults.sections, signature}};
@@ -36,8 +34,5 @@ export function builtInExportPresets(): BuiltInExportPreset[] {
         }, {format: "json"}), group: "confirmed"},
         preset("Submit a timesheet", "last_week", {...manual}, {summaryGrouping: "day"}),
         preset("Support an invoice", "last_month", {...manual}, {format: "pdf", summaryGrouping: "category", durationFormat: "decimal", pdf: pdf("Invoice supporting records")}),
-        preset("Review personal productivity", "this_week", {...activity}, {format: "pdf", summaryGrouping: "day", pdf: pdf("Personal productivity")}),
-        preset("Analyze time in a spreadsheet", "last_30_days", {...combined}, {summaryGrouping: "day", durationFormat: "decimal"}),
-        preset("Investigate tracking discrepancies", "today", {...activity, activity_logs: true, devices: true, activity_categories: true}, {summaryGrouping: "device"}),
     ];
 }
