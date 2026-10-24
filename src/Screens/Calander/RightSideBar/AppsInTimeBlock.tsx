@@ -301,7 +301,7 @@ export default function AppsInTimeBlock({
                                 key={rowKey(log)}
                                 onClick={(e) => logRowLeftClickCalendarFilter(e, log.app)}
                                 onContextMenu={(e) => openFromContextMenuMany(e, log.app_names)}
-                                className={`min-h-15 rounded-lg p-3 transition-colors select-text cursor-pointer ${calendarAppFilterActive === log.app
+                                className={`h-15 rounded-lg p-3 transition-colors select-text cursor-pointer ${calendarAppFilterActive === log.app
                                     ? "bg-gray-800 ring-2 ring-blue-500 ring-offset-2 ring-offset-black"
                                     : "bg-gray-900 hover:bg-gray-800"
                                     }`}
@@ -311,7 +311,7 @@ export default function AppsInTimeBlock({
                                         start={Math.floor(selectedEvent.start.getTime() / 1000)}
                                         end={Math.floor(selectedEvent.end.getTime() / 1000)} ids={log.ids}
                                         deviceUuids={log.device_uuid ? [log.device_uuid] : undefined}
-                                        className="text-sm font-medium text-white whitespace-normal break-words min-w-0 flex-1 select-text" />
+                                        className="text-sm font-medium text-white truncate min-w-0 flex-1 select-text" />
                                     <input
                                         type="checkbox"
                                         checked={selectedApps.has(rowKey(log))}
@@ -349,14 +349,16 @@ export default function AppsInTimeBlock({
                                         {formatDuration(log.duration)}
                                     </span>
                                 </div>
-                                <div className="text-xs text-gray-500 mt-1 mb-2 truncate" title={log.device_uuid ?? "Unknown device"}>{deviceName(log.device_uuid)}</div>
-                                <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
-                                    <div
-                                        className="h-full bg-blue-600"
-                                        style={{
-                                            width: `${totalDuration > 0 ? (log.duration / totalDuration) * 100 : 0}%`,
-                                        }}
-                                    />
+                                <div className="flex items-center gap-2 h-3">
+                                    <div className="h-1 bg-gray-800 rounded-full overflow-hidden flex-1 min-w-0">
+                                        <div
+                                            className="h-full bg-blue-600"
+                                            style={{
+                                                width: `${totalDuration > 0 ? (log.duration / totalDuration) * 100 : 0}%`,
+                                            }}
+                                        />
+                                    </div>
+                                    <span className="text-[10px] leading-3 text-gray-500 truncate max-w-[40%] shrink-0" title={log.device_uuid ?? "Unknown device"}>{deviceName(log.device_uuid)}</span>
                                 </div>
                             </div>
                         ))}

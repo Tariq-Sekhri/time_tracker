@@ -27,7 +27,7 @@ it("labels identical titles by device and selects them independently", async () 
     expect(mocks.titleProps).toHaveBeenCalledWith(expect.objectContaining({deviceUuids: ["desktop"]}));
     expect(mocks.titleProps).toHaveBeenCalledWith(expect.objectContaining({deviceUuids: ["phone"]}));
     // Both devices have ID 1. Deleting one device's row must retain the other.
-    const row = screen.getByText("Work PC").parentElement!;
+    const row = screen.getByText("Work PC").parentElement!.parentElement!;
     const icons = row.querySelectorAll("svg");
     fireEvent.click(icons[icons.length - 1]);
     await waitFor(() => expect(mocks.remove).toHaveBeenCalledWith([1], "desktop"));
