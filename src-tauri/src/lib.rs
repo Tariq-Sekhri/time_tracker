@@ -494,7 +494,11 @@ pub fn run() {
                     device_logs,
                     get_server_ip,
                     set_server_ip,
-                    // Import/export commands are disabled until testing is complete.
+                    data_transfer::get_export_filter_options,
+                    data_transfer::export_dataset,
+                    data_transfer::import_dataset,
+                    data_transfer::save_export_file,
+                    data_transfer::read_import_file,
                 ]);
             move |invoke: tauri::ipc::Invoke| {
                 let command = invoke.message.command().to_string();

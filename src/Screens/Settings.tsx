@@ -1,6 +1,6 @@
 import "./Settings.css";
 import ThemeSettings from "../theme/ThemeSettings";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "../Componants/Toast.tsx";
 import { useBackendSettings, type SettingField } from "../hooks/useBackendSettings.ts";
@@ -15,7 +15,7 @@ import { useNotesState } from "../hooks/useNotesState.ts";
 import {getSupportLogInfo, openSupportLogFolder, isDesktopApp, type SupportLogInfo} from "../diagnostics.ts";
 import AfkSettings from "../Componants/AfkSettings.tsx";
 
-// Import/export remains out of the released Settings UI until testing is complete.
+const DataTransfer = lazy(() => import("../dataTransfer/ui/DataTransfer.tsx"));
 
 type FieldDef = { key: string; label: string };
 type CategoryDef = { title: string; fields: FieldDef[] };
@@ -383,7 +383,7 @@ export default function Settings() {
     const sections = [
         {id: "general", label: "General"},
         {id: "tracking", label: "Tracking"},
-        ...(isDesktopApp() ? [{id: "data", label: "Data & support"}] : []),
+        ...(isDesktopApp() ? [{id: "transfer", label: "Import & export"}, {id: "data", label: "Data & support"}] : []),
     ];
     const selectSection = (id: string) => {
         setSection(id);
@@ -401,7 +401,7 @@ export default function Settings() {
     return <div className="settings-shell">
         <div className="theme-header shrink-0 border-b border-gray-700">
             <nav className="flex min-w-0 items-center justify-start overflow-x-auto border-t border-gray-800/70 bg-gray-950/60 px-5 py-2 nice-scrollbar sm:justify-center" aria-label="Settings sections">
-                <div className={`grid w-full max-w-[760px] shrink-0 ${sections.length === 3 ? "min-w-[390px] grid-cols-3" : "min-w-[200px] grid-cols-2"}`} role="tablist" aria-label="Settings sections"
+                <div className={`grid w-full max-w-[760px] shrink-0 ${sections.length === 4 ? "min-w-[520px] grid-cols-4" : "min-w-[200px] grid-cols-2"}`} role="tablist" aria-label="Settings sections"
                     onKeyDown={event => {
                         if ((event.target as HTMLElement).getAttribute("role") !== "tab") return;
                         const index = sections.findIndex(item => item.id === section);
@@ -456,6 +456,9 @@ export default function Settings() {
                     <AfkSettings />
                 </div>
 
+                {isDesktopApp() && <div className="settings-section-stack" role="tabpanel" id="settings-section-transfer" aria-labelledby="settings-tab-transfer" hidden={section !== "transfer"}>
+                    {section === "transfer" && <Suspense fallback={<p className="settings-muted" role="status">Loading import &amp; export?</p>}><DataTransfer /></Suspense>}
+                </div>}
                 {isDesktopApp() && <div className="settings-section-stack" role="tabpanel" id="settings-section-data" aria-labelledby="settings-tab-data" hidden={section !== "data"}>
                     <section className="settings-panel" aria-label="Data and support">
                         <div className="settings-section-heading"><div><h2>Data &amp; support</h2><p>Database location and diagnostic logs.</p></div></div>

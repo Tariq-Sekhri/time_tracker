@@ -68,17 +68,19 @@ it("keeps unsaved tracking changes when navigating settings sections", async () 
     expect(screen.queryByRole("tab", {name: "Data & support"})).toBeNull();
 });
 
-it("hides import/export from desktop Settings while keeping the other sections available", async () => {
+it("opens import/export from desktop Settings while keeping the other sections available", async () => {
     Object.defineProperty(window, "__TAURI_INTERNALS__", {configurable: true, value: {}});
     bridge.commands.length = 0;
     const client = new QueryClient({defaultOptions: {queries: {retry: false}}});
     render(<QueryClientProvider client={client}><ToastProvider><Settings /></ToastProvider></QueryClientProvider>);
-    expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual(["General", "Tracking", "Data & support"]);
-    expect(document.getElementById("settings-section-transfer")).toBeNull();
-    expect(screen.queryByRole("tab", {name: /import|export/i})).toBeNull();
+    expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual(["General", "Tracking", "Import & export", "Data & support"]);
+    expect(bridge.commands).not.toContain("get_export_filter_options");
+    fireEvent.click(screen.getByRole("tab", {name: "Import & export"}));
+    expect(screen.getByRole("tabpanel", {name: "Import & export"})).toBeTruthy();
+    await screen.findByRole("tab", {name: "Export"});
+    await waitFor(() => expect(bridge.commands).toContain("get_export_filter_options"));
     fireEvent.click(screen.getByRole("tab", {name: "Data & support"}));
     expect(screen.getByRole("tabpanel", {name: "Data & support"})).toBeTruthy();
-    expect(bridge.commands).not.toContain("get_export_filter_options");
     expect(bridge.commands).not.toContain("export_dataset");
     expect(bridge.commands).not.toContain("import_dataset");
 });
