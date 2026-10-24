@@ -73,13 +73,40 @@ async function readyCsv(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("ExportView", () => {
+    it("requires a category for the manual invoice and keeps pricing optional", async () => {
+        const user = mount();
+        await readyCsv(user);
+        await user.selectOptions(screen.getByRole("combobox", {name: "Preset"}), "builtin:Manual exporter");
+        expect(exportButton().disabled).toBe(true);
+        expect(screen.getByText("Choose a manual category for the invoice.")).toBeTruthy();
+        expect((screen.getByRole("spinbutton", {name: "Hourly rate (optional)"}) as HTMLInputElement).value).toBe("");
+        await user.click(screen.getByRole("button", {name: /^Manual categories/}));
+        const categories = screen.getByRole("dialog", {name: "Choose manual categories"});
+        await user.click(within(categories).getByRole("checkbox", {name: "Client"}));
+        await user.keyboard("{Escape}");
+        await waitFor(() => expect(exportButton().disabled).toBe(false));
+        await waitFor(() => expect(mocks.export).toHaveBeenLastCalledWith(expect.objectContaining({
+            manual_category_ids: [1, 2],
+        })));
+        fireEvent.change(screen.getByRole("spinbutton", {name: "Hourly rate (optional)"}), {target: {value: "-5"}});
+        expect(exportButton().disabled).toBe(true);
+        fireEvent.change(screen.getByRole("spinbutton", {name: "Hourly rate (optional)"}), {target: {value: "125"}});
+        expect(exportButton().disabled).toBe(false);
+        await user.click(exportButton());
+        await waitFor(() => expect(mocks.write).toHaveBeenCalled(), {timeout: 5000});
+        expect(mocks.export).toHaveBeenLastCalledWith(expect.objectContaining({
+            manual_category_ids: [1, 2], include: expect.objectContaining({manual_entries: true, activity_sessions: false}),
+        }));
+
+    });
+
     it("applies common-use presets without writing files and lets users save their own version", async () => {
         const user = mount();
         await readyCsv(user);
         const picker = screen.getByRole("combobox", {name: "Preset"});
-        expect(within(picker).getAllByRole("option")).toHaveLength(13);
+        expect(within(picker).getAllByRole("option")).toHaveLength(14);
         const confirmed = within(picker).getByRole("group", {name: "Confirmed presets"});
-        expect(within(confirmed).getAllByRole("option").map(option => option.textContent)).toEqual(["Archiver"]);
+        expect(within(confirmed).getAllByRole("option").map(option => option.textContent)).toEqual(["Archiver", "Manual exporter"]);
         await user.selectOptions(picker, "builtin:Archiver");
         expect(screen.getByRole("radio", {name: /^JSON/}).getAttribute("aria-checked")).toBe("true");
         await user.click(screen.getByRole("radio", {name: /^CSV/}));

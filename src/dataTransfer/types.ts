@@ -41,6 +41,18 @@ export type PdfSections = {
     signature: boolean;
 };
 
+export type InvoiceOptions = {
+    number: string;
+    issuedOn: string;
+    dueOn: string;
+    hourlyRate: string;
+    currency: "CAD" | "USD" | "EUR" | "GBP" | "AUD";
+    taxPercent: string;
+    senderDetails: string;
+    clientDetails: string;
+    paymentTerms: string;
+};
+
 export type ExportOptions = {
     format: ExportFormat;
     framework: FrameworkId;
@@ -60,6 +72,8 @@ export type ExportOptions = {
     userEmail: string;
     /** PDF only. */
     pdf: {
+        layout?: "report" | "invoice";
+        invoice?: InvoiceOptions;
         title: string;
         /** e.g. company or freelancer name, shown top-left. */
         preparedBy: string;

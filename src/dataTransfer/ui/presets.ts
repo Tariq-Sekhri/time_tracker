@@ -1,3 +1,4 @@
+import {DEFAULT_INVOICE, INVOICE_CURRENCIES} from "../formats/export/invoice.ts";
 import type {ExportInclude} from "../../api/dataTransfer.ts";
 import type {ExportOptions} from "../types.ts";
 import {RANGE_PRESET_IDS, type RangeSelection} from "./dateRanges.ts";
@@ -81,6 +82,16 @@ export function mergeOptions(defaults: ExportOptions, stored: unknown): ExportOp
         }
     }
     if (isRecord(stored.pdf)) {
+        if (stored.pdf.layout === "report" || stored.pdf.layout === "invoice") result.pdf.layout = stored.pdf.layout;
+        if (isRecord(stored.pdf.invoice)) {
+            const invoice = {...DEFAULT_INVOICE};
+            for (const key of Object.keys(invoice) as (keyof typeof invoice)[]) {
+                const value = stored.pdf.invoice[key];
+                if (typeof value === "string" && key !== "currency") invoice[key] = value;
+            }
+            if (INVOICE_CURRENCIES.includes(stored.pdf.invoice.currency as typeof invoice.currency)) invoice.currency = stored.pdf.invoice.currency as typeof invoice.currency;
+            result.pdf.invoice = invoice;
+        }
         const pdf = result.pdf as unknown as Record<string, unknown>;
         for (const key of ["title", "preparedBy", "preparedFor"] as const) if (typeof stored.pdf[key] === "string") pdf[key] = stored.pdf[key];
         if (["portrait", "landscape"].includes(stored.pdf.orientation as string)) pdf.orientation = stored.pdf.orientation;

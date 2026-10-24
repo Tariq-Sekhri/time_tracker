@@ -9,6 +9,7 @@ import {nestManualCategories} from "../../api/ManualProject.ts";
 import {useToast} from "../../Componants/Toast.tsx";
 import {toErrorString} from "../../types/common.ts";
 import {buildExport, columnsFor, defaultExportOptions} from "../formats/index.ts";
+import {DEFAULT_INVOICE, invoiceErrors} from "../formats/export/invoice.ts";
 import {pdfText} from "../formats/export/pdf/text.ts";
 import type {ExportOptions} from "../types.ts";
 import ColumnPickerNotice from "./ColumnPickerNotice.tsx";
@@ -137,6 +138,11 @@ export default function ExportView() {
     const patchOptions = (patch: Partial<ExportOptions>) => setOptions((current) => ({...current, ...patch}));
 
     const blockers: string[] = [];
+    if (options.format === "pdf" && options.pdf.layout === "invoice") {
+        if (!include.manual_entries || selectedKeys.some(key => key !== "manual_entries")) blockers.push("Hourly invoices use manual time entries only.");
+        if (filters.manualCategories == null || filters.manualCategories.length === 0) blockers.push("Choose a manual category for the invoice.");
+        blockers.push(...invoiceErrors({...DEFAULT_INVOICE, ...options.pdf.invoice}));
+    }
     if (!filterOptions.data) blockers.push(filterOptions.error ? "Load filter options successfully before exporting." : "Loading available data…");
     if (!selectedKeys.length) blockers.push("Choose at least one thing to export.");
     if (!resolved) blockers.push("Fix the date range.");

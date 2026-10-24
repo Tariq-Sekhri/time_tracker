@@ -1,5 +1,6 @@
 import type {ExportInclude} from "../../api/dataTransfer.ts";
 import type {ColumnDef, DatasetKey, ExportOptions, PdfSections, Rounding} from "../types.ts";
+import InvoiceOptionsPanel from "./InvoiceOptionsPanel.tsx";
 import ColumnPicker from "./ColumnPicker.tsx";
 import {Banner} from "./common.tsx";
 import {DATASETS} from "./scope.ts";
@@ -48,6 +49,7 @@ export default function ExportOptionsPanel({options, include, columnsFor, onChan
             it can be re-imported here later, on this or another computer. Columns and formatting options don't apply.
         </Banner>;
     }
+    if (format === "pdf" && options.pdf.layout === "invoice") return <InvoiceOptionsPanel options={options} onChange={onChange} />;
     const tabular = format === "csv" || format === "xlsx";
     const setPdf = (patch: Partial<ExportOptions["pdf"]>) => onChange({pdf: {...options.pdf, ...patch}});
     const columnSets = tabular ? DATASETS.filter((item) => include[item.key])
@@ -58,6 +60,7 @@ export default function ExportOptionsPanel({options, include, columnsFor, onChan
         {format === "pdf" && <div className="dt-subpanel">
             <span className="dt-subheading">Report</span>
             <div className="dt-field-grid">
+                <label className="dt-field"><span>PDF layout</span><select className="dt-select" value="report" onChange={() => setPdf({layout: "invoice"})}><option value="report">Time report</option><option value="invoice">Hourly invoice</option></select></label>
                 <label className="dt-field"><span>Title</span>
                     <input className="dt-input" value={options.pdf.title} placeholder="Time report" onChange={(event) => setPdf({title: event.target.value})} /></label>
                 <label className="dt-field"><span>Prepared by</span>

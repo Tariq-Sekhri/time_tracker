@@ -1,4 +1,5 @@
-﻿import type {ExportInclude} from "../../api/dataTransfer.ts";
+﻿import {DEFAULT_INVOICE} from "../formats/export/invoice.ts";
+import type {ExportInclude} from "../../api/dataTransfer.ts";
 import {defaultExportOptions} from "../formats/index.ts";
 import type {ExportOptions} from "../types.ts";
 import type {RangePreset} from "./dateRanges.ts";
@@ -27,6 +28,9 @@ export function builtInExportPresets(): BuiltInExportPreset[] {
     };
     return [
         {...preset("Archiver", "all_time", everythingInclude(), {format: "json"}), group: "confirmed"},
+        {...preset("Manual exporter", "this_month", {...manual}, {
+            format: "pdf", pdf: {...pdf("Invoice"), layout: "invoice", invoice: {...DEFAULT_INVOICE}},
+        }), scopeTemplate: {range: {preset: "this_month", customStart: "", customEnd: ""}, filters: {...ALL_FILTERS, manualCategories: []}, include: {...manual}}, group: "confirmed"},
         preset("Submit a timesheet", "last_week", {...manual}, {summaryGrouping: "day"}),
         preset("Support an invoice", "last_month", {...manual}, {format: "pdf", summaryGrouping: "category", durationFormat: "decimal", pdf: pdf("Invoice supporting records")}),
         preset("Review personal productivity", "this_week", {...activity}, {format: "pdf", summaryGrouping: "day", pdf: pdf("Personal productivity")}),

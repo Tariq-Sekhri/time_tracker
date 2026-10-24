@@ -30,6 +30,10 @@ export function pdfFileName(dataset: ExportDataset, options: ExportOptions): str
  * the main bundle.
  */
 export async function buildPdfReport(dataset: ExportDataset, options: ExportOptions): Promise<ExportFile> {
+    if (options.pdf.layout === "invoice") {
+        const {buildInvoicePdf} = await import("./invoicePdf.ts");
+        return buildInvoicePdf(dataset, options);
+    }
     const [{jsPDF}, {autoTable}] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
     const pdf = options.pdf;
     const doc = new jsPDF({
