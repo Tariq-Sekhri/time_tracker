@@ -21,7 +21,7 @@ export default function ExportLayout({slots: s, overview, onResetScope, toolbar}
     const [step, setStep] = useState(0);
     const pages = [s.data, <>{s.format}{s.options}</>, <SelectionSummary overview={overview} />];
     return <div className="ex-root">
-        <div className="ex-toolbar"><div className="ex-preset">{s.preset}</div>{toolbar}</div>
+        <div className="ex-toolbar"><div className="ex-preset">{s.preset}</div>
         <details className="ex-scope-control">
             <summary><span className="ex-eyebrow">Scope</span><span className="ex-scope-value">{overview.scopeSummary ?? overview.range ?? "Everything"}</span><span className="ex-scope-change">Change</span></summary>
             <div className="ex-scope-content">
@@ -29,6 +29,8 @@ export default function ExportLayout({slots: s, overview, onResetScope, toolbar}
                 <div className="ex-scope-fields">{s.range}{s.filters}</div>
             </div>
         </details>
+        {toolbar}
+        </div>
         <div className="ex-focus">
             <nav className="ex-step-rail" aria-label="Export workflow">
                 {STEPS.map((label, index) => <button type="button" key={label} aria-current={step === index ? "step" : undefined} onClick={() => setStep(index)}><span>{index + 1}</span>{label}</button>)}
