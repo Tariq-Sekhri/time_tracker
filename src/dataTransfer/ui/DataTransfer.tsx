@@ -10,7 +10,7 @@ export default function DataTransfer() {
                 {(["export", "import"] as const).map(item => <button key={item} id={`dt-tab-${item}`} type="button" role="tab"
                     aria-selected={view === item} aria-controls={`dt-view-${item}`} tabIndex={view === item ? 0 : -1}
                     onKeyDown={event => {if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {event.preventDefault(); event.stopPropagation(); const next = event.key === "Home" ? "export" : event.key === "End" ? "import" : view === "export" ? "import" : "export"; setView(next); document.getElementById(`dt-tab-${next}`)?.focus();}}}
-                    onClick={() => setView(item)}>{item === "export" ? <IconDownload /> : <IconUpload />}{item === "export" ? "Export" : "Import"}</button>)}
+                    onClick={() => setView(item)}>{item === "export" ? <IconUpload /> : <IconDownload />}{item === "export" ? "Export" : "Import"}</button>)}
             </div>;
     return <div className="dt-root">
         {view === "import" && <header className="dt-header">{tabs}</header>}
