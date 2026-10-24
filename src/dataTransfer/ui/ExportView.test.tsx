@@ -170,7 +170,7 @@ describe("ExportView", () => {
         const user = mount();
         await readyCsv(user);
         await user.click(screen.getByRole("button", {name: /1.*Choose preset/}));
-        await user.click(screen.getByRole("button", {name: /^Custom/}));
+        await user.click(screen.getByRole("button", {name: /^Advanced/}));
         await user.click(screen.getByRole("checkbox", {name: /^Manual time entries/}));
         expect(exportButton().disabled).toBe(true);
         expect(previewButton().disabled).toBe(true);
@@ -182,7 +182,7 @@ describe("ExportView", () => {
         const user = mount();
         await readyCsv(user);
         await user.click(screen.getByRole("button", {name: /1.*Choose preset/}));
-        await user.click(screen.getByRole("button", {name: /^Custom/}));
+        await user.click(screen.getByRole("button", {name: /^Advanced/}));
         await user.click(screen.getByRole("checkbox", {name: /^Activity sessions/}));
         await user.click(screen.getByRole("button", {name: /^Devices All/}));
         const devices = screen.getByRole("dialog", {name: "Choose devices"});

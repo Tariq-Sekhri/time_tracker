@@ -30,16 +30,16 @@ export default function PresetBar({presets, builtIns = [], active, onApply, onCu
 
     return <div className="dt-presets">
         <label htmlFor="dt-preset-select">Preset</label>
-        <select id="dt-preset-select" className="dt-select" value={activeSaved ? `saved:${activeSaved.name}` : activeBuiltIn ? `builtin:${activeBuiltIn.name}` : ""}
+        <select id="dt-preset-select" className="dt-select" value={activeSaved ? `saved:${activeSaved.name}` : activeBuiltIn ? `builtin:${activeBuiltIn.name}` : "custom"}
             onChange={(event) => {
                 const value = event.target.value;
                 const preset = value.startsWith("builtin:")
                     ? builtIns.find(item => `builtin:${item.name}` === value)
                     : presets.find(item => `saved:${item.name}` === value);
                 if (preset) onApply(preset);
-                else if (value === "") onCustom?.();
+                else if (value === "custom") onCustom?.();
             }}>
-            <option value="">Custom</option>
+            <option value="custom">Advanced</option>
             {(["confirmed", "suggested"] as const).map(group => {
                 const items = builtIns.filter(item => item.group === group);
                 return items.length > 0 && <optgroup key={group} label={group === "confirmed" ? "Confirmed presets" : "Suggested presets"}>

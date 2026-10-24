@@ -17,7 +17,7 @@ export default function PresetGrid({presets, builtIns, active, custom, onPick, o
     ];
     return <div className="ex-preset-grid-wrap">
         <div className="ex-preset-grid">
-            <button type="button" className="ex-preset-card" aria-pressed={custom} onClick={onCustom}><strong>Custom</strong><span>Pick the data yourself</span></button>
+            <button type="button" className="ex-preset-card" aria-pressed={custom} onClick={onCustom}><strong>Advanced</strong><span>Pick the data yourself</span></button>
         </div>
         {groups.filter(group => group.items.length).map(group => <section key={group.label}>
             <div className="ex-eyebrow">{group.label}</div>
