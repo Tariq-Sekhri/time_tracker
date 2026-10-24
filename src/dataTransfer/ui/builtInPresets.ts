@@ -36,10 +36,6 @@ export function builtInExportPresets(): BuiltInExportPreset[] {
         preset("Review personal productivity", "this_week", {...activity}, {format: "pdf", summaryGrouping: "day", pdf: pdf("Personal productivity")}),
         preset("Share a time-use report", "last_month", {...combined}, {format: "pdf", summaryGrouping: "category", pdf: pdf("Time-use report")}),
         preset("Analyze time in a spreadsheet", "last_30_days", {...combined}, {summaryGrouping: "day", durationFormat: "decimal"}),
-        ...(["clockify", "toggl", "harvest"] as const).map(framework => preset(
-            `Move work to ${framework === "clockify" ? "Clockify" : framework === "toggl" ? "Toggl" : "Harvest"}`,
-            "all_time", {...manual}, {format: "csv", framework, summaryGrouping: "none"},
-        )),
         preset("Keep a portable copy", "all_time", everythingInclude(), {format: "json"}),
         preset("Investigate tracking discrepancies", "today", {...activity, activity_logs: true, devices: true, activity_categories: true}, {summaryGrouping: "device"}),
         preset("Transfer tracking configuration", "all_time", {
