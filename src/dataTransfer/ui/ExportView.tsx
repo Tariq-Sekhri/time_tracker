@@ -3,7 +3,7 @@ import {keepPreviousData, useQuery} from "@tanstack/react-query";
 import {open, save} from "@tauri-apps/plugin-dialog";
 import {join} from "@tauri-apps/api/path";
 import {revealItemInDir} from "@tauri-apps/plugin-opener";
-import {exportDataset, getExportFilterOptions, saveExportFile, type ExportFilterOptions, type ExportInclude} from "../../api/dataTransfer.ts";
+import {exportDataset, getExportFilterOptions, saveExportFile, type ExportDataset, type ExportFilterOptions, type ExportInclude} from "../../api/dataTransfer.ts";
 import {getAppMetadata, setAppMetadata} from "../../api/appMetadata.ts";
 import {nestManualCategories} from "../../api/ManualProject.ts";
 import {useToast} from "../../Componants/Toast.tsx";
@@ -257,7 +257,11 @@ export default function ExportView({toolbar}: {toolbar?: ReactNode} = {}) {
             else if (content.kind === "pdf") URL.revokeObjectURL(content.url);
         };
         try {
-            const dataset = await exportDataset(scope);
+            // The count query already loaded this data, so reuse it instead of querying again.
+            const cached = counts.data && !counts.isFetching && countScope === debouncedCountScope ? counts.data : null;
+            const dataset = cached
+                ? {...cached, ...Object.fromEntries(DATASETS.filter(item => !include[item.key]).map(item => [item.key, []]))} as ExportDataset
+                : await exportDataset(scope);
             if (options.format === "pdf") {
                 const [file] = await buildExport(dataset, normalizedOptions());
                 show({kind: "pdf", url: URL.createObjectURL(new Blob([file.bytes as BlobPart], {type: "application/pdf"}))});
