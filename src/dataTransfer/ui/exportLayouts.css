@@ -1,15 +1,7 @@
-﻿/* Alternative export compositions share the same state and export actions. */
+/* Export workflow: the selected Focus layout. */
 .ex-root {display:flex;flex-direction:column;gap:16px;min-width:0;color:var(--tt-text)}
 .ex-root *, .ex-root *::before, .ex-root *::after {box-sizing:border-box}
-.ex-picker {display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--tt-border)}
 .ex-eyebrow {font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.12em;color:var(--tt-muted)}
-.ex-picker-segments {display:inline-flex;max-width:100%;border:1px solid var(--tt-border);border-radius:5px;overflow:hidden}
-.ex-picker-segments button {min-width:29px;height:28px;border-left:1px solid var(--tt-border);font:12px ui-monospace,monospace;color:var(--tt-muted);background:transparent}
-.ex-picker-segments button:first-child {border-left:0}
-.ex-picker-segments button:hover {color:var(--tt-text);background:var(--tt-hover)}
-.ex-picker-segments button[aria-checked=true] {background:var(--tt-accent);color:var(--tt-onAccent);font-weight:700}
-.ex-picker strong {font-size:13px;color:var(--tt-heading)}
-.ex-picker small {font-size:12px;color:var(--tt-muted)}
 .ex-stack {display:flex;flex-direction:column;gap:14px;min-width:0}
 .ex-root [hidden] {display:none!important}
 .ex-root :is(main,aside,section,header,.dt-field,.dt-subpanel,.dt-section,.dt-presets,.dt-filter-grid>*,.dt-field-grid>*) {min-width:0}
@@ -56,7 +48,6 @@
 .ex-root .dt-footer-summary {font-size:12px;flex-basis:240px}
 .ex-root .dt-footer-summary small {font-size:11px}
 .ex-actions {min-width:0;border-top:1px solid var(--tt-border);padding-top:12px}
-.ex-zone-title {font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.14em;color:var(--tt-muted);padding:0 2px}
 .ex-overview {border:1px solid var(--tt-border);border-radius:10px;background:var(--tt-panel);padding:24px;display:flex;flex-direction:column;gap:12px;min-width:0}
 .ex-overview h3 {font-size:24px;font-weight:600;letter-spacing:-.04em;color:var(--tt-heading)}
 .ex-overview p {font-size:12px;color:var(--tt-muted)}
@@ -67,99 +58,6 @@
 .ex-overview-status {border-top:1px solid var(--tt-border);padding-top:14px;margin-top:12px;color:var(--tt-success);font-size:12px;line-height:1.5}
 .ex-overview-status[data-blocked=true] {color:var(--tt-warning)}
 .ex-overview>small {font-size:10px;line-height:1.5;color:var(--tt-muted)}
-/* 01: two equally weighted work surfaces. */
-.ex-workbench {display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:20px;align-items:start}
-.ex-layout-1 .ex-scope {border-right:1px solid var(--tt-border);padding-right:20px}
-.ex-layout-1 .dt-filter-grid {grid-template-columns:repeat(2,minmax(0,1fr))}
-.ex-layout-1 .dt-filter-grid>*:last-child {grid-column:1/-1}
-/* 02: narrow form, large quiet review area. */
-.ex-review-desk {display:grid;grid-template-columns:minmax(0,1.15fr) minmax(260px,1fr);gap:32px;align-items:start}
-.ex-review-rail {position:sticky;top:16px;padding:26px 0}
-.ex-layout-2 .ex-overview {min-height:380px;padding:32px;border-top:3px solid var(--tt-accent)}
-.ex-layout-2 .ex-overview h3 {font-size:32px}
-.ex-layout-2 .settings-panel {background:transparent;border:0;border-bottom:1px solid var(--tt-border);border-radius:0;padding:8px 0 20px}
-.ex-layout-2 .dt-step-number {display:none}
-/* 03: horizontal guided flow. */
-.ex-wizard {border:1px solid var(--tt-border);border-radius:12px;overflow:hidden}
-.ex-step-tabs {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-bottom:1px solid var(--tt-border);background:var(--tt-raised)}
-.ex-step-tabs button {padding:17px 12px;display:flex;align-items:center;justify-content:center;gap:9px;font-size:12px;color:var(--tt-muted);border-bottom:2px solid transparent}
-.ex-step-tabs button span,.ex-step-rail button span {border:1px solid var(--tt-border);border-radius:50%;width:23px;height:23px;display:inline-grid;place-items:center;font-size:11px;flex-shrink:0}
-.ex-step-tabs button[aria-current=step] {color:var(--tt-accentText);border-bottom-color:var(--tt-accent);background:var(--tt-accentSoft)}
-.ex-step-panels {padding:24px;min-width:0}
-.ex-step-panels .settings-panel {background:transparent;border:0;padding:0}
-.ex-layout-3 .dt-dataset-grid {grid-template-columns:repeat(4,minmax(0,1fr))}
-.ex-layout-3 .dt-format-grid {grid-template-columns:repeat(4,minmax(0,1fr))}
-.ex-layout-3 .dt-filter-grid {grid-template-columns:repeat(3,minmax(0,1fr))}
-.ex-step-actions {display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--tt-border);padding-top:18px;margin-top:24px}
-.ex-step-actions>span {font-size:11px;color:var(--tt-muted)}
-/* 04: expandable notebook chapters. */
-.ex-notebook {display:grid;grid-template-columns:130px minmax(0,1fr);gap:25px;align-items:start}
-.ex-jumps {display:flex;flex-direction:column;gap:5px;position:sticky;top:16px}
-.ex-jumps button {display:flex;align-items:center;gap:12px;text-align:left;padding:12px 8px;color:var(--tt-secondary);font-size:12px;border-bottom:1px solid var(--tt-borderSubtle)}
-.ex-jumps button span {font:10px ui-monospace,monospace;color:var(--tt-muted)}
-.ex-chapters {border-left:1px solid var(--tt-border);padding-left:24px}
-.ex-chapters>details {border-bottom:1px solid var(--tt-border);padding:0 0 14px;margin-bottom:14px}
-.ex-chapters>details>summary {display:flex;align-items:center;gap:16px;cursor:pointer;padding:14px 0;list-style:none}
-.ex-chapters>details>summary>span:first-child {font:11px ui-monospace,monospace;color:var(--tt-accentText)}
-.ex-chapters>details>summary strong {font-size:19px;font-weight:500;letter-spacing:-.03em}
-.ex-expand {margin-left:auto;font-size:20px;color:var(--tt-muted)}
-.ex-chapters>details[open]>summary .ex-expand {transform:rotate(45deg)}
-.ex-layout-4 .settings-panel {border:0;background:transparent;padding:12px 0}
-.ex-layout-4 .dt-dataset-grid {grid-template-columns:repeat(3,minmax(0,1fr))}
-.ex-layout-4 .dt-format-grid {grid-template-columns:repeat(4,minmax(0,1fr))}
-/* 05: aligned property sheet, no card scaffolding. */
-.ex-property-sheet {border:1px solid var(--tt-border);border-radius:8px;overflow:hidden}
-.ex-property-row {display:grid;grid-template-columns:180px minmax(0,1fr);border-bottom:1px solid var(--tt-border)}
-.ex-property-row:last-child {border-bottom:0}
-.ex-property-row>header {padding:22px 18px;background:var(--tt-raised);border-right:1px solid var(--tt-border)}
-.ex-property-row>header strong {display:block;font-size:13px}
-.ex-property-row>header small {display:block;font-size:11px;color:var(--tt-muted);line-height:1.6;margin-top:7px}
-.ex-property-row>div {padding:18px}
-.ex-layout-5 .settings-panel {padding:0;border:0;background:transparent}
-.ex-layout-5 .dt-section-title {display:none}
-.ex-layout-5 .dt-dataset-grid {grid-template-columns:repeat(3,minmax(0,1fr))}
-.ex-layout-5 .dt-format-grid {grid-template-columns:repeat(4,minmax(0,1fr))}
-.ex-layout-5 .dt-filter-grid {grid-template-columns:repeat(3,minmax(0,1fr))}
-.ex-layout-5 .dt-field-grid {grid-template-columns:repeat(3,minmax(0,1fr))}
-/* 06: a horizontal pipeline with distinct lanes. */
-.ex-board {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
-.ex-board-lane {background:var(--tt-raised);border-radius:10px;padding:12px;border:1px solid var(--tt-borderSubtle);min-width:0}
-.ex-board-lane>header {display:flex;gap:10px;align-items:center;padding:3px 2px 14px}
-.ex-board-lane>header span {font:10px ui-monospace,monospace;color:var(--tt-accentText)}
-.ex-board-lane>header h3 {font-size:14px;font-weight:600}
-.ex-layout-6 .dt-dataset-grid,.ex-layout-6 .dt-field-grid {grid-template-columns:minmax(0,1fr)}
-.ex-layout-6 .settings-panel {padding:12px;border:0}
-.ex-layout-6 .dt-section-title p {display:none}
-.ex-layout-6 .dt-step-number {display:none}
-/* 07: a source browser and a wide composer. */
-.ex-library {display:grid;grid-template-columns:285px minmax(0,1fr);gap:24px;align-items:start}
-.ex-library>aside {padding:14px;background:var(--tt-raised);border:1px solid var(--tt-border);border-radius:8px}
-.ex-library>aside .settings-panel {background:transparent;border:0;padding:0}
-.ex-library>aside .dt-dataset-grid {grid-template-columns:minmax(0,1fr)}
-.ex-library>aside .dt-section-title p,.ex-library>aside .dt-step-number {display:none}
-.ex-library>main {padding:14px 0}
-.ex-library>main .settings-panel {background:transparent;border:0;border-bottom:1px solid var(--tt-border);border-radius:0;padding:0 0 20px}
-.ex-layout-7 .dt-format-grid {grid-template-columns:repeat(4,minmax(0,1fr))}
-/* 08: report studio with an outline canvas. */
-.ex-studio {display:grid;grid-template-columns:minmax(230px,.9fr) minmax(250px,1.15fr) minmax(240px,.95fr);gap:12px;align-items:start}
-.ex-studio .settings-panel {padding:12px;border-radius:5px}
-.ex-studio .dt-dataset-grid,.ex-studio .dt-field-grid {grid-template-columns:minmax(0,1fr)}
-.ex-studio .dt-section-title p,.ex-studio .dt-step-number {display:none}
-.ex-canvas {padding:26px 16px;background:var(--tt-raised);border:1px solid var(--tt-border);border-radius:8px;min-height:500px;position:sticky;top:14px}
-.ex-paper {background:var(--tt-panel);min-height:430px;border-radius:2px;box-shadow:0 8px 24px var(--tt-overlay);padding:26px 20px;border-top:4px solid var(--tt-accent)}
-.ex-paper h3 {font-size:26px;line-height:1.1}
-/* 09: scope overview and independently arranged tiles. */
-.ex-metrics {display:grid;grid-template-columns:.7fr 1.8fr .7fr 1fr;background:var(--tt-raised);border:1px solid var(--tt-border);border-radius:9px;overflow:hidden}
-.ex-metrics>div {padding:14px 18px;border-right:1px solid var(--tt-border);min-width:0}
-.ex-metrics>div:last-child {border:0}
-.ex-metrics small {display:block;font-size:10px;color:var(--tt-muted);text-transform:uppercase;letter-spacing:.08em}
-.ex-metrics strong {display:block;margin-top:7px;font-size:14px;font-weight:500;line-height:1.4}
-.ex-metrics [data-blocked=true] strong {color:var(--tt-warning)}
-.ex-dashboard {display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
-.ex-dash-scope {grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr}
-.ex-dash-options {grid-column:1/-1}
-.ex-layout-9 .ex-dash-options .dt-field-grid {grid-template-columns:repeat(3,minmax(0,1fr))}
-/* 10: one focused stage beside a vertical progress rail. */
 .ex-focus {display:grid;grid-template-columns:200px minmax(0,1fr);border:1px solid var(--tt-border);border-radius:12px;overflow:hidden;min-height:400px}
 .ex-step-rail {padding:24px 12px;background:var(--tt-raised);border-right:1px solid var(--tt-border);display:flex;flex-direction:column;gap:12px}
 .ex-step-rail button {display:flex;align-items:center;gap:10px;padding:10px 8px;text-align:left;font-size:12px;color:var(--tt-muted);border-radius:7px}
@@ -167,11 +65,40 @@
 .ex-focus-main>header {padding:30px 30px 0}
 .ex-focus-main>header h3 {margin-top:8px;font-size:27px;letter-spacing:-.04em}
 .ex-focus .ex-step-panels {padding:24px 30px}
-.ex-layout-10 .dt-section-title {display:none}
-.ex-layout-10 .dt-dataset-grid {grid-template-columns:repeat(2,minmax(0,1fr))}
-.ex-layout-10 .dt-dataset-card {padding:16px}
-.ex-layout-10 .dt-dataset-text p {display:block;font-size:11px}
-@media(min-width:1500px) {.ex-workbench .dt-filter-grid {grid-template-columns:repeat(3,minmax(0,1fr))}.ex-workbench .dt-filter-grid>*:last-child{grid-column:auto}.ex-workbench .dt-dataset-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media(max-width:1100px) {.ex-studio{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.ex-canvas{grid-column:1/-1;grid-row:1;min-height:0;position:static}.ex-paper{min-height:0}.ex-board{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.ex-board-lane:last-child{grid-column:1/-1}.ex-layout-6 .ex-board-lane:last-child .dt-field-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ex-layout-3 .dt-dataset-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ex-layout-5 .dt-filter-grid{grid-template-columns:minmax(0,1fr)}}
-@media(max-width:760px) {.ex-workbench,.ex-review-desk,.ex-library,.ex-dashboard,.ex-dash-scope,.ex-board,.ex-studio{grid-template-columns:minmax(0,1fr)}.ex-layout-1 .ex-scope{padding-right:0;border-right:0}.ex-review-rail{position:static;padding:0}.ex-review-rail .ex-overview{min-height:0}.ex-board-lane:last-child,.ex-canvas,.ex-dash-options,.ex-dash-scope{grid-column:auto}.ex-focus{grid-template-columns:140px minmax(0,1fr)}.ex-focus-main>header{padding:20px 16px 0}.ex-focus .ex-step-panels{padding:20px 16px}.ex-step-rail{padding:20px 6px}.ex-step-rail button{font-size:11px;gap:6px;padding:10px 5px}.ex-notebook{grid-template-columns:minmax(0,1fr)}.ex-jumps{position:static;flex-direction:row;flex-wrap:wrap}.ex-chapters{padding-left:0;border-left:0}.ex-property-row{grid-template-columns:125px minmax(0,1fr)}.ex-property-row>header{padding:16px 12px}.ex-property-row>div{padding:12px}.ex-layout-5 .dt-dataset-grid,.ex-layout-5 .dt-field-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ex-layout-4 .dt-format-grid,.ex-layout-7 .dt-format-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ex-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.ex-step-tabs button{flex-direction:column;padding:12px 6px;font-size:10px}.ex-layout-3 .dt-filter-grid{grid-template-columns:minmax(0,1fr)}.ex-step-panels{padding:16px}.ex-layout-9 .ex-dash-options .dt-field-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:480px) {.ex-picker{gap:8px}.ex-picker small{flex-basis:100%}.ex-picker-segments button{min-width:26px}.ex-root .dt-field-grid,.ex-layout-1 .dt-filter-grid,.ex-layout-5 .dt-field-grid,.ex-layout-5 .dt-dataset-grid,.ex-layout-4 .dt-dataset-grid,.ex-layout-10 .dt-dataset-grid,.ex-layout-3 .dt-format-grid,.ex-layout-9 .ex-dash-options .dt-field-grid{grid-template-columns:minmax(0,1fr)}.ex-property-row{grid-template-columns:minmax(0,1fr)}.ex-property-row>header{border-right:0;border-bottom:1px solid var(--tt-border)}.ex-focus{grid-template-columns:minmax(0,1fr)}.ex-step-rail{flex-direction:row;border-right:0;border-bottom:1px solid var(--tt-border);padding:8px;gap:2px}.ex-step-rail button{flex:1;flex-direction:column;align-items:center;text-align:center;font-size:10px}.ex-root .dt-dataset-grid{grid-template-columns:minmax(0,1fr)}.ex-layout-1 .dt-filter-grid>*:last-child{grid-column:auto}.ex-layout-6 .ex-board-lane:last-child .dt-field-grid{grid-template-columns:minmax(0,1fr)}.ex-root .dt-footer-actions{width:100%}.ex-root .dt-footer-actions .dt-button{flex:1}.ex-root .dt-section-title p{display:none}}
+.ex-focus .dt-section-title {display:none}
+.ex-focus .dt-dataset-grid {grid-template-columns:repeat(2,minmax(0,1fr))}
+.ex-focus .dt-dataset-card {padding:16px}
+.ex-focus .dt-dataset-text p {display:block;font-size:11px}
+
+.ex-step-rail button span {border:1px solid var(--tt-border);border-radius:50%;width:23px;height:23px;display:inline-grid;place-items:center;font-size:11px;flex-shrink:0}
+.ex-step-panels {min-width:0}
+.ex-step-panels .settings-panel {background:transparent;border:0;padding:0}
+.ex-step-actions {display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--tt-border);padding-top:18px;margin-top:24px}
+.ex-step-actions>span {font-size:11px;color:var(--tt-muted)}
+.ex-scope-control {border:1px solid var(--tt-border);border-radius:8px;background:var(--tt-panel)}
+.ex-scope-control>summary {display:flex;align-items:center;gap:12px;cursor:pointer;list-style:none;padding:11px 14px;font-size:12px}
+.ex-scope-control>summary::-webkit-details-marker {display:none}
+.ex-scope-value {flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--tt-secondary)}
+.ex-scope-change {font-size:11px;color:var(--tt-accentText)}
+.ex-scope-control[open]>.ex-scope-content {border-top:1px solid var(--tt-border)}
+.ex-scope-content {padding:14px}
+.ex-scope-reset {display:flex;justify-content:flex-end;margin-bottom:12px}
+.ex-scope-fields {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start}
+.ex-root .ex-scope-fields .settings-panel {padding:0;border:0;background:transparent}
+@media(max-width:760px) {
+ .ex-focus {grid-template-columns:140px minmax(0,1fr)}
+ .ex-focus-main>header {padding:20px 16px 0}
+ .ex-focus .ex-step-panels {padding:20px 16px}
+ .ex-step-rail {padding:20px 6px}
+ .ex-step-rail button {font-size:11px;gap:6px;padding:10px 5px}
+ .ex-scope-fields {grid-template-columns:minmax(0,1fr)}
+}
+@media(max-width:480px) {
+ .ex-root .dt-field-grid,.ex-root .dt-dataset-grid {grid-template-columns:minmax(0,1fr)}
+ .ex-focus {grid-template-columns:minmax(0,1fr)}
+ .ex-step-rail {flex-direction:row;border-right:0;border-bottom:1px solid var(--tt-border);padding:8px;gap:2px}
+ .ex-step-rail button {flex:1;flex-direction:column;align-items:center;text-align:center;font-size:10px}
+ .ex-root .dt-footer-actions {width:100%}
+ .ex-root .dt-footer-actions .dt-button {flex:1}
+ .ex-root .dt-section-title p {display:none}
+}

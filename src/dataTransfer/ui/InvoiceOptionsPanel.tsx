@@ -8,7 +8,7 @@ export default function InvoiceOptionsPanel({options, onChange}: {options: Expor
     return <div className="dt-section" style={{gap: 18}}>
         <div className="dt-subpanel">
             <span className="dt-subheading">Hourly invoice</span>
-            <p className="settings-muted">Choose a manual category above. Its subcategories are included. Leave the hourly rate blank to omit pricing from the PDF.</p>
+            <p className="settings-muted">Use Scope to narrow the report to a project or category. Leave the hourly rate blank to omit pricing from the PDF.</p>
             <div className="dt-field-grid">
                 <label className="dt-field"><span>PDF layout</span><select className="dt-select" value="invoice" onChange={() => setPdf({layout: "report"})}><option value="report">Time report</option><option value="invoice">Hourly invoice</option></select></label>
                 <label className="dt-field"><span>Invoice number</span><input className="dt-input" value={invoice.number} maxLength={60} placeholder="INV-001" onChange={event => patch({number: event.target.value})} /></label>

@@ -6,7 +6,6 @@ import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 import type {ExportFilterOptions, ExportScope} from "../../api/dataTransfer.ts";
 import {sampleDataset} from "../formats/export/fixtures.ts";
 import ExportView from "./ExportView.tsx";
-import {EXPORT_LAYOUT_KEY} from "./ExportLayout.tsx";
 
 const mocks = vi.hoisted(() => ({
     filters: vi.fn(), export: vi.fn(), write: vi.fn(), metadata: vi.fn(), setMetadata: vi.fn(),
@@ -41,7 +40,6 @@ const clients: QueryClient[] = [];
 
 beforeEach(() => {
     vi.resetAllMocks();
-    localStorage.removeItem(EXPORT_LAYOUT_KEY);
     mocks.filters.mockResolvedValue(filterOptions);
     mocks.metadata.mockImplementation(async (key: string) => key === "data_export_last_v1"
         ? JSON.stringify({scopeTemplate: {}, options: {summaryGrouping: "none"}})
@@ -69,48 +67,43 @@ const exportButton = () => screen.getByRole<HTMLButtonElement>("button", {name: 
 const previewButton = () => screen.getByRole<HTMLButtonElement>("button", {name: "Preview"});
 async function readyCsv(user: ReturnType<typeof userEvent.setup>) {
     await waitFor(() => expect(mocks.filters).toHaveBeenCalled());
+    await user.click(screen.getByText("Scope", {exact: true}));
     await waitFor(() => expect(screen.getByRole<HTMLButtonElement>("button", {name: /^Manual categories All/}).disabled).toBe(false));
+    await user.click(screen.getByRole("button", {name: /2.*Design output/}));
     await user.click(screen.getByRole("radio", {name: /^CSV/}));
     await waitFor(() => expect(exportButton().disabled).toBe(false));
 }
 
 describe("ExportView", () => {
-    it("switches all ten layouts without losing project selection or pricing", async () => {
+    it("keeps the focused three-step workflow and makes scope an optional compact control", async () => {
         const user = mount();
         await readyCsv(user);
+        expect(screen.queryByRole("radiogroup", {name: "Export layout"})).toBeNull();
+        expect(within(screen.getByRole("navigation", {name: "Export workflow"})).getAllByRole("button")).toHaveLength(3);
+        expect(screen.queryByRole("button", {name: /Set scope/})).toBeNull();
+        expect(screen.getByText("All time / All devices & categories")).toBeTruthy();
+        await user.click(screen.getByText("Scope", {exact: true}));
+        expect(screen.getByText("Scope", {exact: true}).closest("details")!.open).toBe(false);
         await user.selectOptions(screen.getByRole("combobox", {name: "Preset"}), "builtin:Project report");
-        await user.click(screen.getByRole("button", {name: /^Manual categories/}));
-        const categories = screen.getByRole("dialog", {name: "Choose manual categories"});
-        await user.click(within(categories).getByRole("checkbox", {name: "Client"}));
-        await user.keyboard("{Escape}");
         fireEvent.change(screen.getByRole("spinbutton", {name: "Hourly rate (optional)"}), {target: {value: "125"}});
-        const picker = screen.getByRole("radiogroup", {name: "Export layout"});
-        const choices = within(picker).getAllByRole("radio");
-        expect(choices).toHaveLength(10);
-        for (let index = 0; index < choices.length; index++) {
-            await user.click(choices[index]);
-            expect(choices[index].getAttribute("aria-checked")).toBe("true");
-            expect(localStorage.getItem(EXPORT_LAYOUT_KEY)).toBe(String(index + 1));
-            expect(exportButton().disabled).toBe(false);
-        }
-        await user.click(screen.getByRole("button", {name: /3.*Design output/}));
-        expect((screen.getByRole("spinbutton", {name: "Hourly rate (optional)"}) as HTMLInputElement).value).toBe("125");
-        await user.click(choices[0]);
+        await user.click(screen.getByRole("button", {name: "Next"}));
+        expect(screen.getByRole("complementary", {name: "Export selection summary"})).toBeTruthy();
+        await user.click(screen.getByRole("button", {name: "Back"}));
         expect((screen.getByRole("spinbutton", {name: "Hourly rate (optional)"}) as HTMLInputElement).value).toBe("125");
         await user.click(exportButton());
         await waitFor(() => expect(mocks.write).toHaveBeenCalled(), {timeout: 5000});
-        expect(mocks.export).toHaveBeenLastCalledWith(expect.objectContaining({manual_category_ids: [1, 2]}));
+        expect(mocks.export).toHaveBeenLastCalledWith(expect.objectContaining({manual_category_ids: null}));
     });
 
-    it("requires a category for the manual invoice and keeps pricing optional", async () => {
+    it("allows all project categories by default and supports optional narrowing and pricing", async () => {
         const user = mount();
         await readyCsv(user);
         await user.selectOptions(screen.getByRole("combobox", {name: "Preset"}), "builtin:Project report");
-        expect(exportButton().disabled).toBe(true);
-        expect(screen.getByText("Choose a manual category for the invoice.")).toBeTruthy();
+        expect(exportButton().disabled).toBe(false);
         expect((screen.getByRole("spinbutton", {name: "Hourly rate (optional)"}) as HTMLInputElement).value).toBe("");
         await user.click(screen.getByRole("button", {name: /^Manual categories/}));
         const categories = screen.getByRole("dialog", {name: "Choose manual categories"});
+        await user.click(within(categories).getByRole("button", {name: "Select none"}));
         await user.click(within(categories).getByRole("checkbox", {name: "Client"}));
         await user.keyboard("{Escape}");
         await waitFor(() => expect(exportButton().disabled).toBe(false));
@@ -126,6 +119,14 @@ describe("ExportView", () => {
         expect(mocks.export).toHaveBeenLastCalledWith(expect.objectContaining({
             manual_category_ids: [1, 2], include: expect.objectContaining({manual_entries: true, activity_sessions: false}),
         }));
+        await user.click(screen.getByRole("button", {name: "Use everything"}));
+        expect(screen.getByText("All time / All devices & categories")).toBeTruthy();
+        expect((screen.getByRole("spinbutton", {name: "Hourly rate (optional)"}) as HTMLInputElement).value).toBe("125");
+        await waitFor(() => expect(exportButton().disabled).toBe(false));
+        await user.click(exportButton());
+        await waitFor(() => expect(mocks.write).toHaveBeenCalledTimes(2), {timeout: 5000});
+        expect(mocks.export).toHaveBeenLastCalledWith(expect.objectContaining({manual_category_ids: null}));
+
 
     });
 
@@ -168,16 +169,18 @@ describe("ExportView", () => {
     it("blocks an empty dataset selection", async () => {
         const user = mount();
         await readyCsv(user);
+        await user.click(screen.getByRole("button", {name: /1.*Choose data/}));
         await user.click(screen.getByRole("button", {name: "Clear"}));
         expect(exportButton().disabled).toBe(true);
         expect(previewButton().disabled).toBe(true);
-        expect(screen.getByText("Choose at least one thing to export.")).toBeTruthy();
+        expect(screen.getByText("Choose at least one thing to export.", {selector: ".dt-footer-summary small"})).toBeTruthy();
         expect(mocks.save).not.toHaveBeenCalled();
     });
 
     it("sends selected devices, activity categories and parent plus child manual categories", async () => {
         const user = mount();
         await readyCsv(user);
+        await user.click(screen.getByRole("button", {name: /1.*Choose data/}));
         await user.click(screen.getByRole("checkbox", {name: /^Activity sessions/}));
         await user.click(screen.getByRole("button", {name: /^Devices All/}));
         const devices = screen.getByRole("dialog", {name: "Choose devices"});
