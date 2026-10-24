@@ -6,6 +6,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 import type {ExportFilterOptions, ExportScope} from "../../api/dataTransfer.ts";
 import {sampleDataset} from "../formats/export/fixtures.ts";
 import ExportView from "./ExportView.tsx";
+import {EXPORT_LAYOUT_KEY} from "./ExportLayout.tsx";
 
 const mocks = vi.hoisted(() => ({
     filters: vi.fn(), export: vi.fn(), write: vi.fn(), metadata: vi.fn(), setMetadata: vi.fn(),
@@ -40,6 +41,7 @@ const clients: QueryClient[] = [];
 
 beforeEach(() => {
     vi.resetAllMocks();
+    localStorage.removeItem(EXPORT_LAYOUT_KEY);
     mocks.filters.mockResolvedValue(filterOptions);
     mocks.metadata.mockImplementation(async (key: string) => key === "data_export_last_v1"
         ? JSON.stringify({scopeTemplate: {}, options: {summaryGrouping: "none"}})
@@ -73,6 +75,33 @@ async function readyCsv(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("ExportView", () => {
+    it("switches all ten layouts without losing project selection or pricing", async () => {
+        const user = mount();
+        await readyCsv(user);
+        await user.selectOptions(screen.getByRole("combobox", {name: "Preset"}), "builtin:Project report");
+        await user.click(screen.getByRole("button", {name: /^Manual categories/}));
+        const categories = screen.getByRole("dialog", {name: "Choose manual categories"});
+        await user.click(within(categories).getByRole("checkbox", {name: "Client"}));
+        await user.keyboard("{Escape}");
+        fireEvent.change(screen.getByRole("spinbutton", {name: "Hourly rate (optional)"}), {target: {value: "125"}});
+        const picker = screen.getByRole("radiogroup", {name: "Export layout"});
+        const choices = within(picker).getAllByRole("radio");
+        expect(choices).toHaveLength(10);
+        for (let index = 0; index < choices.length; index++) {
+            await user.click(choices[index]);
+            expect(choices[index].getAttribute("aria-checked")).toBe("true");
+            expect(localStorage.getItem(EXPORT_LAYOUT_KEY)).toBe(String(index + 1));
+            expect(exportButton().disabled).toBe(false);
+        }
+        await user.click(screen.getByRole("button", {name: /3.*Design output/}));
+        expect((screen.getByRole("spinbutton", {name: "Hourly rate (optional)"}) as HTMLInputElement).value).toBe("125");
+        await user.click(choices[0]);
+        expect((screen.getByRole("spinbutton", {name: "Hourly rate (optional)"}) as HTMLInputElement).value).toBe("125");
+        await user.click(exportButton());
+        await waitFor(() => expect(mocks.write).toHaveBeenCalled(), {timeout: 5000});
+        expect(mocks.export).toHaveBeenLastCalledWith(expect.objectContaining({manual_category_ids: [1, 2]}));
+    });
+
     it("requires a category for the manual invoice and keeps pricing optional", async () => {
         const user = mount();
         await readyCsv(user);

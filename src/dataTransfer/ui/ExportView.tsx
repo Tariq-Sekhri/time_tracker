@@ -22,6 +22,7 @@ import ExportOptionsPanel from "./ExportOptionsPanel.tsx";
 import FormatPicker from "./FormatPicker.tsx";
 import {IconDownload, IconEye, IconFolderOpen, IconX, Spinner} from "./icons.tsx";
 import MultiSelect, {type MultiSelectOption} from "./MultiSelect.tsx";
+import ExportLayout from "./ExportLayout.tsx";
 import PresetBar from "./PresetBar.tsx";
 import {builtInExportPresets} from "./builtInPresets.ts";
 import {
@@ -294,15 +295,14 @@ export default function ExportView() {
     const devicesApply = filterApplies("devices", include);
     const manualApply = filterApplies("manualCategories", include);
 
-    return <div className="dt-root">
-        <PresetBar presets={presets} builtIns={builtIns} active={activePreset}
+    const presetControls = <PresetBar presets={presets} builtIns={builtIns} active={activePreset}
             onApply={(preset) => applySettings({scopeTemplate: structuredClone(preset.scopeTemplate), options: structuredClone(preset.options)})}
             onSave={async (name) => {
                 if (await savePresets(upsertPreset(presets, {name, ...structuredClone(settings)}))) showToast(`Saved preset “${name}”`, "success");
             }}
-            onDelete={(name) => void savePresets(removePreset(presets, name))} />
+            onDelete={(name) => void savePresets(removePreset(presets, name))} />;
 
-        <Section id="dt-export-what" step={1} title="What to export" description="Pick one or more datasets. Counts update with your range and filters."
+    const dataControls = <Section id="dt-export-what" step={1} title="What to export" description="Pick one or more datasets. Counts update with your range and filters."
             actions={<>
                 <button type="button" className="dt-button" onClick={() => quickSet(timesheetInclude(), options.format === "json" ? "xlsx" : undefined)}>Timesheet</button>
                 <button type="button" className="dt-button" onClick={() => quickSet(everythingInclude(), "json")}>Everything</button>
@@ -313,14 +313,14 @@ export default function ExportView() {
             {logCount != null && logCount > LARGE_LOG_COUNT && <Banner tone="warning">
                 <strong>{logCount.toLocaleString("en-US")} raw activity logs.</strong> Large exports take longer and{options.format === "pdf" ? " make very long PDFs" : " produce big files"}. Consider a shorter range or Activity sessions instead.
             </Banner>}
-        </Section>
+        </Section>;
 
-        <Section id="dt-export-range" step={2} title="Date range"
+    const rangeControls = <Section id="dt-export-range" step={2} title="Date range"
             description="Entries, sessions and logs are selected by start time. Settings-like data (devices, categories, rules) isn't date-bound.">
             <DateRangePicker value={range} resolved={resolved} onChange={setRange} />
-        </Section>
+        </Section>;
 
-        <Section id="dt-export-filters" step={3} title="Filters" description="Leave everything selected to export all. New devices and categories are included automatically.">
+    const filtersControls = <Section id="dt-export-filters" step={3} title="Filters" description="Leave everything selected to export all. New devices and categories are included automatically.">
             {filterOptions.error && <Banner tone="danger" role="alert">Could not load filter options: {toErrorString(filterOptions.error)}</Banner>}
             <div className="dt-filter-grid">
                 <MultiSelect label="Devices" noun="devices" options={pickers.devices} selected={filters.devices}
@@ -333,20 +333,20 @@ export default function ExportView() {
                     onChange={(manualCategories) => setFilters({...filters, manualCategories})} disabled={!manualApply}
                     hint={filterHint(manualApply, "manual time entries") ?? "Selecting a category also selects its subcategories."} />
             </div>
-        </Section>
+        </Section>;
 
-        <Section id="dt-export-format" step={4} title="Format">
+    const formatControls = <Section id="dt-export-format" step={4} title="Format">
             <FormatPicker options={options} manualSelected={include.manual_entries} onChange={patchOptions} />
             {unsupportedPdfText && <Banner tone="warning">Some selected text uses characters this PDF font cannot display. Those characters become “?”. Choose Excel, CSV, or JSON to preserve the original text.</Banner>}
             {options.format === "pdf" && include.activity_logs && <Banner tone="info">PDFs show up to 5,000 raw activity log rows. Totals include all selected logs. Use CSV, Excel, or JSON for every raw record.</Banner>}
             {options.format === "json" && selectedKeys.length < DATASETS.length && <ColumnPickerNotice onSelectAll={() => setInclude(everythingInclude())} />}
-        </Section>
+        </Section>;
 
-        <Section id="dt-export-options" step={5} title="Options" description={options.format === "json" ? undefined : `Settings for the ${FORMAT_LABELS[options.format]} file.`}>
+    const optionsControls = <Section id="dt-export-options" step={5} title="Options" description={options.format === "json" ? undefined : `Settings for the ${FORMAT_LABELS[options.format]} file.`}>
             <ExportOptionsPanel options={options} include={include} columnsFor={columnsFor} onChange={patchOptions} />
-        </Section>
+        </Section>;
 
-        <div className="dt-footer">
+    const footerControls = <div className="dt-footer">
             <div className="dt-footer-inner">
                 <div className="dt-footer-summary" aria-live="polite">
                     {busy ? <Spinner /> : <IconDownload className="dt-icon" />}
@@ -385,7 +385,11 @@ export default function ExportView() {
                     </div>
                 </Banner>}
             </div>}
-        </div>
+        </div>;
+
+    return <div className="dt-root">
+        <ExportLayout slots={{preset: presetControls, data: dataControls, range: rangeControls, filters: filtersControls, format: formatControls, options: optionsControls, footer: footerControls}}
+            overview={{summary, format: FORMAT_LABELS[options.format], range: rangeText, datasets: selectedKeys.map(key => ({label: DATASETS.find(item => item.key === key)!.label, count: countMap[key]})), blocker: blockers[0]}} />
 
         {preview && <PreviewModal title={`Preview · ${FORMAT_LABELS[options.format]}`} subtitle={preview.subtitle} content={preview.content} onClose={closePreview} />}
     </div>;
