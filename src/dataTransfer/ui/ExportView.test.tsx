@@ -170,7 +170,7 @@ describe("ExportView", () => {
         const user = mount();
         await readyCsv(user);
         await user.click(screen.getByRole("button", {name: /1.*Choose data/}));
-        await user.click(screen.getByRole("button", {name: "Clear"}));
+        await user.click(screen.getByRole("checkbox", {name: /^Manual time entries/}));
         expect(exportButton().disabled).toBe(true);
         expect(previewButton().disabled).toBe(true);
         expect(screen.getByText("Choose at least one thing to export.", {selector: ".dt-footer-summary small"})).toBeTruthy();

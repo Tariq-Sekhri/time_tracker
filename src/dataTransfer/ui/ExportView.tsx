@@ -32,7 +32,7 @@ import {
 import {baseName, formatBytes, onlyDataset, parseCsv, SAVE_FILTERS, sliceDataset, tablePreviewOptions} from "./preview.ts";
 import PreviewModal, {type PreviewContent} from "./PreviewModal.tsx";
 import {
-    ALL_FILTERS, buildCountScope, buildScope, DATASETS, datasetCounts, emptyInclude, everythingInclude, exportSummary,
+    ALL_FILTERS, buildCountScope, buildScope, DATASETS, datasetCounts, everythingInclude, exportSummary,
     filterApplies, FORMAT_LABELS, FRAMEWORKS, includedKeys, LARGE_LOG_COUNT, timesheetInclude, type ExportFilters,
 } from "./scope.ts";
 
@@ -285,12 +285,6 @@ export default function ExportView({toolbar}: {toolbar?: ReactNode} = {}) {
         }
     };
 
-    const quickSet = (next: ExportInclude, format?: ExportOptions["format"]) => {
-        setInclude(next);
-        if (format === "json") {setRange(current => ({...current, preset: "all_time"})); setFilters(ALL_FILTERS);}
-        if (format) patchOptions({format});
-    };
-
     const filterHint = (applies: boolean, appliesTo: string) => applies ? null : `Only used for ${appliesTo}, which aren't selected.`;
     const devicesApply = filterApplies("devices", include);
     const manualApply = filterApplies("manualCategories", include);
@@ -302,12 +296,7 @@ export default function ExportView({toolbar}: {toolbar?: ReactNode} = {}) {
             }}
             onDelete={(name) => void savePresets(removePreset(presets, name))} />;
 
-    const dataControls = <Section id="dt-export-what" step={1} title="What to export" description="Pick one or more datasets. Counts update with your range and filters."
-            actions={<>
-                <button type="button" className="dt-button" onClick={() => quickSet(timesheetInclude(), options.format === "json" ? "xlsx" : undefined)}>Timesheet</button>
-                <button type="button" className="dt-button" onClick={() => quickSet(everythingInclude(), "json")}>Everything</button>
-                <button type="button" className="dt-button dt-button-ghost" onClick={() => quickSet(emptyInclude())}>Clear</button>
-            </>}>
+    const dataControls = <Section id="dt-export-what" step={1} title="What to export" description="Pick one or more datasets. Counts update with your range and filters.">
             <DatasetPicker include={include} counts={countMap} loading={countsLoading} onChange={setInclude} />
             {counts.error && <Banner tone="danger" role="alert">Could not count data: {toErrorString(counts.error)}</Banner>}
             {logCount != null && logCount > LARGE_LOG_COUNT && <Banner tone="warning">
