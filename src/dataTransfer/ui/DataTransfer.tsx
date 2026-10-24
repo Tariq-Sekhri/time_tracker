@@ -7,7 +7,7 @@ import "./dataTransfer.css";
 export default function DataTransfer() {
     const [view, setView] = useState<"export" | "import">("export");
     return <div className="dt-root">
-        <header className="dt-header"><div><h2>Import &amp; export</h2><p>Your time, ready for reports, spreadsheets, and moving between tools.</p></div>
+        <header className="dt-header">
             <div className="dt-segmented" role="tablist" aria-label="Data transfer">
                 {(["export", "import"] as const).map(item => <button key={item} id={`dt-tab-${item}`} type="button" role="tab"
                     aria-selected={view === item} aria-controls={`dt-view-${item}`} tabIndex={view === item ? 0 : -1}

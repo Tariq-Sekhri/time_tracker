@@ -10,9 +10,7 @@
 .dt-root :is(button, input, select, textarea, summary, [tabindex]):focus-visible { outline: 2px solid var(--tt-focus); outline-offset: 2px; }
 
 /* Header + segmented control */
-.dt-header { display: flex; align-items: center; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; }
-.dt-header h2 { font-size: 17px; font-weight: 600; color: var(--tt-heading); }
-.dt-header p { color: var(--tt-muted); font-size: 13px; margin-top: 5px; }
+.dt-header { display: flex; align-items: center; justify-content: flex-end; gap: 16px 24px; flex-wrap: wrap; }
 .dt-segmented { display: inline-flex; padding: 3px; gap: 2px; border-radius: 10px; background: var(--tt-raised); border: 1px solid var(--tt-border); }
 .dt-segmented button { display: inline-flex; align-items: center; gap: 8px; padding: 7px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--tt-muted); transition: background .15s, color .15s; }
 .dt-segmented button:hover { color: var(--tt-text); }
