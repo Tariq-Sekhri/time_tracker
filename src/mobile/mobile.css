@@ -26,7 +26,7 @@ input[type="date"] { appearance: none; }
 .page-viewport { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: pan-y pinch-zoom; }
 .page-viewport > .swipe-page { position: absolute; inset: 0; background: #111318; will-change: transform; }
 @media (prefers-reduced-motion: reduce) { .page-viewport > .swipe-page { transition: none !important; } }
-.app-header { padding: 15px 16px 12px; display: flex; justify-content: space-between; align-items: center; flex: none; border-bottom: 1px solid #262c38; }
+.app-header { padding: 4px 16px 6px; display: flex; justify-content: space-between; align-items: center; flex: none; border-bottom: 1px solid #262c38; }
 .app-header small { font-size: 10px; letter-spacing: .16em; color: #b18bff; margin-bottom: 3px; }
 .status { font-size: 11px; padding: 6px 9px; background: #2b2635; color: #dac8ff; border-radius: 20px; }
 .status.active { color: #a6e5bf; background: #19352a; }
