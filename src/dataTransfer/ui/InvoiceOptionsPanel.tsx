@@ -8,7 +8,7 @@ export default function InvoiceOptionsPanel({options, onChange}: {options: Expor
     return <div className="dt-section" style={{gap: 18}}>
         <div className="dt-subpanel">
             <span className="dt-subheading">Hourly invoice</span>
-            <p className="settings-muted">Choose a manual category above. Its subcategories are included. Leave the hourly rate blank for an unpriced invoice.</p>
+            <p className="settings-muted">Choose a manual category above. Its subcategories are included. Leave the hourly rate blank to omit pricing from the PDF.</p>
             <div className="dt-field-grid">
                 <label className="dt-field"><span>PDF layout</span><select className="dt-select" value="invoice" onChange={() => setPdf({layout: "report"})}><option value="report">Time report</option><option value="invoice">Hourly invoice</option></select></label>
                 <label className="dt-field"><span>Invoice number</span><input className="dt-input" value={invoice.number} maxLength={60} placeholder="INV-001" onChange={event => patch({number: event.target.value})} /></label>
@@ -18,7 +18,7 @@ export default function InvoiceOptionsPanel({options, onChange}: {options: Expor
                 <label className="dt-field"><span>Bill to</span><input className="dt-input" value={options.pdf.preparedFor} placeholder="Client name or business" onChange={event => setPdf({preparedFor: event.target.value})} /></label>
                 <label className="dt-field"><span>Sender address / contact / tax ID</span><textarea className="dt-input" rows={3} value={invoice.senderDetails} onChange={event => patch({senderDetails: event.target.value})} /></label>
                 <label className="dt-field"><span>Client address / contact</span><textarea className="dt-input" rows={3} value={invoice.clientDetails} onChange={event => patch({clientDetails: event.target.value})} /></label>
-                <label className="dt-field"><span>Hourly rate (optional)</span><input aria-label="Hourly rate (optional)" aria-describedby="dt-invoice-rate-hint" className="dt-input" type="number" min={0} max={1000000} step="0.01" value={invoice.hourlyRate} placeholder="Leave blank for no pricing" onChange={event => patch({hourlyRate: event.target.value})} /><small id="dt-invoice-rate-hint">A single rate applies to all selected entries. Blank keeps rate, amounts, and total due blank.</small></label>
+                <label className="dt-field"><span>Hourly rate (optional)</span><input aria-label="Hourly rate (optional)" aria-describedby="dt-invoice-rate-hint" className="dt-input" type="number" min={0} max={1000000} step="0.01" value={invoice.hourlyRate} placeholder="Leave blank for no pricing" onChange={event => patch({hourlyRate: event.target.value})} /><small id="dt-invoice-rate-hint">A single rate applies to all selected entries. Blank hides rate, amounts, tax, and monetary totals in the PDF.</small></label>
                 <label className="dt-field"><span>Currency</span><select className="dt-select" value={invoice.currency} onChange={event => patch({currency: event.target.value as InvoiceOptions["currency"]})}>{INVOICE_CURRENCIES.map(currency => <option key={currency}>{currency}</option>)}</select></label>
                 <label className="dt-field"><span>Tax percentage (optional)</span><input className="dt-input" type="number" min={0} max={100} step="0.01" value={invoice.taxPercent} placeholder="Leave blank for no tax line" onChange={event => patch({taxPercent: event.target.value})} /></label>
             </div>
