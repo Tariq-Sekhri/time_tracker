@@ -125,3 +125,11 @@
  .ex-toolbar .ex-scope-control>summary {grid-row:3}
  .ex-toolbar .ex-scope-content {grid-row:4}
 }
+
+.ex-preset-grid-wrap {display:flex;flex-direction:column;gap:18px}
+.ex-preset-grid-wrap section {display:flex;flex-direction:column;gap:8px}
+.ex-preset-grid {display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.ex-preset-card {display:flex;flex-direction:column;gap:4px;text-align:left;padding:16px;min-height:64px;border:1px solid var(--tt-border);border-radius:8px;background:var(--tt-panel);color:inherit;cursor:pointer;font-size:13px}
+.ex-preset-card span {font-size:11px;color:var(--tt-muted)}
+.ex-preset-card:hover {border-color:var(--tt-accentText)}
+.ex-preset-card[aria-pressed="true"] {border-color:var(--tt-accentText);box-shadow:0 0 0 1px var(--tt-accentText)}

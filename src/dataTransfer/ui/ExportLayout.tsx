@@ -1,9 +1,9 @@
-﻿import {useEffect, useState, type ReactNode} from "react";
+﻿import {useState, type ReactNode} from "react";
 import "./exportLayouts.css";
 
-type Slots = {preset: ReactNode; data: ReactNode; range: ReactNode; filters: ReactNode; format: ReactNode; options: ReactNode; footer: ReactNode};
+type Slots = {preset: ReactNode; presetGrid: (control: {advance: () => void; custom: boolean; setCustom: (value: boolean) => void}) => ReactNode; data: ReactNode; range: ReactNode; filters: ReactNode; format: ReactNode; options: ReactNode; footer: ReactNode};
 type Overview = {summary: string; format: string; range: string | null; datasets: {label: string; count?: number}[]; blocker?: string; scopeSummary?: string};
-const STEPS = ["Choose data", "Design output", "Review & export"];
+const STEPS = ["Choose preset", "Design output", "Review & export"];
 
 function SelectionSummary({overview}: {overview: Overview}) {
     return <aside className="ex-overview" aria-label="Export selection summary">
@@ -17,13 +17,13 @@ function SelectionSummary({overview}: {overview: Overview}) {
     </aside>;
 }
 
-export default function ExportLayout({slots: s, overview, onResetScope, toolbar, presetActive = false}: {slots: Slots; overview: Overview; presetActive?: boolean; onResetScope?: () => void; toolbar?: ReactNode}) {
+export default function ExportLayout({slots: s, overview, onResetScope, toolbar}: {slots: Slots; overview: Overview; onResetScope?: () => void; toolbar?: ReactNode}) {
     const [step, setStep] = useState(0);
-    // Picking a preset already chooses the data, so move on from Choose data. Custom stays there.
-    useEffect(() => {if (presetActive) setStep(value => value === 0 ? 1 : value);}, [presetActive]);
-    const pages = [s.data, <>{s.format}{s.options}</>, <SelectionSummary overview={overview} />];
+    const [custom, setCustom] = useState(false);
+    const grid = s.presetGrid({advance: () => setStep(1), custom, setCustom});
+    const pages = [<>{grid}{custom && s.data}</>, <>{s.format}{s.options}</>, <SelectionSummary overview={overview} />];
     return <div className="ex-root">
-        <div className="ex-toolbar"><div className="ex-preset">{s.preset}</div>
+        <div className="ex-toolbar">{step !== 0 && <div className="ex-preset">{s.preset}</div>}
         <details className="ex-scope-control">
             <summary><span className="ex-eyebrow">Scope</span><span className="ex-scope-value">{overview.scopeSummary ?? overview.range ?? "Everything"}</span><span className="ex-scope-change">Change</span></summary>
             <div className="ex-scope-content">
