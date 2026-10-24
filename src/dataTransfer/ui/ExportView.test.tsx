@@ -135,8 +135,7 @@ describe("ExportView", () => {
         await readyCsv(user);
         const picker = screen.getByRole("combobox", {name: "Preset"});
         expect(within(picker).getAllByRole("option")).toHaveLength(5);
-        const confirmed = within(picker).getByRole("group", {name: "Confirmed presets"});
-        expect(within(confirmed).getAllByRole("option").map(option => option.textContent)).toEqual(["Archiver", "Invoice", "Timesheet", "Settings & rules"]);
+        expect(within(picker).getAllByRole("option").map(option => option.textContent)).toEqual(["Advanced", "Archiver", "Invoice", "Timesheet", "Settings & rules"]);
         await user.selectOptions(picker, "builtin:Archiver");
         expect(screen.getByRole("radio", {name: /^JSON/}).getAttribute("aria-checked")).toBe("true");
         await user.click(screen.getByRole("radio", {name: /^CSV/}));

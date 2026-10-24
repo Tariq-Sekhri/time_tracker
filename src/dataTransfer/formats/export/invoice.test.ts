@@ -46,6 +46,5 @@ describe("hourly invoice", () => {
         settings.scopeTemplate.filters.manualCategories = [2];
         settings.options.pdf.invoice.number = "INV-123";
         expect(deserializeSettings(serializeSettings(settings), preset)).toEqual({scopeTemplate: settings.scopeTemplate, options: settings.options});
-        expect(preset.group).toBe("confirmed");
     });
 });

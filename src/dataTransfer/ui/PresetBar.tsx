@@ -40,12 +40,7 @@ export default function PresetBar({presets, builtIns = [], active, onApply, onCu
                 else if (value === "custom") onCustom?.();
             }}>
             <option value="custom">Advanced</option>
-            {(["confirmed", "suggested"] as const).map(group => {
-                const items = builtIns.filter(item => item.group === group);
-                return items.length > 0 && <optgroup key={group} label={group === "confirmed" ? "Confirmed presets" : "Suggested presets"}>
-                    {items.map(item => <option key={item.name} value={`builtin:${item.name}`}>{item.name}</option>)}
-                </optgroup>;
-            })}
+            {builtIns.map(item => <option key={item.name} value={`builtin:${item.name}`}>{item.name}</option>)}
             {presets.length > 0 && <optgroup label="My presets">{presets.map(item => <option key={item.name} value={`saved:${item.name}`}>{item.name}</option>)}</optgroup>}
         </select>
         {activeSaved && <button type="button" className="dt-button dt-button-ghost dt-button-danger" aria-label={`Delete preset ${activeName}`} title="Delete preset"
