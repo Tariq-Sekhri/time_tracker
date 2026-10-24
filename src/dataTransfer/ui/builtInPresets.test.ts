@@ -16,7 +16,7 @@ describe("built-in export presets", () => {
 
     it("uses exact manual time for billing", () => {
         const presets = builtInExportPresets();
-        const invoice = presets.find(item => item.name === "Support an invoice")!;
+        const invoice = presets.find(item => item.name === "Invoice")!;
         expect(invoice.scopeTemplate.include).toMatchObject({manual_entries: true, activity_sessions: false, activity_logs: false});
         expect(invoice.options.rounding).toBe(0);
     });

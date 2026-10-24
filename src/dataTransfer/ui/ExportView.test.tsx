@@ -84,7 +84,7 @@ describe("ExportView", () => {
         expect(screen.getByText("All time / All devices & categories")).toBeTruthy();
         await user.click(screen.getByText("Scope", {exact: true}));
         expect(screen.getByText("Scope", {exact: true}).closest("details")!.open).toBe(false);
-        await user.selectOptions(screen.getByRole("combobox", {name: "Preset"}), "builtin:Project report");
+        await user.selectOptions(screen.getByRole("combobox", {name: "Preset"}), "builtin:Invoice");
         fireEvent.change(screen.getByRole("spinbutton", {name: "Hourly rate (optional)"}), {target: {value: "125"}});
         await user.click(screen.getByRole("button", {name: "Next"}));
         expect(screen.getByRole("complementary", {name: "Export selection summary"})).toBeTruthy();
@@ -98,7 +98,7 @@ describe("ExportView", () => {
     it("allows all project categories by default and supports optional narrowing and pricing", async () => {
         const user = mount();
         await readyCsv(user);
-        await user.selectOptions(screen.getByRole("combobox", {name: "Preset"}), "builtin:Project report");
+        await user.selectOptions(screen.getByRole("combobox", {name: "Preset"}), "builtin:Invoice");
         expect(exportButton().disabled).toBe(false);
         expect((screen.getByRole("spinbutton", {name: "Hourly rate (optional)"}) as HTMLInputElement).value).toBe("");
         await user.click(screen.getByRole("button", {name: /^Manual categories/}));
@@ -134,9 +134,9 @@ describe("ExportView", () => {
         const user = mount();
         await readyCsv(user);
         const picker = screen.getByRole("combobox", {name: "Preset"});
-        expect(within(picker).getAllByRole("option")).toHaveLength(6);
+        expect(within(picker).getAllByRole("option")).toHaveLength(5);
         const confirmed = within(picker).getByRole("group", {name: "Confirmed presets"});
-        expect(within(confirmed).getAllByRole("option").map(option => option.textContent)).toEqual(["Archiver", "Project report", "Settings & rules"]);
+        expect(within(confirmed).getAllByRole("option").map(option => option.textContent)).toEqual(["Archiver", "Invoice", "Timesheet", "Settings & rules"]);
         await user.selectOptions(picker, "builtin:Archiver");
         expect(screen.getByRole("radio", {name: /^JSON/}).getAttribute("aria-checked")).toBe("true");
         await user.click(screen.getByRole("radio", {name: /^CSV/}));
@@ -144,7 +144,7 @@ describe("ExportView", () => {
         await user.selectOptions(picker, "builtin:Archiver");
         expect(screen.getByRole("radio", {name: /^JSON/}).getAttribute("aria-checked")).toBe("true");
         expect(screen.queryByRole("button", {name: /^Delete preset/})).toBeNull();
-        await user.selectOptions(picker, "builtin:Submit a timesheet");
+        await user.selectOptions(picker, "builtin:Timesheet");
         expect(screen.getByRole("radio", {name: /^Excel/}).getAttribute("aria-checked")).toBe("true");
         await user.click(screen.getByRole("button", {name: /Save as preset/}));
         const name = screen.getByRole("textbox", {name: "Preset name"});

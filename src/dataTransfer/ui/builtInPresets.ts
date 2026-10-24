@@ -26,13 +26,12 @@ export function builtInExportPresets(): BuiltInExportPreset[] {
     };
     return [
         {...preset("Archiver", "all_time", everythingInclude(), {format: "json"}), group: "confirmed"},
-        {...preset("Project report", "all_time", {...manual}, {
-            format: "pdf", pdf: {...pdf("Invoice"), layout: "invoice", invoice: {...DEFAULT_INVOICE}},
-        }), scopeTemplate: {range: {preset: "all_time", customStart: "", customEnd: ""}, filters: {...ALL_FILTERS}, include: {...manual}}, group: "confirmed"},
+        {...preset("Invoice", "last_month", {...manual}, {
+            format: "pdf", durationFormat: "decimal", pdf: {...pdf("Invoice"), layout: "invoice", invoice: {...DEFAULT_INVOICE}},
+        }), group: "confirmed"},
+        {...preset("Timesheet", "last_week", {...manual}, {summaryGrouping: "day"}), group: "confirmed"},
         {...preset("Settings & rules", "all_time", {
             ...emptyInclude(), activity_categories: true, manual_categories: true, app_groups: true, skipped_apps: true,
         }, {format: "json"}), group: "confirmed"},
-        preset("Submit a timesheet", "last_week", {...manual}, {summaryGrouping: "day"}),
-        preset("Support an invoice", "last_month", {...manual}, {format: "pdf", summaryGrouping: "category", durationFormat: "decimal", pdf: pdf("Invoice supporting records")}),
     ];
 }
