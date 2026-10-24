@@ -381,7 +381,7 @@ export default function ExportView({toolbar}: {toolbar?: ReactNode} = {}) {
         </div>;
 
     return <div className="dt-root">
-        <ExportLayout toolbar={toolbar} onResetScope={() => {setRange({...defaultRangeSelection(), preset: "all_time"}); setFilters(ALL_FILTERS);}} slots={{preset: presetControls, data: dataControls, range: rangeControls, filters: filtersControls, format: formatControls, options: optionsControls, footer: footerControls}}
+        <ExportLayout toolbar={toolbar} presetActive={activePreset != null} onResetScope={() => {setRange({...defaultRangeSelection(), preset: "all_time"}); setFilters(ALL_FILTERS);}} slots={{preset: presetControls, data: dataControls, range: rangeControls, filters: filtersControls, format: formatControls, options: optionsControls, footer: footerControls}}
             overview={{summary, scopeSummary: `${range.preset === "all_time" ? "All time" : rangeText ?? "Invalid dates"} / ${Object.values(filters).every(value => value === null) ? "All devices & categories" : "Custom filters"}`, format: FORMAT_LABELS[options.format], range: rangeText, datasets: selectedKeys.map(key => ({label: DATASETS.find(item => item.key === key)!.label, count: countMap[key]})), blocker: blockers[0]}} />
 
         {preview && <PreviewModal title={`Preview · ${FORMAT_LABELS[options.format]}`} subtitle={preview.subtitle} content={preview.content} onClose={closePreview} />}

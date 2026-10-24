@@ -36,7 +36,7 @@ export default function PresetBar({presets, builtIns = [], active, onApply, onSa
                     : presets.find(item => `saved:${item.name}` === value);
                 if (preset) onApply(preset);
             }}>
-            <option value="">Custom settings</option>
+            <option value="">Custom</option>
             {(["confirmed", "suggested"] as const).map(group => {
                 const items = builtIns.filter(item => item.group === group);
                 return items.length > 0 && <optgroup key={group} label={group === "confirmed" ? "Confirmed presets" : "Suggested presets"}>

@@ -1,4 +1,4 @@
-﻿import {useState, type ReactNode} from "react";
+﻿import {useEffect, useState, type ReactNode} from "react";
 import "./exportLayouts.css";
 
 type Slots = {preset: ReactNode; data: ReactNode; range: ReactNode; filters: ReactNode; format: ReactNode; options: ReactNode; footer: ReactNode};
@@ -17,8 +17,10 @@ function SelectionSummary({overview}: {overview: Overview}) {
     </aside>;
 }
 
-export default function ExportLayout({slots: s, overview, onResetScope, toolbar}: {slots: Slots; overview: Overview; onResetScope?: () => void; toolbar?: ReactNode}) {
+export default function ExportLayout({slots: s, overview, onResetScope, toolbar, presetActive = false}: {slots: Slots; overview: Overview; presetActive?: boolean; onResetScope?: () => void; toolbar?: ReactNode}) {
     const [step, setStep] = useState(0);
+    // Picking a preset already chooses the data, so move on from Choose data. Custom stays there.
+    useEffect(() => {if (presetActive) setStep(value => value === 0 ? 1 : value);}, [presetActive]);
     const pages = [s.data, <>{s.format}{s.options}</>, <SelectionSummary overview={overview} />];
     return <div className="ex-root">
         <div className="ex-toolbar"><div className="ex-preset">{s.preset}</div>
