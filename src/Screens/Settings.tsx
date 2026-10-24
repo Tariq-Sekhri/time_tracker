@@ -376,14 +376,15 @@ function DatabaseLocationSetting() {
 export default function Settings() {
     const { showToast } = useToast();
     const { fields, allLocked, setVal, toggleLock, resetField, resetSettings } = useBackendSettings();
-    const { enabled: notesEnabled, setEnabled: setNotesEnabled } = useNotesState();
+    // Dev mode reuses the Notes flag and also unlocks the unfinished Import & export tab.
+    const { enabled: devMode, setEnabled: setDevMode } = useNotesState();
 
     const [section, setSection] = useState("general");
     const pageRef = useRef<HTMLDivElement>(null);
     const sections = [
         {id: "general", label: "General"},
         {id: "tracking", label: "Tracking"},
-        ...(isDesktopApp() ? [{id: "transfer", label: "Import & export"}, {id: "data", label: "Data & support"}] : []),
+        ...(isDesktopApp() ? [...(devMode ? [{id: "transfer", label: "Import & export"}] : []), {id: "data", label: "Data & support"}] : []),
     ];
     const selectSection = (id: string) => {
         setSection(id);
@@ -401,7 +402,7 @@ export default function Settings() {
     return <div className="settings-shell">
         <div className="theme-header shrink-0 border-b border-gray-700">
             <nav className="flex min-w-0 items-center justify-start overflow-x-auto border-t border-gray-800/70 bg-gray-950/60 px-5 py-2 nice-scrollbar sm:justify-center" aria-label="Settings sections">
-                <div className={`grid w-full max-w-[760px] shrink-0 ${sections.length === 4 ? "min-w-[520px] grid-cols-4" : "min-w-[200px] grid-cols-2"}`} role="tablist" aria-label="Settings sections"
+                <div className={`grid w-full max-w-[760px] shrink-0 ${sections.length === 4 ? "min-w-[520px] grid-cols-4" : sections.length === 3 ? "min-w-[390px] grid-cols-3" : "min-w-[200px] grid-cols-2"}`} role="tablist" aria-label="Settings sections"
                     onKeyDown={event => {
                         if ((event.target as HTMLElement).getAttribute("role") !== "tab") return;
                         const index = sections.findIndex(item => item.id === section);
@@ -437,9 +438,9 @@ export default function Settings() {
                     <section className="settings-panel" aria-labelledby="display-settings-title">
                         <div className="settings-section-heading"><div><h2 id="display-settings-title">Display</h2><p>Keep the interface focused.</p></div></div>
                         <div className="settings-field-grid">
-                            <label className="settings-toggle-row"><span>Show Notes</span><input type="checkbox" checked={notesEnabled}
-                                onChange={event => {void setNotesEnabled(event.target.checked).catch(error => showToast("Could not update Notes", "error", 5000, toErrorString(error)));}}
-                                aria-label="Enable Notes" /></label>
+                            <label className="settings-toggle-row"><span>Dev mode</span><input type="checkbox" checked={devMode}
+                                onChange={event => {void setDevMode(event.target.checked).catch(error => showToast("Could not update dev mode", "error", 5000, toErrorString(error)));}}
+                                aria-label="Enable dev mode" /></label>
                             {renderFields(SETTINGS_LAYOUT[2])}
                         </div>
                     </section>
@@ -456,7 +457,7 @@ export default function Settings() {
                     <AfkSettings />
                 </div>
 
-                {isDesktopApp() && <div className="settings-section-stack" role="tabpanel" id="settings-section-transfer" aria-labelledby="settings-tab-transfer" hidden={section !== "transfer"}>
+                {isDesktopApp() && devMode && <div className="settings-section-stack" role="tabpanel" id="settings-section-transfer" aria-labelledby="settings-tab-transfer" hidden={section !== "transfer"}>
                     {section === "transfer" && <Suspense fallback={<p className="settings-muted" role="status">Loading import &amp; export?</p>}><DataTransfer /></Suspense>}
                 </div>}
                 {isDesktopApp() && <div className="settings-section-stack" role="tabpanel" id="settings-section-data" aria-labelledby="settings-tab-data" hidden={section !== "data"}>

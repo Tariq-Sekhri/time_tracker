@@ -35,7 +35,7 @@ it("browser Settings loads without native-only requests and supports Notes and n
     expect(screen.queryByRole("button", {name: "Open log folder"})).toBeNull();
     expect(screen.queryByText("Failed to load database location")).toBeNull();
 
-    await user.click(screen.getByRole("checkbox", {name: "Enable Notes"}));
+    await user.click(screen.getByRole("checkbox", {name: "Enable dev mode"}));
     await waitFor(async () => expect(await invoke("get_notes_state")).toMatchObject({enabled: true}));
 
     await user.clear(input);
@@ -68,11 +68,16 @@ it("keeps unsaved tracking changes when navigating settings sections", async () 
     expect(screen.queryByRole("tab", {name: "Data & support"})).toBeNull();
 });
 
-it("opens import/export from desktop Settings while keeping the other sections available", async () => {
+it("opens import/export from desktop Settings only in dev mode while keeping the other sections available", async () => {
     Object.defineProperty(window, "__TAURI_INTERNALS__", {configurable: true, value: {}});
     bridge.commands.length = 0;
+    await invoke("set_notes_enabled", {enabled: false});
+    const user = userEvent.setup();
     const client = new QueryClient({defaultOptions: {queries: {retry: false}}});
     render(<QueryClientProvider client={client}><ToastProvider><Settings /></ToastProvider></QueryClientProvider>);
+    expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual(["General", "Tracking", "Data & support"]);
+    await user.click(screen.getByRole("checkbox", {name: "Enable dev mode"}));
+    await screen.findByRole("tab", {name: "Import & export"});
     expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual(["General", "Tracking", "Import & export", "Data & support"]);
     expect(bridge.commands).not.toContain("get_export_filter_options");
     fireEvent.click(screen.getByRole("tab", {name: "Import & export"}));
