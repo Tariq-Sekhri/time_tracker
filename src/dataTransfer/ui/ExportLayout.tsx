@@ -17,11 +17,11 @@ function SelectionSummary({overview}: {overview: Overview}) {
     </aside>;
 }
 
-export default function ExportLayout({slots: s, overview, onResetScope}: {slots: Slots; overview: Overview; onResetScope?: () => void}) {
+export default function ExportLayout({slots: s, overview, onResetScope, toolbar}: {slots: Slots; overview: Overview; onResetScope?: () => void; toolbar?: ReactNode}) {
     const [step, setStep] = useState(0);
     const pages = [s.data, <>{s.format}{s.options}</>, <SelectionSummary overview={overview} />];
     return <div className="ex-root">
-        <div className="ex-preset">{s.preset}</div>
+        <div className="ex-toolbar"><div className="ex-preset">{s.preset}</div>{toolbar}</div>
         <details className="ex-scope-control">
             <summary><span className="ex-eyebrow">Scope</span><span className="ex-scope-value">{overview.scopeSummary ?? overview.range ?? "Everything"}</span><span className="ex-scope-change">Change</span></summary>
             <div className="ex-scope-content">

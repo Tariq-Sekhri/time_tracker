@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import {useCallback, useEffect, useMemo, useRef, useState, type ReactNode} from "react";
 import {keepPreviousData, useQuery} from "@tanstack/react-query";
 import {open, save} from "@tauri-apps/plugin-dialog";
 import {join} from "@tauri-apps/api/path";
@@ -60,7 +60,7 @@ function filterPickerOptions(data: ExportFilterOptions | undefined) {
     return {devices, activityCategories, manualCategories};
 }
 
-export default function ExportView() {
+export default function ExportView({toolbar}: {toolbar?: ReactNode} = {}) {
     const {showToast} = useToast();
     const initial = useMemo(defaultSettings, []);
     const builtIns = useMemo(builtInExportPresets, []);
@@ -388,7 +388,7 @@ export default function ExportView() {
         </div>;
 
     return <div className="dt-root">
-        <ExportLayout onResetScope={() => {setRange({...defaultRangeSelection(), preset: "all_time"}); setFilters(ALL_FILTERS);}} slots={{preset: presetControls, data: dataControls, range: rangeControls, filters: filtersControls, format: formatControls, options: optionsControls, footer: footerControls}}
+        <ExportLayout toolbar={toolbar} onResetScope={() => {setRange({...defaultRangeSelection(), preset: "all_time"}); setFilters(ALL_FILTERS);}} slots={{preset: presetControls, data: dataControls, range: rangeControls, filters: filtersControls, format: formatControls, options: optionsControls, footer: footerControls}}
             overview={{summary, scopeSummary: `${range.preset === "all_time" ? "All time" : rangeText ?? "Invalid dates"} / ${Object.values(filters).every(value => value === null) ? "All devices & categories" : "Custom filters"}`, format: FORMAT_LABELS[options.format], range: rangeText, datasets: selectedKeys.map(key => ({label: DATASETS.find(item => item.key === key)!.label, count: countMap[key]})), blocker: blockers[0]}} />
 
         {preview && <PreviewModal title={`Preview · ${FORMAT_LABELS[options.format]}`} subtitle={preview.subtitle} content={preview.content} onClose={closePreview} />}

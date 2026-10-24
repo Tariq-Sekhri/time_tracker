@@ -102,3 +102,7 @@
  .ex-root .dt-footer-actions .dt-button {flex:1}
  .ex-root .dt-section-title p {display:none}
 }
+
+.ex-toolbar {display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;min-width:0}
+.ex-toolbar .ex-preset {flex:1 1 420px;min-width:0}
+.ex-toolbar .dt-segmented {flex:none;margin-left:auto}
