@@ -134,7 +134,7 @@ describe("ExportView", () => {
         const user = mount();
         await readyCsv(user);
         const picker = screen.getByRole("combobox", {name: "Preset"});
-        expect(within(picker).getAllByRole("option")).toHaveLength(14);
+        expect(within(picker).getAllByRole("option")).toHaveLength(11);
         const confirmed = within(picker).getByRole("group", {name: "Confirmed presets"});
         expect(within(confirmed).getAllByRole("option").map(option => option.textContent)).toEqual(["Archiver", "Project report"]);
         await user.selectOptions(picker, "builtin:Archiver");
