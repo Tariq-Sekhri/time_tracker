@@ -134,14 +134,14 @@ describe("ExportView", () => {
         const user = mount();
         await readyCsv(user);
         const picker = screen.getByRole("combobox", {name: "Preset"});
-        expect(within(picker).getAllByRole("option")).toHaveLength(11);
+        expect(within(picker).getAllByRole("option")).toHaveLength(10);
         const confirmed = within(picker).getByRole("group", {name: "Confirmed presets"});
         expect(within(confirmed).getAllByRole("option").map(option => option.textContent)).toEqual(["Archiver", "Project report"]);
         await user.selectOptions(picker, "builtin:Archiver");
         expect(screen.getByRole("radio", {name: /^JSON/}).getAttribute("aria-checked")).toBe("true");
         await user.click(screen.getByRole("radio", {name: /^CSV/}));
         expect(screen.getByRole("radio", {name: /^CSV/}).getAttribute("aria-checked")).toBe("true");
-        await user.selectOptions(picker, "builtin:Keep a portable copy");
+        await user.selectOptions(picker, "builtin:Archiver");
         expect(screen.getByRole("radio", {name: /^JSON/}).getAttribute("aria-checked")).toBe("true");
         expect(screen.queryByRole("button", {name: /^Delete preset/})).toBeNull();
         await user.selectOptions(picker, "builtin:Submit a timesheet");
