@@ -5,7 +5,7 @@ import {everythingInclude} from "./scope.ts";
 describe("built-in export presets", () => {
     it("keeps the archiver complete and configuration transfers free of activity records", () => {
         const presets = builtInExportPresets();
-        const portable = presets.find(item => item.name === "Archiver")!;
+        const portable = presets.find(item => item.name === "Full app backup")!;
         expect(portable.scopeTemplate.include).toEqual(everythingInclude());
         expect(portable.scopeTemplate.range.preset).toBe("all_time");
         expect(portable.options.format).toBe("json");
