@@ -17,11 +17,11 @@ function SelectionSummary({overview}: {overview: Overview}) {
     </aside>;
 }
 
-export default function ExportLayout({slots: s, overview, onResetScope, toolbar, presetActive = false}: {presetActive?: boolean; slots: Slots; overview: Overview; onResetScope?: () => void; toolbar?: ReactNode}) {
+export default function ExportLayout({slots: s, overview, onResetScope, toolbar}: {slots: Slots; overview: Overview; onResetScope?: () => void; toolbar?: ReactNode}) {
     const [step, setStep] = useState(0);
     const [custom, setCustom] = useState(false);
     const grid = s.presetGrid({advance: () => setStep(1), custom, setCustom});
-    const pages = [<>{grid}{(custom || !presetActive) && s.data}</>, <>{s.format}{s.options}</>, <SelectionSummary overview={overview} />];
+    const pages = [<>{grid}{custom && s.data}</>, <>{s.format}{s.options}</>, <SelectionSummary overview={overview} />];
     return <div className="ex-root">
         <div className="ex-toolbar">{step !== 0 && <div className="ex-preset">{s.preset({goCustom: () => {setCustom(true); setStep(0);}})}</div>}
         <details className="ex-scope-control">
