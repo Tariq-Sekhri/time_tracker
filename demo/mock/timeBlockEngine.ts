@@ -290,6 +290,20 @@ export function mergeLogsInTimeBlock(logs: DemoLog[]): DemoMergedLog[] {
     return [...appMap.values()];
 }
 
+/** Detail rows preserve exact titles and device identity, independently of app-group rules. */
+export function timeBlockDetailLogs(logs: (DemoLog & {device_uuid?: string | null})[]) {
+    const devices = new Map<string | null, DemoLog[]>();
+    for (const log of logs) {
+        const key = log.device_uuid ?? null;
+        const rows = devices.get(key) ?? [];
+        rows.push(log);
+        devices.set(key, rows);
+    }
+    return [...devices].flatMap(([device_uuid, rows]) => mergeLogsInTimeBlock(rows).map(row => ({
+        ...row, device_uuid, app_names: [row.app],
+    }))).sort((a, b) => b.duration - a.duration || a.app.localeCompare(b.app));
+}
+
 export function logsOverlappingBlock(
     logs: DemoLog[],
     appNames: Set<string>,

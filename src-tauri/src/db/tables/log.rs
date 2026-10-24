@@ -488,24 +488,18 @@ pub async fn get_logs_for_time_block(
         .filter(|log| request.app_names.contains(&log.app))
         .collect();
 
-    let groups = crate::db::tables::app_group::get_app_groups().await?;
-    let matchers = crate::db::tables::app_group::build_app_group_matchers(&groups)?;
-    perf.stage("filter_groups");
-    let merged = merge_logs_in_time_block(filtered_logs, &matchers);
+    // Detail rows retain their recorded titles; app groups belong to summaries.
+    let merged = merge_logs_in_time_block(filtered_logs);
     perf.stage("merge");
     perf.note("merged", merged.len());
     perf.done();
     Ok(merged)
 }
 
-fn merge_logs_in_time_block(
-    logs: Vec<Log>,
-    app_groups: &[crate::db::tables::app_group::CachedAppGroup],
-) -> Vec<MergedLog> {
+fn merge_logs_in_time_block(logs: Vec<Log>) -> Vec<MergedLog> {
     let mut app_map: HashMap<(Option<String>, String), MergedLog> = HashMap::new();
     for log in logs {
-        let grouped_app =
-            crate::db::tables::app_group::resolve_app_group(&log.app, app_groups).to_string();
+        let grouped_app = log.app.clone();
         let key = (log.device_uuid.clone(), grouped_app.clone());
         if let Some(existing) = app_map.get_mut(&key) {
             existing.duration += log.duration;
@@ -616,27 +610,24 @@ mod merge_logs_tests {
 
     #[test]
     fn keeps_same_app_logs_separate_by_device_uuid() {
-        let merged = merge_logs_in_time_block(
-            vec![
-                Log {
-                    id: 1,
-                    device_uuid: Some("device-a".into()),
-                    app: "Editor".into(),
-                    timestamp: 100,
-                    duration: 30,
-                    is_deleted: false,
-                },
-                Log {
-                    id: 2,
-                    device_uuid: Some("device-b".into()),
-                    app: "Editor".into(),
-                    timestamp: 110,
-                    duration: 45,
-                    is_deleted: false,
-                },
-            ],
-            &[],
-        );
+        let merged = merge_logs_in_time_block(vec![
+            Log {
+                id: 1,
+                device_uuid: Some("device-a".into()),
+                app: "Editor".into(),
+                timestamp: 100,
+                duration: 30,
+                is_deleted: false,
+            },
+            Log {
+                id: 2,
+                device_uuid: Some("device-b".into()),
+                app: "Editor".into(),
+                timestamp: 110,
+                duration: 45,
+                is_deleted: false,
+            },
+        ]);
 
         assert_eq!(merged.len(), 2);
         assert!(merged
@@ -648,39 +639,32 @@ mod merge_logs_tests {
     }
 
     #[test]
-    fn combines_titles_that_share_an_app_group() {
-        let groups = vec![crate::db::tables::app_group::AppGroup {
-            id: 1,
-            name: "YouTube".into(),
-            regex: "(?i)youtube".into(),
-        }];
-        let matchers = crate::db::tables::app_group::build_app_group_matchers(&groups).unwrap();
-        let merged = merge_logs_in_time_block(
-            vec![
-                Log {
-                    id: 1,
-                    device_uuid: Some("device-a".into()),
-                    app: "First video - YouTube".into(),
-                    timestamp: 100,
-                    duration: 30,
-                    is_deleted: false,
-                },
-                Log {
-                    id: 2,
-                    device_uuid: Some("device-a".into()),
-                    app: "Second video - YouTube".into(),
-                    timestamp: 140,
-                    duration: 45,
-                    is_deleted: false,
-                },
-            ],
-            &matchers,
-        );
+    fn preserves_recorded_titles_in_time_block_details() {
+        let merged = merge_logs_in_time_block(vec![
+            Log {
+                id: 1,
+                device_uuid: Some("device-a".into()),
+                app: "First video - YouTube".into(),
+                timestamp: 100,
+                duration: 30,
+                is_deleted: false,
+            },
+            Log {
+                id: 2,
+                device_uuid: Some("device-a".into()),
+                app: "Second video - YouTube".into(),
+                timestamp: 140,
+                duration: 45,
+                is_deleted: false,
+            },
+        ]);
 
-        assert_eq!(merged.len(), 1);
-        assert_eq!(merged[0].app, "YouTube");
-        assert_eq!(merged[0].duration, 75);
-        assert_eq!(merged[0].app_names.len(), 2);
+        assert_eq!(merged.len(), 2);
+        assert_eq!(merged.iter().map(|row| row.duration).sum::<i64>(), 75);
+        assert!(merged.iter().any(|row| row.app == "First video - YouTube"
+            && row.app_names == vec!["First video - YouTube"]));
+        assert!(merged.iter().any(|row| row.app == "Second video - YouTube"
+            && row.app_names == vec!["Second video - YouTube"]));
     }
 }
 
@@ -769,9 +753,7 @@ pub async fn get_logs_by_category(
     perf.note("category_regexes", regex_list.len());
     perf.note("category_logs", filtered_logs.len());
 
-    let groups = crate::db::tables::app_group::get_app_groups().await?;
-    let matchers = crate::db::tables::app_group::build_app_group_matchers(&groups)?;
-    let merged = merge_logs_in_time_block(filtered_logs, &matchers);
+    let merged = merge_logs_in_time_block(filtered_logs);
     perf.stage("merge");
     perf.note("merged", merged.len());
     perf.done();

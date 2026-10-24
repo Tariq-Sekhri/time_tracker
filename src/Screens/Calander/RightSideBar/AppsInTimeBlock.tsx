@@ -7,8 +7,9 @@ import {
     delete_logs_for_time_block
 } from "../../../api/Log.ts";
 import { useEffect, useState, type ReactNode } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SideBarView } from "./RightSideBar.tsx";
+import {getDevices} from "../../../api/sync.ts";
 import { useToast } from "../../../Componants/Toast.tsx";
 import { useAppCategorizeMenu } from "../../../hooks/useAppCategorizeMenu.tsx";
 import { logRowLeftClickCalendarFilter } from "../../../utils/calendarAppFilterRowClick.ts";
@@ -44,6 +45,9 @@ export default function AppsInTimeBlock({
     trailingToolbar?: ReactNode,
 }) {
     const queryClient = useQueryClient();
+    const {data: devices = []} = useQuery({queryKey: ["sync", "devices"], queryFn: getDevices});
+    const deviceName = (uuid: string | null) => uuid ? devices.find(device => device.uuid === uuid)?.name || `Device ${uuid.slice(0, 8)}` : "Unknown device";
+    const rowKey = (log: EventLogs[number]) => JSON.stringify([log.device_uuid, log.app]);
 
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [deleteLogCount, setDeleteLogCount] = useState(0);
@@ -112,9 +116,9 @@ export default function AppsInTimeBlock({
         mutationFn: async ({ ids, uuid }: { ids: number[]; uuid: string }) => {
             return await delete_logs_by_ids(ids, uuid)
         },
-        onSuccess: (_, { ids: deletedIds }) => {
+        onSuccess: (_, { ids: deletedIds, uuid: deletedDevice }) => {
             const updatedLogs = selectedEventLogs.filter((log) => {
-                return !log.ids.some(id => deletedIds.includes(id))
+                return log.device_uuid !== deletedDevice || !log.ids.some(id => deletedIds.includes(id))
             })
             setSelectedEventLogs(updatedLogs);
 
@@ -176,9 +180,9 @@ export default function AppsInTimeBlock({
     const displayedLogs = [...selectedEventLogs].sort((a, b) => b.duration - a.duration);
     const totalDuration = displayedLogs.reduce((sum, log) => sum + log.duration, 0);
     const allTimeBlockApps = Array.from(new Set(displayedLogs.flatMap((log) => log.app_names)));
-    const allDisplayedAppNames = displayedLogs.map((log) => log.app);
+    const allDisplayedAppNames = displayedLogs.map(rowKey);
     const selectedAppNames = displayedLogs
-        .filter((log) => selectedApps.has(log.app))
+        .filter((log) => selectedApps.has(rowKey(log)))
         .flatMap((log) => log.app_names);
 
     useEffect(() => {
@@ -294,10 +298,10 @@ export default function AppsInTimeBlock({
                     <div className="space-y-2">
                         {displayedLogs.map((log) => (
                             <div
-                                key={log.ids.join("-")}
+                                key={rowKey(log)}
                                 onClick={(e) => logRowLeftClickCalendarFilter(e, log.app)}
                                 onContextMenu={(e) => openFromContextMenuMany(e, log.app_names)}
-                                className={`h-15 rounded-lg p-3 transition-colors select-text cursor-pointer ${calendarAppFilterActive === log.app
+                                className={`min-h-15 rounded-lg p-3 transition-colors select-text cursor-pointer ${calendarAppFilterActive === log.app
                                     ? "bg-gray-800 ring-2 ring-blue-500 ring-offset-2 ring-offset-black"
                                     : "bg-gray-900 hover:bg-gray-800"
                                     }`}
@@ -306,11 +310,12 @@ export default function AppsInTimeBlock({
                                     <AppTitleDetails app={log.app} appNames={log.app_names}
                                         start={Math.floor(selectedEvent.start.getTime() / 1000)}
                                         end={Math.floor(selectedEvent.end.getTime() / 1000)} ids={log.ids}
-                                        className="text-sm font-medium text-white truncate flex-1 select-text" />
+                                        deviceUuids={log.device_uuid ? [log.device_uuid] : undefined}
+                                        className="text-sm font-medium text-white whitespace-normal break-words min-w-0 flex-1 select-text" />
                                     <input
                                         type="checkbox"
-                                        checked={selectedApps.has(log.app)}
-                                        onChange={() => toggleAppSelected(log.app)}
+                                        checked={selectedApps.has(rowKey(log))}
+                                        onChange={() => toggleAppSelected(rowKey(log))}
                                         onClick={(e) => e.stopPropagation()}
                                         className="w-4 h-4 rounded cursor-pointer mr-2"
                                     />
@@ -344,6 +349,7 @@ export default function AppsInTimeBlock({
                                         {formatDuration(log.duration)}
                                     </span>
                                 </div>
+                                <div className="text-xs text-gray-500 mt-1 mb-2 truncate" title={log.device_uuid ?? "Unknown device"}>{deviceName(log.device_uuid)}</div>
                                 <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
                                     <div
                                         className="h-full bg-blue-600"

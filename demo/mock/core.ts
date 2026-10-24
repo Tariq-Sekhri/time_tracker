@@ -21,7 +21,7 @@ import {
     buildTimeBlocksFromLogs,
     logsForCategoryInRange,
     logsOverlappingBlock,
-    mergeLogsInTimeBlock,
+    timeBlockDetailLogs,
     type DemoLog,
     type DemoTimeBlock,
 } from "./timeBlockEngine";
@@ -1632,11 +1632,7 @@ export async function invoke<T>(
                 catRegex,
                 skippedApps
             );
-            return mergeLogsInTimeBlock(rows).map((row) => ({
-                ...row,
-                app: resolveDemoAppGroup(row.app),
-                app_names: [row.app],
-            })).sort((a, b) => b.duration - a.duration) as unknown as T;
+            return timeBlockDetailLogs(rows) as unknown as T;
         }
         case "get_logs_for_time_block": {
             const req = (a as {
@@ -1657,11 +1653,7 @@ export async function invoke<T>(
                 req.end_time,
                 minD
             );
-            return mergeLogsInTimeBlock(rows).map((row) => ({
-                ...row,
-                app: resolveDemoAppGroup(row.app),
-                app_names: [row.app],
-            })).sort((a, b) => b.duration - a.duration) as unknown as T;
+            return timeBlockDetailLogs(rows) as unknown as T;
         }
         case "count_logs_for_time_block": {
             const req = (a as {
