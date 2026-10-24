@@ -4,12 +4,14 @@ import type {ExportPreset} from "./presets.ts";
 import type {BuiltInExportPreset} from "./builtInPresets.ts";
 
 /** Saved export presets: pick one to apply, save the current settings, or delete. */
-export default function PresetBar({presets, builtIns = [], active, onApply, onSave, onDelete}: {
+export default function PresetBar({presets, builtIns = [], active, onApply, onCustom, onSave, onDelete}: {
     presets: ExportPreset[];
     builtIns?: BuiltInExportPreset[];
     /** Matching preset key, prefixed with saved: or builtin:. */
     active: string | null;
     onApply: (preset: ExportPreset) => void;
+    /** Chosen "Custom": go back to picking the data by hand. */
+    onCustom?: () => void;
     onSave: (name: string) => Promise<void> | void;
     onDelete: (name: string) => void;
 }) {
@@ -35,6 +37,7 @@ export default function PresetBar({presets, builtIns = [], active, onApply, onSa
                     ? builtIns.find(item => `builtin:${item.name}` === value)
                     : presets.find(item => `saved:${item.name}` === value);
                 if (preset) onApply(preset);
+                else if (value === "") onCustom?.();
             }}>
             <option value="">Custom</option>
             {(["confirmed", "suggested"] as const).map(group => {
