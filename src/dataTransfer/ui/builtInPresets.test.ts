@@ -9,7 +9,7 @@ describe("built-in export presets", () => {
         expect(portable.scopeTemplate.include).toEqual(everythingInclude());
         expect(portable.scopeTemplate.range.preset).toBe("all_time");
         expect(portable.options.format).toBe("json");
-        const configuration = presets.find(item => item.name === "Transfer tracking configuration")!;
+        const configuration = presets.find(item => item.name === "Settings & rules")!;
         expect(configuration.options.format).toBe("json");
         expect(configuration.scopeTemplate.include).toMatchObject({manual_entries: false, activity_sessions: false, activity_logs: false, devices: false, activity_categories: true, manual_categories: true, app_groups: true, skipped_apps: true});
     });
