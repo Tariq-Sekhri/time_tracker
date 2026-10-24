@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.13.3] - 2026-10-24
+
+- Time-block details show exact window titles and the source device.
+- Easier-to-read selected tabs on all themes except Original.
+- "Show Notes" is now "Dev mode", adding a preview of Import & export.
+
 ## [1.13.2] - 2026-10-23
 
 - Fix manual timer saves occasionally failing with a “database is locked” error.
