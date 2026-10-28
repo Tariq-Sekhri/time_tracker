@@ -9,6 +9,7 @@ import { migrateLocalStorageToDb } from "./migrateLocalStorageToDb.ts";
 import {installDiagnostics, logMessage, reportError} from "./diagnostics.ts";
 import ErrorBoundary from "./Componants/ErrorBoundary.tsx";
 import {installLongTaskObserver} from "./perf.ts";
+import {retryStartupDatabase} from "./startup.ts";
 
 initializeTheme();
 installDiagnostics();
@@ -23,7 +24,7 @@ const queryClient = new QueryClient({
 });
 
 async function bootstrap() {
-    await hydrateGoogleOAuthCredentials();
+    await retryStartupDatabase(hydrateGoogleOAuthCredentials);
     await migrateLocalStorageToDb();
     ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
         <React.StrictMode>
@@ -44,5 +45,10 @@ void bootstrap().catch(async (error) => {
     const root = document.getElementById("root");
     if (root) {
         root.textContent = "Time Tracker could not start. Please send the most recent file from your Time Tracker logs folder to support.";
+        const retry = document.createElement("button");
+        retry.textContent = "Retry startup";
+        retry.style.cssText = "display:block;margin-top:16px;padding:8px 16px;cursor:pointer";
+        retry.onclick = () => window.location.reload();
+        root.appendChild(retry);
     }
 });

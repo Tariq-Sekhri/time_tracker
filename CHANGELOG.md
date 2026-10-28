@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Retry temporary database locks during startup and offer a retry button if the app cannot load.
+
 ## [1.13.3] - 2026-10-24
 
 - Time-block details show exact window titles and the source device.
