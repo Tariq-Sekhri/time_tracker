@@ -304,7 +304,7 @@ export default function CategoriesView() {
                     >
                         <option value="">No parent</option>
                         {topLevel.filter((cat) => cat.name !== "Miscellaneous").map((cat) => (
-                            <option key={cat.id} value={cat.id}>Subcategory of {cat.name}</option>
+                            <option key={cat.id} value={cat.id}>{cat.name}</option>
                         ))}
                     </select>
                     {newCategoryParent == null && (

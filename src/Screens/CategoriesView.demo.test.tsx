@@ -14,7 +14,7 @@ it("adds a subcategory from the new category form", async () => {
     const parentId = await invoke<number>("insert_category", {newCategory: {name: "Form parent", priority: 5000, color: "#123456"}});
     render(<QueryClientProvider client={new QueryClient({defaultOptions: {queries: {retry: false}}})}><ToastProvider><CategoriesView/></ToastProvider></QueryClientProvider>);
 
-    const parent = await screen.findByRole("option", {name: "Subcategory of Form parent"});
+    const parent = await screen.findByRole("option", {name: "Form parent"});
     fireEvent.change(parent.closest("select")!, {target: {value: String(parentId)}});
     expect(screen.queryByPlaceholderText("Priority")).toBeNull();
     fireEvent.change(screen.getByPlaceholderText("Category name"), {target: {value: "Form child"}});
