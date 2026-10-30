@@ -1,4 +1,5 @@
 use crate::db;
+use crate::db::queries::category_match::{self, derive_category, find_match, CachedCategoryRegex};
 use crate::db::tables::app_group::{
     build_app_group_matchers, get_app_groups, resolve_app_group, CachedAppGroup,
 };
@@ -20,6 +21,16 @@ pub struct CategoryStat {
     pub total_duration: i64,
     pub percentage: f64,
     pub percentage_change: Option<f64>,
+    pub color: Option<String>,
+    /// Slices of `total_duration`; time matched only by the parent is left out.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub subcategories: Vec<SubcategoryStat>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct SubcategoryStat {
+    pub name: String,
+    pub total_duration: i64,
     pub color: Option<String>,
 }
 
@@ -118,7 +129,7 @@ mod isolation_tests {
 
     #[test]
     fn statistics_isolation_combines_device_and_category_before_app_aggregation() {
-        let regexes = vec![CachedCategoryRegex {regex: Regex::new("Editor").unwrap(), category: "Work".into(), priority: 0}];
+        let regexes = vec![CachedCategoryRegex {regex: Regex::new("Editor").unwrap(), category: "Work".into(), subcategory: None, rule_id: 1}];
         let logs = vec![("desktop", "Editor", 20), ("phone", "Editor", 30), ("desktop", "Browser", 40)]
             .into_iter().enumerate().map(|(id, (device, app, duration))| Log {
                 id: id as i64, device_uuid: Some(device.into()), app: app.into(), timestamp: 100, duration, is_deleted: false,
@@ -183,16 +194,9 @@ async fn manual_statistics_logs(
     Ok(manual_segments(&blocks, start, end))
 }
 
-#[derive(Clone)]
-struct CachedCategoryRegex {
-    regex: Regex,
-    category: String,
-    priority: i32,
-}
-
 #[derive(PartialEq, Eq)]
 struct CategoryMatcherKey {
-    categories: Vec<(i32, String, i32)>,
+    categories: Vec<(i32, String, i32, Option<i32>)>,
     patterns: Vec<(i32, String)>,
 }
 
@@ -324,7 +328,7 @@ pub async fn get_trend_statistics(
     let categories = get_categories().await?;
     let regexes = build_regex_table(&categories, &get_cat_regex().await?)?;
     let groups = build_app_group_matchers(&get_app_groups().await?)?;
-    let mut colors: HashMap<String, Option<String>> = categories.into_iter().map(|category| (category.name, category.color)).collect();
+    let mut colors: HashMap<String, Option<String>> = categories.into_iter().filter(|category| category.parent_id.is_none()).map(|category| (category.name, category.color)).collect();
     add_manual_category_colors(&mut colors).await?;
     let manual_blocks = if include_manual == Some(false) || end < start { Vec::new() } else {
         crate::db::tables::manual_time_block::get_manual_time_blocks(start, end.saturating_add(1)).await?
@@ -371,7 +375,7 @@ pub async fn get_trend_statistics(
         let total_time: i64 = category_totals.values().sum();
         let mut categories: Vec<CategoryStat> = category_totals.into_iter().map(|(category,total_duration)| CategoryStat {
             color: colors.get(&category).cloned().flatten(), category, total_duration,
-            percentage: if total_time > 0 { (total_duration as f64 / total_time as f64) * 100.0 } else {0.0}, percentage_change: None,
+            percentage: if total_time > 0 { (total_duration as f64 / total_time as f64) * 100.0 } else {0.0}, percentage_change: None, subcategories: Vec::new(),
         }).collect();
         categories.sort_by(|a,b| b.total_duration.cmp(&a.total_duration));
         let mut all_apps: Vec<AppStat> = app_totals.into_iter().map(|(app,(total_duration,names))| AppStat {
@@ -434,17 +438,32 @@ fn app_duration_map(logs: &[Log], app_groups: &[CachedAppGroup]) -> HashMap<Stri
     durations
 }
 
-fn derive_category(app: &str, regexes: &[CachedCategoryRegex]) -> String {
-    if regexes.is_empty() {
-        return "Miscellaneous".to_string();
+/// Subcategory breakdown per top-level category, largest first. Manual entries
+/// already carry their subcategory in the app rows, so only tracked time counts.
+fn subcategory_stats(logs: &[Log], regexes: &[CachedCategoryRegex], categories: &[Category]) -> HashMap<String, Vec<SubcategoryStat>> {
+    let mut stats = HashMap::new();
+    if regexes.iter().all(|rule| rule.subcategory.is_none()) {
+        return stats;
     }
-
-
-    regexes
-        .iter()
-        .find(|regex| regex.regex.is_match(app))
-        .map(|regex| regex.category.clone())
-        .unwrap_or_else(|| "Miscellaneous".to_string())
+    let mut cache: HashMap<&str, Option<&CachedCategoryRegex>> = HashMap::new();
+    let mut totals: HashMap<(&str, &str), i64> = HashMap::new();
+    for log in logs.iter().filter(|log| !is_manual(log)) {
+        let rule = *cache.entry(log.app.as_str()).or_insert_with(|| find_match(&log.app, regexes));
+        if let Some((category, name)) = rule.and_then(|rule| Some((rule.category.as_str(), rule.subcategory.as_deref()?))) {
+            *totals.entry((category, name)).or_insert(0) += log.duration;
+        }
+    }
+    for ((category, name), total_duration) in totals {
+        let parent = categories.iter().find(|cat| cat.parent_id.is_none() && cat.name == category).map(|cat| cat.id);
+        let color = categories.iter()
+            .find(|cat| cat.name == name && parent.is_some() && cat.parent_id == parent)
+            .and_then(|cat| cat.color.clone());
+        stats.entry(category.to_string()).or_insert_with(Vec::new).push(SubcategoryStat {name: name.to_string(), total_duration, color});
+    }
+    for rows in stats.values_mut() {
+        rows.sort_by(|a: &SubcategoryStat, b| b.total_duration.cmp(&a.total_duration).then_with(|| a.name.cmp(&b.name)));
+    }
+    stats
 }
 
 fn derive_category_cached(
@@ -465,7 +484,7 @@ fn build_regex_table(
     cat_regex: &[CategoryRegex],
 ) -> Result<Vec<CachedCategoryRegex>, Error> {
     let key = CategoryMatcherKey {
-        categories: categories.iter().map(|category| (category.id, category.name.clone(), category.priority)).collect(),
+        categories: categories.iter().map(|category| (category.id, category.name.clone(), category.priority, category.parent_id)).collect(),
         patterns: cat_regex.iter().map(|pattern| (pattern.cat_id, pattern.regex.clone())).collect(),
     };
     {
@@ -474,27 +493,7 @@ fn build_regex_table(
             if cached_key == &key { return Ok(matchers.clone()); }
         }
     }
-    let category_map: HashMap<i32, &Category> =
-        categories.iter().map(|cat| (cat.id, cat)).collect();
-
-    let mut regex: Vec<CachedCategoryRegex> = cat_regex
-        .iter()
-        .map(|reg| {
-            let cat = category_map
-                .get(&reg.cat_id)
-                .ok_or_else(|| anyhow::anyhow!("Category not found"))?;
-
-            let compiled_regex = Regex::new(&reg.regex)?;
-
-            Ok(CachedCategoryRegex {
-                category: cat.name.clone(),
-                priority: cat.priority,
-                regex: compiled_regex,
-            })
-        })
-        .collect::<Result<Vec<_>, Error>>()?;
-
-    regex.sort_by_key(|r| std::cmp::Reverse(r.priority));
+    let regex = category_match::build_regex_table(categories, cat_regex)?;
     *CATEGORY_MATCHER_CACHE.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some((key, regex.clone()));
     Ok(regex)
 }
@@ -734,7 +733,7 @@ async fn week_statistics_with_range_reuse(
     let mut category_cache = HashMap::<String, String>::new();
     let mut category_colors: HashMap<String, Option<String>> = HashMap::new();
 
-    for cat in &categories {
+    for cat in categories.iter().filter(|cat| cat.parent_id.is_none()) {
         category_colors.insert(cat.name.clone(), cat.color.clone());
     }
     add_manual_category_colors(&mut category_colors).await?;
@@ -747,6 +746,7 @@ async fn week_statistics_with_range_reuse(
     perf.stage("categorize");
 
     let total_time: i64 = category_durations.values().sum();
+    let mut subcategories = subcategory_stats(&period_logs, &regex, &categories);
 
     let mut category_stats: Vec<CategoryStat> = category_durations
         .into_iter()
@@ -762,6 +762,7 @@ async fn week_statistics_with_range_reuse(
                 percentage,
                 percentage_change: None, // Will calculate later if needed
                 color: category_colors.get(&category).cloned().flatten(),
+                subcategories: subcategories.remove(&category).unwrap_or_default(),
             }
         })
         .collect();
@@ -999,7 +1000,7 @@ async fn total_statistics(include_manual: Option<bool>) -> Result<WeekStatistics
 
     let mut category_colors: HashMap<String, Option<String>> = HashMap::new();
 
-    for cat in &categories {
+    for cat in categories.iter().filter(|cat| cat.parent_id.is_none()) {
         category_colors.insert(cat.name.clone(), cat.color.clone());
     }
     add_manual_category_colors(&mut category_colors).await?;
@@ -1034,6 +1035,7 @@ async fn total_statistics(include_manual: Option<bool>) -> Result<WeekStatistics
     perf.note("active_days", day_totals.len());
 
     let total_time: i64 = category_durations.values().sum();
+    let mut subcategories = subcategory_stats(&logs, &regex, &categories);
 
     let mut category_stats: Vec<CategoryStat> = category_durations
         .into_iter()
@@ -1049,6 +1051,7 @@ async fn total_statistics(include_manual: Option<bool>) -> Result<WeekStatistics
                 percentage,
                 percentage_change: None,
                 color: category_colors.get(&category).cloned().flatten(),
+                subcategories: subcategories.remove(&category).unwrap_or_default(),
             }
         })
         .collect();
@@ -1184,7 +1187,7 @@ pub async fn get_day_statistics(
     let mut category_cache = HashMap::<String, String>::new();
     let mut category_colors: HashMap<String, Option<String>> = HashMap::new();
 
-    for cat in &categories {
+    for cat in categories.iter().filter(|cat| cat.parent_id.is_none()) {
         category_colors.insert(cat.name.clone(), cat.color.clone());
     }
     add_manual_category_colors(&mut category_colors).await?;
@@ -1195,6 +1198,7 @@ pub async fn get_day_statistics(
     }
 
     let total_time: i64 = category_durations.values().sum();
+    let mut subcategories = subcategory_stats(&day_logs, &regex, &categories);
 
     let mut category_stats: Vec<CategoryStat> = category_durations
         .into_iter()
@@ -1210,6 +1214,7 @@ pub async fn get_day_statistics(
                 percentage,
                 percentage_change: None,
                 color: category_colors.get(&category).cloned().flatten(),
+                subcategories: subcategories.remove(&category).unwrap_or_default(),
             }
         })
         .collect();
@@ -1489,7 +1494,7 @@ mod category_matcher_tests {
     use super::*;
 
     fn category(id: i32, name: &str, priority: i32) -> Category {
-        Category {id,name:name.into(),priority,color:None,regex_enabled:true,is_visible:true,in_stats:true,is_collapsed:false}
+        Category {id,name:name.into(),priority,color:None,regex_enabled:true,is_visible:true,in_stats:true,is_collapsed:false,parent_id:None}
     }
 
     fn pattern(id: i32, cat_id: i32, regex: &str) -> CategoryRegex {

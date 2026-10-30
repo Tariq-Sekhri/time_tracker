@@ -187,10 +187,10 @@ async fn category_paths_match_case_insensitively_and_respect_depth() {
         dry_run: false,
         create_missing_categories: true,
         manual_categories: vec![
-            ImportManualCategory { name: "Legs".into(), color: Some("#123456".into()), parent_name: Some("Gym".into()) },
-            ImportManualCategory { name: "Gym".into(), color: Some("#AABBCC".into()), parent_name: None },
-            ImportManualCategory { name: "client".into(), color: Some("#000000".into()), parent_name: None },
-            ImportManualCategory { name: "Uncategorized".into(), color: Some("#000000".into()), parent_name: None },
+            ImportManualCategory { name: "Legs".into(), color: Some("#123456".into()), parent_name: Some("Gym".into()), priority: 0, rules: Vec::new() },
+            ImportManualCategory { name: "Gym".into(), color: Some("#AABBCC".into()), parent_name: None, priority: 0, rules: Vec::new() },
+            ImportManualCategory { name: "client".into(), color: Some("#000000".into()), parent_name: None, priority: 0, rules: Vec::new() },
+            ImportManualCategory { name: "Uncategorized".into(), color: Some("#000000".into()), parent_name: None, priority: 0, rules: Vec::new() },
         ],
         manual_entries: vec![
             entry("a", &[" client ", "PROJECT"], 100, 200),
@@ -254,9 +254,10 @@ fn everything_request() -> ImportRequest {
         dry_run: true,
         create_missing_categories: true,
         manual_entries: vec![entry("Work", &["New", "Child"], 100, 200)],
-        manual_categories: vec![ImportManualCategory { name: "Other".into(), color: Some("#ffffff".into()), parent_name: None }],
+        manual_categories: vec![ImportManualCategory { name: "Other".into(), color: Some("#ffffff".into()), parent_name: None, priority: 0, rules: Vec::new() }],
         activity_categories: vec![
             ExportActivityCategory {
+                parent_name: None,
                 name: "coding".into(),
                 color: None,
                 priority: 1,
@@ -265,6 +266,7 @@ fn everything_request() -> ImportRequest {
                 rules: vec!["Code".into(), "Rider".into(), "Rider".into()],
             },
             ExportActivityCategory {
+                parent_name: None,
                 name: "Design".into(),
                 color: Some("#ff0000".into()),
                 priority: 650,
@@ -528,6 +530,11 @@ async fn exported_data_round_trips_into_an_empty_database() {
     seed_activity(&source).await;
     exec(&source, "INSERT INTO manual_projects (id, name, parent_id) VALUES (1, 'Client', NULL), (2, 'Project', 1)").await;
     exec(&source, "INSERT INTO manual_time_blocks (title, project_id, start_time, end_time, created_at, updated_at) VALUES ('Child', 2, 200, 260, 1, 2)").await;
+    exec(&source, "UPDATE manual_projects SET priority = 7 WHERE id = 2").await;
+    exec(&source, "INSERT INTO category_regex (manual_project_id, regex) VALUES (2, 'Essay')").await;
+    exec(&source, "INSERT INTO category (name, priority, parent_id) SELECT 'Rust', 5, id FROM category WHERE name = 'Coding'").await;
+    exec(&source, "INSERT INTO category (name, priority, parent_id) SELECT 'Rust', 5, id FROM category WHERE name = 'Browsing'").await;
+    exec(&source, "INSERT INTO category_regex (cat_id, regex) SELECT c.id, 'cargo' FROM category c JOIN category p ON p.id = c.parent_id WHERE p.name = 'Coding'").await;
     let dataset = run_export(&source, &scope(include_all())).await;
     let request = ImportRequest {
         dry_run: false,
@@ -546,7 +553,7 @@ async fn exported_data_round_trips_into_an_empty_database() {
         manual_categories: dataset
             .manual_categories
             .iter()
-            .map(|c| ImportManualCategory { name: c.name.clone(), color: Some(c.color.clone()), parent_name: c.parent_name.clone() })
+            .map(|c| ImportManualCategory { name: c.name.clone(), color: Some(c.color.clone()), parent_name: c.parent_name.clone(), priority: c.priority, rules: c.rules.clone() })
             .collect(),
         activity_categories: dataset.activity_categories.clone(),
         app_groups: dataset.app_groups.clone(),
@@ -564,8 +571,19 @@ async fn exported_data_round_trips_into_an_empty_database() {
     assert_eq!(report.manual_categories_created, vec!["Client", "Client › Project"]);
     assert_eq!(report.manual_entries_imported, 1);
     assert_eq!(report.activity_logs_imported, dataset.activity_logs.len() as u64);
+    let manual_rule: (String, i32) = sqlx::query_as("SELECT r.regex, p.priority FROM category_regex r JOIN manual_projects p ON p.id = r.manual_project_id WHERE p.name = 'Project'")
+        .fetch_one(&target).await.unwrap();
+    assert_eq!(manual_rule, ("Essay".into(), 7));
+    let auto_rule: String = sqlx::query_scalar("SELECT p.name FROM category_regex r JOIN category c ON c.id = r.cat_id JOIN category p ON p.id = c.parent_id WHERE r.regex = 'cargo'")
+        .fetch_one(&target).await.unwrap();
+    assert_eq!(auto_rule, "Coding");
+    let same_named_subcategories: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM category WHERE name = 'Rust'").fetch_one(&target).await.unwrap();
+    assert_eq!(same_named_subcategories, 2);
     // A second import of the same file changes nothing.
     let again = import::import(&target, &request, 9).await.unwrap();
+    assert_eq!(again.category_rules_added, 0);
+    let categories_after_reimport: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM category WHERE name = 'Rust'").fetch_one(&target).await.unwrap();
+    assert_eq!(categories_after_reimport, 2);
     assert_eq!((again.manual_entries_imported, again.activity_logs_imported, again.devices_added), (0, 0, 0));
     assert_eq!(again.activity_logs_duplicate, dataset.activity_logs.len() as u64);
 }

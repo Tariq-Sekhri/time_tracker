@@ -1,5 +1,6 @@
 use crate::db;
 use crate::db::error::Error;
+use crate::db::queries::category_match::{build_regex_table, derive_category, find_match, CachedCategoryRegex};
 use crate::db::tables::app_group::{
     build_app_group_matchers, get_app_groups, resolve_app_group, CachedAppGroup,
 };
@@ -19,12 +20,17 @@ pub struct TimeBlockLogs {
     pub app: String,
     pub app_names: Vec<String>,
     pub total_duration: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subcategory: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct TimeBlock {
     pub id: i32,
     pub category: String,
+    /// The subcategory holding most of this block's time, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subcategory: Option<String>,
     pub apps: Vec<TimeBlockLogs>,
     pub start_time: i64,
     pub end_time: i64,
@@ -44,11 +50,13 @@ impl TimeBlock {
         TimeBlock {
             id,
             category: log_cat,
+            subcategory: None,
             start_time: log.timestamp,
             apps: vec![TimeBlockLogs {
                 app: resolve_app_group(&log.app, app_groups).to_string(),
                 app_names: vec![log.app.clone()],
                 total_duration: log.duration,
+                subcategory: None,
             }],
             end_time: log.timestamp + log.duration,
         }
@@ -100,59 +108,36 @@ impl TimeBlock {
     }
 }
 
-pub(crate) struct CachedCategoryRegex {
-    regex: Regex,
-    category: String,
-    priority: i32,
-}
-
-pub(crate) fn derive_category(app: &str, regexes: &[CachedCategoryRegex]) -> Result<String, Error> {
-    if regexes.is_empty() {
-        return Ok("Miscellaneous".to_string());
-    }
-
-    regexes
-        .iter()
-        .find(|regex| regex.regex.is_match(app))
-        .map(|regex| regex.category.clone())
-        .ok_or_else(|| anyhow::anyhow!("Derive Category Error").into())
-}
-
-pub(crate) fn build_regex_table(
-    categories: &[Category],
-    cat_regex: &[CategoryRegex],
-) -> Result<Vec<CachedCategoryRegex>, Error> {
-    let category_map: HashMap<i32, &Category> =
-        categories.iter().map(|cat| (cat.id, cat)).collect();
-
-    let mut regex: Vec<CachedCategoryRegex> = cat_regex
-        .iter()
-        .map(|reg| {
-            let cat = category_map
-                .get(&reg.cat_id)
-                .ok_or_else(|| anyhow::anyhow!("Error creating regex: category not found"))?;
-
-            let compiled_regex = Regex::new(&reg.regex)?;
-
-            Ok(CachedCategoryRegex {
-                category: cat.name.clone(),
-                priority: cat.priority,
-                regex: compiled_regex,
-            })
-        })
-        .collect::<Result<Vec<_>, Error>>()?;
-
-    regex.sort_by_key(|r| std::cmp::Reverse(r.priority));
-    Ok(regex)
-}
-
 fn get_time_blocks(
     logs: &[Log],
     regex: &[CachedCategoryRegex],
     app_groups: &[CachedAppGroup],
     time_block_settings: &TimeBlockSettings,
 ) -> Result<Vec<TimeBlock>, Error> {
-    get_time_blocks_with(logs, |app| derive_category(app, regex), app_groups, time_block_settings)
+    get_time_blocks_with(logs, |app| Ok(derive_category(app, regex)), app_groups, time_block_settings)
+}
+
+/// Blocks merge on the top-level category, so subcategories are labelled once
+/// merging is done and can never change how time is grouped.
+pub(crate) fn label_subcategories(blocks: &mut [TimeBlock], regex: &[CachedCategoryRegex]) {
+    if regex.iter().all(|rule| rule.subcategory.is_none()) {
+        return;
+    }
+    let mut cache: HashMap<String, Option<&CachedCategoryRegex>> = HashMap::new();
+    for block in blocks {
+        let mut totals: Vec<(Option<String>, i64)> = Vec::new();
+        for app in &mut block.apps {
+            app.subcategory = app.app_names.iter().find_map(|title| {
+                let rule = *cache.entry(title.clone()).or_insert_with(|| find_match(title, regex));
+                rule.filter(|rule| rule.category == block.category)?.subcategory.clone()
+            });
+            match totals.iter_mut().find(|(name, _)| *name == app.subcategory) {
+                Some((_, total)) => *total += app.total_duration,
+                None => totals.push((app.subcategory.clone(), app.total_duration)),
+            }
+        }
+        block.subcategory = totals.into_iter().rev().max_by_key(|(_, total)| *total).and_then(|(name, _)| name);
+    }
 }
 
 /// Same as `get_time_blocks`, but lets callers supply the category of each
@@ -222,6 +207,7 @@ pub(crate) fn get_time_blocks_with(
                             app: grouped_app.to_string(),
                             app_names: vec![log.app.clone()],
                             total_duration: log.duration,
+                            subcategory: None,
                         })
                     }
                 } else {
@@ -289,6 +275,7 @@ pub(crate) fn get_time_blocks_with(
                         app: grouped_app.to_string(),
                         app_names: vec![short_log.app.clone()],
                         total_duration: short_log.duration,
+                        subcategory: None,
                     });
                 }
             }
@@ -437,7 +424,8 @@ pub async fn get_week(
     let blocks = get_time_blocks(&logs, &regex, &app_groups, &time_block_settings)?;
     perf.stage("build_blocks");
     perf.note("raw_blocks", blocks.len());
-    let blocks = transform_time_blocks(blocks, &time_block_settings)?;
+    let mut blocks = transform_time_blocks(blocks, &time_block_settings)?;
+    label_subcategories(&mut blocks, &regex);
     perf.stage("merge_blocks");
     perf.note("blocks", blocks.len());
     perf.done();
@@ -499,7 +487,8 @@ pub async fn get_week_for_app_filter(
 
     let blocks = get_time_blocks(&logs, &regex, &app_groups, &time_block_settings)?;
     perf.stage("build_blocks");
-    let blocks = transform_time_blocks(blocks, &time_block_settings)?;
+    let mut blocks = transform_time_blocks(blocks, &time_block_settings)?;
+    label_subcategories(&mut blocks, &regex);
     perf.stage("merge_blocks");
     perf.note("blocks", blocks.len());
     perf.done();
@@ -787,10 +776,12 @@ mod calendar_performance_tests {
                 blocks.push(TimeBlock {
                     id,
                     category: format!("category{}", (seed >> 32) % 4),
+                    subcategory: None,
                     apps: vec![TimeBlockLogs {
                         app: "app".into(),
                         app_names: vec!["title".into()],
                         total_duration: duration,
+                        subcategory: None,
                     }],
                     start_time: start,
                     end_time: start + duration,

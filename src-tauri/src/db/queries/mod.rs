@@ -1,3 +1,4 @@
+pub(crate) mod category_match;
 pub mod week;
 pub mod statistics;
 

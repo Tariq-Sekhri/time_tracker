@@ -1,7 +1,8 @@
 use crate::db;
+use crate::db::queries::category_match::{build_regex_table, find_match, rule_order, FALLBACK_CATEGORY};
 use crate::db::Error;
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, SqlitePool};
+use sqlx::{FromRow, SqliteConnection, SqlitePool};
 
 #[derive(Debug, Serialize, FromRow, Deserialize)]
 pub struct CategoryRegex {
@@ -15,26 +16,40 @@ pub struct NewCategoryRegex {
     regex: String,
 }
 
+/// One entry of the single rule list: exactly one of the two targets is set.
+#[derive(Debug, Serialize, FromRow, Deserialize)]
+pub struct CategoryRule {
+    pub id: i32,
+    pub cat_id: Option<i32>,
+    pub manual_project_id: Option<i64>,
+    pub regex: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NewCategoryRule {
+    pub cat_id: Option<i32>,
+    pub manual_project_id: Option<i64>,
+    pub regex: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct MatchingCategoryRule {
     pub rule: Option<CategoryRegex>,
     pub category_name: String,
+    pub subcategory: Option<String>,
 }
 
 fn matching_rule(app: &str, categories: &[super::category::Category], rules: Vec<CategoryRegex>) -> Result<MatchingCategoryRule, Error> {
-    let mut compiled = Vec::new();
-    for rule in rules {
-        let category = categories.iter().find(|category| category.id == rule.cat_id)
-            .ok_or_else(|| anyhow::anyhow!("Category not found"))?;
-        let pattern = regex::Regex::new(&rule.regex).map_err(anyhow::Error::new)?;
-        compiled.push((category.priority, category.name.clone(), pattern, rule));
-    }
     // The calendar and statistics both choose the first match after a stable priority sort.
-    compiled.sort_by_key(|row| std::cmp::Reverse(row.0));
-    for (_, category_name, pattern, rule) in compiled {
-        if pattern.is_match(app) { return Ok(MatchingCategoryRule {rule: Some(rule), category_name}); }
-    }
-    Ok(MatchingCategoryRule {rule: None, category_name: "Miscellaneous".into()})
+    let table = build_regex_table(categories, &rules)?;
+    Ok(match find_match(app, &table) {
+        Some(matched) => MatchingCategoryRule {
+            category_name: matched.category.clone(),
+            subcategory: matched.subcategory.clone(),
+            rule: rules.into_iter().find(|rule| rule.id == matched.rule_id),
+        },
+        None => MatchingCategoryRule {rule: None, category_name: FALLBACK_CATEGORY.into(), subcategory: None},
+    })
 }
 
 #[tauri::command]
@@ -46,7 +61,7 @@ pub async fn get_matching_category_rule(app_name: String) -> Result<MatchingCate
 mod matching_rule_tests {
     use super::*;
     fn category(id: i32, priority: i32) -> super::super::category::Category {
-        super::super::category::Category {id, name: format!("Category {id}"), priority, color: None, regex_enabled: true, is_visible: true, in_stats: true, is_collapsed: false}
+        super::super::category::Category {id, name: format!("Category {id}"), priority, color: None, regex_enabled: true, is_visible: true, in_stats: true, is_collapsed: false, parent_id: None}
     }
     fn rule(id: i32, cat_id: i32, pattern: &str) -> CategoryRegex {CategoryRegex {id, cat_id, regex: pattern.into()}}
     #[test]
@@ -63,15 +78,41 @@ mod matching_rule_tests {
 pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS category_regex (
-    id       INTEGER
+    id                INTEGER
         primary key autoincrement,
-    cat_id   INTEGER not null,
-    regex    TEXT    not null
+    cat_id            INTEGER,
+    manual_project_id INTEGER,
+    regex             TEXT    not null,
+    CHECK ((cat_id IS NULL) <> (manual_project_id IS NULL))
 );",
     )
     .execute(pool)
     .await?;
 
+    Ok(())
+}
+
+/// Older databases required `cat_id`, which manual rules leave empty.
+pub async fn ensure_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    let cat_id_required: Option<bool> = sqlx::query_scalar("SELECT \"notnull\" FROM pragma_table_info('category_regex') WHERE name = 'cat_id'")
+        .fetch_optional(pool).await?;
+    if cat_id_required == Some(true) {
+        let mut transaction = pool.begin().await?;
+        sqlx::query("ALTER TABLE category_regex RENAME TO category_regex_legacy").execute(&mut *transaction).await?;
+        sqlx::query(
+            "CREATE TABLE category_regex (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                cat_id            INTEGER,
+                manual_project_id INTEGER,
+                regex             TEXT NOT NULL,
+                CHECK ((cat_id IS NULL) <> (manual_project_id IS NULL))
+            )",
+        ).execute(&mut *transaction).await?;
+        sqlx::query("INSERT INTO category_regex (id, cat_id, regex) SELECT id, cat_id, regex FROM category_regex_legacy")
+            .execute(&mut *transaction).await?;
+        sqlx::query("DROP TABLE category_regex_legacy").execute(&mut *transaction).await?;
+        transaction.commit().await?;
+    }
     Ok(())
 }
 
@@ -233,7 +274,7 @@ pub async fn ensure_default_regexes(pool: &SqlitePool) -> Result<(), sqlx::Error
         let non_misc_regex_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM category_regex cr
              JOIN category c ON c.id = cr.cat_id
-             WHERE NOT (c.name = ?1 AND cr.regex = ?2)",
+             WHERE c.parent_id IS NULL AND NOT (c.name = ?1 AND cr.regex = ?2)",
         )
         .bind("Miscellaneous")
         .bind(".*")
@@ -251,7 +292,7 @@ pub async fn ensure_default_regexes(pool: &SqlitePool) -> Result<(), sqlx::Error
                     "SELECT 1
                      FROM category_regex cr
                      JOIN category c ON c.id = cr.cat_id
-                     WHERE c.name = ?1 AND cr.regex = ?2
+                     WHERE c.name = ?1 AND c.parent_id IS NULL AND cr.regex = ?2
                      LIMIT 1",
                 )
                 .bind(category_name)
@@ -271,10 +312,10 @@ pub async fn ensure_default_regexes(pool: &SqlitePool) -> Result<(), sqlx::Error
             .await?;
     }
 
-    let misc = sqlx::query!("SELECT id FROM category WHERE name = 'Miscellaneous'")
+    let misc: Option<i32> = sqlx::query_scalar("SELECT id FROM category WHERE name = 'Miscellaneous' AND parent_id IS NULL")
         .fetch_optional(pool)
         .await?;
-    if let Some(m) = misc {
+    if let Some(misc_id) = misc {
         sqlx::query(
             "INSERT INTO category_regex (cat_id, regex)
              SELECT ?1, ?2
@@ -282,7 +323,7 @@ pub async fn ensure_default_regexes(pool: &SqlitePool) -> Result<(), sqlx::Error
                  SELECT 1 FROM category_regex WHERE cat_id = ?1 AND regex = ?2
              )",
         )
-        .bind(m.id)
+        .bind(misc_id)
         .bind(".*")
         .execute(pool)
         .await?;
@@ -311,7 +352,7 @@ async fn apply_default_regex_seed(
         return Ok(());
     }
 
-    let cat_id: Option<i32> = sqlx::query_scalar("SELECT id FROM category WHERE name = ?1")
+    let cat_id: Option<i32> = sqlx::query_scalar("SELECT id FROM category WHERE name = ?1 AND parent_id IS NULL")
         .bind(category_name)
         .fetch_optional(pool)
         .await?;
@@ -380,130 +421,294 @@ fn find_seed_key(category_name: &str, regex: &str) -> Option<&'static str> {
     }
     None
 }
+/// A rule belongs to exactly one target. Auto rules sort tracked windows when
+/// they are read; manual rules file Uncategorized manual entries when they are
+/// saved. The two lists never compete with each other.
+fn validate_target_shape(cat_id: Option<i32>, manual_project_id: Option<i64>, regex: &str) -> Result<(), Error> {
+    if regex.trim().is_empty() {
+        return Err(anyhow::anyhow!("Pattern cannot be empty").into());
+    }
+    regex::Regex::new(regex).map_err(anyhow::Error::new)?;
+    if cat_id.is_some() == manual_project_id.is_some() {
+        return Err(anyhow::anyhow!("Choose one category for this rule").into());
+    }
+    Ok(())
+}
+
+async fn validate_rule(pool: &SqlitePool, cat_id: Option<i32>, manual_project_id: Option<i64>, regex: &str) -> Result<(), Error> {
+    validate_target_shape(cat_id, manual_project_id, regex)?;
+    if let Some(cat_id) = cat_id {
+        let exists: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM category WHERE id = ?1").bind(cat_id).fetch_one(pool).await?;
+        if exists == 0 {
+            return Err(anyhow::anyhow!("Category with id {} does not exist", cat_id).into());
+        }
+    }
+    super::manual_project::validate_project_id(pool, manual_project_id).await
+}
+
+async fn insert_rule(pool: &SqlitePool, rule: &NewCategoryRule) -> Result<i64, Error> {
+    validate_rule(pool, rule.cat_id, rule.manual_project_id, &rule.regex).await?;
+    let result = sqlx::query("INSERT INTO category_regex (cat_id, manual_project_id, regex) VALUES (?1, ?2, ?3)")
+        .bind(rule.cat_id)
+        .bind(rule.manual_project_id)
+        .bind(&rule.regex)
+        .execute(pool)
+        .await?;
+    Ok(result.last_insert_rowid())
+}
+
+async fn top_level_name(pool: &SqlitePool, cat_id: Option<i32>) -> Result<Option<String>, Error> {
+    let Some(cat_id) = cat_id else { return Ok(None) };
+    Ok(sqlx::query_scalar("SELECT name FROM category WHERE id = ?1 AND parent_id IS NULL")
+        .bind(cat_id)
+        .fetch_optional(pool)
+        .await?)
+}
+
+async fn find_rule(pool: &SqlitePool, id: i32) -> Result<Option<CategoryRule>, Error> {
+    Ok(sqlx::query_as::<_, CategoryRule>("SELECT id, cat_id, manual_project_id, regex FROM category_regex WHERE id = ?1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?)
+}
+
+async fn update_rule(pool: &SqlitePool, rule: &CategoryRule) -> Result<(), Error> {
+    validate_rule(pool, rule.cat_id, rule.manual_project_id, &rule.regex).await?;
+    let current = find_rule(pool, rule.id).await?
+        .ok_or_else(|| anyhow::anyhow!("Regex pattern with id {} does not exist", rule.id))?;
+    if let Some(name) = top_level_name(pool, current.cat_id).await? {
+        if name == FALLBACK_CATEGORY && current.regex == ".*" {
+            return Err(anyhow::anyhow!("The catch-all pattern (.*) for Miscellaneous cannot be edited.").into());
+        }
+        if let Some(seed_key) = find_seed_key(&name, &current.regex) {
+            if current.cat_id != rule.cat_id || current.regex != rule.regex {
+                mark_seed_as_deleted(pool, seed_key).await?;
+            }
+        }
+    }
+    sqlx::query("UPDATE category_regex SET cat_id = ?1, manual_project_id = ?2, regex = ?3 WHERE id = ?4")
+        .bind(rule.cat_id)
+        .bind(rule.manual_project_id)
+        .bind(&rule.regex)
+        .bind(rule.id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+async fn manual_matchers(conn: &mut SqliteConnection) -> Result<Vec<(regex::Regex, i64)>, Error> {
+    let rows = sqlx::query_as::<_, (String, i64, i32, Option<i32>)>(
+        "SELECT r.regex, p.id, p.priority, parent.priority
+         FROM category_regex r
+         JOIN manual_projects p ON p.id = r.manual_project_id
+         LEFT JOIN manual_projects parent ON parent.id = p.parent_id
+         ORDER BY r.id",
+    )
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut ordered: Vec<_> = rows.into_iter().map(|(pattern, id, priority, parent)| (rule_order(parent, priority), pattern, id)).collect();
+    ordered.sort_by_key(|(order, _, _)| *order);
+    // A bad stored pattern must never stop time from being saved.
+    Ok(ordered.into_iter().filter_map(|(_, pattern, id)| {
+        crate::logger::Log::result("Invalid manual category rule", regex::Regex::new(&pattern)).ok().map(|regex| (regex, id))
+    }).collect())
+}
+
+fn first_manual_match(title: &str, matchers: &[(regex::Regex, i64)]) -> Option<i64> {
+    let title = title.trim();
+    if title.is_empty() {
+        return None;
+    }
+    matchers.iter().find(|(regex, _)| regex.is_match(title)).map(|(_, id)| *id)
+}
+
+pub(crate) async fn manual_project_for_title(conn: &mut SqliteConnection, title: &str) -> Result<Option<i64>, Error> {
+    Ok(first_manual_match(title, &manual_matchers(conn).await?))
+}
+
+async fn apply_rules_to_uncategorized(pool: &SqlitePool, now: i64) -> Result<u64, Error> {
+    let mut transaction = pool.begin().await?;
+    let matchers = manual_matchers(&mut transaction).await?;
+    let entries = sqlx::query_as::<_, (i64, String)>("SELECT id, title FROM manual_time_blocks WHERE project_id IS NULL")
+        .fetch_all(&mut *transaction)
+        .await?;
+    let mut updated = 0;
+    for (id, title) in entries {
+        if let Some(project_id) = first_manual_match(&title, &matchers) {
+            updated += sqlx::query("UPDATE manual_time_blocks SET project_id = ?1, updated_at = ?2 WHERE id = ?3")
+                .bind(project_id)
+                .bind(now)
+                .bind(id)
+                .execute(&mut *transaction)
+                .await?
+                .rows_affected();
+        }
+    }
+    transaction.commit().await?;
+    Ok(updated)
+}
+
+#[tauri::command]
+pub async fn get_category_rules() -> Result<Vec<CategoryRule>, Error> {
+    let pool = db::get_pool().await?;
+    Ok(sqlx::query_as::<_, CategoryRule>("SELECT id, cat_id, manual_project_id, regex FROM category_regex ORDER BY id")
+        .fetch_all(&pool)
+        .await?)
+}
+
+#[tauri::command]
+pub async fn insert_category_rule(rule: NewCategoryRule) -> Result<i64, Error> {
+    let pool = db::get_pool().await?;
+    insert_rule(&pool, &rule).await
+}
+
+#[tauri::command]
+pub async fn update_category_rule(rule: CategoryRule) -> Result<(), Error> {
+    let pool = db::get_pool().await?;
+    update_rule(&pool, &rule).await
+}
+
+#[tauri::command]
+pub async fn match_manual_rule(title: String) -> Result<Option<i64>, Error> {
+    let pool = db::get_pool().await?;
+    manual_project_for_title(&mut *pool.acquire().await?, &title).await
+}
+
+#[tauri::command]
+pub async fn apply_manual_rules() -> Result<u64, Error> {
+    let pool = db::get_pool().await?;
+    let updated = apply_rules_to_uncategorized(&pool, chrono::Utc::now().timestamp()).await?;
+    crate::manual_sync::entries_changed_locally();
+    Ok(updated)
+}
+
 #[tauri::command]
 pub async fn insert_cat_regex(new_category_regex: NewCategoryRegex) -> Result<i64, Error> {
     let pool = db::get_pool().await?;
-    let result = sqlx::query!(
-        "INSERT INTO category_regex (cat_id, regex) VALUES (?1, ?2)",
-        new_category_regex.cat_id,
-        new_category_regex.regex
-    )
-    .execute(&pool)
-    .await?;
-    Ok(result.last_insert_rowid())
+    insert_rule(&pool, &NewCategoryRule {cat_id: Some(new_category_regex.cat_id), manual_project_id: None, regex: new_category_regex.regex}).await
 }
 
 #[tauri::command]
 pub async fn update_cat_regex_by_id(cat_regex: CategoryRegex) -> Result<(), Error> {
-    if cat_regex.regex.trim().is_empty() { return Err(anyhow::anyhow!("Pattern cannot be empty").into()); }
-    regex::Regex::new(&cat_regex.regex).map_err(anyhow::Error::new)?;
     let pool = db::get_pool().await?;
-    
-    let current = sqlx::query_as!(
-        CategoryRegex,
-        r#"SELECT id as "id!: i32", cat_id as "cat_id!: i32", regex FROM category_regex WHERE id = ?1"#,
-        cat_regex.id
-    )
-    .fetch_optional(&pool)
-    .await?;
-    if let Some(ref row) = current {
-        let cat_name: Option<String> = sqlx::query_scalar("SELECT name FROM category WHERE id = ?1")
-            .bind(row.cat_id)
-            .fetch_optional(&pool)
-            .await?;
-        if cat_name.as_deref() == Some("Miscellaneous") && row.regex == ".*" {
-            return Err(anyhow::anyhow!("The catch-all pattern (.*) for Miscellaneous cannot be edited.").into());
-        }
-        if let Some(name) = cat_name {
-            if let Some(seed_key) = find_seed_key(&name, &row.regex) {
-                if row.cat_id != cat_regex.cat_id || row.regex != cat_regex.regex {
-                    mark_seed_as_deleted(&pool, seed_key).await?;
-                }
-            }
-        }
-    }
-    
-    let category_exists: i64 = sqlx::query_scalar!(
-        "SELECT COUNT(*) FROM category WHERE id = ?1",
-        cat_regex.cat_id
-    )
-    .fetch_one(&pool)
-    .await?;
-    
-    if category_exists == 0 {
-        return Err(anyhow::anyhow!("Category with id {} does not exist", cat_regex.cat_id).into());
-    }
-    
-    let regex_exists: i64 = sqlx::query_scalar!(
-        "SELECT COUNT(*) FROM category_regex WHERE id = ?1",
-        cat_regex.id
-    )
-    .fetch_one(&pool)
-    .await?;
-    
-    if regex_exists == 0 {
-        return Err(anyhow::anyhow!("Regex pattern with id {} does not exist", cat_regex.id).into());
-    }
-    
-    sqlx::query!(
-        "UPDATE category_regex SET cat_id = ?1, regex = ?2 WHERE id = ?3",
-        cat_regex.cat_id,
-        cat_regex.regex,
-        cat_regex.id
-    )
-    .execute(&pool)
-    .await?;
-    Ok(())
+    update_rule(&pool, &CategoryRule {id: cat_regex.id, cat_id: Some(cat_regex.cat_id), manual_project_id: None, regex: cat_regex.regex}).await
 }
+
 #[tauri::command]
 pub async fn get_cat_regex_by_id(id: i32) -> Result<CategoryRegex, Error> {
     let pool = db::get_pool().await?;
-    let regex = sqlx::query_as!(
-        CategoryRegex,
-        r#"SELECT id as "id!: i32", cat_id as "cat_id!: i32", regex FROM category_regex WHERE id = ?1"#,
-        id
-    )
-    .fetch_one(&pool)
-    .await?;
+    let regex = sqlx::query_as::<_, CategoryRegex>("SELECT id, cat_id, regex FROM category_regex WHERE id = ?1 AND cat_id IS NOT NULL")
+        .bind(id)
+        .fetch_one(&pool)
+        .await?;
     Ok(regex)
 }
+
 #[tauri::command]
 pub async fn get_cat_regex() -> Result<Vec<CategoryRegex>, Error> {
     let pool = db::get_pool().await?;
-    let regex = sqlx::query_as!(
-        CategoryRegex,
-        r#"SELECT id as "id!: i32", cat_id as "cat_id!: i32", regex FROM category_regex"#
-    )
-    .fetch_all(&pool)
-    .await?;
+    let regex = sqlx::query_as::<_, CategoryRegex>("SELECT id, cat_id, regex FROM category_regex WHERE cat_id IS NOT NULL")
+        .fetch_all(&pool)
+        .await?;
     Ok(regex)
 }
+
 #[tauri::command]
 pub async fn delete_cat_regex_by_id(id: i32) -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    let row = sqlx::query_as!(
-        CategoryRegex,
-        r#"SELECT id as "id!: i32", cat_id as "cat_id!: i32", regex FROM category_regex WHERE id = ?1"#,
-        id
-    )
-    .fetch_optional(&pool)
-    .await?;
-    if let Some(ref r) = row {
-        let cat_name: Option<String> = sqlx::query_scalar("SELECT name FROM category WHERE id = ?1")
-            .bind(r.cat_id)
-            .fetch_optional(&pool)
-            .await?;
-        if cat_name.as_deref() == Some("Miscellaneous") && r.regex == ".*" {
-            return Err(anyhow::anyhow!("The catch-all pattern (.*) for Miscellaneous cannot be deleted.").into());
-        }
-        if let Some(name) = cat_name {
-            if let Some(seed_key) = find_seed_key(&name, &r.regex) {
+    if let Some(rule) = find_rule(&pool, id).await? {
+        if let Some(name) = top_level_name(&pool, rule.cat_id).await? {
+            if name == FALLBACK_CATEGORY && rule.regex == ".*" {
+                return Err(anyhow::anyhow!("The catch-all pattern (.*) for Miscellaneous cannot be deleted.").into());
+            }
+            if let Some(seed_key) = find_seed_key(&name, &rule.regex) {
                 mark_seed_as_deleted(&pool, seed_key).await?;
             }
         }
     }
-    sqlx::query!("DELETE FROM category_regex WHERE id = ?1", id)
+    sqlx::query("DELETE FROM category_regex WHERE id = ?1")
+        .bind(id)
         .execute(&pool)
         .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod rule_tests {
+    use super::*;
+
+    async fn test_pool() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query("CREATE TABLE app_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)").execute(&pool).await.unwrap();
+        super::super::category::create_table(&pool).await.unwrap();
+        super::super::manual_project::create_table(&pool).await.unwrap();
+        super::super::manual_time_block::create_table(&pool).await.unwrap();
+        create_table(&pool).await.unwrap();
+        sqlx::query("INSERT INTO manual_projects (id, name, parent_id, priority) VALUES (1, 'School', NULL, 10), (2, 'Homework', 1, 0), (3, 'Work', NULL, 5)")
+            .execute(&pool).await.unwrap();
+        pool
+    }
+
+    fn manual(project_id: i64, regex: &str) -> NewCategoryRule {
+        NewCategoryRule {cat_id: None, manual_project_id: Some(project_id), regex: regex.into()}
+    }
+
+    async fn title_match(pool: &SqlitePool, title: &str) -> Option<i64> {
+        manual_project_for_title(&mut *pool.acquire().await.unwrap(), title).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn legacy_required_cat_id_is_rebuilt_without_losing_rules() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query("CREATE TABLE category_regex (id INTEGER PRIMARY KEY AUTOINCREMENT, cat_id INTEGER NOT NULL, regex TEXT NOT NULL)").execute(&pool).await.unwrap();
+        sqlx::query("ALTER TABLE category_regex ADD COLUMN manual_project_id INTEGER").execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO category_regex (id, cat_id, regex) VALUES (5, 2, 'Code')").execute(&pool).await.unwrap();
+        ensure_schema(&pool).await.unwrap();
+        ensure_schema(&pool).await.unwrap();
+        let row: (i32, Option<i32>, Option<i64>, String) = sqlx::query_as("SELECT id, cat_id, manual_project_id, regex FROM category_regex").fetch_one(&pool).await.unwrap();
+        assert_eq!(row, (5, Some(2), None, "Code".into()));
+        sqlx::query("INSERT INTO category_regex (manual_project_id, regex) VALUES (1, 'x')").execute(&pool).await.unwrap();
+        assert!(sqlx::query("INSERT INTO category_regex (cat_id, manual_project_id, regex) VALUES (1, 1, 'x')").execute(&pool).await.is_err());
+        assert!(sqlx::query("INSERT INTO category_regex (regex) VALUES ('x')").execute(&pool).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn rules_need_exactly_one_real_target_and_a_valid_pattern() {
+        let pool = test_pool().await;
+        assert!(insert_rule(&pool, &NewCategoryRule {cat_id: Some(1), manual_project_id: Some(1), regex: "x".into()}).await.is_err());
+        assert!(insert_rule(&pool, &NewCategoryRule {cat_id: None, manual_project_id: None, regex: "x".into()}).await.is_err());
+        assert!(insert_rule(&pool, &manual(99, "x")).await.is_err());
+        assert!(insert_rule(&pool, &manual(1, "  ")).await.is_err());
+        assert!(insert_rule(&pool, &manual(1, "(")).await.is_err());
+        let id = insert_rule(&pool, &manual(1, "Essay")).await.unwrap() as i32;
+        let category: i32 = sqlx::query_scalar("SELECT id FROM category WHERE name = 'Coding'").fetch_one(&pool).await.unwrap();
+        // One rule list: a rule can move between auto and manual targets.
+        update_rule(&pool, &CategoryRule {id, cat_id: Some(category), manual_project_id: None, regex: "Essay".into()}).await.unwrap();
+        assert_eq!(title_match(&pool, "Essay").await, None);
+    }
+
+    #[tokio::test]
+    async fn manual_rules_follow_priority_and_ignore_blank_titles_and_bad_patterns() {
+        let pool = test_pool().await;
+        insert_rule(&pool, &manual(3, "Essay")).await.unwrap();
+        insert_rule(&pool, &manual(1, "Essay")).await.unwrap();
+        insert_rule(&pool, &manual(2, "Essay draft")).await.unwrap();
+        sqlx::query("INSERT INTO category_regex (manual_project_id, regex) VALUES (3, '(')").execute(&pool).await.unwrap();
+        insert_rule(&pool, &manual(3, ".*")).await.unwrap();
+        assert_eq!(title_match(&pool, "Essay").await, Some(1));
+        assert_eq!(title_match(&pool, "Essay draft").await, Some(2));
+        assert_eq!(title_match(&pool, "Standup").await, Some(3));
+        assert_eq!(title_match(&pool, "   ").await, None);
+    }
+
+    #[tokio::test]
+    async fn applying_rules_only_touches_uncategorized_entries() {
+        let pool = test_pool().await;
+        insert_rule(&pool, &manual(1, "Essay")).await.unwrap();
+        sqlx::query("INSERT INTO manual_time_blocks (title, project_id, start_time, end_time, created_at, updated_at) VALUES ('Essay', NULL, 1, 2, 1, 1), ('Essay', 3, 3, 4, 1, 1), ('Other', NULL, 5, 6, 1, 1)")
+            .execute(&pool).await.unwrap();
+        assert_eq!(apply_rules_to_uncategorized(&pool, 50).await.unwrap(), 1);
+        let rows: Vec<(Option<i64>, i64)> = sqlx::query_as("SELECT project_id, updated_at FROM manual_time_blocks ORDER BY id").fetch_all(&pool).await.unwrap();
+        assert_eq!(rows, vec![(Some(1), 50), (Some(3), 1), (None, 1)]);
+    }
 }

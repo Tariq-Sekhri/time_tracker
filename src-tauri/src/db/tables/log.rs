@@ -680,12 +680,12 @@ pub struct GetLogsByCategoryRequest {
 pub async fn get_logs_by_category(
     request: GetLogsByCategoryRequest,
 ) -> Result<Vec<MergedLog>, Error> {
+    use crate::db::queries::category_match::{build_regex_table, derive_category};
     use crate::db::tables::{cat_regex, category, skipped_app};
     use cat_regex::get_cat_regex;
     use category::get_categories;
     use regex::Regex;
     use skipped_app::get_skipped_apps;
-    use std::collections::HashMap;
 
     let mut perf = crate::perf::Perf::new("get_logs_by_category");
     let pool = db::get_pool().await?;
@@ -719,35 +719,11 @@ pub async fn get_logs_by_category(
     let categories = get_categories().await?;
     let cat_regex_list = get_cat_regex().await?;
 
-    let category_map: HashMap<i32, &category::Category> =
-        categories.iter().map(|cat| (cat.id, cat)).collect();
-
-    let mut regex_list: Vec<(Regex, String)> = Vec::new();
-    for reg in cat_regex_list {
-        if let Some(cat) = category_map.get(&reg.cat_id) {
-            regex_list.push((Regex::new(&reg.regex)?, cat.name.clone()));
-        }
-    }
-
-    regex_list.sort_by_key(|(_, cat_name)| {
-        categories
-            .iter()
-            .find(|c| c.name == *cat_name)
-            .map(|c| std::cmp::Reverse(c.priority))
-            .unwrap_or(std::cmp::Reverse(0))
-    });
+    let regex_list = build_regex_table(&categories, &cat_regex_list)?;
 
     let filtered_logs: Vec<Log> = logs
         .into_iter()
-        .filter(|log| {
-            let matched_category = regex_list
-                .iter()
-                .find(|(regex, _)| regex.is_match(&log.app))
-                .map(|(_, cat_name)| cat_name.clone())
-                .unwrap_or_else(|| "Miscellaneous".to_string());
-
-            matched_category == request.category
-        })
+        .filter(|log| derive_category(&log.app, &regex_list) == request.category)
         .collect();
     perf.stage("rules_categorize");
     perf.note("category_regexes", regex_list.len());

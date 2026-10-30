@@ -3,10 +3,8 @@ use super::{
     ExportAppGroup, ExportDataset, ExportDevice, ExportFilterOptions, ExportManualCategory,
     ExportManualEntry, ExportScope, ExportSessionApp,
 };
-use crate::db::queries::week::{
-    build_regex_table, derive_category, get_time_blocks_with, transform_time_blocks,
-    TimeBlockSettings,
-};
+use crate::db::queries::category_match::{build_regex_table, derive_category, FALLBACK_CATEGORY};
+use crate::db::queries::week::{get_time_blocks_with, transform_time_blocks, TimeBlockSettings};
 use crate::db::tables::app_group::{build_app_group_matchers, resolve_app_group, AppGroup};
 use crate::db::tables::cat_regex::CategoryRegex;
 use crate::db::tables::category::Category;
@@ -25,7 +23,6 @@ pub(crate) struct ExportContext<'a> {
 }
 
 const UNCATEGORIZED: &str = "Uncategorized";
-const FALLBACK_CATEGORY: &str = "Miscellaneous";
 
 pub(super) struct DeviceDirectory {
     pub devices: Vec<ExportDevice>,
@@ -108,13 +105,13 @@ pub(super) async fn load_devices(pool: &SqlitePool) -> Result<DeviceDirectory, E
 
 async fn load_categories(pool: &SqlitePool) -> Result<(Vec<Category>, Vec<CategoryRegex>), Error> {
     let categories = sqlx::query_as::<_, Category>(
-        "SELECT id, name, priority, color, regex_enabled, is_visible, in_stats, is_collapsed
+        "SELECT id, name, priority, color, regex_enabled, is_visible, in_stats, is_collapsed, parent_id
          FROM category ORDER BY priority DESC",
     )
     .fetch_all(pool)
     .await?;
     let rules = sqlx::query_as::<_, CategoryRegex>(
-        "SELECT id, cat_id, regex FROM category_regex ORDER BY id",
+        "SELECT id, cat_id, regex FROM category_regex WHERE cat_id IS NOT NULL ORDER BY id",
     )
     .fetch_all(pool)
     .await?;
@@ -127,9 +124,20 @@ async fn load_manual_categories(pool: &SqlitePool) -> Result<Vec<ExportManualCat
         .iter()
         .filter_map(|category| category.id.map(|id| (id, category.name.clone())))
         .collect();
+    let mut rules: HashMap<i64, Vec<String>> = HashMap::new();
+    for (project_id, regex) in sqlx::query_as::<_, (i64, String)>(
+        "SELECT manual_project_id, regex FROM category_regex WHERE manual_project_id IS NOT NULL ORDER BY id",
+    )
+    .fetch_all(pool)
+    .await?
+    {
+        rules.entry(project_id).or_default().push(regex);
+    }
     Ok(categories
         .into_iter()
         .map(|category| ExportManualCategory {
+            rules: category.id.and_then(|id| rules.remove(&id)).unwrap_or_default(),
+            priority: category.priority,
             parent_name: category.parent_id.and_then(|id| names.get(&id).cloned()),
             id: category.id,
             name: category.name,
@@ -142,7 +150,7 @@ async fn load_manual_categories(pool: &SqlitePool) -> Result<Vec<ExportManualCat
 pub(crate) async fn filter_options(pool: &SqlitePool) -> Result<ExportFilterOptions, Error> {
     let devices = load_devices(pool).await?.devices;
     let activity_categories =
-        sqlx::query_as::<_, (String, Option<String>)>("SELECT name, color FROM category ORDER BY priority DESC")
+        sqlx::query_as::<_, (String, Option<String>)>("SELECT name, color FROM category WHERE parent_id IS NULL ORDER BY priority DESC")
             .fetch_all(pool)
             .await?
             .into_iter()
@@ -261,9 +269,11 @@ pub(crate) async fn export(
             for rule in rules {
                 rules_by_category.entry(rule.cat_id).or_default().push(rule.regex.clone());
             }
+            let names: HashMap<i32, &String> = categories.iter().map(|category| (category.id, &category.name)).collect();
             dataset.activity_categories = categories
                 .iter()
                 .map(|category| ExportActivityCategory {
+                    parent_name: category.parent_id.and_then(|id| names.get(&id).map(|name| (*name).clone())),
                     name: category.name.clone(),
                     color: category.color.clone(),
                     priority: category.priority,
@@ -395,8 +405,7 @@ async fn export_activity(
             let app_group = (!std::ptr::eq(grouped, log.app.as_str())).then(|| grouped.to_string());
             let info = TitleInfo {
                 skipped: skipped.iter().any(|regex| regex.is_match(&log.app)),
-                category: derive_category(&log.app, &regexes)
-                    .unwrap_or_else(|_| FALLBACK_CATEGORY.to_string()),
+                category: derive_category(&log.app, &regexes),
                 app_group,
             };
             titles.insert(log.app.clone(), info);

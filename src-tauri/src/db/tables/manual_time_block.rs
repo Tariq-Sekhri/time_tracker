@@ -152,6 +152,10 @@ pub async fn insert_manual_time_block(
     let pool = db::get_pool().await?;
     let now = chrono::Utc::now().timestamp();
     super::manual_project::validate_project_id(&pool, new_manual_time_block.project_id).await?;
+    let project_id = match new_manual_time_block.project_id {
+        Some(id) => Some(id),
+        None => super::cat_regex::manual_project_for_title(&mut *pool.acquire().await?, &title).await?,
+    };
     let result = sqlx::query(
         "INSERT INTO manual_time_blocks
          (title, notes, start_time, end_time, created_at, updated_at, project_id)
@@ -162,7 +166,7 @@ pub async fn insert_manual_time_block(
     .bind(new_manual_time_block.start_time)
     .bind(new_manual_time_block.end_time)
     .bind(now)
-    .bind(new_manual_time_block.project_id)
+    .bind(project_id)
     .execute(&pool)
     .await?;
     Ok(result.last_insert_rowid())
@@ -341,6 +345,10 @@ async fn finish_manual_timer_in_pool(pool: &SqlitePool) -> Result<i64, Error> {
         .end_time
         .ok_or_else(|| anyhow::anyhow!("Stop the timer before recording it"))?;
     let now = chrono::Utc::now().timestamp();
+    let project_id = match timer.project_id {
+        Some(id) => Some(id),
+        None => super::cat_regex::manual_project_for_title(&mut transaction, &timer.title).await?,
+    };
     // The session ID lets other devices recognise this block when it syncs back.
     let result = sqlx::query(
         "INSERT INTO manual_time_blocks
@@ -352,7 +360,7 @@ async fn finish_manual_timer_in_pool(pool: &SqlitePool) -> Result<i64, Error> {
     .bind(timer.start_time)
     .bind(end_time)
     .bind(now)
-    .bind(timer.project_id)
+    .bind(project_id)
     .bind(&timer.session_id)
     .bind(timer.session_id.is_some())
     .execute(&mut *transaction)
@@ -363,6 +371,24 @@ async fn finish_manual_timer_in_pool(pool: &SqlitePool) -> Result<i64, Error> {
         .await?;
     transaction.commit().await?;
     Ok(result.last_insert_rowid())
+}
+
+/// A rule only fills in a category when an Uncategorized entry gets a new title,
+/// so moving an entry back to Uncategorized on purpose sticks.
+async fn project_after_edit(pool: &SqlitePool, edit: &UpdateManualTimeBlock, title: &str) -> Result<Option<i64>, Error> {
+    if edit.project_id.is_some() {
+        return Ok(edit.project_id);
+    }
+    let previous = sqlx::query_as::<_, (String, Option<i64>)>("SELECT title, project_id FROM manual_time_blocks WHERE id = ?1")
+        .bind(edit.id)
+        .fetch_optional(pool)
+        .await?;
+    match previous {
+        Some((previous_title, None)) if previous_title != title => {
+            super::cat_regex::manual_project_for_title(&mut *pool.acquire().await?, title).await
+        }
+        _ => Ok(None),
+    }
 }
 
 #[tauri::command]
@@ -377,6 +403,7 @@ pub async fn update_manual_time_block(
     )?;
     let pool = db::get_pool().await?;
     super::manual_project::validate_project_id(&pool, manual_time_block.project_id).await?;
+    let project_id = project_after_edit(&pool, &manual_time_block, &title).await?;
     let result = sqlx::query(
         "UPDATE manual_time_blocks
          SET title = ?1, notes = ?2, start_time = ?3, end_time = ?4, updated_at = ?5, project_id = ?7
@@ -388,7 +415,7 @@ pub async fn update_manual_time_block(
     .bind(manual_time_block.end_time)
     .bind(chrono::Utc::now().timestamp())
     .bind(manual_time_block.id)
-    .bind(manual_time_block.project_id)
+    .bind(project_id)
     .execute(&pool)
     .await?;
 
@@ -430,6 +457,8 @@ mod tests {
         sqlx::query("CREATE TABLE app_metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
             .execute(&pool).await.unwrap();
         create_table(&pool).await.unwrap();
+        super::super::manual_project::create_table(&pool).await.unwrap();
+        super::super::cat_regex::create_table(&pool).await.unwrap();
         let timer = RunningManualTimer {
             title: "Planning".into(), notes: Some("Keep notes".into()), start_time: 100,
             end_time: Some(200), session_id: Some("test-session".into()), ..Default::default()
@@ -499,6 +528,25 @@ mod tests {
         let timer_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM app_metadata WHERE key = ?1")
             .bind(RUNNING_TIMER_KEY).fetch_one(&pool).await.unwrap();
         assert_eq!(timer_count, 0);
+        cleanup(pool.clone(), path).await;
+    }
+
+    #[tokio::test]
+    async fn timer_rules_fill_uncategorized_entries_and_edits_keep_explicit_choices() {
+        let (pool, path) = wal_pool().await;
+        sqlx::query("INSERT INTO manual_projects (id, name) VALUES (1, 'School'), (2, 'Work')").execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO category_regex (manual_project_id, regex) VALUES (1, 'Planning|Essay')").execute(&pool).await.unwrap();
+        let id = finish_manual_timer_in_pool(&pool).await.unwrap();
+        let project: Option<i64> = sqlx::query_scalar("SELECT project_id FROM manual_time_blocks WHERE id = ?1").bind(id).fetch_one(&pool).await.unwrap();
+        assert_eq!(project, Some(1));
+
+        let edit = |id, title: &str, project_id| UpdateManualTimeBlock {id, title: title.into(), notes: None, project_id, start_time: 100, end_time: 200};
+        // Clearing the category on purpose stays cleared while the title is unchanged.
+        assert_eq!(project_after_edit(&pool, &edit(id, "Planning", None), "Planning").await.unwrap(), None);
+        assert_eq!(project_after_edit(&pool, &edit(id, "Essay", Some(2)), "Essay").await.unwrap(), Some(2));
+        sqlx::query("UPDATE manual_time_blocks SET project_id = NULL WHERE id = ?1").bind(id).execute(&pool).await.unwrap();
+        assert_eq!(project_after_edit(&pool, &edit(id, "Essay", None), "Essay").await.unwrap(), Some(1));
+        assert_eq!(project_after_edit(&pool, &edit(id, "Lunch", None), "Lunch").await.unwrap(), None);
         cleanup(pool.clone(), path).await;
     }
 

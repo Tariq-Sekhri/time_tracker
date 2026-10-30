@@ -110,6 +110,8 @@ fn default_true() -> bool {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ExportActivityCategory {
     pub name: String,
+    #[serde(default)]
+    pub parent_name: Option<String>,
     pub color: Option<String>,
     #[serde(default)]
     pub priority: i32,
@@ -128,6 +130,10 @@ pub struct ExportManualCategory {
     pub color: String,
     pub parent_id: Option<i64>,
     pub parent_name: Option<String>,
+    #[serde(default)]
+    pub priority: i32,
+    #[serde(default)]
+    pub rules: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -185,6 +191,10 @@ pub struct ImportManualCategory {
     pub color: Option<String>,
     #[serde(default)]
     pub parent_name: Option<String>,
+    #[serde(default)]
+    pub priority: i32,
+    #[serde(default)]
+    pub rules: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -143,35 +143,54 @@ async fn import_activity_categories(conn: &mut SqliteConnection, request: &Impor
     if request.activity_categories.is_empty() {
         return Ok(());
     }
-    let mut ids: HashMap<String, i64> = sqlx::query_as::<_, (i64, String)>("SELECT id, name FROM category")
+    // Keyed by parent too: subcategories under different parents may share a name.
+    let mut ids: HashMap<(Option<String>, String), i64> = sqlx::query_as::<_, (i64, String, Option<String>)>(
+        "SELECT c.id, c.name, parent.name FROM category c LEFT JOIN category parent ON parent.id = c.parent_id",
+    )
+    .fetch_all(&mut *conn)
+    .await?
+    .into_iter()
+    .map(|(id, name, parent)| ((parent.as_deref().map(fold), fold(&name)), id))
+    .collect();
+    let mut rules: HashSet<(i64, String)> = sqlx::query_as::<_, (i64, String)>("SELECT cat_id, regex FROM category_regex WHERE cat_id IS NOT NULL")
         .fetch_all(&mut *conn)
         .await?
         .into_iter()
-        .map(|(id, name)| (fold(&name), id))
         .collect();
-    let mut rules: HashSet<(i64, String)> = sqlx::query_as::<_, (i64, String)>("SELECT cat_id, regex FROM category_regex")
-        .fetch_all(&mut *conn)
-        .await?
-        .into_iter()
-        .collect();
-    for category in &request.activity_categories {
+    // Parents first so subcategories can attach to categories from the same file.
+    let mut categories: Vec<_> = request.activity_categories.iter().collect();
+    categories.sort_by_key(|category| category.parent_name.as_deref().is_some_and(|parent| !parent.trim().is_empty()));
+    for category in categories {
         let name = category.name.trim();
-        let id = match ids.get(&fold(name)) {
+        let parent = category.parent_name.as_deref().map(fold).filter(|parent| !parent.is_empty());
+        let parent_id = match &parent {
+            Some(parent_name) => match ids.get(&(None, parent_name.clone())) {
+                Some(id) if name != "Miscellaneous" => Some(*id),
+                _ => {
+                    crate::logger::Log::warn(format!("Import skipped subcategory {name}: its parent is unavailable"));
+                    continue;
+                }
+            },
+            None => None,
+        };
+        let key = (parent, fold(name));
+        let id = match ids.get(&key) {
             Some(id) => *id,
             None => {
                 let id = sqlx::query(
-                    "INSERT INTO category (name, priority, color, regex_enabled, is_visible, in_stats)
-                     VALUES (?1, ?2, ?3, 1, ?4, ?5)",
+                    "INSERT INTO category (name, priority, color, regex_enabled, is_visible, in_stats, parent_id)
+                     VALUES (?1, ?2, ?3, 1, ?4, ?5, ?6)",
                 )
                 .bind(name)
                 .bind(category.priority)
                 .bind(category.color.as_deref().map(str::trim).filter(|color| !color.is_empty()))
                 .bind(category.is_visible)
                 .bind(category.in_stats)
+                .bind(parent_id)
                 .execute(&mut *conn)
                 .await?
                 .last_insert_rowid();
-                ids.insert(fold(name), id);
+                ids.insert(key, id);
                 report.activity_categories_created.push(name.to_string());
                 id
             }
@@ -375,6 +394,24 @@ async fn import_manual_categories(
                 continue;
             }
         };
+        if index.created.contains(&id) {
+            sqlx::query("UPDATE manual_projects SET priority = ?1 WHERE id = ?2")
+                .bind(category.priority)
+                .bind(id)
+                .execute(&mut *conn)
+                .await?;
+        }
+        for rule in &category.rules {
+            report.category_rules_added += sqlx::query(
+                "INSERT INTO category_regex (manual_project_id, regex) SELECT ?1, ?2
+                 WHERE NOT EXISTS (SELECT 1 FROM category_regex WHERE manual_project_id = ?1 AND regex = ?2)",
+            )
+            .bind(id)
+            .bind(rule)
+            .execute(&mut *conn)
+            .await?
+            .rows_affected();
+        }
         let Some(color) = category.color.as_deref().map(str::trim).filter(|color| valid_hex_color(color)) else {
             continue;
         };

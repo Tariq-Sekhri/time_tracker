@@ -178,6 +178,12 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
                     not_null: true,
                     default_value: Some("1"),
                 },
+                ExpectedColumn {
+                    name: "parent_id",
+                    sql_type: "INTEGER",
+                    not_null: false,
+                    default_value: None,
+                },
             ],
         },
         ExpectedTable {
@@ -192,7 +198,13 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
                 ExpectedColumn {
                     name: "cat_id",
                     sql_type: "INTEGER",
-                    not_null: true,
+                    not_null: false,
+                    default_value: None,
+                },
+                ExpectedColumn {
+                    name: "manual_project_id",
+                    sql_type: "INTEGER",
+                    not_null: false,
                     default_value: None,
                 },
                 ExpectedColumn {
@@ -402,6 +414,7 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
                 ExpectedColumn { name: "id", sql_type: "INTEGER", not_null: true, default_value: None },
                 ExpectedColumn { name: "name", sql_type: "TEXT", not_null: true, default_value: None },
                 ExpectedColumn { name: "parent_id", sql_type: "INTEGER", not_null: false, default_value: None },
+                ExpectedColumn { name: "priority", sql_type: "INTEGER", not_null: true, default_value: Some("0") },
             ],
         },
         ExpectedTable {
@@ -563,6 +576,14 @@ pub async fn validate_and_repair_database(pool: &SqlitePool) -> Result<Validatio
     }
 
     migrate_legacy_category_prefs(pool).await?;
+
+    crate::db::tables::category::ensure_schema(pool)
+        .await
+        .map_err(Error::from)?;
+
+    crate::db::tables::cat_regex::ensure_schema(pool)
+        .await
+        .map_err(Error::from)?;
 
     crate::db::tables::manual_project::ensure_schema(pool)
         .await
