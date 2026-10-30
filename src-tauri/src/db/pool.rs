@@ -15,6 +15,9 @@ use serde::Serialize;
 static POOL: Mutex<Option<SqlitePool>> = Mutex::new(None);
 static POOL_INIT: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
+// Dev and beta never follow a custom location, so they can't be pointed at the real database.
+const FIXED_DB_PATH: bool = cfg!(debug_assertions) || crate::instance::IS_BETA;
+
 fn app_data_time_tracker_dir() -> PathBuf {
     crate::instance::data_dir()
 }
@@ -26,6 +29,8 @@ fn database_location_config_path() -> PathBuf {
 fn default_db_path() -> PathBuf {
     let db_filename = if cfg!(debug_assertions) {
         "apptest.db"
+    } else if crate::instance::IS_BETA {
+        "app-beta.db"
     } else {
         "app.db"
     };
@@ -40,7 +45,7 @@ fn db_file_has_data(path: &Path) -> bool {
 }
 
 fn migrate_dev_db_to_app_db_once() -> std::io::Result<()> {
-    if cfg!(debug_assertions) || is_custom_db_path() {
+    if FIXED_DB_PATH || is_custom_db_path() {
         return Ok(());
     }
 
@@ -135,7 +140,7 @@ fn paths_equal(a: &Path, b: &Path) -> bool {
 }
 
 fn is_custom_db_path() -> bool {
-    !cfg!(debug_assertions) && read_custom_db_path().is_some()
+    !FIXED_DB_PATH && read_custom_db_path().is_some()
 }
 
 fn is_valid_sqlite_file(path: &Path) -> bool {
@@ -158,7 +163,7 @@ fn seed_database_from_app_db_once(target_path: &PathBuf) -> std::io::Result<()> 
 }
 
 pub fn get_db_path() -> PathBuf {
-    if cfg!(debug_assertions) { default_db_path() } else { read_custom_db_path().unwrap_or_else(default_db_path) }
+    if FIXED_DB_PATH { default_db_path() } else { read_custom_db_path().unwrap_or_else(default_db_path) }
 }
 
 pub async fn refresh_dev_database() -> Result<(), sqlx::Error> {
@@ -170,6 +175,28 @@ pub async fn refresh_dev_database() -> Result<(), sqlx::Error> {
     }
     refresh_database_copy(&source, &default_db_path()).await?;
     crate::logger::Log::info("Dev database refreshed from app.db; activity tracking and sync disabled");
+    Ok(())
+}
+
+fn stable_db_path() -> PathBuf {
+    let dir = crate::instance::stable_data_dir();
+    std::fs::read_to_string(dir.join("database_location.txt")).ok()
+        .map(|contents| contents.trim().to_string())
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| dir.join("app.db"))
+}
+
+/// Beta starts from a copy of stable's data. A failure leaves no database behind, so the next start retries.
+async fn seed_beta_database(source: &Path, target: &Path) -> Result<(), sqlx::Error> {
+    if db_file_has_data(target) || !db_file_has_data(source) {
+        return Ok(());
+    }
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    refresh_database_copy(source, target).await?;
+    crate::logger::Log::info(format!("Beta database copied from {}", source.display()));
     Ok(())
 }
 
@@ -193,8 +220,8 @@ async fn refresh_database_copy(source: &Path, target: &Path) -> Result<(), sqlx:
         let sidecar = PathBuf::from(format!("{}{suffix}", target.display()));
         if sidecar.exists() { std::fs::remove_file(sidecar)?; }
     }
-    std::fs::copy(&snapshot, target)?;
-    std::fs::remove_file(snapshot)?;
+    // The snapshot is complete here, and the rename never exposes a partial database.
+    std::fs::rename(&snapshot, target)?;
     Ok(())
 }
 
@@ -247,7 +274,7 @@ pub async fn set_database_location(
     path: String,
     overwrite: bool,
 ) -> Result<SetDatabaseLocationResult, Error> {
-    if cfg!(debug_assertions) { return Err(anyhow::anyhow!("Dev mode always uses apptest.db").into()); }
+    if FIXED_DB_PATH { return Err(anyhow::anyhow!("Dev and beta builds use a fixed database location").into()); }
     let path = resolve_location_path(&path)?;
     crate::logger::Log::info(format!(
         "Database location change requested path={} overwrite={overwrite}",
@@ -296,7 +323,7 @@ pub async fn set_database_location(
 
 #[tauri::command]
 pub async fn reset_database_location() -> Result<DatabaseLocationInfo, Error> {
-    if cfg!(debug_assertions) { return Ok(get_database_location()); }
+    if FIXED_DB_PATH { return Ok(get_database_location()); }
     crate::logger::Log::info("Resetting database location to default");
     clear_custom_db_path()?;
     reopen_pool().await?;
@@ -372,6 +399,9 @@ async fn create_pool() -> Result<SqlitePool, sqlx::Error> {
     }
 
     let db_path = get_db_path();
+    if crate::instance::IS_BETA {
+        seed_beta_database(&stable_db_path(), &db_path).await?;
+    }
     ensure_db_path(&db_path)?;
 
     if db_file_has_data(&db_path) {
@@ -437,4 +467,77 @@ fn migration_checksum_mismatch(err: &MigrateError) -> bool {
     let msg = err.to_string();
     msg.contains("was previously applied but has been modified")
         || msg.contains("checksum mismatch")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_dir() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("time-tracker-seed-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    async fn open(path: &Path) -> SqliteConnection {
+        SqliteConnection::connect_with(&SqliteConnectOptions::new()
+            .filename(path).create_if_missing(true).journal_mode(SqliteJournalMode::Wal)).await.unwrap()
+    }
+
+    async fn values(connection: &mut SqliteConnection) -> Vec<i64> {
+        sqlx::query_scalar("SELECT value FROM data ORDER BY value").fetch_all(connection).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn beta_seed_copies_committed_data_without_changing_the_source() {
+        let dir = temp_dir();
+        let (source, target) = (dir.join("app.db"), dir.join("beta").join("app-beta.db"));
+        let mut stable = open(&source).await;
+        sqlx::raw_sql("CREATE TABLE data (value INTEGER); INSERT INTO data VALUES (1), (2);")
+            .execute(&mut stable).await.unwrap();
+
+        // The stable connection stays open, so these rows are still only in its WAL.
+        seed_beta_database(&source, &target).await.unwrap();
+
+        let mut beta = open(&target).await;
+        assert_eq!(values(&mut beta).await, vec![1, 2]);
+        sqlx::query("INSERT INTO data VALUES (3)").execute(&mut beta).await.unwrap();
+        assert_eq!(values(&mut stable).await, vec![1, 2]);
+        assert_eq!(std::fs::read_dir(target.parent().unwrap()).unwrap()
+            .filter(|entry| entry.as_ref().unwrap().file_name().to_string_lossy().contains("refresh-")).count(), 0);
+    }
+
+    #[tokio::test]
+    async fn beta_seed_keeps_an_existing_beta_database() {
+        let dir = temp_dir();
+        let (source, target) = (dir.join("app.db"), dir.join("app-beta.db"));
+        std::fs::write(&source, b"stable").unwrap();
+        std::fs::write(&target, b"beta").unwrap();
+
+        seed_beta_database(&source, &target).await.unwrap();
+
+        assert_eq!(std::fs::read(&target).unwrap(), b"beta");
+        assert_eq!(std::fs::read(&source).unwrap(), b"stable");
+    }
+
+    #[tokio::test]
+    async fn beta_seed_starts_empty_without_a_stable_database() {
+        let dir = temp_dir();
+        let target = dir.join("app-beta.db");
+
+        seed_beta_database(&dir.join("app.db"), &target).await.unwrap();
+
+        assert!(!target.exists());
+    }
+
+    #[tokio::test]
+    async fn failed_beta_seed_leaves_no_database_so_the_next_start_retries() {
+        let dir = temp_dir();
+        let (source, target) = (dir.join("app.db"), dir.join("app-beta.db"));
+        std::fs::write(&source, b"not a sqlite database").unwrap();
+
+        assert!(seed_beta_database(&source, &target).await.is_err());
+
+        assert!(!target.exists());
+    }
 }

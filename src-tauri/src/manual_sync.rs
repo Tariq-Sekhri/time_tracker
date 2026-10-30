@@ -74,7 +74,7 @@ struct Connection {
 }
 
 async fn connection() -> Result<Option<Connection>, Error> {
-    if cfg!(debug_assertions) || !crate::sync::is_sync_ready().await? {
+    if !crate::instance::SYNC_ENABLED || !crate::sync::is_sync_ready().await? {
         return Ok(None);
     }
     let Some(device) = get_local_device().await? else { return Ok(None) };
@@ -110,7 +110,7 @@ fn spawn_logged<F>(context: &'static str, task: F)
 where
     F: std::future::Future<Output = Result<(), Error>> + Send + 'static,
 {
-    if cfg!(debug_assertions) {
+    if !crate::instance::SYNC_ENABLED {
         return;
     }
     tauri::async_runtime::spawn(async move {
@@ -519,8 +519,8 @@ async fn listen(conn: Connection) -> Result<(), Error> {
 /// Holds a live connection to the sync server whenever sync is ready.
 pub async fn run(app: AppHandle) {
     let _ = APP.set(app);
-    if cfg!(debug_assertions) {
-        Log::info("Manual timer live sync disabled in dev mode");
+    if !crate::instance::SYNC_ENABLED {
+        Log::info("Manual timer live sync disabled in dev and beta builds");
         return;
     }
     loop {

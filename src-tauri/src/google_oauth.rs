@@ -23,7 +23,7 @@ const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const REDIRECT_PORT: u16 = 8742;
 
 fn calendar_oauth_scope() -> &'static str {
-    if cfg!(debug_assertions) {
+    if cfg!(debug_assertions) || crate::instance::IS_BETA {
         "https://www.googleapis.com/auth/calendar.readonly"
     } else {
         "https://www.googleapis.com/auth/calendar"

@@ -31,8 +31,8 @@ static SYNC_HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 static SYNC_CYCLE_LOCK: OnceLock<AsyncMutex<()>> = OnceLock::new();
 
 fn ensure_sync_enabled() -> Result<(), Error> {
-    if cfg!(debug_assertions) {
-        return Err(anyhow!("Sync is disabled in dev mode").into());
+    if !crate::instance::SYNC_ENABLED {
+        return Err(anyhow!("Sync is disabled in dev and beta builds").into());
     }
     Ok(())
 }
@@ -325,7 +325,7 @@ pub async fn is_registered_for_sync() -> Result<bool, Error> {
 }
 
 pub async fn is_sync_ready() -> Result<bool, Error> {
-    if cfg!(debug_assertions) {return Ok(false);}
+    if !crate::instance::SYNC_ENABLED {return Ok(false);}
     let Some(device) = get_local_device().await? else {
         return Ok(false);
     };
@@ -384,7 +384,7 @@ pub enum AutoSyncResult {
 }
 
 pub async fn run_auto_sync_cycle() -> AutoSyncResult {
-    if cfg!(debug_assertions) {return AutoSyncResult::Skipped;}
+    if !crate::instance::SYNC_ENABLED {return AutoSyncResult::Skipped;}
     let _cycle_guard = sync_cycle_lock().lock().await;
     let Ok(registered) = is_registered_for_sync().await else {
         return AutoSyncResult::Skipped;
@@ -643,7 +643,7 @@ pub async fn unsubscribe_device(uuid: String) -> Result<(), Error> {
 #[tauri::command]
 pub async fn get_devices(app_handle: tauri::AppHandle) -> Result<Vec<Device>, Error> {
     let mut perf = crate::perf::Perf::new("get_devices");
-    if cfg!(debug_assertions) {
+    if !crate::instance::SYNC_ENABLED {
         perf.done();
         return annotate_devices_with_local_logs(get_devices_from_db().await?).await;
     }

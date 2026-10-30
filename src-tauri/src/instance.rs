@@ -4,8 +4,13 @@ use std::sync::OnceLock;
 
 static INSTANCE: OnceLock<InstanceConfig> = OnceLock::new();
 
-const DATA_DIR_NAME: &str = if cfg!(debug_assertions) { "time-tracker-dev" } else { "time-tracker" };
-const DISPLAY_NAME: &str = if cfg!(debug_assertions) { "Time Tracker (Dev)" } else { "Time Tracker" };
+pub const IS_BETA: bool = cfg!(feature = "beta");
+// Beta works on its own copy of the data, so nothing it does may reach the server.
+pub const SYNC_ENABLED: bool = !cfg!(debug_assertions) && !IS_BETA;
+
+const STABLE_DATA_DIR_NAME: &str = "time-tracker";
+const DATA_DIR_NAME: &str = if cfg!(debug_assertions) { "time-tracker-dev" } else if IS_BETA { "time-tracker-beta" } else { STABLE_DATA_DIR_NAME };
+const DISPLAY_NAME: &str = if cfg!(debug_assertions) { "Time Tracker (Dev)" } else if IS_BETA { "Time Tracker Beta" } else { "Time Tracker" };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InstanceConfig {
@@ -134,6 +139,12 @@ pub fn data_dir() -> PathBuf {
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join(DATA_DIR_NAME)
+}
+
+pub fn stable_data_dir() -> PathBuf {
+    dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(STABLE_DATA_DIR_NAME)
 }
 
 pub fn webview_data_dir() -> PathBuf {

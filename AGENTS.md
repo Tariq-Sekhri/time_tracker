@@ -2,9 +2,16 @@
 
 ## Git
 
-- Stay on `master` (the main branch). Never create or switch to another branch unless explicitly told to.
+- Do day-to-day work on `beta`. Never create or switch to another branch unless explicitly told to.
+- Pushing `beta` publishes a Time Tracker Beta build. Pushing `master` publishes a stable release, so `master` only receives tested work merged from `beta`.
 - Commit frequently as work progresses, staging only the files you changed. Unrelated uncommitted changes in the working tree are the user's; leave them alone.
 - Never push unless explicitly told to.
+
+## Beta
+
+- Time Tracker Beta is a separate Windows app built from `src-tauri/tauri.beta.conf.json` with the `beta` Cargo feature. It has its own install, data folder, `app-beta.db` and update feed, and runs alongside stable.
+- With no database, Beta copies stable's `app.db` read-only on startup. It must never write to `app.db` or any other stable data.
+- Sync stays off in Beta and Google Calendar is read-only.
 
 ## Version bumps and changelog
 

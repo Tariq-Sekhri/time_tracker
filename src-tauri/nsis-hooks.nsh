@@ -5,7 +5,11 @@ Var InstanceUninstKey
 
 !macro InitFixedInstanceBody
   StrCpy $InstanceId "${PRODUCTNAME}"
-  StrCpy $InstanceDisplayName "Time Tracker"
+  !if "${PRODUCTNAME}" == "Time Tracker Beta"
+    StrCpy $InstanceDisplayName "Time Tracker Beta"
+  !else
+    StrCpy $InstanceDisplayName "Time Tracker"
+  !endif
   StrCpy $InstanceManuKey "Software\${MANUFACTURER}\${PRODUCTNAME}"
   StrCpy $InstanceUninstKey "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCTNAME}"
 !macroend

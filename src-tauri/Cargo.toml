@@ -89,6 +89,7 @@ objc2-app-kit = { version = "=0.3.1", default-features = false, features = [
 ] }
 [features]
 dev-warnings = []
+beta = []
 
 # Production-speed measurements with every development isolation guard enabled.
 [profile.performance]

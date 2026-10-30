@@ -213,8 +213,8 @@ pub fn run() {
             let app_handle = app.handle().clone();
 
             tauri::async_runtime::spawn(async move {
-                if cfg!(debug_assertions) {
-                    Log::info("Automatic sync disabled in dev mode");
+                if !instance::SYNC_ENABLED {
+                    Log::info("Automatic sync disabled in dev and beta builds");
                     return;
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(3)).await;

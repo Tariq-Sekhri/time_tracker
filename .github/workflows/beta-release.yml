@@ -1,0 +1,88 @@
+name: Build Beta
+
+on:
+  push:
+    branches:
+      - beta
+    # Changelog-only pushes don't change the app.
+    paths-ignore:
+      - CHANGELOG.md
+  workflow_dispatch:
+
+concurrency:
+  group: beta-release
+  cancel-in-progress: true
+
+jobs:
+  rust-lib-tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install repository Rust toolchain
+        uses: dtolnay/rust-toolchain@1.96.0
+
+      - name: Rust cache
+        continue-on-error: true
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: cargo test
+        working-directory: src-tauri
+        run: cargo test --lib --features beta
+
+  build:
+    needs: rust-lib-tests
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install repository Rust toolchain
+        uses: dtolnay/rust-toolchain@1.96.0
+
+      - name: Rust cache
+        continue-on-error: true
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Set beta version
+        shell: pwsh
+        run: |
+          $path = "src-tauri/tauri.beta.conf.json"
+          $config = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+          $base = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
+          $config.version = "$base-beta.${{ github.run_number }}"
+          $config | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $path
+
+      # The fixed tag is the beta update feed. Prereleases never become GitHub's "latest",
+      # so stable clients can't see these builds.
+      - name: Build and upload beta
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+          VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.VITE_GOOGLE_CLIENT_SECRET }}
+        with:
+          tagName: app-beta-channel
+          releaseName: Time Tracker Beta
+          releaseBody: Latest Windows beta. Runs alongside the stable app with its own data, and with sync and Google Calendar changes turned off.
+          releaseDraft: false
+          prerelease: true
+          releaseAssetNamePattern: time-tracker-beta_[arch][setup].[ext]
+          updaterJsonPreferNsis: true
+          args: --config src-tauri/tauri.beta.conf.json --bundles nsis --features beta
