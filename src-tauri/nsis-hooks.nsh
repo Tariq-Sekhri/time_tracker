@@ -4,14 +4,19 @@ Var InstanceManuKey
 Var InstanceUninstKey
 
 !macro InitFixedInstanceBody
-  StrCpy $InstanceId "${PRODUCTNAME}"
-  !if "${PRODUCTNAME}" == "Time Tracker Beta"
+  ; This file loads before PRODUCTNAME and MANUFACTURER are defined, so stable's registry
+  ; keys contain those names literally. Installed apps rely on them, so stable must keep them.
+  !if "${INSTANCE_PRODUCT}" == "Time Tracker Beta"
+    StrCpy $InstanceId "Time Tracker Beta"
     StrCpy $InstanceDisplayName "Time Tracker Beta"
+    StrCpy $InstanceManuKey "Software\Time Tracker Beta"
+    StrCpy $InstanceUninstKey "Software\Microsoft\Windows\CurrentVersion\Uninstall\Time Tracker Beta"
   !else
+    StrCpy $InstanceId "${PRODUCTNAME}"
     StrCpy $InstanceDisplayName "Time Tracker"
+    StrCpy $InstanceManuKey "Software\${MANUFACTURER}\${PRODUCTNAME}"
+    StrCpy $InstanceUninstKey "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCTNAME}"
   !endif
-  StrCpy $InstanceManuKey "Software\${MANUFACTURER}\${PRODUCTNAME}"
-  StrCpy $InstanceUninstKey "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCTNAME}"
 !macroend
 
 Function InitFixedInstance

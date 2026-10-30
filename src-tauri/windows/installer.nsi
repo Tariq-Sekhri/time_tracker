@@ -31,6 +31,7 @@ ManifestDPIAwareness PerMonitorV2
 ${StrCase}
 ${StrLoc}
 
+!define INSTANCE_PRODUCT "{{product_name}}"
 {{#if installer_hooks}}
 !include "{{installer_hooks}}"
 {{/if}}
