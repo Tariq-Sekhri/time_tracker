@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 - Retry temporary database locks during startup and offer a retry button if the app cannot load.
+- Auto categories can now have subcategories, shown in statistics and on time blocks.
+- App Rules is now one list: each regex targets an auto or manual category.
+- Manual entries with no category are filled in by regex rules from their title, with a preview before you save.
+- Run rules over existing Uncategorized manual entries, and set which manual category wins when several match.
 
 ## [1.13.3] - 2026-10-24
 
