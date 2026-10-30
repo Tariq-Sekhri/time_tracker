@@ -1,7 +1,6 @@
 import {useQuery, useMutation, useQueryClient} from "@tanstack/react-query";
-import {useEffect, useState} from "react";
+import {useEffect, useMemo, useState} from "react";
 import {
-    get_categories,
     insert_category,
     update_category_by_id,
     delete_category_by_id,
@@ -10,6 +9,8 @@ import {
 } from "../api/Category.ts";
 import {get_cat_regex} from "../api/CategoryRegex.ts";
 import {useToast} from "../Componants/Toast.tsx";
+import {useAllCategories} from "../hooks/useAllCategories.ts";
+import ManualCategoryPriorities from "../Componants/ManualCategoryPriorities.tsx";
 
 export default function CategoriesView() {
     const queryClient = useQueryClient();
@@ -22,17 +23,21 @@ export default function CategoriesView() {
     const [categoryToDelete, setCategoryToDelete] = useState<number | null>(null);
     const [cascadeDelete, setCascadeDelete] = useState(true);
     const [regexCount, setRegexCount] = useState(0);
+    const [addingSubTo, setAddingSubTo] = useState<number | null>(null);
+    const [newSubName, setNewSubName] = useState("");
 
-    const {data: categories = []} = useQuery({
-        queryKey: ["categories"],
-        queryFn: get_categories,
+    const categories = useAllCategories();
 
-    });
+    const topLevel = useMemo(
+        () => categories.filter((cat) => cat.parent_id == null).sort((a, b) => b.priority - a.priority),
+        [categories]
+    );
+    const subcategoriesOf = (id: number) =>
+        categories.filter((cat) => cat.parent_id === id).sort((a, b) => b.priority - a.priority);
 
     useEffect(() => {
-        // getting 0 is fine because of Miscellaneous exists which can't be deleted
-        setNewCategoryPriority(categories[0].priority + 100);
-    }, [categories]);
+        setNewCategoryPriority((topLevel[0]?.priority ?? 0) + 100);
+    }, [topLevel]);
 
     const {data: regexes = []} = useQuery({
         queryKey: ["cat_regex"],
@@ -48,6 +53,8 @@ export default function CategoriesView() {
             setNewCategoryName("");
             setNewCategoryPriority(0);
             setNewCategoryColor("#000000");
+            setAddingSubTo(null);
+            setNewSubName("");
             showToast("Category created successfully", "success");
         },
         onError: (error: any) => {
@@ -96,7 +103,8 @@ export default function CategoriesView() {
         setCategoryToDelete(id);
         setCascadeDelete(true); // Default to cascade delete
 
-        const count = regexes.filter(regex => regex.cat_id === id).length;
+        const removedIds = new Set([id, ...subcategoriesOf(id).map((cat) => cat.id)]);
+        const count = regexes.filter(regex => removedIds.has(regex.cat_id)).length;
         setRegexCount(count);
 
         setShowCascadeDeleteConfirm(true);
@@ -125,8 +133,144 @@ export default function CategoriesView() {
         });
     };
 
+    const handleCreateSubcategory = (parent: Category) => {
+        if (!newSubName.trim()) {
+            showToast("Category name cannot be empty", "error");
+            return;
+        }
+
+        // No color: a subcategory starts with its parent's.
+        createCategoryMutation.mutate({
+            name: newSubName.trim(),
+            priority: 0,
+            color: null,
+            regex_enabled: true,
+            is_visible: true,
+            in_stats: true,
+            is_collapsed: false,
+            parent_id: parent.id,
+        });
+    };
+
     const handleUpdateCategory = (cat: Category) => {
         updateCategoryMutation.mutate(cat);
+    };
+
+    const renderSubcategoryForm = (parent: Category) => (
+        <form
+            key={`new-sub-${parent.id}`}
+            onSubmit={(event) => {
+                event.preventDefault();
+                handleCreateSubcategory(parent);
+            }}
+            className="ml-8 p-4 bg-gray-900 rounded-lg flex gap-3"
+        >
+            <input
+                autoFocus
+                type="text"
+                placeholder={`Subcategory of ${parent.name}`}
+                value={newSubName}
+                onChange={(e) => setNewSubName(e.target.value)}
+                className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
+            />
+            <button type="submit" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded">Add</button>
+            <button type="button" onClick={() => setAddingSubTo(null)} className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded">Cancel</button>
+        </form>
+    );
+
+    const renderCategoryRow = (cat: Category) => {
+        const isMiscellaneous = cat.name === "Miscellaneous" && cat.parent_id == null;
+        return (
+            <div key={cat.id} className={`p-4 bg-gray-900 rounded-lg flex items-center justify-between ${cat.parent_id != null ? "ml-8" : ""}`}>
+                {editingCategory?.id === cat.id ? (
+                    <div className="flex gap-3 flex-1">
+                        <input
+                            type="text"
+                            value={editingCategory.name}
+                            onChange={(e) => setEditingCategory({...editingCategory, name: e.target.value})}
+                            className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
+                        />
+                        {!isMiscellaneous && (
+                            <input
+                                type="number"
+                                value={editingCategory.priority}
+                                onChange={(e) => setEditingCategory({
+                                    ...editingCategory,
+                                    priority: parseInt(e.target.value) || 0
+                                })}
+                                className="w-24 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
+                            />
+                        )}
+                        <input
+                            type="color"
+                            value={editingCategory.color || "#000000"}
+                            onChange={(e) => setEditingCategory({
+                                ...editingCategory,
+                                color: e.target.value
+                            })}
+                            className="w-16 h-10 bg-gray-800 border border-gray-700 rounded cursor-pointer"
+                        />
+                        <button
+                            onClick={() => handleUpdateCategory(isMiscellaneous ? {
+                                ...editingCategory,
+                                priority: 0
+                            } : editingCategory)}
+                            className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded"
+                        >
+                            Save
+                        </button>
+                        <button
+                            onClick={() => setEditingCategory(null)}
+                            className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                ) : (
+                    <>
+                        <div className="flex items-center gap-3">
+                            <div
+                                className="w-6 h-6 rounded border border-gray-600"
+                                style={{backgroundColor: cat.color || "#000000"}}
+                            />
+                            <div>
+                                <span className="font-medium">{cat.name}</span>
+                                {!isMiscellaneous && (
+                                    <span className="text-gray-400 ml-3">Priority: {cat.priority}</span>
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            {!isMiscellaneous && cat.parent_id == null && (
+                                <button
+                                    onClick={() => {
+                                        setAddingSubTo(cat.id);
+                                        setNewSubName("");
+                                    }}
+                                    className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+                                >
+                                    + Sub
+                                </button>
+                            )}
+                            <button
+                                onClick={() => setEditingCategory(cat)}
+                                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm"
+                            >
+                                Edit
+                            </button>
+                            {!isMiscellaneous && (
+                                <button
+                                    onClick={() => handleDeleteCategoryClick(cat.id)}
+                                    className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-sm"
+                                >
+                                    Delete
+                                </button>
+                            )}
+                        </div>
+                    </>
+                )}
+            </div>
+        );
     };
 
     return (
@@ -164,90 +308,14 @@ export default function CategoriesView() {
             </div>
 
             <div className="space-y-2">
-                {[...categories].sort((a, b) => b.priority - a.priority).map((cat) => {
-                    const isMiscellaneous = cat.name === "Miscellaneous";
-                    return (
-                        <div key={cat.id} className="p-4 bg-gray-900 rounded-lg flex items-center justify-between">
-                            {editingCategory?.id === cat.id ? (
-                                <div className="flex gap-3 flex-1">
-                                    <input
-                                        type="text"
-                                        value={editingCategory.name}
-                                        onChange={(e) => setEditingCategory({...editingCategory, name: e.target.value})}
-                                        className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
-                                    />
-                                    {!isMiscellaneous && (
-                                        <input
-                                            type="number"
-                                            value={editingCategory.priority}
-                                            onChange={(e) => setEditingCategory({
-                                                ...editingCategory,
-                                                priority: parseInt(e.target.value) || 0
-                                            })}
-                                            className="w-24 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
-                                        />
-                                    )}
-                                    <input
-                                        type="color"
-                                        value={editingCategory.color || "#000000"}
-                                        onChange={(e) => setEditingCategory({
-                                            ...editingCategory,
-                                            color: e.target.value
-                                        })}
-                                        className="w-16 h-10 bg-gray-800 border border-gray-700 rounded cursor-pointer"
-                                    />
-                                    <button
-                                        onClick={() => handleUpdateCategory(isMiscellaneous ? {
-                                            ...editingCategory,
-                                            priority: 0
-                                        } : editingCategory)}
-                                        className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded"
-                                    >
-                                        Save
-                                    </button>
-                                    <button
-                                        onClick={() => setEditingCategory(null)}
-                                        className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            ) : (
-                                <>
-                                    <div className="flex items-center gap-3">
-                                        <div
-                                            className="w-6 h-6 rounded border border-gray-600"
-                                            style={{backgroundColor: cat.color || "#000000"}}
-                                        />
-                                        <div>
-                                            <span className="font-medium">{cat.name}</span>
-                                            {!isMiscellaneous && (
-                                                <span className="text-gray-400 ml-3">Priority: {cat.priority}</span>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => setEditingCategory(cat)}
-                                            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm"
-                                        >
-                                            Edit
-                                        </button>
-                                        {!isMiscellaneous && (
-                                            <button
-                                                onClick={() => handleDeleteCategoryClick(cat.id)}
-                                                className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-sm"
-                                            >
-                                                Delete
-                                            </button>
-                                        )}
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                    );
-                })}
+                {topLevel.flatMap((cat) => [
+                    renderCategoryRow(cat),
+                    ...(addingSubTo === cat.id ? [renderSubcategoryForm(cat)] : []),
+                    ...subcategoriesOf(cat.id).map(renderCategoryRow),
+                ])}
             </div>
+
+            <ManualCategoryPriorities/>
 
             {showCascadeDeleteConfirm && categoryToDelete !== null && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
@@ -270,6 +338,11 @@ export default function CategoriesView() {
                                     ) : (
                                         <p className="text-gray-400 mb-4 text-sm">
                                             This category has no regex patterns associated with it.
+                                        </p>
+                                    )}
+                                    {subcategoriesOf(categoryToDelete).length > 0 && (
+                                        <p className="text-yellow-400 mb-4 text-sm">
+                                            Its subcategories will be deleted too.
                                         </p>
                                     )}
                                     <p className="text-gray-300 mb-4">
@@ -312,7 +385,7 @@ export default function CategoriesView() {
                                         <div className="font-medium text-white">Simple Delete</div>
                                         <div className="text-sm text-gray-400">
                                             Delete only the
-                                            category{regexCount > 0 && ` (${regexCount} regex pattern${regexCount !== 1 ? 's will' : ' will'} remain orphaned)`}
+                                            category{regexCount > 0 && ` (${regexCount} regex pattern${regexCount !== 1 ? 's move' : ' moves'} to ${categories.find(c => c.id === categories.find(c => c.id === categoryToDelete)?.parent_id)?.name ?? "Miscellaneous"})`}
                                         </div>
                                     </div>
                                 </label>

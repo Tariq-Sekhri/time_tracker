@@ -5,6 +5,7 @@ import {useToast} from "../../../Componants/Toast.tsx";
 import {formatDuration} from "../utils.ts";
 import type {CalendarEvent} from "../types.ts";
 import ProjectSelector from "../../../Componants/ProjectSelector.tsx";
+import ManualRulePreview from "../../../Componants/ManualRulePreview.tsx";
 import {getManualProjects, MANUAL_PROJECTS_QUERY_KEY} from "../../../api/ManualProject.ts";
 
 function toLocalDateTimeInput(date: Date): string {
@@ -123,6 +124,7 @@ export default function ManualTimeBlockView({
                     <div>
                         <span className="mb-1 block text-sm text-gray-400">Category</span>
                         <ProjectSelector value={projectId} onChange={setProjectId} disabled={updateMutation.isPending} />
+                        <ManualRulePreview title={title} projectId={projectId} enabled={selectedEvent.projectId == null && title.trim() !== selectedEvent.title} />
                     </div>
                     <label className="block">
                         <span className="mb-1 block text-sm text-gray-400">Description or notes</span>

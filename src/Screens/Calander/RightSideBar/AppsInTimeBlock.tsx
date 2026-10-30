@@ -19,6 +19,8 @@ export type SelectedEvent = {
     title: string
     start: Date
     end: Date
+    category?: string
+    subcategory?: string
     apps: {
         app: string
         appNames: string[]
@@ -228,7 +230,10 @@ export default function AppsInTimeBlock({
                 }}
             >
                 <div className="flex items-center justify-between mb-3 gap-2">
-                    <h2 className="text-xl font-bold text-white min-w-0 truncate">{selectedEvent.title}</h2>
+                    <div className="min-w-0">
+                        <h2 className="text-xl font-bold text-white truncate">{selectedEvent.title}</h2>
+                        {selectedEvent.subcategory && <p className="text-sm text-gray-400 truncate">{selectedEvent.category} › {selectedEvent.subcategory}</p>}
+                    </div>
                     <div className="flex items-center gap-2 shrink-0">
                         <button
                             onClick={() => {

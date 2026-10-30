@@ -4,6 +4,7 @@ import {useMutation, useQueryClient} from "@tanstack/react-query";
 import {insert_manual_time_block} from "../../api/ManualTimeBlock.ts";
 import {useToast} from "../../Componants/Toast.tsx";
 import ProjectSelector from "../../Componants/ProjectSelector.tsx";
+import ManualRulePreview from "../../Componants/ManualRulePreview.tsx";
 import ManualPopover from "../../Componants/ManualPopover.tsx";
 
 function toLocalDateTimeInput(date: Date): string {
@@ -123,6 +124,7 @@ export default function ManualTimeBlockDialog({
                     <div>
                         <span className="mb-1 block text-sm font-medium text-gray-300">Category</span>
                         <ProjectSelector value={projectId} onChange={setProjectId} disabled={createMutation.isPending} showManage={false} />
+                        <ManualRulePreview title={title} projectId={projectId} />
                     </div>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <label className="block">

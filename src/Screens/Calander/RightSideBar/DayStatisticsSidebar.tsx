@@ -7,6 +7,8 @@ import { useRenderPerf } from "../../../perf.ts";
 import { get_day_statistics } from "../../../api/statistics.ts";
 import { getCalendarDayRangeUnix } from "../../../utils.ts";
 import { formatDuration } from "../utils.ts";
+import SubcategoryRows from "../../../Componants/SubcategoryRows.tsx";
+import type { SubcategoryStat } from "../../../api/statistics.ts";
 import { DonutChart } from "../DonutChart.tsx";
 import {
     get_all_google_calendar_events,
@@ -46,6 +48,7 @@ type CombinedCategory = {
     total_duration: number;
     color: string | null;
     source: "tracking" | "google" | "manual";
+    subcategories?: SubcategoryStat[];
 };
 
 export default function DayStatisticsSidebar({
@@ -154,7 +157,7 @@ export default function DayStatisticsSidebar({
                 category: name,
                 total_duration: dur,
                 color,
-                source: "google",
+                source: "google" as const,
             };
         });
     }, [includeGoogleInStats, isLoadingGoogleEvents, isGoogleEventsError, filteredGoogleEvents, calendarMap]);
@@ -167,7 +170,7 @@ export default function DayStatisticsSidebar({
     );
 
     const manualCategories = useMemo<CombinedCategory[]>(() => manualTimeInStats
-        ? manualTimeCategoryStats(manualTimeBlocks, dayStart, dayEnd + 1).map((row) => ({...row, source: "manual"}))
+        ? manualTimeCategoryStats(manualTimeBlocks, dayStart, dayEnd + 1).map((row) => ({...row, source: "manual" as const}))
         : [], [manualTimeInStats, manualTimeBlocks, dayStart, dayEnd]);
 
     const topCategories = useMemo(() => {
@@ -180,9 +183,10 @@ export default function DayStatisticsSidebar({
             total_duration: c.total_duration,
             color: c.color,
             source: "tracking",
+            subcategories: c.subcategories,
         }));
 
-        const combined = [
+        const combined: CombinedCategory[] = [
             ...trackingCategories,
             ...manualCategories,
             ...(includeGoogleInStats ? googleCategories : []),
@@ -403,6 +407,7 @@ export default function DayStatisticsSidebar({
                                         }}
                                     />
                                 </div>
+                                <SubcategoryRows subcategories={cat.subcategories} />
                             </div>
                         );
                     })}

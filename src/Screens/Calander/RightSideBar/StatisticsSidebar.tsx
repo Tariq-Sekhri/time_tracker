@@ -7,6 +7,7 @@ import { useRenderPerf } from "../../../perf.ts";
 import { get_week_statistics, CategoryStat } from "../../../api/statistics.ts";
 import { getWeekRange } from "../../../utils.ts";
 import { formatDuration, formatPercentage } from "../utils.ts";
+import SubcategoryRows from "../../../Componants/SubcategoryRows.tsx";
 import { DonutChart } from "../DonutChart.tsx";
 import {
     get_all_google_calendar_events,
@@ -550,6 +551,7 @@ export default function StatisticsSidebar({
                                         }}
                                     />
                                 </div>
+                                <SubcategoryRows subcategories={cat.subcategories} />
                             </div>
                         );
                     })}

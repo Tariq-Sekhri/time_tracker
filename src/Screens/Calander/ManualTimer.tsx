@@ -3,6 +3,7 @@ import {useQueryClient} from "@tanstack/react-query";
 import {finish_manual_timer, RunningManualTimer, start_manual_timer, stop_manual_timer, update_manual_timer_details} from "../../api/ManualTimeBlock.ts";
 import {useToast} from "../../Componants/Toast.tsx";
 import ProjectSelector from "../../Componants/ProjectSelector.tsx";
+import ManualRulePreview from "../../Componants/ManualRulePreview.tsx";
 import ManualPopover from "../../Componants/ManualPopover.tsx";
 
 function toLocalDateTimeInput(timestamp: number): string {
@@ -137,6 +138,7 @@ export function ManualTimerControl({timer, onAddPastTime}: {timer: RunningManual
                 setProjectId(id);
                 if (timerRef.current || pendingRef.current) commit(title, id);
             }} />
+            <ManualRulePreview title={title} projectId={projectId} />
         </div>
         {timer ? <>
             <button type="button" disabled={finishing} title="Edit start time" aria-haspopup="dialog" onClick={(event) => {

@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useToast } from "../Componants/Toast.tsx";
-import { get_categories } from "../api/Category.ts";
+import { categoryLabel } from "../api/Category.ts";
+import { useAllCategories } from "./useAllCategories.ts";
+import { nestManualCategories } from "../api/ManualProject.ts";
 import { get_cat_regex, insert_cat_regex, update_cat_regex_by_id, getMatchingCategoryRule, type CategoryRegex } from "../api/CategoryRegex.ts";
 import { count_matching_logs, insert_skipped_app_and_delete_logs } from "../api/SkippedApp.ts";
 import { exactAppRegexPattern } from "../utils/exactAppRegexPattern.ts";
@@ -48,10 +50,7 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
 
     const extra = options?.extraInvalidateQueryKeys ?? [];
 
-    const { data: categories = [] } = useQuery({
-        queryKey: ["categories"],
-        queryFn: get_categories,
-    });
+    const categories = useAllCategories();
 
     const { data: catRegexRows = [] } = useQuery({
         queryKey: ["cat_regex"],
@@ -257,7 +256,7 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
     };
 
     const sortedCategories = useMemo(
-        () => [...categories].sort((a, b) => b.priority - a.priority),
+        () => nestManualCategories([...categories].sort((a, b) => b.priority - a.priority)),
         [categories]
     );
 
@@ -301,11 +300,12 @@ export function useAppCategorizeMenu(options?: UseAppCategorizeMenuOptions) {
                     {rulesError && <p className="px-3 py-1.5 text-xs text-red-300">Couldn’t identify the matching rule.</p>}
                     {responsibleRules.map((match) => {
                         const rule = match.rule!;
-                        const protectedRule = match.category_name === "Miscellaneous" && rule.regex === ".*";
+                        const protectedRule = match.category_name === "Miscellaneous" && !match.subcategory && rule.regex === ".*";
+                        const target = match.subcategory ? `${match.category_name} › ${match.subcategory}` : match.category_name;
                         return <div key={rule.id} className="flex items-center gap-1 pl-3 pr-1 py-1 text-xs border-b border-gray-700 min-w-0" title={isBatchMenu ? match.app : `${menu.appNames[0]}
 ${rule.regex}`}>
-                            <button type="button" onClick={() => {useRegexNavigation.getState().openRule(rule.id); setMenu(null);}} title="Open this regex in App Rules" aria-label={`Matching regex · ${match.category_name}: ${rule.regex} — open in App Rules`} className="min-w-0 flex-1 truncate rounded px-1 py-0.5 -ml-1 text-left font-mono text-sky-300 hover:bg-gray-800 hover:underline">{rule.regex}</button>
-                            <span className="shrink-0 px-1 text-gray-400">{match.category_name}</span>
+                            <button type="button" onClick={() => {useRegexNavigation.getState().openRule(rule.id); setMenu(null);}} title="Open this regex in App Rules" aria-label={`Matching regex · ${target}: ${rule.regex} — open in App Rules`} className="min-w-0 flex-1 truncate rounded px-1 py-0.5 -ml-1 text-left font-mono text-sky-300 hover:bg-gray-800 hover:underline">{rule.regex}</button>
+                            <span className="shrink-0 px-1 text-gray-400">{target}</span>
                             {!protectedRule && <>
                                 <button type="button" onClick={() => editRule(rule, "edit")} title="Edit regex" aria-label={`Edit matching regex ${rule.regex}`} className="shrink-0 rounded p-1 text-gray-400 hover:bg-gray-800 hover:text-white">
                                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.232-6.232a2.5 2.5 0 113.536 3.536L12.536 16.536 8 18l1.464-4.536z" /></svg>
@@ -330,7 +330,7 @@ ${rule.regex}`}>
                                 })
                             }
                         >
-                            {cat.name}
+                            {categoryLabel(cat, categories)}
                         </button>
                     ))}
                     <div className="border-t border-gray-700 my-1" />

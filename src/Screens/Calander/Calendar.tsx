@@ -503,12 +503,14 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
             } else {
                 const timeBlockId = clickInfo.event.extendedProps?.timeBlockId as number | undefined;
                 const category = clickInfo.event.extendedProps?.category as string | undefined;
+                const subcategory = clickInfo.event.extendedProps?.subcategory as string | null | undefined;
                 const event = {
                     title: clickInfo.event.title,
                     start: clickInfo.event.start,
                     end: clickInfo.event.end,
                     apps: (clickInfo.event.extendedProps?.apps || []) as { app: string; appNames: string[]; totalDuration: number }[],
                     ...(category != null && category !== "" ? {category} : {}),
+                    ...(subcategory ? {subcategory} : {}),
                     ...(timeBlockId != null ? {timeBlockId} : {}),
                 };
                 setSelectedEvent(event);

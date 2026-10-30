@@ -497,6 +497,7 @@ export default function RenderCalendarContent({
                         type: "timeblock",
                         ...(calendarAppFilter ? {} : { timeBlockId: block.id }),
                         category: block.category,
+                        subcategory: block.subcategory,
                     },
                 };
             })
