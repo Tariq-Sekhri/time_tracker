@@ -19,6 +19,7 @@ export default function CategoriesView() {
     const [newCategoryName, setNewCategoryName] = useState("");
     const [newCategoryPriority, setNewCategoryPriority] = useState(0);
     const [newCategoryColor, setNewCategoryColor] = useState("#000000");
+    const [newCategoryParent, setNewCategoryParent] = useState<number | null>(null);
     const [showCascadeDeleteConfirm, setShowCascadeDeleteConfirm] = useState(false);
     const [categoryToDelete, setCategoryToDelete] = useState<number | null>(null);
     const [cascadeDelete, setCascadeDelete] = useState(true);
@@ -53,6 +54,7 @@ export default function CategoriesView() {
             setNewCategoryName("");
             setNewCategoryPriority(0);
             setNewCategoryColor("#000000");
+            setNewCategoryParent(null);
             setAddingSubTo(null);
             setNewSubName("");
             showToast("Category created successfully", "success");
@@ -122,6 +124,11 @@ export default function CategoriesView() {
             return;
         }
 
+        if (newCategoryParent != null) {
+            createSubcategory(newCategoryName, newCategoryParent);
+            return;
+        }
+
         createCategoryMutation.mutate({
             name: newCategoryName.trim(),
             priority: newCategoryPriority,
@@ -133,23 +140,27 @@ export default function CategoriesView() {
         });
     };
 
-    const handleCreateSubcategory = (parent: Category) => {
-        if (!newSubName.trim()) {
-            showToast("Category name cannot be empty", "error");
-            return;
-        }
-
+    const createSubcategory = (name: string, parentId: number) => {
         // No color: a subcategory starts with its parent's.
         createCategoryMutation.mutate({
-            name: newSubName.trim(),
+            name: name.trim(),
             priority: 0,
             color: null,
             regex_enabled: true,
             is_visible: true,
             in_stats: true,
             is_collapsed: false,
-            parent_id: parent.id,
+            parent_id: parentId,
         });
+    };
+
+    const handleCreateSubcategory = (parent: Category) => {
+        if (!newSubName.trim()) {
+            showToast("Category name cannot be empty", "error");
+            return;
+        }
+
+        createSubcategory(newSubName, parent.id);
     };
 
     const handleUpdateCategory = (cat: Category) => {
@@ -285,19 +296,34 @@ export default function CategoriesView() {
                         onChange={(e) => setNewCategoryName(e.target.value)}
                         className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
                     />
-                    <input
-                        type="number"
-                        placeholder="Priority"
-                        value={newCategoryPriority}
-                        onChange={(e) => setNewCategoryPriority(parseInt(e.target.value) || 0)}
-                        className="w-24 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
-                    />
-                    <input
-                        type="color"
-                        value={newCategoryColor}
-                        onChange={(e) => setNewCategoryColor(e.target.value)}
-                        className="w-16 h-10 bg-gray-800 border border-gray-700 rounded cursor-pointer"
-                    />
+                    <select
+                        aria-label="Parent category"
+                        value={newCategoryParent ?? ""}
+                        onChange={(e) => setNewCategoryParent(e.target.value ? Number(e.target.value) : null)}
+                        className="w-48 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
+                    >
+                        <option value="">No parent</option>
+                        {topLevel.filter((cat) => cat.name !== "Miscellaneous").map((cat) => (
+                            <option key={cat.id} value={cat.id}>Subcategory of {cat.name}</option>
+                        ))}
+                    </select>
+                    {newCategoryParent == null && (
+                        <>
+                            <input
+                                type="number"
+                                placeholder="Priority"
+                                value={newCategoryPriority}
+                                onChange={(e) => setNewCategoryPriority(parseInt(e.target.value) || 0)}
+                                className="w-24 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
+                            />
+                            <input
+                                type="color"
+                                value={newCategoryColor}
+                                onChange={(e) => setNewCategoryColor(e.target.value)}
+                                className="w-16 h-10 bg-gray-800 border border-gray-700 rounded cursor-pointer"
+                            />
+                        </>
+                    )}
                     <button
                         onClick={handleCreateCategory}
                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded"
