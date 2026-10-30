@@ -11,6 +11,7 @@ export type DemoCategory = {
     id: number;
     name: string;
     priority: number;
+    parent_id?: number | null;
 };
 
 export type DemoCategoryRegex = {
@@ -69,12 +70,14 @@ function buildRegexTable(
     for (const row of catRegex) {
         const cat = catById.get(row.cat_id);
         if (!cat) continue;
+        const parent = cat.parent_id == null ? undefined : catById.get(cat.parent_id);
         try {
             out.push({
                 re: new RegExp(row.regex),
                 regexStr: row.regex,
-                category: cat.name,
-                priority: cat.priority,
+                category: (parent ?? cat).name,
+                // A subcategory competes in its parent's slot, just ahead of the parent's own rules.
+                priority: parent ? parent.priority + 0.5 : cat.priority,
             });
         } catch {
         }

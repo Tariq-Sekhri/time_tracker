@@ -9,6 +9,7 @@ export type Category = {
     is_visible: boolean;
     in_stats: boolean;
     is_collapsed: boolean;
+    parent_id: number | null;
 };
 
 export type NewCategory = {
@@ -19,10 +20,23 @@ export type NewCategory = {
     is_visible: boolean;
     in_stats: boolean;
     is_collapsed: boolean;
+    parent_id?: number | null;
 };
 
+/** Top-level categories only: everything that groups time by category works on these. */
 export async function get_categories(): Promise<Category[]> {
+    return (await get_all_categories()).filter((category) => category.parent_id == null);
+}
+
+export const ALL_CATEGORIES_QUERY_KEY = ["categories", "all"] as const;
+export async function get_all_categories(): Promise<Category[]> {
     return invokeOrThrow<Category[]>("get_categories");
+}
+
+/** "Coding › Rust" for subcategories, the plain name otherwise. */
+export function categoryLabel(category: Category, all: Category[]): string {
+    const parent = category.parent_id == null ? undefined : all.find((item) => item.id === category.parent_id);
+    return parent ? `${parent.name} › ${category.name}` : category.name;
 }
 
 export async function delete_category_by_id(id: number, cascade: boolean = false): Promise<null> {

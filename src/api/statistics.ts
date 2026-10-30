@@ -1,11 +1,18 @@
 import { invokeOrThrow } from "../utils.ts";
 
+export type SubcategoryStat = {
+    name: string;
+    total_duration: number;
+    color: string | null;
+};
+
 export type CategoryStat = {
     category: string;
     total_duration: number;
     percentage: number;
     percentage_change: number | null;
     color: string | null;
+    subcategories?: SubcategoryStat[];
 };
 
 export type AppStat = {

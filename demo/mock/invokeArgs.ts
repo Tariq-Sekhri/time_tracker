@@ -78,8 +78,8 @@ export function pickCategoryRow(
 
 export function pickNewCategory(
     args: Record<string, unknown>
-): { name: string; priority: number; color?: string | null } | undefined {
-    const wrapped = pickPayload<{ name?: string; priority?: number; color?: string | null }>(args, [
+): { name: string; priority: number; color?: string | null; parent_id?: number | null } | undefined {
+    const wrapped = pickPayload<{ name?: string; priority?: number; color?: string | null; parent_id?: number | null }>(args, [
         "newCategory",
         "new_category",
     ]);
@@ -88,6 +88,7 @@ export function pickNewCategory(
         name: String(wrapped.name),
         priority: Number(wrapped.priority),
         color: wrapped.color ?? null,
+        parent_id: wrapped.parent_id ?? null,
     };
 }
 

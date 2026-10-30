@@ -111,6 +111,7 @@ type CategoryRow = {
     is_visible: boolean;
     in_stats: boolean;
     is_collapsed: boolean;
+    parent_id: number | null;
 };
 
 type SettingRow = {
@@ -253,13 +254,14 @@ let manualTimeBlocks: ManualTimeBlock[] = [];
 let runningManualTimer: RunningManualTimer | null = null;
 function demoManualCategories() {
     const palette = ["#0ea5e9", "#a78bfa", "#34d399", "#fbbf24", "#fb7185", "#22d3ee"];
-    return [{id: null, name: "Uncategorized", color: appMetadata["manual_category_color:none"] ?? palette[0], parent_id: null as number | null},
+    return [{id: null, name: "Uncategorized", color: appMetadata["manual_category_color:none"] ?? palette[0], parent_id: null as number | null, priority: 0},
         ...manualProjects.map((project) => ({...project, color: appMetadata[`manual_category_color:${project.id}`]
             ?? (project.parent_id != null ? appMetadata[`manual_category_color:${project.parent_id}`] : undefined)
             ?? palette[(project.parent_id ?? project.id) % palette.length]}))];
 }
 
-let manualProjects: Array<{id: number; name: string; parent_id: number | null}> = [];
+let manualProjects: Array<{id: number; name: string; parent_id: number | null; priority: number}> = [];
+let manualRules: Array<{id: number; manual_project_id: number; regex: string}> = [];
 let nextManualProjectId = 1;
 let notesState = {enabled: false, text: ""};
 
@@ -292,6 +294,7 @@ function toDemoCategory(c: {
     name: string;
     priority: number;
     color: string | null;
+    parent_id?: number | null;
 }): CategoryRow {
     return {
         ...c,
@@ -299,7 +302,37 @@ function toDemoCategory(c: {
         is_visible: true,
         in_stats: true,
         is_collapsed: false,
+        parent_id: c.parent_id ?? null,
     };
+}
+
+function demoPatternMatches(pattern: string, text: string): boolean {
+    const insensitive = pattern.startsWith("(?i)");
+    return new RegExp(insensitive ? pattern.slice(4) : pattern, insensitive ? "i" : undefined).test(text);
+}
+
+/** Same order as the app: a subcategory runs in its parent's slot, ahead of the parent's own rules. */
+function ruleOrder<R>(rules: R[], target: (rule: R) => {priority?: number; parent_id?: number | null} | undefined, parentOf: (id: number) => {priority?: number} | undefined): R[] {
+    const key = (rule: R) => {
+        const own = target(rule);
+        const parent = own?.parent_id == null ? undefined : parentOf(own.parent_id);
+        return parent ? [parent.priority ?? 0, 1, own?.priority ?? 0] : [own?.priority ?? 0, 0, 0];
+    };
+    return [...rules].sort((left, right) => {
+        const [a, b] = [key(left), key(right)];
+        return b[0] - a[0] || b[1] - a[1] || b[2] - a[2];
+    });
+}
+
+function demoManualProjectForTitle(title: string): number | null {
+    const byId = (id: number | null) => manualProjects.find((project) => project.id === id);
+    return ruleOrder(manualRules, (rule) => byId(rule.manual_project_id), byId)
+        .find((rule) => demoPatternMatches(rule.regex, title))?.manual_project_id ?? null;
+}
+
+function isCatchAllRule(row: {cat_id: number; regex: string} | undefined): boolean {
+    const cat = row ? categories.find((c) => c.id === row.cat_id) : undefined;
+    return cat?.name === "Miscellaneous" && cat.parent_id == null && row?.regex === ".*";
 }
 
 function getDemoCalendarStartHour(): number {
@@ -433,6 +466,7 @@ function seed() {
     manualTimeBlocks = [];
     runningManualTimer = null;
     manualProjects = [];
+    manualRules = [];
     nextManualProjectId = 1;
     notesState = {enabled: false, text: ""};
     nextManualTimeBlockId = 1;
@@ -1318,7 +1352,7 @@ export async function invoke<T>(
                     if (!parent) throw new DemoInvokeError(cmd, "Parent category no longer exists");
                     if (parent.parent_id != null) throw new DemoInvokeError(cmd, "Subcategories cannot have their own subcategories");
                 }
-                manualProjects.push({id: nextManualProjectId++, name, parent_id: parentId});
+                manualProjects.push({id: nextManualProjectId++, name, parent_id: parentId, priority: 0});
                 return id as T;
             }
             const project = manualProjects.find((item) => item.id === id);
@@ -1333,8 +1367,15 @@ export async function invoke<T>(
             // Subcategory time moves to its parent; a category takes its subcategories with it.
             const removed = new Set([id, ...manualProjects.filter((project) => project.parent_id === id).map((project) => project.id)]);
             manualProjects = manualProjects.filter((project) => !removed.has(project.id));
+            manualRules = manualRules.filter((rule) => !removed.has(rule.manual_project_id));
             manualTimeBlocks.forEach((block) => {if (block.project_id != null && removed.has(block.project_id)) block.project_id = deleted.parent_id;});
             if (runningManualTimer?.project_id != null && removed.has(runningManualTimer.project_id)) runningManualTimer = {...runningManualTimer, project_id: deleted.parent_id};
+            return null as T;
+        }
+        case "update_manual_project_priority": {
+            const project = manualProjects.find((item) => item.id === Number((a as {id?: number}).id));
+            if (!project) throw new DemoInvokeError(cmd, "Project no longer exists");
+            project.priority = Number((a as {priority?: number}).priority) || 0;
             return null as T;
         }
         case "get_manual_time_blocks": {
@@ -1365,7 +1406,7 @@ export async function invoke<T>(
             const now = Math.floor(Date.now() / 1000);
             const id = nextManualTimeBlockId++;
             if (block?.project_id != null && !manualProjects.some((project) => project.id === block.project_id)) throw new DemoInvokeError(cmd, "Project no longer exists");
-            manualTimeBlocks.push({ id, title, notes: block?.notes?.trim() || null, project_id: block?.project_id ?? null, start_time: startTime, end_time: endTime, created_at: now, updated_at: now });
+            manualTimeBlocks.push({ id, title, notes: block?.notes?.trim() || null, project_id: block?.project_id ?? demoManualProjectForTitle(title), start_time: startTime, end_time: endTime, created_at: now, updated_at: now });
             return id as T;
         }
         case "update_manual_time_block": {
@@ -1382,7 +1423,9 @@ export async function invoke<T>(
             const existing = manualTimeBlocks.find((item) => item.id === id);
             if (!existing) throw new DemoInvokeError(cmd, `Manual time block ${id} does not exist`);
             if (block?.project_id != null && !manualProjects.some((project) => project.id === block.project_id)) throw new DemoInvokeError(cmd, "Project no longer exists");
-            Object.assign(existing, { title, notes: block?.notes?.trim() || null, project_id: block?.project_id ?? null, start_time: startTime, end_time: endTime, updated_at: Math.floor(Date.now() / 1000) });
+            // A rule only fills in a category when an Uncategorized entry gets a new title.
+            const projectId = block?.project_id ?? (existing.project_id == null && existing.title !== title ? demoManualProjectForTitle(title) : null);
+            Object.assign(existing, { title, notes: block?.notes?.trim() || null, project_id: projectId, start_time: startTime, end_time: endTime, updated_at: Math.floor(Date.now() / 1000) });
             return null as T;
         }
         case "delete_manual_time_block": {
@@ -1434,7 +1477,8 @@ export async function invoke<T>(
             if (runningManualTimer.end_time == null) throw new DemoInvokeError(cmd, "Stop the timer before recording it");
             const now = Math.floor(Date.now() / 1000);
             const id = nextManualTimeBlockId++;
-            manualTimeBlocks.push({ id, title: runningManualTimer.title.trim() || "Unnamed", notes: runningManualTimer.notes, project_id: runningManualTimer.project_id ?? null, start_time: runningManualTimer.start_time, end_time: runningManualTimer.end_time, created_at: now, updated_at: now });
+            const timerTitle = runningManualTimer.title.trim() || "Unnamed";
+            manualTimeBlocks.push({ id, title: timerTitle, notes: runningManualTimer.notes, project_id: runningManualTimer.project_id ?? demoManualProjectForTitle(timerTitle), start_time: runningManualTimer.start_time, end_time: runningManualTimer.end_time, created_at: now, updated_at: now });
             runningManualTimer = null;
             return id as T;
         }
@@ -1449,13 +1493,24 @@ export async function invoke<T>(
         case "insert_category": {
             const nc = pickNewCategory(a);
             if (!nc) throw new DemoInvokeError(cmd, "Missing new category payload");
+            const parentId = nc.parent_id ?? null;
+            const parent = categories.find((c) => c.id === parentId);
+            if (parentId != null) {
+                if (nc.name === "Miscellaneous") throw new DemoInvokeError(cmd, "Miscellaneous cannot be a subcategory");
+                if (!parent) throw new DemoInvokeError(cmd, "Parent category no longer exists");
+                if (parent.parent_id != null) throw new DemoInvokeError(cmd, "Subcategories cannot have their own subcategories");
+            }
+            if (categories.some((c) => c.parent_id === parentId && c.name.toLowerCase() === nc.name.toLowerCase())) {
+                throw new DemoInvokeError(cmd, "A category with this name already exists here");
+            }
             const id = nextCatId++;
             categories.push(
                 toDemoCategory({
                     id,
                     name: nc.name,
                     priority: nc.priority,
-                    color: nc.color ?? null,
+                    color: nc.color ?? parent?.color ?? null,
+                    parent_id: parentId,
                 })
             );
             return id as unknown as T;
@@ -1476,20 +1531,58 @@ export async function invoke<T>(
             const cascade = Boolean((a as { cascade?: boolean }).cascade);
             const removed = categories.find((c) => c.id === id);
             const removedName = removed?.name;
-            categories = categories.filter((c) => c.id !== id);
-            if (cascade) {
-                catRegex = catRegex.filter((r) => r.cat_id !== id);
-            }
+            const removedIds = new Set([id, ...categories.filter((c) => c.parent_id === id).map((c) => c.id)]);
+            const heir = removed?.parent_id ?? categories.find((c) => c.name === "Miscellaneous" && c.parent_id == null)?.id;
+            categories = categories.filter((c) => !removedIds.has(c.id));
+            catRegex = cascade || heir === undefined
+                ? catRegex.filter((r) => !removedIds.has(r.cat_id))
+                : catRegex.map((r) => (removedIds.has(r.cat_id) ? {...r, cat_id: heir} : r));
             return null as T;
         }
         case "get_matching_category_rule": {
             const app = String((a as {appName: string}).appName);
-            const ordered = [...catRegex].sort((left, right) => (categories.find(c => c.id === right.cat_id)?.priority ?? 0) - (categories.find(c => c.id === left.cat_id)?.priority ?? 0));
-            const rule = ordered.find(row => {
-                const insensitive = row.regex.startsWith("(?i)");
-                return new RegExp(insensitive ? row.regex.slice(4) : row.regex, insensitive ? "i" : undefined).test(app);
-            });
-            return {rule: rule ? {...rule} : null, category_name: categories.find(c => c.id === rule?.cat_id)?.name ?? "Miscellaneous"} as T;
+            const byId = (id: number | null | undefined) => categories.find(c => c.id === id);
+            const rule = ruleOrder(catRegex, row => byId(row.cat_id), byId).find(row => demoPatternMatches(row.regex, app));
+            const cat = byId(rule?.cat_id);
+            const parent = byId(cat?.parent_id);
+            return {rule: rule ? {...rule} : null, category_name: (parent ?? cat)?.name ?? "Miscellaneous", subcategory: parent ? cat?.name ?? null : null} as T;
+        }
+        case "get_category_rules":
+            return [
+                ...catRegex.map((rule) => ({...rule, manual_project_id: null})),
+                ...manualRules.map((rule) => ({...rule, cat_id: null})),
+            ] as unknown as T;
+        case "insert_category_rule":
+        case "update_category_rule": {
+            const rule = (a as {rule?: {id?: number; cat_id?: number | null; manual_project_id?: number | null; regex?: string}}).rule;
+            const regex = rule?.regex?.trim() ?? "";
+            const catId = rule?.cat_id ?? null;
+            const projectId = rule?.manual_project_id ?? null;
+            validateRegexPattern(regex, cmd);
+            if ((catId == null) === (projectId == null)) throw new DemoInvokeError(cmd, "Choose one category for this rule");
+            if (catId != null && !categories.some((c) => c.id === catId)) throw new DemoInvokeError(cmd, `Category with id ${catId} does not exist`);
+            if (projectId != null && !manualProjects.some((project) => project.id === projectId)) throw new DemoInvokeError(cmd, "Project no longer exists");
+            const id = cmd === "insert_category_rule" ? nextRegexId++ : Number(rule?.id);
+            if (cmd === "update_category_rule") {
+                if (isCatchAllRule(catRegex.find((r) => r.id === id))) throw new DemoInvokeError(cmd, "The catch-all pattern (.*) for Miscellaneous cannot be edited.");
+                if (!catRegex.some((r) => r.id === id) && !manualRules.some((r) => r.id === id)) throw new DemoInvokeError(cmd, `Regex pattern with id ${id} does not exist`);
+                catRegex = catRegex.filter((r) => r.id !== id);
+                manualRules = manualRules.filter((r) => r.id !== id);
+            }
+            if (catId != null) catRegex.push({id, cat_id: catId, regex});
+            else manualRules.push({id, manual_project_id: projectId!, regex});
+            return (cmd === "insert_category_rule" ? id : null) as unknown as T;
+        }
+        case "match_manual_rule":
+            return demoManualProjectForTitle(String((a as {title?: string}).title ?? "")) as unknown as T;
+        case "apply_manual_rules": {
+            let updated = 0;
+            for (const block of manualTimeBlocks) {
+                if (block.project_id != null) continue;
+                block.project_id = demoManualProjectForTitle(block.title);
+                if (block.project_id != null) updated += 1;
+            }
+            return updated as unknown as T;
         }
         case "get_cat_regex":
             return catRegex.map((rule) => ({...rule})) as unknown as T;
@@ -1526,12 +1619,11 @@ export async function invoke<T>(
         case "delete_cat_regex_by_id": {
             const id = pickNumber(a, ["id"]);
             if (id === undefined) throw new DemoInvokeError(cmd, "Missing regex id");
-            const row = catRegex.find((r) => r.id === id);
-            const cat = row ? categories.find((c) => c.id === row.cat_id) : undefined;
-            if (cat?.name === "Miscellaneous" && row?.regex === ".*") {
+            if (isCatchAllRule(catRegex.find((r) => r.id === id))) {
                 throw new DemoInvokeError(cmd, "The catch-all Miscellaneous pattern cannot be deleted");
             }
             catRegex = catRegex.filter((r) => r.id !== id);
+            manualRules = manualRules.filter((r) => r.id !== id);
             return null as T;
         }
         case "get_app_groups":

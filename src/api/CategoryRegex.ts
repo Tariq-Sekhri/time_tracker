@@ -11,7 +11,24 @@ export type NewCategoryRegex = {
     regex: string;
 };
 
-export type MatchingCategoryRule = {rule: CategoryRegex | null; category_name: string};
+/** One rule list: a rule targets either an auto category or a manual category. */
+export type CategoryRule = {
+    id: number;
+    cat_id: number | null;
+    manual_project_id: number | null;
+    regex: string;
+};
+
+export type NewCategoryRule = Omit<CategoryRule, "id">;
+
+export const CATEGORY_RULES_QUERY_KEY = ["cat_regex", "rules"] as const;
+export const get_category_rules = () => invokeOrThrow<CategoryRule[]>("get_category_rules");
+export const insert_category_rule = (rule: NewCategoryRule) => invokeOrThrow<number>("insert_category_rule", {rule});
+export const update_category_rule = (rule: CategoryRule) => invokeOrThrow<null>("update_category_rule", {rule});
+export const matchManualRule = (title: string) => invokeOrThrow<number | null>("match_manual_rule", {title});
+export const applyManualRules = () => invokeOrThrow<number>("apply_manual_rules");
+
+export type MatchingCategoryRule = {rule: CategoryRegex | null; category_name: string; subcategory: string | null};
 export const getMatchingCategoryRule = (appName: string) =>
     invokeOrThrow<MatchingCategoryRule>("get_matching_category_rule", {appName});
 

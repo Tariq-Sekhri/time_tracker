@@ -66,22 +66,22 @@ export function localTs(year: number, month: number, day: number, hour = 0, minu
 }
 
 const MANUAL_CATEGORIES: ExportManualCategory[] = [
-    {id: 1, name: "Acme Corp", color: "#2563eb", parent_id: null, parent_name: null},
-    {id: 2, name: "Website redesign", color: "#3b82f6", parent_id: 1, parent_name: "Acme Corp"},
-    {id: 3, name: "Mobile app", color: "#60a5fa", parent_id: 1, parent_name: "Acme Corp"},
-    {id: 4, name: "Globex", color: "#f97316", parent_id: null, parent_name: null},
-    {id: 5, name: "Data migration", color: "#fb923c", parent_id: 4, parent_name: "Globex"},
-    {id: 6, name: "Initech", color: "#14b8a6", parent_id: null, parent_name: null},
-    {id: 7, name: "Internal", color: "#8b5cf6", parent_id: null, parent_name: null},
-    {id: 8, name: "Meetings", color: "#a78bfa", parent_id: 7, parent_name: "Internal"},
-    {id: 9, name: "Admin & invoicing", color: "#c4b5fd", parent_id: 7, parent_name: "Internal"},
-    {id: 10, name: "Learning", color: "#eab308", parent_id: null, parent_name: null},
-    {id: 11, name: "Umbrella Health", color: "#ec4899", parent_id: null, parent_name: null},
-    {id: 12, name: "Stark Industries", color: "#ef4444", parent_id: null, parent_name: null},
-    {id: 13, name: "Wayne Enterprises", color: "#64748b", parent_id: null, parent_name: null},
-    {id: 14, name: "Hooli", color: "#22c55e", parent_id: null, parent_name: null},
-    {id: 15, name: "Pied Piper", color: "#10b981", parent_id: null, parent_name: null},
-    {id: null, name: "Uncategorized", color: "#9ca3af", parent_id: null, parent_name: null},
+    {id: 1, name: "Acme Corp", color: "#2563eb", parent_id: null, parent_name: null, priority: 0, rules: []},
+    {id: 2, name: "Website redesign", color: "#3b82f6", parent_id: 1, parent_name: "Acme Corp", priority: 0, rules: []},
+    {id: 3, name: "Mobile app", color: "#60a5fa", parent_id: 1, parent_name: "Acme Corp", priority: 0, rules: []},
+    {id: 4, name: "Globex", color: "#f97316", parent_id: null, parent_name: null, priority: 0, rules: []},
+    {id: 5, name: "Data migration", color: "#fb923c", parent_id: 4, parent_name: "Globex", priority: 0, rules: []},
+    {id: 6, name: "Initech", color: "#14b8a6", parent_id: null, parent_name: null, priority: 0, rules: []},
+    {id: 7, name: "Internal", color: "#8b5cf6", parent_id: null, parent_name: null, priority: 0, rules: []},
+    {id: 8, name: "Meetings", color: "#a78bfa", parent_id: 7, parent_name: "Internal", priority: 0, rules: []},
+    {id: 9, name: "Admin & invoicing", color: "#c4b5fd", parent_id: 7, parent_name: "Internal", priority: 0, rules: []},
+    {id: 10, name: "Learning", color: "#eab308", parent_id: null, parent_name: null, priority: 0, rules: []},
+    {id: 11, name: "Umbrella Health", color: "#ec4899", parent_id: null, parent_name: null, priority: 0, rules: []},
+    {id: 12, name: "Stark Industries", color: "#ef4444", parent_id: null, parent_name: null, priority: 0, rules: []},
+    {id: 13, name: "Wayne Enterprises", color: "#64748b", parent_id: null, parent_name: null, priority: 0, rules: []},
+    {id: 14, name: "Hooli", color: "#22c55e", parent_id: null, parent_name: null, priority: 0, rules: []},
+    {id: 15, name: "Pied Piper", color: "#10b981", parent_id: null, parent_name: null, priority: 0, rules: []},
+    {id: null, name: "Uncategorized", color: "#9ca3af", parent_id: null, parent_name: null, priority: 0, rules: []},
 ];
 
 const TITLES: Record<number | string, string[]> = {

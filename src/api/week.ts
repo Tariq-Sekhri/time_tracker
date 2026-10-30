@@ -3,6 +3,7 @@ import { invokeOrThrow } from "../utils.ts";
 type TimeBlockBackend = {
     id: number;
     category: string;
+    subcategory?: string | null;
     start_time: number; // Unix timestamp in seconds
     end_time: number; // Unix timestamp in seconds
     apps: { app: string; app_names: string[]; total_duration: number }[];
@@ -11,6 +12,7 @@ type TimeBlockBackend = {
 export type TimeBlock = {
     id: number;
     category: string;
+    subcategory?: string | null;
     startTime: number; // Unix timestamp in seconds
     endTime: number; // Unix timestamp in seconds
     apps: { app: string; appNames: string[]; totalDuration: number }[];
@@ -20,6 +22,7 @@ function transformTimeBlock(block: TimeBlockBackend): TimeBlock {
     return {
         id: block.id,
         category: block.category,
+        subcategory: block.subcategory,
         startTime: block.start_time,
         endTime: block.end_time,
         apps: block.apps.map(app => ({

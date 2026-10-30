@@ -95,6 +95,8 @@ export type ExportActivityCategory = {
     in_stats: boolean;
     /** Category rule regexes. */
     rules: string[];
+    /** Set on subcategories. */
+    parent_name?: string | null;
 };
 
 export type ExportManualCategory = {
@@ -104,6 +106,9 @@ export type ExportManualCategory = {
     color: string;
     parent_id: number | null;
     parent_name: string | null;
+    priority: number;
+    /** Rule regexes that send entries to this category. */
+    rules: string[];
 };
 
 export type ExportAppGroup = {name: string; regex: string};
@@ -144,7 +149,7 @@ export type ImportManualEntry = {
     end_time: number;
 };
 
-export type ImportManualCategory = {name: string; color: string | null; parent_name: string | null};
+export type ImportManualCategory = {name: string; color: string | null; parent_name: string | null; priority: number; rules: string[]};
 
 export type ImportActivityLog = {device_uuid: string; id: number; app: string; timestamp: number; duration: number};
 

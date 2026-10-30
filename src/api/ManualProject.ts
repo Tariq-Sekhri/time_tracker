@@ -1,13 +1,14 @@
 import {invokeOrThrow} from "../utils.ts";
 
-export type ManualProject = {id: number; name: string; parent_id?: number | null};
+export type ManualProject = {id: number; name: string; parent_id?: number | null; priority?: number};
 export const MANUAL_PROJECTS_QUERY_KEY = ["manualProjects"] as const;
 export const getManualProjects = () => invokeOrThrow<ManualProject[]>("get_manual_projects");
 export const createManualProject = (name: string, parentId: number | null = null) => invokeOrThrow<number>("create_manual_project", {name, parentId});
 export const updateManualProject = (id: number, name: string) => invokeOrThrow<void>("update_manual_project", {id, name});
 export const deleteManualProject = (id: number) => invokeOrThrow<void>("delete_manual_project", {id});
+export const updateManualProjectPriority = (id: number, priority: number) => invokeOrThrow<void>("update_manual_project_priority", {id, priority});
 
-export type ManualCategory = {id: number | null; name: string; color: string; parent_id?: number | null};
+export type ManualCategory = {id: number | null; name: string; color: string; parent_id?: number | null; priority?: number};
 export const MANUAL_CATEGORIES_QUERY_KEY = ["manualCategories"] as const;
 export const getManualCategories = () => invokeOrThrow<ManualCategory[]>("get_manual_categories");
 export const updateManualCategory = (id: number | null, name: string, color: string) =>

@@ -10,9 +10,9 @@ const options: ExportFilterOptions = {
     ],
     activity_categories: [{name: "Work", color: "#f00"}, {name: "Games", color: null}],
     manual_categories: [
-        {id: null, name: "Uncategorized", color: "#888", parent_id: null, parent_name: null},
-        {id: 1, name: "Client", color: "#00f", parent_id: null, parent_name: null},
-        {id: 2, name: "Project", color: "#0f0", parent_id: 1, parent_name: "Client"},
+        {id: null, name: "Uncategorized", color: "#888", parent_id: null, parent_name: null, priority: 0, rules: []},
+        {id: 1, name: "Client", color: "#00f", parent_id: null, parent_name: null, priority: 0, rules: []},
+        {id: 2, name: "Project", color: "#0f0", parent_id: 1, parent_name: "Client", priority: 0, rules: []},
     ],
     data_start: null,
     data_end: null,

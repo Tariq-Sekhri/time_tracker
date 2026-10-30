@@ -29,10 +29,10 @@ const filterOptions: ExportFilterOptions = {
     ],
     activity_categories: [{name: "Coding", color: "#2563eb"}, {name: "Browsing", color: null}],
     manual_categories: [
-        {id: null, name: "Uncategorized", color: "#0ea5e9", parent_id: null, parent_name: null},
-        {id: 1, name: "Client", color: "#2563eb", parent_id: null, parent_name: null},
-        {id: 2, name: "Website", color: "#2563eb", parent_id: 1, parent_name: "Client"},
-        {id: 3, name: "Admin", color: "#34d399", parent_id: null, parent_name: null},
+        {id: null, name: "Uncategorized", color: "#0ea5e9", parent_id: null, parent_name: null, priority: 0, rules: []},
+        {id: 1, name: "Client", color: "#2563eb", parent_id: null, parent_name: null, priority: 0, rules: []},
+        {id: 2, name: "Website", color: "#2563eb", parent_id: 1, parent_name: "Client", priority: 0, rules: []},
+        {id: 3, name: "Admin", color: "#34d399", parent_id: null, parent_name: null, priority: 0, rules: []},
     ],
     data_start: 1_772_323_200, data_end: 1_774_915_200,
 };

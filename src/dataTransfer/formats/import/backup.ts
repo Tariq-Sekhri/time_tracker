@@ -125,13 +125,17 @@ function categoryPath(row: Obj): string[] {
 }
 
 /** Skips the Uncategorized pseudo row (id null) and lists parents before their children. */
+function strings(value: unknown): string[] {
+    return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+}
+
 function manualCategories(rows: Obj[]): ImportManualCategory[] {
     const result = rows.flatMap((row): ImportManualCategory[] => {
         if (row.id === null || row.id === undefined) return [];
         const name = (str(row.name) ?? "").trim();
         if (!name) return [];
         const parent = (str(row.parent_name) ?? "").trim();
-        return [{name, color: str(row.color), parent_name: parent || null}];
+        return [{name, color: str(row.color), parent_name: parent || null, priority: num(row.priority) ?? 0, rules: strings(row.rules)}];
     });
     return [...result.filter((c) => c.parent_name === null), ...result.filter((c) => c.parent_name !== null)];
 }
@@ -139,13 +143,15 @@ function manualCategories(rows: Obj[]): ImportManualCategory[] {
 function activityCategory(row: Obj): ExportActivityCategory | null {
     const name = (str(row.name) ?? "").trim();
     if (!name) return null;
+    const parent = str(row.parent_name)?.trim();
     return {
         name,
         color: str(row.color),
         priority: num(row.priority) ?? 0,
         is_visible: bool(row.is_visible, true),
         in_stats: bool(row.in_stats, true),
-        rules: Array.isArray(row.rules) ? row.rules.filter((v): v is string => typeof v === "string") : [],
+        rules: strings(row.rules),
+        ...(parent ? {parent_name: parent} : {}),
     };
 }
 
