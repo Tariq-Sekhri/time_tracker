@@ -62,7 +62,7 @@ pub fn get_db_path_cmd() -> String {
     get_db_path().to_string_lossy().to_string()
 }
 
-pub use pool::get_db_path;
+pub use pool::{get_db_path, replace_beta_database};
 
 #[derive(Serialize)]
 pub struct BackupInfoResponse {

@@ -200,28 +200,85 @@ async fn seed_beta_database(source: &Path, target: &Path) -> Result<(), sqlx::Er
     Ok(())
 }
 
+fn beta_replacement_path(target: &Path) -> PathBuf {
+    target.with_extension("replacement.db")
+}
+
+async fn install_beta_replacement(target: &Path, backup_path: &Path) -> Result<(), sqlx::Error> {
+    if db_file_has_data(target) {
+        let snapshot = snapshot_database(target, target).await?;
+        std::fs::rename(snapshot, backup_path)?;
+    }
+    install_snapshot(&beta_replacement_path(target), target)?;
+    crate::logger::Log::info(format!("Beta database replaced; previous copy saved at {}", backup_path.display()));
+    Ok(())
+}
+
+/// The tracker keeps row IDs in memory, so the swap waits for a restart, before anything opens the database.
+async fn apply_pending_beta_replacement(target: &Path) -> std::io::Result<()> {
+    let replacement = beta_replacement_path(target);
+    if !replacement.exists() { return Ok(()); }
+    let backup_path = backup::safety_backup_path("pre_replace")?;
+    if let Err(error) = install_beta_replacement(target, &backup_path).await {
+        crate::logger::Log::error(format!("Beta database replacement failed; keeping the existing database: {error}"));
+        std::fs::remove_file(&replacement)?;
+    }
+    backup::prune_safety_backups()
+}
+
+#[tauri::command]
+pub async fn replace_beta_database(app: tauri::AppHandle) -> Result<(), Error> {
+    if !crate::instance::IS_BETA { return Err(anyhow::anyhow!("Only Time Tracker Beta can replace its database").into()); }
+    let source = stable_db_path();
+    if !db_file_has_data(&source) { return Err(anyhow::anyhow!("Time Tracker's database was not found").into()); }
+    let target = get_db_path();
+    let snapshot = snapshot_database(&source, &target).await?;
+    std::fs::rename(snapshot, beta_replacement_path(&target))?;
+    crate::logger::Log::info(format!("Beta database replacement prepared from {}; restarting", source.display()));
+    app.request_restart();
+    Ok(())
+}
+
 async fn refresh_database_copy(source: &Path, target: &Path) -> Result<(), sqlx::Error> {
+    let snapshot = snapshot_database(source, target).await?;
+    install_snapshot(&snapshot, target)
+}
+
+/// Writes a verified copy of `source` next to `target`. A failure leaves no partial file behind.
+async fn snapshot_database(source: &Path, target: &Path) -> Result<PathBuf, sqlx::Error> {
     let snapshot = target.with_extension(format!("refresh-{}.db", std::process::id()));
     if snapshot.exists() { std::fs::remove_file(&snapshot)?; }
+    let result = write_verified_snapshot(source, &snapshot).await;
+    if result.is_err() && snapshot.exists() {
+        std::fs::remove_file(&snapshot)?;
+    }
+    result.map(|()| snapshot)
+}
+
+async fn write_verified_snapshot(source: &Path, snapshot: &Path) -> Result<(), sqlx::Error> {
     // SQLite reads a consistent snapshot, including committed WAL data, without writing to production.
     let mut connection = SqliteConnection::connect_with(&SqliteConnectOptions::new()
         .filename(source).read_only(true).busy_timeout(Duration::from_secs(10))).await?;
     sqlx::query("VACUUM main INTO ?").bind(snapshot.to_string_lossy().as_ref())
         .execute(&mut connection).await?;
     connection.close().await?;
-    let mut copy = SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&snapshot).read_only(true)).await?;
+    let mut copy = SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(snapshot).read_only(true)).await?;
     let integrity: String = sqlx::query_scalar("PRAGMA integrity_check").fetch_one(&mut copy).await?;
     copy.close().await?;
     if integrity != "ok" {
         return Err(sqlx::Error::Io(std::io::Error::other("Production database snapshot failed integrity check")));
     }
+    Ok(())
+}
+
+fn install_snapshot(snapshot: &Path, target: &Path) -> Result<(), sqlx::Error> {
     // No dev connections exist yet: discard old journals before installing the complete snapshot.
     for suffix in ["-wal", "-shm"] {
         let sidecar = PathBuf::from(format!("{}{suffix}", target.display()));
         if sidecar.exists() { std::fs::remove_file(sidecar)?; }
     }
     // The snapshot is complete here, and the rename never exposes a partial database.
-    std::fs::rename(&snapshot, target)?;
+    std::fs::rename(snapshot, target)?;
     Ok(())
 }
 
@@ -230,6 +287,7 @@ pub struct DatabaseLocationInfo {
     pub path: String,
     pub default_path: String,
     pub is_custom: bool,
+    pub is_beta: bool,
 }
 
 #[derive(Serialize)]
@@ -254,6 +312,7 @@ pub fn get_database_location() -> DatabaseLocationInfo {
         path: path.to_string_lossy().to_string(),
         default_path: default_path.to_string_lossy().to_string(),
         is_custom: is_custom_db_path(),
+        is_beta: crate::instance::IS_BETA,
     }
 }
 
@@ -400,6 +459,7 @@ async fn create_pool() -> Result<SqlitePool, sqlx::Error> {
 
     let db_path = get_db_path();
     if crate::instance::IS_BETA {
+        apply_pending_beta_replacement(&db_path).await.map_err(sqlx::Error::Io)?;
         seed_beta_database(&stable_db_path(), &db_path).await?;
     }
     ensure_db_path(&db_path)?;
@@ -528,6 +588,40 @@ mod tests {
         seed_beta_database(&dir.join("app.db"), &target).await.unwrap();
 
         assert!(!target.exists());
+    }
+
+    async fn database_with(path: &Path, value: i64) {
+        let mut connection = open(path).await;
+        sqlx::query("CREATE TABLE data (value INTEGER)").execute(&mut connection).await.unwrap();
+        sqlx::query("INSERT INTO data VALUES (?)").bind(value).execute(&mut connection).await.unwrap();
+        connection.close().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn beta_replacement_installs_the_new_database_and_backs_up_the_old_one() {
+        let dir = temp_dir();
+        let (target, backup) = (dir.join("app-beta.db"), dir.join("backup.db"));
+        database_with(&target, 1).await;
+        database_with(&beta_replacement_path(&target), 2).await;
+
+        install_beta_replacement(&target, &backup).await.unwrap();
+
+        assert_eq!(values(&mut open(&target).await).await, vec![2]);
+        assert_eq!(values(&mut open(&backup).await).await, vec![1]);
+        assert!(!beta_replacement_path(&target).exists());
+    }
+
+    #[tokio::test]
+    async fn beta_replacement_keeps_the_old_database_when_its_backup_fails() {
+        let dir = temp_dir();
+        let target = dir.join("app-beta.db");
+        database_with(&target, 1).await;
+        database_with(&beta_replacement_path(&target), 2).await;
+
+        let unwritable = dir.join("missing").join("backup.db");
+        assert!(install_beta_replacement(&target, &unwritable).await.is_err());
+
+        assert_eq!(values(&mut open(&target).await).await, vec![1]);
     }
 
     #[tokio::test]

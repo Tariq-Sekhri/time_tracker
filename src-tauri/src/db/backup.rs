@@ -44,14 +44,21 @@ pub fn create_daily_backup() -> std::io::Result<Option<PathBuf>> {
     Ok(Some(backup_path))
 }
 
+pub fn safety_backup_path(reason: &str) -> std::io::Result<PathBuf> {
+    let backup_dir = ensure_backup_dir()?;
+    let timestamp = Local::now().format("%Y-%m-%d_%H-%M-%S").to_string();
+    let safe_reason = reason.replace(" ", "_").replace("/", "-");
+    Ok(backup_dir.join(format!("safety_{}_{}.db", timestamp, safe_reason)))
+}
+
+pub fn prune_safety_backups() -> std::io::Result<()> {
+    cleanup_old_backups(&get_backup_dir(), "safety_", MAX_SAFETY_BACKUPS)
+}
+
 pub fn create_safety_backup(reason: &str) -> std::io::Result<PathBuf> {
     let db_path = get_db_path();
     let backup_dir = ensure_backup_dir()?;
-
-    let timestamp = Local::now().format("%Y-%m-%d_%H-%M-%S").to_string();
-    let safe_reason = reason.replace(" ", "_").replace("/", "-");
-    let backup_name = format!("safety_{}_{}.db", timestamp, safe_reason);
-    let backup_path = backup_dir.join(&backup_name);
+    let backup_path = safety_backup_path(reason)?;
 
     fs::copy(&db_path, &backup_path)?;
     crate::logger::Log::info(format!(

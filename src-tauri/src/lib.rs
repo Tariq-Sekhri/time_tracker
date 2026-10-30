@@ -67,8 +67,8 @@ use db::tables::google_calendar_sync::{
 };
 use db::{
     create_manual_backup, create_safety_backup, get_backup_dir, get_database_location,
-    get_db_path_cmd, list_backups, probe_database_location, reset_database_location,
-    restore_backup, set_database_location,
+    get_db_path_cmd, list_backups, probe_database_location, replace_beta_database,
+    reset_database_location, restore_backup, set_database_location,
 };
 use google_oauth::{
     get_google_auth_status, get_google_oauth_app_credentials, google_oauth_login,
@@ -470,6 +470,7 @@ pub fn run() {
                     list_backups,
                     create_manual_backup,
                     restore_backup,
+                    replace_beta_database,
                     get_backup_dir,
                     create_safety_backup,
                     get_db_schema_version,
