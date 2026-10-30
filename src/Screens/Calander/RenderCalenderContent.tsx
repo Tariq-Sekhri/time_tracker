@@ -688,6 +688,7 @@ export default function RenderCalendarContent({
                 onToggleCal: toggleAllCategoriesVisible,
                 onToggleStats: toggleAllCategoriesInStats,
             },
+            onCreate: (anchor: HTMLElement) => toggleSourceEditor({kind: "newCategory", value: {id: null, name: "", color: "#0ea5e9", priority: Math.max(0, ...categories.map((category) => category.priority)) + 100}}, anchor),
             items: categories.map((category) => ({
                 key: String(category.id),
                 name: category.name,

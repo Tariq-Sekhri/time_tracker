@@ -8,7 +8,7 @@ import {invoke} from "../../demo/mock/core";
 import {getManualCategories} from "../api/ManualProject";
 import {get_manual_time_blocks, manualTimeCategoryStats} from "../api/ManualTimeBlock";
 import SourceEditor from "./SourceEditor";
-import {get_categories, update_category_by_id} from "../api/Category";
+import {get_all_categories, get_categories, update_category_by_id} from "../api/Category";
 import {delete_google_calendar, get_google_calendar_by_id, insert_google_calendar} from "../api/GoogleCalendar";
 
 afterEach(cleanup);
@@ -58,6 +58,36 @@ it("edits tracked category priority while preserving its latest visibility setti
         await waitFor(() => expect(close).toHaveBeenCalledOnce());
         expect((await get_categories()).find((row) => row.id === category.id)).toMatchObject({name: "Deep work", color: "#34d399", priority: 850, is_visible: false, in_stats: false});
     } finally {await update_category_by_id(category); anchor.remove();}
+});
+
+it("creates a category, or a subcategory that takes its parent's color", async () => {
+    const user = userEvent.setup();
+    const anchor = document.createElement("button");
+    document.body.append(anchor);
+    const close = vi.fn();
+    const source = {kind: "newCategory", value: {id: null, name: "", color: "#0ea5e9", priority: 700}} as const;
+    const ui = () => <QueryClientProvider client={new QueryClient()}><SourceEditor source={source} anchor={anchor} onClose={close} /></QueryClientProvider>;
+    try {
+        render(ui());
+        expect((screen.getByRole("button", {name: "Create"}) as HTMLButtonElement).disabled).toBe(true);
+        await user.type(screen.getByRole("textbox", {name: "Name"}), "Sidebar made");
+        await user.click(screen.getByRole("button", {name: "Use #34d399"}));
+        await user.click(screen.getByRole("button", {name: "Create"}));
+        await waitFor(() => expect(close).toHaveBeenCalledOnce());
+        const parent = (await get_categories()).find((category) => category.name === "Sidebar made")!;
+        expect(parent).toMatchObject({priority: 700, color: "#34d399", parent_id: null});
+        cleanup();
+
+        render(ui());
+        await user.type(screen.getByRole("textbox", {name: "Name"}), "Sidebar child");
+        await screen.findByRole("option", {name: "Sidebar made"});
+        await user.selectOptions(screen.getByRole("combobox", {name: "Parent"}), String(parent.id));
+        expect(screen.queryByRole("spinbutton", {name: "Priority"})).toBeNull();
+        expect(screen.queryByRole("button", {name: "Use #34d399"})).toBeNull();
+        await user.click(screen.getByRole("button", {name: "Create"}));
+        await waitFor(() => expect(close).toHaveBeenCalledTimes(2));
+        expect((await get_all_categories()).find((category) => category.name === "Sidebar child")).toMatchObject({parent_id: parent.id, color: "#34d399"});
+    } finally {anchor.remove();}
 });
 
 it("edits a Google calendar locally without changing its inclusion settings", async () => {

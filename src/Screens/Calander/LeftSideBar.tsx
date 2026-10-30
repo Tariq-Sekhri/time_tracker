@@ -36,6 +36,7 @@ export type SidebarSection = {
     items: SidebarSource[];
     emptyText?: string;
     error?: string;
+    onCreate?: (anchor: HTMLElement) => void;
 };
 
 type VariantProps = {
@@ -202,7 +203,12 @@ function ColourSectionHeader({section, open, onToggleOpen}: { section: SidebarSe
                     <span className="truncate text-xs font-medium">{section.title}</span>
                     <span className="text-[11px] tabular-nums text-gray-600">{onCount(section.items)}/{section.items.length}</span>
                 </button>
-                <span className="w-6"/>
+                {section.onCreate
+                    ? <button type="button" onClick={(event) => section.onCreate?.(event.currentTarget)} aria-label="Create category" title="Create category"
+                              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-800 hover:text-white">
+                        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    </button>
+                    : <span className="w-6"/>}
                 <AllCells section={section}/>
             </div>
         </div>
