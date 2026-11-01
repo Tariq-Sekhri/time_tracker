@@ -4,13 +4,10 @@
 
 ## [1.13.4] - 2026-11-01
 
-- Retry temporary database locks during startup and offer a retry button if the app cannot load.
-- Auto categories can now have subcategories, shown in statistics and on time blocks.
-- App Rules is now one list: each regex targets an auto or manual category.
-- Manual entries with no category are filled in by regex rules from their title, with a preview before you save.
-- Run rules over existing Uncategorized manual entries, and set which manual category wins when several match.
-- Create categories and subcategories directly from the calendar sidebar, and collapse manual subcategories in the priority list.
-- Time Tracker Beta now installs alongside stable with separate data and updates, and can refresh its data from a copy of stable's database.
+- Recover from temporary database locks at startup.
+- Add auto subcategories and create categories directly from the calendar sidebar.
+- Manage auto and manual category rules in one list.
+- Categorize manual entries by title, with previews, priorities, and rules for existing entries.
 
 ## [1.13.3] - 2026-10-24
 
