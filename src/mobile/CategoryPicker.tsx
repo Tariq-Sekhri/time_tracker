@@ -76,7 +76,7 @@ export default function CategoryPicker({categories, value, onChange, onCreate, d
             <span className="picker-label">{selected ? <>{selectedParent && <span className="muted-text">{selectedParent}{separator}</span>}{labelOf(selected.name)}</> : <span className="muted-text">Uncategorized</span>}</span>
             <Chevron open={open} />
         </button>
-        {open && <ManualPopover anchor={triggerRef.current} onClose={close} labelledBy="category-picker-search" width={triggerRef.current?.offsetWidth ?? 340}>
+        {open && <ManualPopover portalRoot={triggerRef.current?.closest("dialog") ?? undefined} anchor={triggerRef.current} onClose={close} labelledBy="category-picker-search" width={triggerRef.current?.offsetWidth ?? 340}>
             <div className="category-picker">
                 <div className="picker-search">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
@@ -85,7 +85,7 @@ export default function CategoryPicker({categories, value, onChange, onCreate, d
                         event.preventDefault();
                         if (options.length) pick(options[0]);
                         else if (search) startCreating(null);
-                    }} placeholder="Search category or subcategory" />
+                    }} placeholder="Search categories" />
                 </div>
                 <div role="listbox" aria-label="Categories" className="picker-list">
                     {showUncategorized && <button type="button" role="option" aria-selected={value === ""} className="picker-option" onClick={() => pick("")}>
@@ -99,8 +99,8 @@ export default function CategoryPicker({categories, value, onChange, onCreate, d
                                     <span className="dot" style={{background: parent.color}} /><span className="picker-label">{parent.name}</span>
                                 </button>
                                 {childCount > 0
-                                    ? <button type="button" className="picker-chip" aria-expanded={isOpen} aria-label={`${isOpen ? "Hide" : "Show"} ${parent.name} subcategories`} onClick={() => toggle(parent.name)}>{childCount} {childCount === 1 ? "sub" : "subs"} <Chevron open={isOpen} /></button>
-                                    : <button type="button" className="picker-chip add" aria-label={`Add subcategory to ${parent.name}`} onClick={() => startCreating(parent.name)}><Plus /> Sub</button>}
+                                    ? <button type="button" className="picker-chip" aria-expanded={isOpen} aria-label={`${isOpen ? "Hide" : "Show"} ${parent.name} subcategories`} onClick={() => toggle(parent.name)}>{childCount} {childCount === 1 ? "subcategory" : "subcategories"} <Chevron open={isOpen} /></button>
+                                    : <button type="button" className="picker-chip add" aria-label={`Add subcategory to ${parent.name}`} onClick={() => startCreating(parent.name)}><Plus /></button>}
                             </div>
                             {children.map(child => <button key={child.name} type="button" role="option" aria-selected={value === child.name} className="picker-option child" onClick={() => pick(child.name)}>
                                 <span className="picker-label">{labelOf(child.name)}</span>
