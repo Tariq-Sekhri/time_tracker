@@ -38,3 +38,6 @@ exmaple_start
 /.tauri
 /.cursor
 temp.json
+/AGENTS.md
+/CLAUDE.md
+/private/
