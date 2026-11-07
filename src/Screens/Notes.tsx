@@ -46,7 +46,7 @@ function toEditorHtml(value: string): string {
         : "";
 }
 
-export default function Notes({requestLink, showHeading = true, compactToolbar = false}: {compactToolbar?: boolean; requestLink?: () => Promise<string | null>; showHeading?: boolean} = {}) {
+export default function Notes({requestLink, showHeading = true}: {requestLink?: () => Promise<string | null>; showHeading?: boolean} = {}) {
     const { showToast } = useToast();
     const queryClient = useQueryClient();
     const { data } = useQuery({ queryKey: NOTES_QUERY_KEY, queryFn: getNotesState, refetchInterval: 5000 });
@@ -138,14 +138,14 @@ export default function Notes({requestLink, showHeading = true, compactToolbar =
     };
 
     return (
-        <div className={`${compactToolbar ? "notes-compact " : ""}flex h-full min-h-0 flex-col p-6`}>
+        <div className="flex h-full min-h-0 flex-col p-6">
             <div className={`mb-4 flex items-center ${showHeading ? "justify-between" : "justify-end"}`}>
                 {showHeading && <h1 className="text-2xl font-bold">Notes</h1>}
                 <span className="text-xs text-gray-400" aria-live="polite">{saveStatus}</span>
             </div>
             <div className="mb-2 flex flex-wrap gap-1 rounded-lg border border-gray-700 bg-gray-900 p-2" role="toolbar" aria-label="Note formatting">
                 {([["Bold", "bold"], ["Italic", "italic"], ["Underline", "underline"], ["Bullets", "insertUnorderedList"], ["Numbered list", "insertOrderedList"]] as const).map(([label, command]) => (
-                    <button key={command} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => format(command)} className="rounded px-2.5 py-1.5 text-sm text-gray-200 hover:bg-gray-700 focus-visible:outline focus-visible:outline-blue-400" aria-label={label} title={label}>{compactToolbar ? <span aria-hidden="true">{command === "bold" ? <b>B</b> : command === "italic" ? <i>I</i> : command === "underline" ? <u>U</u> : command === "insertUnorderedList" ? "•≡" : "1."}</span> : label}</button>
+                    <button key={command} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => format(command)} className="rounded px-2.5 py-1.5 text-sm text-gray-200 hover:bg-gray-700 focus-visible:outline focus-visible:outline-blue-400" aria-label={label} title={label}>{label}</button>
                 ))}
                 <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={async () => {
                     const selection = window.getSelection();
@@ -157,7 +157,7 @@ export default function Notes({requestLink, showHeading = true, compactToolbar =
                         selection?.addRange(range);
                     }
                     if (href && /^https?:\/\//i.test(href)) format("createLink", href);
-                }} className="rounded px-2.5 py-1.5 text-sm text-gray-200 hover:bg-gray-700" aria-label="Link" title="Link">{compactToolbar ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m10 13 4-4m-6 6-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 2 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/></svg> : "Link"}</button>
+                }} className="rounded px-2.5 py-1.5 text-sm text-gray-200 hover:bg-gray-700">Link</button>
             </div>
             <div
                 ref={editorRef}

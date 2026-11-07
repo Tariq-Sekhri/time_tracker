@@ -1,8 +1,7 @@
 import {useLayoutEffect, useRef, useState, type ReactNode} from "react";
 import {createPortal} from "react-dom";
 
-export default function ManualPopover({anchor, onClose, labelledBy, children, width = 480, ignoreOutsideSelector, beside = false, positionKey, suspended = false, portalRoot}: {
-    portalRoot?: Element;
+export default function ManualPopover({anchor, onClose, labelledBy, children, width = 480, ignoreOutsideSelector, beside = false, positionKey, suspended = false}: {
     anchor: HTMLElement | null;
     onClose: () => void;
     labelledBy: string;
@@ -72,5 +71,5 @@ export default function ManualPopover({anchor, onClose, labelledBy, children, wi
         onKeyDown={(event) => {
             if (event.key === "Escape") {event.stopPropagation(); onClose(); anchor?.focus();}
         }}
-    >{children}</div>, portalRoot ?? document.body);
+    >{children}</div>, document.body);
 }

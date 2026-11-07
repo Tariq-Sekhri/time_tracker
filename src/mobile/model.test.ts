@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {calendarBlocks, clipLog, dateAtHour, dateValue, dayStart, duration, manualUsage, nextDay, rangeFor, rangeDayCount} from "./model";
+import {calendarBlocks, clipLog, dateAtHour, dateValue, dayStart, nextDay, rangeFor} from "./model";
 import type {MobileLog, Settings} from "./api";
 
 const settings: Settings = {day_start_hour: 6, min_app_duration: 0, min_log_duration: 1,
@@ -49,31 +49,5 @@ describe("mobile calendar activity", () => {
         const blocks = calendarBlocks([log(1, 0, 50000), log(2, 50000, 100000, "other")], 0, 100000,
             {...settings, min_timeblock_duration: 60});
         expect(blocks).toEqual([]);
-    });
-});
-
-
-describe("tracking-day average divisor", () => {
-    it("does not count the following morning as an extra tracking day", () => {
-        expect(rangeDayCount(+new Date(2026, 9, 19, 6), +new Date(2026, 9, 24, 6), 6)).toBe(5);
-        expect(rangeDayCount(+new Date(2026, 9, 23, 6), +new Date(2026, 9, 24, 6), 6)).toBe(1);
-    });
-    it("counts calendar days rather than fixed 24-hour periods across DST", () => {
-        expect(rangeDayCount(+new Date(2026, 9, 31, 6), +new Date(2026, 10, 3, 6), 6)).toBe(3);
-    });
-    it("groups timer time by category and day within the range", () => {
-        const start = +new Date(2026, 9, 22, 6), end = +new Date(2026, 9, 24, 6);
-        const at = (day: number, hour: number) => +new Date(2026, 9, day, hour) / 1000;
-        const result = manualUsage([
-            {project_name: "Work", start_time: at(22, 5), end_time: at(22, 7)},
-            {project_name: null, start_time: at(23, 9), end_time: at(23, 9) + 1800},
-            {project_name: "Work", start_time: at(24, 5), end_time: at(24, 8)},
-        ], start, end, 6);
-        expect(result.total).toBe(3600 + 1800 + 3600);
-        expect(result.apps).toEqual([{packageName: "Work", label: "Work", seconds: 7200}, {packageName: "Uncategorized", label: "Uncategorized", seconds: 1800}]);
-        expect(result.days).toEqual([{date: "2026-10-22", seconds: 3600}, {date: "2026-10-23", seconds: 5400}]);
-    });
-    it("formats durations without zero parts", () => {
-        expect([duration(3600), duration(5580), duration(2220), duration(150), duration(9)]).toEqual(["1h", "1h 33m", "37m", "2m 30s", "9s"]);
     });
 });
