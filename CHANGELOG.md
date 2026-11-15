@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.13.5] - 2026-11-15
+
+- Sync with your server every minute instead of every five minutes.
+
 ## [1.13.4] - 2026-11-01
 
 - Recover from temporary database locks at startup.

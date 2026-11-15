@@ -23,7 +23,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{Mutex as AsyncMutex, Notify};
 
-pub const SYNC_INTERVAL_SECS: u64 = 5 * 60;
+pub const SYNC_INTERVAL_SECS: u64 = 60;
 
 static SYNC_COUNTDOWN_RESET: OnceLock<Arc<Notify>> = OnceLock::new();
 static SYNC_COUNTDOWN_REMAINING: AtomicI64 = AtomicI64::new(-1);
