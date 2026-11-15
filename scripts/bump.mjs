@@ -58,6 +58,17 @@ function writeJson(path, data) {
   writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`);
 }
 
+// Sets only this project's own version. A dependency can share the app's version
+// number, so the lockfile must never be edited with a text replace.
+function writeLockVersion(path, version) {
+  const lock = readJson(path);
+  lock.version = version;
+  if (lock.packages?.[""]) {
+    lock.packages[""].version = version;
+  }
+  writeJson(path, lock);
+}
+
 function replaceAll(path, from, to) {
   const content = readFileSync(path, "utf8");
   if (!content.includes(from)) {
@@ -108,7 +119,7 @@ const mainPackageData = readJson(mainPackageJson);
 mainPackageData.version = newVersion;
 writeJson(mainPackageJson, mainPackageData);
 
-replaceAll(join(root, "package-lock.json"), currentVersion, newVersion);
+writeLockVersion(join(root, "package-lock.json"), newVersion);
 
 replaceRegex(
   join(root, "src-tauri", "Cargo.toml"),
@@ -130,7 +141,7 @@ const demoPackageData = readJson(demoPackageJson);
 demoPackageData.version = newDemoVersion;
 writeJson(demoPackageJson, demoPackageData);
 
-replaceAll(join(root, "demo", "package-lock.json"), oldDemoVersion, newDemoVersion);
+writeLockVersion(join(root, "demo", "package-lock.json"), newDemoVersion);
 replaceAll(
   join(root, "demo", "mock", "core.ts"),
   `"${oldDemoVersion}"`,
