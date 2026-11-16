@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 const GOOGLE_API_BASE: &str = "https://www.googleapis.com/calendar/v3";
 
 fn ensure_google_calendar_writes_enabled() -> Result<(), Error> {
-    if cfg!(debug_assertions) || crate::instance::IS_BETA {
+    if cfg!(debug_assertions) {
         return Err(anyhow::anyhow!("Google Calendar event changes are disabled in dev mode and beta; calendar fetching is available.").into());
     }
     Ok(())

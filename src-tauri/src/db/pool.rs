@@ -15,8 +15,8 @@ use serde::Serialize;
 static POOL: Mutex<Option<SqlitePool>> = Mutex::new(None);
 static POOL_INIT: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-// Dev and beta never follow a custom location, so they can't be pointed at the real database.
-const FIXED_DB_PATH: bool = cfg!(debug_assertions) || crate::instance::IS_BETA;
+// Development never follows a custom location, so it cannot open the real database.
+const FIXED_DB_PATH: bool = cfg!(debug_assertions);
 
 fn app_data_time_tracker_dir() -> PathBuf {
     crate::instance::data_dir()
@@ -29,8 +29,6 @@ fn database_location_config_path() -> PathBuf {
 fn default_db_path() -> PathBuf {
     let db_filename = if cfg!(debug_assertions) {
         "apptest.db"
-    } else if crate::instance::IS_BETA {
-        "app-beta.db"
     } else {
         "app.db"
     };
@@ -187,58 +185,6 @@ fn stable_db_path() -> PathBuf {
         .unwrap_or_else(|| dir.join("app.db"))
 }
 
-/// Beta starts from a copy of stable's data. A failure leaves no database behind, so the next start retries.
-async fn seed_beta_database(source: &Path, target: &Path) -> Result<(), sqlx::Error> {
-    if db_file_has_data(target) || !db_file_has_data(source) {
-        return Ok(());
-    }
-    if let Some(parent) = target.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    refresh_database_copy(source, target).await?;
-    crate::logger::Log::info(format!("Beta database copied from {}", source.display()));
-    Ok(())
-}
-
-fn beta_replacement_path(target: &Path) -> PathBuf {
-    target.with_extension("replacement.db")
-}
-
-async fn install_beta_replacement(target: &Path, backup_path: &Path) -> Result<(), sqlx::Error> {
-    if db_file_has_data(target) {
-        let snapshot = snapshot_database(target, target).await?;
-        std::fs::rename(snapshot, backup_path)?;
-    }
-    install_snapshot(&beta_replacement_path(target), target)?;
-    crate::logger::Log::info(format!("Beta database replaced; previous copy saved at {}", backup_path.display()));
-    Ok(())
-}
-
-/// The tracker keeps row IDs in memory, so the swap waits for a restart, before anything opens the database.
-async fn apply_pending_beta_replacement(target: &Path) -> std::io::Result<()> {
-    let replacement = beta_replacement_path(target);
-    if !replacement.exists() { return Ok(()); }
-    let backup_path = backup::safety_backup_path("pre_replace")?;
-    if let Err(error) = install_beta_replacement(target, &backup_path).await {
-        crate::logger::Log::error(format!("Beta database replacement failed; keeping the existing database: {error}"));
-        std::fs::remove_file(&replacement)?;
-    }
-    backup::prune_safety_backups()
-}
-
-#[tauri::command]
-pub async fn replace_beta_database(app: tauri::AppHandle) -> Result<(), Error> {
-    if !crate::instance::IS_BETA { return Err(anyhow::anyhow!("Only Time Tracker Beta can replace its database").into()); }
-    let source = stable_db_path();
-    if !db_file_has_data(&source) { return Err(anyhow::anyhow!("Time Tracker's database was not found").into()); }
-    let target = get_db_path();
-    let snapshot = snapshot_database(&source, &target).await?;
-    std::fs::rename(snapshot, beta_replacement_path(&target))?;
-    crate::logger::Log::info(format!("Beta database replacement prepared from {}; restarting", source.display()));
-    app.request_restart();
-    Ok(())
-}
-
 async fn refresh_database_copy(source: &Path, target: &Path) -> Result<(), sqlx::Error> {
     let snapshot = snapshot_database(source, target).await?;
     install_snapshot(&snapshot, target)
@@ -287,7 +233,6 @@ pub struct DatabaseLocationInfo {
     pub path: String,
     pub default_path: String,
     pub is_custom: bool,
-    pub is_beta: bool,
 }
 
 #[derive(Serialize)]
@@ -312,7 +257,6 @@ pub fn get_database_location() -> DatabaseLocationInfo {
         path: path.to_string_lossy().to_string(),
         default_path: default_path.to_string_lossy().to_string(),
         is_custom: is_custom_db_path(),
-        is_beta: crate::instance::IS_BETA,
     }
 }
 
@@ -333,7 +277,7 @@ pub async fn set_database_location(
     path: String,
     overwrite: bool,
 ) -> Result<SetDatabaseLocationResult, Error> {
-    if FIXED_DB_PATH { return Err(anyhow::anyhow!("Dev and beta builds use a fixed database location").into()); }
+    if FIXED_DB_PATH { return Err(anyhow::anyhow!("Development builds use a fixed database location").into()); }
     let path = resolve_location_path(&path)?;
     crate::logger::Log::info(format!(
         "Database location change requested path={} overwrite={overwrite}",
@@ -458,10 +402,6 @@ async fn create_pool() -> Result<SqlitePool, sqlx::Error> {
     }
 
     let db_path = get_db_path();
-    if crate::instance::IS_BETA {
-        apply_pending_beta_replacement(&db_path).await.map_err(sqlx::Error::Io)?;
-        seed_beta_database(&stable_db_path(), &db_path).await?;
-    }
     ensure_db_path(&db_path)?;
 
     if db_file_has_data(&db_path) {
@@ -549,89 +489,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn beta_seed_copies_committed_data_without_changing_the_source() {
+    async fn dev_snapshot_copies_committed_data_without_changing_the_source() {
         let dir = temp_dir();
-        let (source, target) = (dir.join("app.db"), dir.join("beta").join("app-beta.db"));
+        let (source, target) = (dir.join("app.db"), dir.join("dev").join("apptest.db"));
         let mut stable = open(&source).await;
         sqlx::raw_sql("CREATE TABLE data (value INTEGER); INSERT INTO data VALUES (1), (2);")
             .execute(&mut stable).await.unwrap();
 
         // The stable connection stays open, so these rows are still only in its WAL.
-        seed_beta_database(&source, &target).await.unwrap();
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+        refresh_database_copy(&source, &target).await.unwrap();
 
-        let mut beta = open(&target).await;
-        assert_eq!(values(&mut beta).await, vec![1, 2]);
-        sqlx::query("INSERT INTO data VALUES (3)").execute(&mut beta).await.unwrap();
+        let mut dev = open(&target).await;
+        assert_eq!(values(&mut dev).await, vec![1, 2]);
+        sqlx::query("INSERT INTO data VALUES (3)").execute(&mut dev).await.unwrap();
         assert_eq!(values(&mut stable).await, vec![1, 2]);
         assert_eq!(std::fs::read_dir(target.parent().unwrap()).unwrap()
             .filter(|entry| entry.as_ref().unwrap().file_name().to_string_lossy().contains("refresh-")).count(), 0);
     }
 
-    #[tokio::test]
-    async fn beta_seed_keeps_an_existing_beta_database() {
-        let dir = temp_dir();
-        let (source, target) = (dir.join("app.db"), dir.join("app-beta.db"));
-        std::fs::write(&source, b"stable").unwrap();
-        std::fs::write(&target, b"beta").unwrap();
-
-        seed_beta_database(&source, &target).await.unwrap();
-
-        assert_eq!(std::fs::read(&target).unwrap(), b"beta");
-        assert_eq!(std::fs::read(&source).unwrap(), b"stable");
-    }
-
-    #[tokio::test]
-    async fn beta_seed_starts_empty_without_a_stable_database() {
-        let dir = temp_dir();
-        let target = dir.join("app-beta.db");
-
-        seed_beta_database(&dir.join("app.db"), &target).await.unwrap();
-
-        assert!(!target.exists());
-    }
-
-    async fn database_with(path: &Path, value: i64) {
-        let mut connection = open(path).await;
-        sqlx::query("CREATE TABLE data (value INTEGER)").execute(&mut connection).await.unwrap();
-        sqlx::query("INSERT INTO data VALUES (?)").bind(value).execute(&mut connection).await.unwrap();
-        connection.close().await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn beta_replacement_installs_the_new_database_and_backs_up_the_old_one() {
-        let dir = temp_dir();
-        let (target, backup) = (dir.join("app-beta.db"), dir.join("backup.db"));
-        database_with(&target, 1).await;
-        database_with(&beta_replacement_path(&target), 2).await;
-
-        install_beta_replacement(&target, &backup).await.unwrap();
-
-        assert_eq!(values(&mut open(&target).await).await, vec![2]);
-        assert_eq!(values(&mut open(&backup).await).await, vec![1]);
-        assert!(!beta_replacement_path(&target).exists());
-    }
-
-    #[tokio::test]
-    async fn beta_replacement_keeps_the_old_database_when_its_backup_fails() {
-        let dir = temp_dir();
-        let target = dir.join("app-beta.db");
-        database_with(&target, 1).await;
-        database_with(&beta_replacement_path(&target), 2).await;
-
-        let unwritable = dir.join("missing").join("backup.db");
-        assert!(install_beta_replacement(&target, &unwritable).await.is_err());
-
-        assert_eq!(values(&mut open(&target).await).await, vec![1]);
-    }
-
-    #[tokio::test]
-    async fn failed_beta_seed_leaves_no_database_so_the_next_start_retries() {
-        let dir = temp_dir();
-        let (source, target) = (dir.join("app.db"), dir.join("app-beta.db"));
-        std::fs::write(&source, b"not a sqlite database").unwrap();
-
-        assert!(seed_beta_database(&source, &target).await.is_err());
-
-        assert!(!target.exists());
-    }
 }

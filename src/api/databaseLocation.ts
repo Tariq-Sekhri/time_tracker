@@ -4,7 +4,6 @@ export type DatabaseLocationInfo = {
     path: string;
     default_path: string;
     is_custom: boolean;
-    is_beta: boolean;
 };
 
 export type DatabaseLocationProbe = {
@@ -30,10 +29,6 @@ export async function setDatabaseLocation(
     overwrite: boolean
 ): Promise<SetDatabaseLocationResult> {
     return invokeOrThrow<SetDatabaseLocationResult>("set_database_location", { path, overwrite });
-}
-
-export async function replaceBetaDatabase(): Promise<void> {
-    return invokeOrThrow<void>("replace_beta_database");
 }
 
 export async function resetDatabaseLocation(): Promise<DatabaseLocationInfo> {

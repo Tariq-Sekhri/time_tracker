@@ -68,7 +68,7 @@ use db::tables::google_calendar_sync::{
 };
 use db::{
     create_manual_backup, create_safety_backup, get_backup_dir, get_database_location,
-    get_db_path_cmd, list_backups, probe_database_location, replace_beta_database,
+    get_db_path_cmd, list_backups, probe_database_location,
     reset_database_location, restore_backup, set_database_location,
 };
 use google_oauth::{
@@ -215,7 +215,7 @@ pub fn run() {
 
             tauri::async_runtime::spawn(async move {
                 if !instance::SYNC_ENABLED {
-                    Log::info("Automatic sync disabled in dev and beta builds");
+                    Log::info("Automatic sync disabled in development builds");
                     return;
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(3)).await;
@@ -478,7 +478,6 @@ pub fn run() {
                     list_backups,
                     create_manual_backup,
                     restore_backup,
-                    replace_beta_database,
                     get_backup_dir,
                     create_safety_backup,
                     get_db_schema_version,

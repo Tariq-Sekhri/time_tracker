@@ -772,11 +772,7 @@ Function un.onInit
  Call un.InitFixedInstance
  ReadRegStr $InstanceDisplayName SHCTX "$InstanceUninstKey" "DisplayName"
  ${If} $InstanceDisplayName == ""
-  !if "${PRODUCTNAME}" == "Time Tracker Beta"
-    StrCpy $InstanceDisplayName "Time Tracker Beta"
-  !else
-    StrCpy $InstanceDisplayName "Time Tracker"
-  !endif
+  StrCpy $InstanceDisplayName "Time Tracker"
  ${EndIf}
 FunctionEnd
 

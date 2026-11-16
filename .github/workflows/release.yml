@@ -2,12 +2,6 @@ name: Build Release
 
 on:
   workflow_dispatch:
-    inputs:
-      beta:
-        description: Create a uniquely tagged beta prerelease
-        required: true
-        type: boolean
-        default: true
   push:
     branches:
       - master
@@ -104,9 +98,9 @@ jobs:
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
           VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.VITE_GOOGLE_CLIENT_SECRET }}
         with:
-          tagName: ${{ github.event_name == 'workflow_dispatch' && inputs.beta && format('app-v__VERSION__-beta.{0}', github.run_number) || 'app-v__VERSION__' }}
-          releaseName: ${{ github.event_name == 'workflow_dispatch' && inputs.beta && format('Time Tracker v__VERSION__ Beta {0}', github.run_number) || 'Time Tracker v__VERSION__' }}
+          tagName: app-v__VERSION__
+          releaseName: Time Tracker v__VERSION__
           releaseBody: ${{ steps.changelog.outputs.body }}
           releaseDraft: false
-          prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.beta }}
+          prerelease: false
           args: ${{ matrix.bundles }}

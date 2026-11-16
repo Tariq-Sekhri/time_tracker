@@ -4,13 +4,11 @@ use std::sync::OnceLock;
 
 static INSTANCE: OnceLock<InstanceConfig> = OnceLock::new();
 
-pub const IS_BETA: bool = cfg!(feature = "beta");
-// Beta works on its own copy of the data, so nothing it does may reach the server.
-pub const SYNC_ENABLED: bool = !cfg!(debug_assertions) && !IS_BETA;
+pub const SYNC_ENABLED: bool = !cfg!(debug_assertions);
 
 const STABLE_DATA_DIR_NAME: &str = "time-tracker";
-const DATA_DIR_NAME: &str = if cfg!(debug_assertions) { "time-tracker-dev" } else if IS_BETA { "time-tracker-beta" } else { STABLE_DATA_DIR_NAME };
-const DISPLAY_NAME: &str = if cfg!(debug_assertions) { "Time Tracker (Dev)" } else if IS_BETA { "Time Tracker Beta" } else { "Time Tracker" };
+const DATA_DIR_NAME: &str = if cfg!(debug_assertions) { "time-tracker-dev" } else { STABLE_DATA_DIR_NAME };
+const DISPLAY_NAME: &str = if cfg!(debug_assertions) { "Time Tracker (Dev)" } else { "Time Tracker" };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InstanceConfig {

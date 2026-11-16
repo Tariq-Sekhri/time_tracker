@@ -6,7 +6,6 @@ import { useToast } from "../Componants/Toast.tsx";
 import { useBackendSettings, type SettingField } from "../hooks/useBackendSettings.ts";
 import {
     getDatabaseLocation,
-    replaceBetaDatabase,
     resetDatabaseLocation,
     setDatabaseLocation,
     type DatabaseLocationInfo,
@@ -322,17 +321,6 @@ function DatabaseLocationSetting() {
         }
     };
 
-    const handleReplaceBetaDatabase = async () => {
-        if (!window.confirm("Replace Beta's data with a copy from Time Tracker? Beta will restart.")) return;
-        setBusy(true);
-        try {
-            await replaceBetaDatabase();
-        } catch (e) {
-            showToast("Failed to copy Time Tracker's data", "error", 5000, toErrorString(e));
-            setBusy(false);
-        }
-    };
-
     return (
         <div className="bg-gray-900 p-4 rounded">
             <h2 className="text-lg font-semibold mb-1">Data</h2>
@@ -380,21 +368,7 @@ function DatabaseLocationSetting() {
                         Default: {info.default_path}
                     </p>
                 )}
-                {info?.is_beta && (
-                    <div className="pt-3 border-t border-gray-800">
-                        <p className="text-sm text-gray-400 mb-2">
-                            Replace Beta's data with a fresh copy from Time Tracker. Time Tracker's own data isn't changed. Beta restarts, and its current data is saved in its backups folder.
-                        </p>
-                        <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => void handleReplaceBetaDatabase()}
-                            className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded text-white text-sm font-medium disabled:opacity-40 disabled:pointer-events-none"
-                        >
-                            Replace with Time Tracker data
-                        </button>
-                    </div>
-                )}
+
             </div>
         </div>
     );
