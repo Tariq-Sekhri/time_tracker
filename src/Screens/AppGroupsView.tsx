@@ -1,3 +1,5 @@
+import MatchPatternSummary from "../Componants/MatchPatternSummary.tsx";
+import MatchPatternField from "../Componants/MatchPatternField.tsx";
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {useState} from "react";
 import {
@@ -106,8 +108,8 @@ export default function AppGroupsView() {
         <div className="p-6 text-white [color-scheme:dark]">
             <p className="text-sm text-gray-400 mb-6 max-w-4xl">
                 Treat changing window titles as one app in calendars and statistics. The display name is shown in
-                Top Apps, while the regex matches the original recorded title. Existing logs are grouped immediately.
-                If rules overlap, the most specific matching regex wins.
+                Top Apps, while the matching rule checks the original recorded title. Existing logs are grouped immediately.
+                If rules overlap, the most specific matching rule wins.
             </p>
 
             <div className="p-4 bg-gray-900 rounded-lg mb-6">
@@ -122,18 +124,10 @@ export default function AppGroupsView() {
                         placeholder="Display name (for example, YouTube)"
                         className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
                     />
-                    <input
-                        value={pattern}
-                        onChange={(event) => {
-                            setPattern(event.target.value);
-                            setFormError(null);
-                        }}
-                        onKeyDown={(event) => {
-                            if (event.key === "Enter") createGroup();
-                        }}
-                        placeholder="Regex (for example, (?i)youtube)"
-                        className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white font-mono"
-                    />
+                    <MatchPatternField newRule value={pattern}
+                        onChange={(pattern) => {setPattern(pattern); setFormError(null);}}
+                        onKeyDown={(event) => {if (event.key === "Enter") createGroup();}}
+                        disabled={createMutation.isPending} />
                     <button
                         onClick={createGroup}
                         disabled={createMutation.isPending}
@@ -149,7 +143,7 @@ export default function AppGroupsView() {
                 <div className="text-gray-500">Loading app groups...</div>
             ) : groups.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-gray-700 p-8 text-center text-gray-500">
-                    No app groups yet. Add YouTube with <span className="font-mono text-gray-300">(?i)youtube</span> to
+                    No app groups yet. Add a group containing <span className="font-mono text-gray-300">YouTube</span> to
                     combine video titles from Vivaldi or another browser.
                 </div>
             ) : (
@@ -167,14 +161,9 @@ export default function AppGroupsView() {
                                             }}
                                             className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
                                         />
-                                        <input
-                                            value={editing.regex}
-                                            onChange={(event) => {
-                                                setEditing({...editing, regex: event.target.value});
-                                                setEditError(null);
-                                            }}
-                                            className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white font-mono"
-                                        />
+                                        <MatchPatternField key={editing.id} value={editing.regex}
+                                            onChange={(pattern) => {setEditing({...editing, regex: pattern}); setEditError(null);}}
+                                            disabled={updateMutation.isPending} />
                                         <button onClick={saveEdit} className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded">
                                             Save
                                         </button>
@@ -196,7 +185,7 @@ export default function AppGroupsView() {
                                         <AppTitleDetails app={group.name} start={0} end={Math.floor(Date.now() / 1000)}
                                             scopeLabel="All recorded time" className="block font-medium truncate max-w-full" />
                                         <div className="font-mono text-sm text-gray-400 truncate" title={group.regex}>
-                                            {group.regex}
+                                            <MatchPatternSummary pattern={group.regex} />
                                         </div>
                                     </div>
                                     <button

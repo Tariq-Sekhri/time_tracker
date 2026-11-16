@@ -17,7 +17,7 @@ export default function Header({currentView, setCurrentView, notesEnabled, stati
     const isDev = appVersion?.endsWith("-dev") ?? false;
     const [updateStatus, setUpdateStatus] = useState<"idle" | "checking" | "upToDate" | "available" | "error" | "applying">("idle");
     const appRuleViews: {view: View; label: string}[] = [
-        {view: "regex", label: "Regex"},
+        {view: "regex", label: "Matching rules"},
         {view: "categories", label: "Categories"},
         {view: "appGroups", label: "App Groups"},
         {view: "skipped", label: "Skipped Apps"},

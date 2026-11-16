@@ -1,6 +1,6 @@
 import {useEffect, useRef, useState} from "react";
 import {useQueryClient} from "@tanstack/react-query";
-import {finish_manual_timer, RunningManualTimer, start_manual_timer, stop_manual_timer, update_manual_timer_details} from "../../api/ManualTimeBlock.ts";
+import {cancel_manual_timer, finish_manual_timer, RunningManualTimer, start_manual_timer, stop_manual_timer, update_manual_timer_details} from "../../api/ManualTimeBlock.ts";
 import {useToast} from "../../Componants/Toast.tsx";
 import ProjectSelector from "../../Componants/ProjectSelector.tsx";
 import ManualRulePreview from "../../Componants/ManualRulePreview.tsx";
@@ -25,6 +25,8 @@ export function ManualTimerControl({timer, onAddPastTime}: {timer: RunningManual
     const [projectId, setProjectId] = useState<number | null>(timer?.project_id ?? null);
     const [pending, setPending] = useState(0);
     const [finishing, setFinishing] = useState(false);
+    const [cancelling, setCancelling] = useState(false);
+    const busy = finishing || cancelling;
     const [startAnchor, setStartAnchor] = useState<HTMLElement | null>(null);
     const [startInput, setStartInput] = useState("");
     const [startError, setStartError] = useState<string | null>(null);
@@ -96,6 +98,20 @@ export function ManualTimerControl({timer, onAddPastTime}: {timer: RunningManual
         });
     };
 
+    const cancel = () => {
+        setStartAnchor(null);
+        setCancelling(true);
+        enqueue(async () => {
+            try {
+                await cancel_manual_timer();
+                publish(null);
+                setTitle("");
+                setProjectId(null);
+                showToast("Manual tracking cancelled", "success");
+            } finally {setCancelling(false);}
+        });
+    };
+
     const saveStartTime = () => {
         const startTime = Math.floor(new Date(startInput).getTime() / 1000);
         const current = timerRef.current;
@@ -130,18 +146,18 @@ export function ManualTimerControl({timer, onAddPastTime}: {timer: RunningManual
             maxLength={200}
             placeholder="What are you working on?"
             title="Enter a name, then Tab or click away to start tracking"
-            disabled={finishing}
+            disabled={busy}
             className="w-56 max-w-full min-w-0 rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white outline-none placeholder:text-gray-500 focus:border-sky-500 disabled:opacity-50"
         />
         <div ref={projectContainerRef} className="w-64 max-w-full min-w-0">
-            <ProjectSelector value={projectId} disabled={finishing} showManage={false} onChange={(id) => {
+            <ProjectSelector value={projectId} disabled={busy} showManage={false} onChange={(id) => {
                 setProjectId(id);
                 if (timerRef.current || pendingRef.current) commit(title, id);
             }} />
             <ManualRulePreview title={title} projectId={projectId} />
         </div>
         {timer ? <>
-            <button type="button" disabled={finishing} title="Edit start time" aria-haspopup="dialog" onClick={(event) => {
+            <button type="button" disabled={busy} title="Edit start time" aria-haspopup="dialog" onClick={(event) => {
                 if (startAnchor === event.currentTarget) {
                     setStartAnchor(null);
                     return;
@@ -153,7 +169,8 @@ export function ManualTimerControl({timer, onAddPastTime}: {timer: RunningManual
                 <span className={`h-1.5 w-1.5 rounded-full ${timer.end_time == null ? "bg-sky-400" : "bg-gray-500"}`} />
                 {formatElapsed(timer.start_time, elapsedEnd)}
             </button>
-            <button type="button" disabled={finishing} onClick={finish} className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50">{finishing ? "Saving…" : timer.end_time == null ? "Done" : "Save time"}</button>
+            <button type="button" disabled={busy} onClick={finish} className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50">{finishing ? "Saving…" : timer.end_time == null ? "Done" : "Save time"}</button>
+            <button type="button" disabled={busy} onClick={cancel} title="Discard this timer without recording time" className="rounded-lg px-3 py-2 text-sm text-gray-400 hover:bg-red-950/50 hover:text-red-300 disabled:opacity-50">{cancelling ? "Cancelling..." : "Cancel"}</button>
         </> : <button type="button" disabled={pending > 0} onClick={() => commit(title, projectId, true)} className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50">{pending > 0 ? "Starting…" : "Start"}</button>}
         <button type="button" onClick={(event) => onAddPastTime(event.currentTarget)} className="rounded-lg px-2 py-2 text-sm text-gray-400 hover:bg-gray-800 hover:text-white">Add past</button>
         {startAnchor && timer && <ManualPopover anchor={startAnchor} onClose={() => setStartAnchor(null)} labelledBy="timer-start-title" width={340}>
@@ -165,7 +182,7 @@ export function ManualTimerControl({timer, onAddPastTime}: {timer: RunningManual
                 {startError && <p role="alert" className="mt-2 text-sm text-red-400">{startError}</p>}
                 <div className="mt-4 flex justify-end gap-2">
                     <button type="button" onClick={() => {setStartAnchor(null); startAnchor.focus();}} className="rounded-lg bg-gray-800 px-3 py-2 text-sm hover:bg-gray-700">Cancel</button>
-                    <button type="submit" disabled={pending > 0 || finishing} className="rounded-lg bg-sky-600 px-3 py-2 text-sm hover:bg-sky-500 disabled:opacity-50">{pending > 0 ? "Saving…" : "Save"}</button>
+                    <button type="submit" disabled={pending > 0 || busy} className="rounded-lg bg-sky-600 px-3 py-2 text-sm hover:bg-sky-500 disabled:opacity-50">{pending > 0 ? "Saving…" : "Save"}</button>
                 </div>
             </form>
         </ManualPopover>}

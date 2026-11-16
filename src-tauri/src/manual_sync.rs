@@ -20,6 +20,8 @@ use tauri::{AppHandle, Emitter};
 use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::{client::IntoClientRequest, http::header, Message};
 
+const CANCELLED_TIMER_PREFIX: &str = "cancelled_manual_timer_v1:";
+
 const ENTRIES_CURSOR_KEY: &str = "manual_entries_cursor_v1";
 const ENTRIES_PAGE_SIZE: usize = 500;
 const PING_INTERVAL: Duration = Duration::from_secs(30);
@@ -134,6 +136,59 @@ pub fn projects_changed_locally() {
     spawn_logged("project push", push_projects());
 }
 
+/// Serialize cancellation with sync so an in-flight push cannot restore the timer.
+pub async fn cancel_timer() -> Result<(), Error> {
+    let _guard = LOCK.lock().await;
+    let pool = db::get_pool().await?;
+    cancel_timer_in_pool(&pool).await?;
+    emit("manual-timer-changed");
+    spawn_logged("timer cancellation", async {
+        let _guard = LOCK.lock().await;
+        let Some(conn) = connection().await? else { return Ok(()) };
+        upload_cancellations_locked(&conn).await
+    });
+    Ok(())
+}
+
+async fn cancel_timer_in_pool(pool: &SqlitePool) -> Result<(), Error> {
+    let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
+    let value: Option<String> = sqlx::query_scalar("SELECT value FROM app_metadata WHERE key = ?1")
+        .bind(RUNNING_TIMER_KEY).fetch_optional(&mut *tx).await?;
+    if let Some(value) = value {
+        let timer: RunningManualTimer = serde_json::from_str(&value).map_err(anyhow::Error::new)?;
+        if let Some(session) = timer.session_id {
+            // Keep a durable tombstone, including after acknowledgement, to ignore stale events.
+            sqlx::query("INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?1, 'pending')")
+                .bind(format!("{CANCELLED_TIMER_PREFIX}{session}")).execute(&mut *tx).await?;
+        }
+        sqlx::query("DELETE FROM app_metadata WHERE key = ?1")
+            .bind(RUNNING_TIMER_KEY).execute(&mut *tx).await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn upload_cancellations_locked(conn: &Connection) -> Result<(), Error> {
+    let pool = db::get_pool().await?;
+    let device = get_local_device().await?.ok_or(anyhow!("Local device not found"))?;
+    let keys: Vec<String> = sqlx::query_scalar(
+        "SELECT key FROM app_metadata WHERE key LIKE ?1 AND value = 'pending'")
+        .bind(format!("{CANCELLED_TIMER_PREFIX}%")).fetch_all(&pool).await?;
+    for key in keys {
+        let session = &key[CANCELLED_TIMER_PREFIX.len()..];
+        let response = sync_http_client()?
+            .delete(sync_server_url(&conn.server_ip, "manual/timer"))
+            .bearer_auth(&conn.token)
+            .json(&serde_json::json!({"session_id": session}))
+            .send().await?;
+        // Preserve pending cancellations until the server supports them.
+        if old_server(response.status()) { return Ok(()) }
+        require_authenticated_success(response, &device.uuid).await?;
+        metadata_set(&pool, &key, "confirmed").await?;
+    }
+    Ok(())
+}
+
 async fn read_timer(pool: &SqlitePool) -> Result<Option<RunningManualTimer>, Error> {
     metadata_get(pool, RUNNING_TIMER_KEY)
         .await?
@@ -177,8 +232,9 @@ async fn session_recorded(pool: &SqlitePool, session_id: &str) -> Result<bool, E
 }
 
 async fn adopt(pool: &SqlitePool, server: &ServerTimer) -> Result<bool, Error> {
-    // A session this device already recorded must not come back as running.
-    if session_recorded(pool, &server.session_id).await? {
+    // Recorded and cancelled sessions must not come back through stale events.
+    if metadata_get(pool, &format!("{CANCELLED_TIMER_PREFIX}{}", server.session_id)).await?.is_some()
+        || session_recorded(pool, &server.session_id).await? {
         return Ok(false);
     }
     let timer = RunningManualTimer {
@@ -202,6 +258,7 @@ async fn push_timer() -> Result<(), Error> {
 
 async fn push_timer_locked() -> Result<(), Error> {
     let Some(conn) = connection().await? else { return Ok(()) };
+    upload_cancellations_locked(&conn).await?;
     let pool = db::get_pool().await?;
     let Some(mut local) = read_timer(&pool).await? else { return Ok(()) };
     // A stopped timer is about to be recorded; the entry upload ends it remotely.
@@ -301,6 +358,7 @@ fn reconcile(server: Option<&ServerTimer>, local: Option<&RunningManualTimer>) -
 async fn apply_remote_timer(conn: &Connection, server: Option<ServerTimer>) -> Result<(), Error> {
     let _guard = LOCK.lock().await;
     let pool = db::get_pool().await?;
+    upload_cancellations_locked(conn).await?;
     let local = read_timer(&pool).await?;
     let changed = match (reconcile(server.as_ref(), local.as_ref()), server) {
         (Reconcile::Push, _) => return push_timer_locked().await,
@@ -458,6 +516,7 @@ async fn catch_up(conn: &Connection) -> Result<(), Error> {
     push_projects_with(conn).await?;
     {
         let _guard = LOCK.lock().await;
+        upload_cancellations_locked(conn).await?;
         upload_pending_locked(conn).await?;
     }
     pull_entries(conn).await
@@ -545,6 +604,23 @@ pub async fn run(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn cancellation_persists_and_stale_remote_timer_is_not_adopted() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new().max_connections(1)
+            .connect("sqlite::memory:").await.unwrap();
+        sqlx::query("CREATE TABLE app_metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            .execute(&pool).await.unwrap();
+        let timer = local("cancel-me", 1, true);
+        write_timer(&pool, Some(&timer)).await.unwrap();
+        cancel_timer_in_pool(&pool).await.unwrap();
+        assert!(read_timer(&pool).await.unwrap().is_none());
+        assert_eq!(metadata_get(&pool, &format!("{CANCELLED_TIMER_PREFIX}cancel-me")).await.unwrap().as_deref(), Some("pending"));
+        // No entries table exists: cancellation cannot record a block.
+        assert!(!adopt(&pool, &server("cancel-me", 2)).await.unwrap());
+        cancel_timer_in_pool(&pool).await.unwrap();
+        pool.close().await;
+    }
 
     fn server(session: &str, version: i64) -> ServerTimer {
         ServerTimer {

@@ -1472,6 +1472,10 @@ export async function invoke<T>(
             }
             return runningManualTimer as T;
         }
+        case "cancel_manual_timer": {
+            runningManualTimer = null;
+            return null as T;
+        }
         case "finish_manual_timer": {
             if (!runningManualTimer) throw new DemoInvokeError(cmd, "No manual timer is running");
             if (runningManualTimer.end_time == null) throw new DemoInvokeError(cmd, "Stop the timer before recording it");
@@ -2136,7 +2140,7 @@ export async function invoke<T>(
                 ),
             })) as unknown as T;
         case "get_app_version":
-            return "1.13.5-demo" as unknown as T;
+            return "1.13.6-demo" as unknown as T;
         case "refresh_tray_menu":
             return null as T;
         case "check_update_cmd":

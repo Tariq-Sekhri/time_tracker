@@ -1,3 +1,5 @@
+import MatchPatternSummary from "../Componants/MatchPatternSummary.tsx";
+import MatchPatternField from "../Componants/MatchPatternField.tsx";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
@@ -171,21 +173,13 @@ export default function SkippedAppsView() {
     return (
         <div className="p-6 text-white">
             <p className="text-sm text-gray-400 mb-4">
-                Apps matching these regex patterns will not be tracked. Use regex patterns like <code
-                    className="bg-gray-800 px-1 rounded">^Chrome$</code> for exact match or <code
-                        className="bg-gray-800 px-1 rounded">.*Discord.*</code> for partial match.
+                Apps matching these rules will not be tracked. Contains text matches ordinary app names; Regex is for advanced patterns.
             </p>
 
             <div className="mb-4 p-4 bg-gray-900 rounded-lg">
                 <h3 className="text-lg font-medium mb-3">Add Skipped App Pattern</h3>
                 <div className="flex gap-3">
-                    <input
-                        type="text"
-                        placeholder="Regex pattern (e.g., ^Chrome$ or .*Discord.*)"
-                        value={newRegexPattern}
-                        onChange={(e) => setNewRegexPattern(e.target.value)}
-                        className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
-                    />
+                    <MatchPatternField newRule value={newRegexPattern} onChange={setNewRegexPattern} disabled={isCountingLogs || createSkippedAppMutation.isPending} />
                     <button
                         onClick={handleCheckAndAdd}
                         disabled={isCountingLogs}
@@ -201,7 +195,7 @@ export default function SkippedAppsView() {
                     <div className="bg-gray-900 p-6 rounded-lg max-w-md w-full mx-4 border border-gray-700">
                         <h3 className="text-xl font-bold mb-4">Confirm Add Pattern</h3>
                         <p className="text-gray-300 mb-2">
-                            Pattern: <code className="bg-gray-800 px-2 py-1 rounded">{pendingRegex}</code>
+                            Pattern: <MatchPatternSummary pattern={pendingRegex} />
                         </p>
                         <p className="text-gray-300 mb-4">
                             This will <span
@@ -238,12 +232,9 @@ export default function SkippedAppsView() {
                         {editingApp?.id === app.id ? (
                             <div className="space-y-2">
                                 <div className="flex gap-3 items-center">
-                                    <input
-                                        type="text"
-                                        value={editingApp.regex}
-                                        onChange={(e) => setEditingApp({ ...editingApp, regex: e.target.value })}
-                                        className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white"
-                                    />
+                                    <MatchPatternField key={editingApp.id} value={editingApp.regex}
+                                        onChange={(pattern) => setEditingApp({...editingApp, regex: pattern})}
+                                        disabled={updateSkippedAppMutation.isPending} />
                                     <button
                                         onClick={() => handleUpdateApp(editingApp)}
                                         className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded"
@@ -262,7 +253,7 @@ export default function SkippedAppsView() {
                             <div className="flex items-center justify-between">
                                 <div>
                                     <code className="font-medium text-gray-200 bg-gray-800 px-2 py-1 rounded">
-                                        {app.regex || "(empty)"}
+                                        <MatchPatternSummary pattern={app.regex} />
                                     </code>
                                 </div>
                                 <div className="flex gap-2">

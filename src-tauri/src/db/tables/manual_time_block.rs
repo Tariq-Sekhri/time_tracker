@@ -324,6 +324,11 @@ pub async fn stop_manual_timer() -> Result<RunningManualTimer, Error> {
 }
 
 #[tauri::command]
+pub async fn cancel_manual_timer() -> Result<(), Error> {
+    crate::manual_sync::cancel_timer().await
+}
+
+#[tauri::command]
 pub async fn finish_manual_timer() -> Result<i64, Error> {
     let pool = db::get_pool().await?;
     let id = finish_manual_timer_in_pool(&pool).await?;

@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.13.6] - 2026-11-16
+
+- Cancel manual tracking without recording time.
+- Match ordinary text by default, with optional Regex mode, clear warnings, and compact rule controls.
+- Sync cancelled timers across devices with an updated sync server.
+
 ## [1.13.5] - 2026-11-15
 
 - Sync with your server every minute instead of every five minutes.

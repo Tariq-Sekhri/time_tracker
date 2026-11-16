@@ -88,6 +88,10 @@ export async function stop_manual_timer(): Promise<RunningManualTimer> {
     return invokeOrThrow<RunningManualTimer>("stop_manual_timer");
 }
 
+export async function cancel_manual_timer(): Promise<null> {
+    return invokeOrThrow<null>("cancel_manual_timer");
+}
+
 export async function finish_manual_timer(): Promise<number> {
     return invokeOrThrow<number>("finish_manual_timer");
 }

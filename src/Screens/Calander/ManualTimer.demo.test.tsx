@@ -1,5 +1,5 @@
 /* @vitest-environment jsdom */
-import {cleanup, fireEvent, render, screen, waitFor} from "@testing-library/react";
+import {cleanup, fireEvent, render, screen, waitFor, within} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {QueryClient, QueryClientProvider, useQuery} from "@tanstack/react-query";
 import {afterEach, describe, expect, it, vi} from "vitest";
@@ -19,6 +19,24 @@ function TimerHarness() {
 afterEach(cleanup);
 
 describe("demo manual timer control", () => {
+    it.each([false, true])("discards the timer without recording time (stopped: %s)", async (stopped) => {
+        const user = userEvent.setup();
+        const before = await invoke("get_manual_time_blocks", {rangeStart: 0, rangeEnd: 9999999999});
+        await invoke("start_manual_timer", {title: "Discard me", projectId: null});
+        if (stopped) await invoke("stop_manual_timer");
+        const queryClient = new QueryClient({defaultOptions: {queries: {retry: false}}});
+        render(<QueryClientProvider client={queryClient}><ToastProvider><TimerHarness /></ToastProvider></QueryClientProvider>);
+        await screen.findByRole("button", {name: stopped ? "Save time" : "Done"});
+        // Clicking Cancel also blurs the name field, queuing a save before cancellation.
+        await user.click(screen.getByRole("textbox", {name: "Timer task name"}));
+        await user.type(screen.getByRole("textbox", {name: "Timer task name"}), " edited");
+        await user.click(screen.getByRole("button", {name: "Cancel"}));
+        await screen.findByRole("button", {name: "Start"});
+        expect(await get_running_manual_timer()).toBeNull();
+        expect(await invoke("get_manual_time_blocks", {rangeStart: 0, rangeEnd: 9999999999})).toEqual(before);
+        expect((screen.getByRole("textbox", {name: "Timer task name"}) as HTMLInputElement).value).toBe("");
+        queryClient.clear();
+    });
     it("adjusts a running timer earlier and later, then records the adjusted start", async () => {
         const user = userEvent.setup();
         const queryClient = new QueryClient({defaultOptions: {queries: {retry: false}}});
@@ -46,7 +64,7 @@ describe("demo manual timer control", () => {
         expect((await get_running_manual_timer())!.start_time).toBe(original.start_time - 120);
         await user.click(screen.getByRole("button", {name: "Timer running: edit start time"}));
         fireEvent.change(screen.getByLabelText("Start time"), {target: {value: localInput(original.start_time - 7200)}});
-        await user.click(screen.getByRole("button", {name: "Cancel"}));
+        await user.click(within(screen.getByRole("dialog")).getByRole("button", {name: "Cancel"}));
         expect((await get_running_manual_timer())!.start_time).toBe(original.start_time - 120);
         await user.click(screen.getByRole("button", {name: "Done"}));
         await waitFor(async () => expect(await get_running_manual_timer()).toBeNull());

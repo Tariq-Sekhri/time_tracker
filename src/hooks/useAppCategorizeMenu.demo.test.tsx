@@ -32,12 +32,12 @@ it("edits and deletes the exact winning regex while preserving logs", async () =
         await user.click(await screen.findByRole("button", {name: "Edit matching regex ^Windows Explorer$"}));
         await user.clear(screen.getByRole("textbox", {name: "Regex pattern"}));
         fireEvent.change(screen.getByRole("textbox", {name: "Regex pattern"}), {target: {value: "["}});
-        await user.click(screen.getByRole("button", {name: "Save regex"}));
+        await user.click(screen.getByRole("button", {name: "Save rule"}));
         await screen.findByRole("alert");
         expect((await get_cat_regex_by_id(id)).regex).toBe("^Windows Explorer$");
         await user.clear(screen.getByRole("textbox", {name: "Regex pattern"}));
         await user.type(screen.getByRole("textbox", {name: "Regex pattern"}), "(?i)^Explorer rule test$");
-        await user.click(screen.getByRole("button", {name: "Save regex"}));
+        await user.click(screen.getByRole("button", {name: "Save rule"}));
         await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
         expect((await get_cat_regex_by_id(id)).regex).toBe("(?i)^Explorer rule test$");
         expect((await getMatchingCategoryRule("Windows Explorer")).rule?.id).not.toBe(id);
@@ -51,7 +51,7 @@ it("edits and deletes the exact winning regex while preserving logs", async () =
         fireEvent.contextMenu(screen.getByText("Edited log"), {clientX: 100, clientY: 100});
         await user.click(await screen.findByRole("button", {name: "Delete matching regex (?i)^Explorer rule test$"}));
         expect(await get_cat_regex_by_id(id)).toBeTruthy();
-        await user.click(screen.getByRole("button", {name: "Delete regex"}));
+        await user.click(screen.getByRole("button", {name: "Delete rule"}));
         await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
         await expect(get_cat_regex_by_id(id)).rejects.toThrow();
         expect((await invoke<unknown[]>("get_logs")).length).toBe(logsBefore);

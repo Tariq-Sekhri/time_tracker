@@ -1,3 +1,5 @@
+import MatchPatternSummary from "../Componants/MatchPatternSummary.tsx";
+import MatchPatternField from "../Componants/MatchPatternField.tsx";
 import {useRegexNavigation} from "../stores/regexNavigationStore.ts";
 import {useQuery, useMutation, useQueryClient} from "@tanstack/react-query";
 import {useEffect, useMemo, useRef, useState, type ReactNode} from "react";
@@ -223,7 +225,7 @@ export default function CategoryRegexView() {
             invalidateRuleQueries();
             setNewRegexPattern("");
             setRegexError(null);
-            showToast("Regex pattern created successfully", "success");
+            showToast("Matching rule created", "success");
         },
         onError: (error: unknown) => {
             console.error("Failed to create regex:", error);
@@ -241,7 +243,7 @@ export default function CategoryRegexView() {
             invalidateRuleQueries();
             setEditingRegex(null);
             setEditRegexError(null);
-            showToast("Regex pattern updated successfully", "success");
+            showToast("Matching rule updated", "success");
         },
         onError: (error: unknown) => {
             console.error("Failed to update regex:", error);
@@ -257,7 +259,7 @@ export default function CategoryRegexView() {
         },
         onSuccess: () => {
             invalidateRuleQueries();
-            showToast("Regex pattern deleted successfully", "success");
+            showToast("Matching rule deleted", "success");
         },
         onError: (error: unknown) => {
             console.error("Failed to delete regex:", error);
@@ -314,7 +316,7 @@ export default function CategoryRegexView() {
         return (
             <div key={regex.id} data-regex-id={regex.id} tabIndex={focusedRuleId === regex.id ? -1 : undefined} className={`p-4 bg-gray-900 rounded-lg flex items-center justify-between ${focusedRuleId === regex.id ? "ring-2 ring-sky-500" : ""}`}>
                 {editingRegex?.id === regex.id && !catchAll ? (
-                    <div className="flex gap-3 flex-1">
+                    <div className="flex flex-wrap items-start gap-3 flex-1">
                         <RuleTargetPicker
                             target={ruleTargetOf(editingRegex)}
                             onChange={(next) => setEditingRegex({...editingRegex, ...ruleTargetFields(next)})}
@@ -323,16 +325,14 @@ export default function CategoryRegexView() {
                             placeholder="Category"
                         />
                         <div className="flex-1 flex flex-col">
-                            <input
-                                ref={focusedRuleId === regex.id ? focusedInputRef : undefined}
-                                aria-label="Regex pattern"
-                                type="text"
+                            <MatchPatternField key={editingRegex.id}
+                                inputRef={focusedRuleId === regex.id ? focusedInputRef : undefined}
                                 value={editingRegex.regex}
-                                onChange={(e) => {
-                                    setEditingRegex({...editingRegex, regex: e.target.value});
+                                onChange={(pattern) => {
+                                    setEditingRegex({...editingRegex, regex: pattern});
                                     setEditRegexError(null);
                                 }}
-                                className={`px-3 py-2 bg-gray-800 border rounded text-white ${editRegexError ? "border-red-500" : "border-gray-700"}`}
+                                disabled={updateRegexMutation.isPending}
                             />
                             {editRegexError && (
                                 <div className="mt-1 text-red-400 text-sm">{editRegexError}</div>
@@ -370,7 +370,7 @@ export default function CategoryRegexView() {
                                 {regex.manual_project_id != null && (
                                     <span className="ml-2 rounded bg-gray-800 px-1.5 py-0.5 text-xs text-gray-400">Manual</span>
                                 )}
-                                <span className="text-gray-400 ml-3 font-mono text-sm">{regex.regex}</span>
+                                <span className="ml-3"><MatchPatternSummary pattern={regex.regex} /></span>
                                 {catchAll && (
                                     <span
                                         className="ml-2 text-xs text-gray-500">(catch-all, cannot edit or delete)</span>
@@ -446,8 +446,8 @@ export default function CategoryRegexView() {
     return (
         <div className="p-6 text-white [color-scheme:dark]">
             <div className="mb-4 p-4 bg-gray-900 rounded-lg">
-                <h3 className="text-lg font-medium mb-3">Add New Regex</h3>
-                <div className="flex gap-3">
+                <h3 className="text-lg font-medium mb-3">Add matching rule</h3>
+                <div className="flex flex-wrap items-start gap-3">
                     <RuleTargetPicker
                         target={newRegexTarget}
                         onChange={setNewRegexTarget}
@@ -455,16 +455,9 @@ export default function CategoryRegexView() {
                         manualCategories={manualCategories}
                         placeholder="Select category"
                     />
-                    <input
-                        type="text"
-                        placeholder="Regex pattern"
-                        value={newRegexPattern}
-                        onChange={(e) => {
-                            setNewRegexPattern(e.target.value);
-                            setRegexError(null);
-                        }}
-                        className={`flex-1 px-3 py-2 bg-gray-800 border rounded text-white ${regexError ? 'border-red-500' : 'border-gray-700'}`}
-                    />
+                    <MatchPatternField newRule value={newRegexPattern}
+                        onChange={(pattern) => {setNewRegexPattern(pattern); setRegexError(null);}}
+                        disabled={createRegexMutation.isPending} />
                     <button
                         onClick={handleCreateRegex}
                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded"

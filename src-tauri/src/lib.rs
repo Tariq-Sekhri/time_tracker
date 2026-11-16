@@ -44,7 +44,7 @@ use db::tables::log::{
     get_logs_for_time_block,
 };
 use db::tables::manual_time_block::{
-    delete_manual_time_block, finish_manual_timer, get_manual_time_blocks,
+    cancel_manual_timer, delete_manual_time_block, finish_manual_timer, get_manual_time_blocks,
     get_running_manual_timer, insert_manual_time_block, start_manual_timer, stop_manual_timer,
     update_manual_time_block, update_manual_timer_title, update_manual_timer_details,
 };
@@ -432,6 +432,7 @@ pub fn run() {
                     delete_manual_project,
                     stop_manual_timer,
                     finish_manual_timer,
+                    cancel_manual_timer,
                     get_skipped_apps,
                     insert_skipped_app_and_delete_logs,
                     update_skipped_app_by_id,
