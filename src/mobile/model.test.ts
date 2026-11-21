@@ -1,13 +1,14 @@
 import {describe, expect, it} from "vitest";
-import {calendarBlocks, clipLog, dateAtHour, dateValue, dayStart, nextDay, rangeFor} from "./model";
+import {calendarBlocks, clipLog, dateAtHour, dateValue, dayStart, logKey, nextDay, rangeFor} from "./model";
 import type {MobileLog, Settings} from "./api";
 
 const settings: Settings = {day_start_hour: 6, min_app_duration: 0, min_log_duration: 1,
     max_attach_distance: 30, lookahead_window: 60, min_timeblock_duration: 1,
     notes_enabled: true, use_bar_usage_chart: false};
-function log(id: number, start: number, end: number, packageName = "app"): MobileLog {
+function log(id: number, start: number, end: number, packageName = "app", deviceUuid?: string): MobileLog {
     return {id, package_name: packageName, app_label: "Page", app_name: "App", start_timestamp: start,
-        end_timestamp: end, duration: (end - start) / 1000, category: null};
+        end_timestamp: end, duration: (end - start) / 1000, category: null,
+        ...(deviceUuid ? {device_uuid: deviceUuid, device_name: deviceUuid} : {})};
 }
 
 describe("Android usage date boundaries", () => {
@@ -49,5 +50,14 @@ describe("mobile calendar activity", () => {
         const blocks = calendarBlocks([log(1, 0, 50000), log(2, 50000, 100000, "other")], 0, 100000,
             {...settings, min_timeblock_duration: 60});
         expect(blocks).toEqual([]);
+    });
+    it("keeps logs from different devices in separate blocks and gives unique keys", () => {
+        const blocks = calendarBlocks([
+            log(1, 0, 60000, "Code", "phone"),
+            log(1, 10000, 70000, "Code", "desktop"),
+        ], 0, 100000, settings);
+        expect(blocks).toHaveLength(2);
+        expect(blocks.map(b => b.id)).toEqual(["phone:1", "desktop:1"]);
+        expect(logKey(log(7, 0, 1000, "app", "desktop"))).toBe("desktop:7");
     });
 });

@@ -46,7 +46,7 @@ function toEditorHtml(value: string): string {
         : "";
 }
 
-export default function Notes({requestLink, showHeading = true}: {requestLink?: () => Promise<string | null>; showHeading?: boolean} = {}) {
+export default function Notes({requestLink, showHeading = true, showToolbar = true}: {requestLink?: () => Promise<string | null>; showHeading?: boolean; showToolbar?: boolean} = {}) {
     const { showToast } = useToast();
     const queryClient = useQueryClient();
     const { data } = useQuery({ queryKey: NOTES_QUERY_KEY, queryFn: getNotesState, refetchInterval: 5000 });
@@ -143,7 +143,7 @@ export default function Notes({requestLink, showHeading = true}: {requestLink?: 
                 {showHeading && <h1 className="text-2xl font-bold">Notes</h1>}
                 <span className="text-xs text-gray-400" aria-live="polite">{saveStatus}</span>
             </div>
-            <div className="mb-2 flex flex-wrap gap-1 rounded-lg border border-gray-700 bg-gray-900 p-2" role="toolbar" aria-label="Note formatting">
+            {showToolbar && <div className="mb-2 flex flex-wrap gap-1 rounded-lg border border-gray-700 bg-gray-900 p-2" role="toolbar" aria-label="Note formatting">
                 {([["Bold", "bold"], ["Italic", "italic"], ["Underline", "underline"], ["Bullets", "insertUnorderedList"], ["Numbered list", "insertOrderedList"]] as const).map(([label, command]) => (
                     <button key={command} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => format(command)} className="rounded px-2.5 py-1.5 text-sm text-gray-200 hover:bg-gray-700 focus-visible:outline focus-visible:outline-blue-400" aria-label={label} title={label}>{label}</button>
                 ))}
@@ -158,7 +158,7 @@ export default function Notes({requestLink, showHeading = true}: {requestLink?: 
                     }
                     if (href && /^https?:\/\//i.test(href)) format("createLink", href);
                 }} className="rounded px-2.5 py-1.5 text-sm text-gray-200 hover:bg-gray-700">Link</button>
-            </div>
+            </div>}
             <div
                 ref={editorRef}
                 contentEditable

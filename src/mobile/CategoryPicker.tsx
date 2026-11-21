@@ -76,7 +76,7 @@ export default function CategoryPicker({categories, value, onChange, onCreate, d
             <span className="picker-label">{selected ? <>{selectedParent && <span className="muted-text">{selectedParent}{separator}</span>}{labelOf(selected.name)}</> : <span className="muted-text">Uncategorized</span>}</span>
             <Chevron open={open} />
         </button>
-        {open && <ManualPopover anchor={triggerRef.current} onClose={close} labelledBy="category-picker-search" width={triggerRef.current?.offsetWidth ?? 340}>
+        {open && <ManualPopover anchor={triggerRef.current} onClose={close} labelledBy="category-picker-search" width={Math.max(triggerRef.current?.offsetWidth ?? 340, 320)}>
             <div className="category-picker">
                 <div className="picker-search">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>

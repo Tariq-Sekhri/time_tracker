@@ -33,23 +33,30 @@ export function duration(seconds: number): string {
     const h = Math.floor(value / 3600), m = Math.floor(value % 3600 / 60), s = value % 60;
     return h ? `${h}h ${m}m` : m ? `${m}m ${s}s` : `${s}s`;
 }
+export function logKey(log: Pick<MobileLog, "id" | "device_uuid">): string {
+    return `${log.device_uuid ?? "local"}:${log.id}`;
+}
 export function clipLog(log: MobileLog, start: number, end: number) {
     const from = Math.max(start, log.start_timestamp);
     const to = Math.min(end, log.end_timestamp ?? log.start_timestamp + log.duration * 1000);
     return {...log, start_timestamp: from, end_timestamp: to, duration: Math.min(log.duration, Math.max(0, (to - from) / 1000))};
 }
-export type Block = {id: string; packageName: string; title: string; start: number; end: number; activeSeconds: number; logs: MobileLog[]};
+export type Block = {
+    id: string; packageName: string; title: string; start: number; end: number;
+    activeSeconds: number; logs: MobileLog[]; deviceUuid?: string | null; deviceName?: string | null;
+};
 export function calendarBlocks(logs: MobileLog[], start: number, end: number, settings: Settings): Block[] {
     const blocks: Block[] = [];
     for (const log of logs.map(log => clipLog(log, start, end)).filter(log => log.duration >= settings.min_log_duration).sort((a, b) => a.start_timestamp - b.start_timestamp)) {
-        const last = [...blocks].reverse().find(block => block.packageName === log.package_name && log.start_timestamp - block.end <= settings.max_attach_distance * 1000);
+        const device = log.device_uuid ?? "";
+        const last = [...blocks].reverse().find(block => (block.deviceUuid ?? "") === device && block.packageName === log.package_name && log.start_timestamp - block.end <= settings.max_attach_distance * 1000);
         if (last) {
             last.end = Math.max(last.end, log.end_timestamp!); last.activeSeconds += log.duration; last.logs.push(log);
-        } else blocks.push({id: String(log.id), packageName: log.package_name, title: log.app_name, start: log.start_timestamp, end: log.end_timestamp!, activeSeconds: log.duration, logs: [log]});
+        } else blocks.push({id: logKey(log), packageName: log.package_name, title: log.app_name, start: log.start_timestamp, end: log.end_timestamp!, activeSeconds: log.duration, logs: [log], deviceUuid: log.device_uuid ?? null, deviceName: log.device_name ?? null});
     }
     const merged: Block[] = [];
     for (const block of blocks) {
-        const existing = [...merged].reverse().find(previous => previous.packageName === block.packageName && block.start - previous.end <= settings.lookahead_window * 1000);
+        const existing = [...merged].reverse().find(previous => (previous.deviceUuid ?? "") === (block.deviceUuid ?? "") && previous.packageName === block.packageName && block.start - previous.end <= settings.lookahead_window * 1000);
         if (existing) { existing.end = Math.max(existing.end, block.end); existing.activeSeconds += block.activeSeconds; existing.logs.push(...block.logs); }
         else merged.push(block);
     }
