@@ -1,4 +1,4 @@
-import {useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode} from "react";
+import {useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode} from "react";
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -8,7 +8,7 @@ import Notes from "../Screens/Notes";
 import {DonutChart} from "../Screens/Calander/DonutChart";
 import {useToast} from "../Componants/Toast";
 import CategoryPicker from "./CategoryPicker";
-import {request, type MobileDevice, type MobileLog, type MobileState, type Settings, type Usage} from "./api";
+import {request, type GoogleCalendarEvent, type MobileDevice, type MobileLog, type MobileState, type Settings, type Usage} from "./api";
 import {calendarBlocks, clipLog, colorFor, dateAtHour, dateValue, dayStart, duration, logKey, nextDay, rangeFor} from "./model";
 
 type Page = "Usage" | "Logs" | "Calendar" | "Sync" | "Notes" | "Settings";
@@ -268,10 +268,18 @@ function UsageChart({usage, trend}: {usage: Usage; trend: boolean}) {
     return <div className="bar-chart"><ResponsiveContainer width="100%" height={240}><BarChart data={data}><XAxis dataKey="label" tick={{fill: "#a9b0bf", fontSize: 10}} /><YAxis width={34} tick={{fill: "#a9b0bf", fontSize: 10}} /><Tooltip contentStyle={{background: "#1c202a", border: "1px solid #444"}} /><Bar dataKey="minutes" fill="#b18bff" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer></div>;
 }
 
-function DayPicker({day, setDay, hour}: {day: string; setDay: (value: string) => void; hour: number}) {
+function DayPicker({day, setDay, hour, week = false, allowFuture = false}: {day: string; setDay: (value: string) => void; hour: number; week?: boolean; allowFuture?: boolean}) {
     const today = dateValue(dayStart(new Date(), hour));
-    const shift = (amount: number) => { const date = dateAtHour(day, hour); date.setDate(date.getDate() + amount); setDay(dateValue(date)); };
-    return <div className="day-picker"><button onClick={() => shift(-1)} aria-label="Previous day">‹</button><input type="date" aria-label="Selected day" value={day} max={today} onChange={event => { if (event.target.value) setDay(event.target.value); }} /><button disabled={day >= today} onClick={() => shift(1)} aria-label="Next day">›</button><button disabled={day === today} onClick={() => setDay(today)}>Today</button></div>;
+    const step = week ? 7 : 1;
+    const period = week ? "week" : "day";
+    const shift = (amount: number) => {
+        const date = dateAtHour(day, 0);
+        date.setDate(date.getDate() + amount);
+        const value = dateValue(date);
+        setDay(!allowFuture && value > today ? today : value);
+    };
+    const atCurrentPeriod = week ? weekStart(day) >= weekStart(today) : day >= today;
+    return <div className="day-picker"><button onClick={() => shift(-step)} aria-label={`Previous ${period}`}>‹</button><input type="date" aria-label="Selected day" value={day} max={allowFuture ? undefined : today} onChange={event => { if (event.target.value && (allowFuture || event.target.value <= today)) setDay(event.target.value); }} /><button disabled={!allowFuture && atCurrentPeriod} onClick={() => shift(step)} aria-label={`Next ${period}`}>›</button><button disabled={day === today} onClick={() => setDay(today)}>Today</button></div>;
 }
 
 function LogDetails({log, close, act, busy}: {log: MobileLog; close: () => void} & Pick<ScreenProps, "act" | "busy">) {
@@ -314,6 +322,25 @@ function LogsScreen(props: ScreenProps) {
 const CALENDAR_ZOOM_STEPS = [0.5, 0.75, 1, 1.5, 2, 2.5, 3] as const;
 const DEFAULT_ZOOM_INDEX = 2;
 const BASE_SLOT_HEIGHT = 28;
+const CALENDAR_POSITION_KEY = "time-tracker.mobile.calendar-position";
+
+function weekStart(day: string) {
+    const date = dateAtHour(day, 0);
+    date.setDate(date.getDate() - (date.getDay() + 6) % 7);
+    return dateValue(date);
+}
+
+function readCalendarPosition(hour: number): {day: string; view: "day" | "week"} {
+    const today = dateValue(dayStart(new Date(), hour));
+    try {
+        const saved = JSON.parse(localStorage.getItem(CALENDAR_POSITION_KEY) ?? "null");
+        const day = saved?.day;
+        if (typeof day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(day) && dateValue(dateAtHour(day, 0)) === day) {
+            return {day, view: saved.view === "week" ? "week" : "day"};
+        }
+    } catch { /* A fresh view is available if storage is unavailable. */ }
+    return {day: today, view: "day"};
+}
 
 function touchDistance(a: {clientX: number; clientY: number}, b: {clientX: number; clientY: number}) {
     return Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
@@ -326,7 +353,13 @@ function CalendarScreen(props: ScreenProps & {openLogs: () => void}) {
     useEffect(() => {
         if (selectedDevice && !devices.some(device => device.uuid === selectedDevice)) setSelectedDevice(null);
     }, [devices, selectedDevice]);
-    const [day, setDay] = useState(dateValue(dayStart(new Date(), hour)));
+    const [position, setPosition] = useState(() => readCalendarPosition(hour));
+    const {day, view} = position;
+    const week = view === "week";
+    const setDay = (value: string) => setPosition(current => ({...current, day: value}));
+    useEffect(() => {
+        try { localStorage.setItem(CALENDAR_POSITION_KEY, JSON.stringify(position)); } catch { /* Storage may be unavailable. */ }
+    }, [position]);
     const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
     const zoom = CALENDAR_ZOOM_STEPS[zoomIndex];
     const slotHeight = Math.round(BASE_SLOT_HEIGHT * zoom);
@@ -367,17 +400,43 @@ function CalendarScreen(props: ScreenProps & {openLogs: () => void}) {
     }, [slotHeight]);
     const [selected, setSelected] = useState<MobileLog[] | null>(null);
     const [detail, setDetail] = useState<MobileLog | null>(null);
-    const start = dateAtHour(day, hour), end = nextDay(start);
-    const logs = useQuery({queryKey: ["mobile-data", "calendar", day, hour, selectedDevice], queryFn: async () => {
+    const firstDay = week ? weekStart(day) : day;
+    const dayCount = week ? 7 : 1;
+    const {dayBounds, start, end, endDay} = useMemo(() => {
+        const date = dateAtHour(firstDay, 0);
+        const dayBounds = Array.from({length: dayCount + 1}, (_, offset) => new Date(
+            date.getFullYear(), date.getMonth(), date.getDate() + offset, hour
+        ).getTime());
+        return {dayBounds, start: dayBounds[0], end: dayBounds[dayCount], endDay: dateValue(new Date(dayBounds[dayCount]))};
+    }, [firstDay, dayCount, hour]);
+    const logs = useQuery({queryKey: ["mobile-data", "calendar", firstDay, dayCount, hour, selectedDevice], queryFn: async ({signal}) => {
         const rows = new Map<string, MobileLog>(); let offset = 0;
         for (;;) {
+            signal.throwIfAborted();
             const batch = await request("logs", {startMs: +start, endMs: +end, offset, limit: 500, scope: "calendar", deviceUuid: selectedDevice ?? undefined});
             batch.forEach(log => rows.set(logKey(log), log));
             if (batch.length < 500) return [...rows.values()];
             offset += batch.length;
         }
     }, refetchInterval: 15000});
-    const blocks = calendarBlocks(logs.data ?? [], +start, +end, props.state.settings);
+    const settings = props.state.settings;
+    const blocks = useMemo(() => dayBounds.slice(0, -1).flatMap((from, index) => {
+        const to = dayBounds[index + 1];
+        const relevant = (logs.data ?? []).filter(log =>
+            log.start_timestamp < to && (log.end_timestamp ?? log.start_timestamp + log.duration * 1000) > from
+        );
+        return calendarBlocks(relevant, from, to, settings).map(block => ({...block, id: `${from}:${block.id}`}));
+    }), [dayBounds, logs.data, settings]);
+    const google = props.state.googleCalendar;
+    const showGoogle = !!google?.allowed && google.selected.length > 0;
+    const googleEvents = useQuery({
+        queryKey: ["mobile-data", "google-events", firstDay, endDay, hour, google?.selected],
+        queryFn: () => request("calendar.events", {startMs: start, endMs: end, firstDay, endDay}),
+        enabled: showGoogle,
+        refetchInterval: 60000,
+        gcTime: 0,
+    });
+    const [googleEvent, setGoogleEvent] = useState<GoogleCalendarEvent | null>(null);
     const [manual, setManual] = useState<ManualBlock | null>(null);
     const {timer, manualEntries = [], projects} = props.state;
     const manualBlocks: ManualBlock[] = [...manualEntries.map(entry => ({...entry, running: false})), ...(timer ? [{...timer, end_time: Date.now() / 1000, synced: false, running: true}] : [])]
@@ -386,19 +445,28 @@ function CalendarScreen(props: ScreenProps & {openLogs: () => void}) {
     const events = [
         ...blocks.map(block => ({id: block.id, title: `${block.title}${devices.length > 1 && !selectedDevice && block.deviceName ? ` · ${block.deviceName}` : ""} · ${duration(block.activeSeconds)}`, start: new Date(block.start), end: new Date(block.end), backgroundColor: colorFor(block.packageName), borderColor: "transparent", textColor: "#111318", extendedProps: {logs: block.logs}})),
         ...manualBlocks.map(entry => ({id: `manual-${entry.session_id}`, title: `${entry.running ? "● " : ""}${entry.title || "Untitled session"}${entry.project_name ? ` · ${entry.project_name}` : ""} · ${duration(entry.end_time - entry.start_time)}`, start: new Date(Math.max(+start, entry.start_time * 1000)), end: new Date(Math.min(+end, entry.end_time * 1000)), backgroundColor: manualColor(entry.project_name), borderColor: "#f2f3f7", textColor: "#111318", classNames: ["manual-event"], extendedProps: {manual: entry}})),
+        ...(showGoogle ? googleEvents.data ?? [] : []).map(event => ({
+            ...event, backgroundColor: "#83c5ed", borderColor: "transparent", textColor: "#111318", extendedProps: {googleEvent: event},
+        })),
     ];
-    return <><DayPicker day={day} setDay={setDay} hour={hour} />
+    return <><DayPicker day={day} setDay={setDay} hour={hour} week={week} allowFuture={showGoogle} />
         <DeviceFilterBar devices={devices} selected={selectedDevice} onSelect={setSelectedDevice} />
         <div className="row calendar-toolbar">
-            <button onClick={props.openLogs}>View logs</button>
+            <div className="calendar-views" role="group" aria-label="Calendar view">
+                {(["day", "week"] as const).map(option => <button key={option} type="button" aria-pressed={view === option} onClick={() => setPosition(current => ({...current, view: option}))}>{option === "day" ? "Day" : "Week"}</button>)}
+            </div>
             <div className="zoom-controls" role="group" aria-label="Calendar zoom">
                 <button type="button" aria-label="Zoom out" disabled={zoomIndex <= 0} onClick={() => setZoomStep(zoomIndex - 1)}>−</button>
                 <button type="button" className="zoom-level" aria-label="Reset zoom" disabled={zoomIndex === DEFAULT_ZOOM_INDEX} onClick={() => setZoomStep(DEFAULT_ZOOM_INDEX)}>{Math.round(zoom * 100)}%</button>
                 <button type="button" aria-label="Zoom in" disabled={zoomIndex >= CALENDAR_ZOOM_STEPS.length - 1} onClick={() => setZoomStep(zoomIndex + 1)}>+</button>
             </div>
+            <button onClick={props.openLogs}>View logs</button>
         </div>
         {logs.error && <p role="alert">Could not load calendar. <button onClick={() => void logs.refetch()}>Retry</button></p>}
-        {logs.isPending ? <Empty>Loading calendar…</Empty> : <div ref={calendarWrapRef} className="mobile-calendar" style={{"--slot-height": `${slotHeight}px`} as CSSProperties}
+        {showGoogle && googleEvents.isPending && <p className="muted" role="status">Loading Google events…</p>}
+        {showGoogle && googleEvents.error && <p role="alert">Could not load Google events. <button onClick={() => void googleEvents.refetch()}>Retry</button></p>}
+        {logs.isPending && <p className="muted" role="status">Loading time blocks…</p>}
+        <div ref={calendarWrapRef} className="mobile-calendar" style={{"--slot-height": `${slotHeight}px`} as CSSProperties}
             onTouchStart={event => {
                 if (event.touches.length === 2) pinchRef.current = {distance: touchDistance(event.touches[0], event.touches[1])};
             }}
@@ -418,9 +486,29 @@ function CalendarScreen(props: ScreenProps & {openLogs: () => void}) {
                 if (event.touches.length < 2) pinchRef.current = null;
             }}
             onTouchCancel={() => { pinchRef.current = null; }}>
-            <FullCalendar ref={calendarRef} key={`${day}:${hour}:${slotHeight}`} plugins={[timeGridPlugin, interactionPlugin]} initialView="timeGridDay" initialDate={day} headerToolbar={false} allDaySlot={false} dayHeaders={false} height="auto" slotMinTime={`${String(hour).padStart(2, "0")}:00:00`} slotMaxTime={`${hour + 24}:00:00`} scrollTime={`${hour}:00:00`} nowIndicator events={events} eventClick={event => { const entry = event.event.extendedProps.manual as ManualBlock | undefined; if (entry) setManual(entry); else setSelected(event.event.extendedProps.logs as MobileLog[]); }} />
-        </div>}
-        {!logs.isPending && !events.length && <p className="muted">No time blocks match the detection settings for this day.</p>}
+            <FullCalendar ref={calendarRef} key={`${firstDay}:${view}:${hour}`} plugins={[timeGridPlugin, interactionPlugin]}
+                initialView={week ? "timeGridWeek" : "timeGridDay"} initialDate={firstDay} firstDay={1} headerToolbar={false}
+                allDaySlot={showGoogle && !!googleEvents.data?.some(event => event.allDay)} dayHeaders={week}
+                dayHeaderContent={({date}) => <button type="button" className="calendar-day-heading"
+                    aria-label={date.toLocaleDateString([], {dateStyle: "full"})}
+                    onClick={() => setPosition({day: dateValue(date), view: "day"})}>
+                    <span>{date.toLocaleDateString([], {weekday: "short"})}</span><strong>{date.getDate()}</strong>
+                </button>}
+                height="auto" slotMinTime={`${String(hour).padStart(2, "0")}:00:00`} slotMaxTime={`${hour + 24}:00:00`}
+                scrollTime={`${hour}:00:00`} nowIndicator events={events}
+                eventClick={({event, jsEvent}) => {
+                    jsEvent.preventDefault();
+                    const {manual, logs, googleEvent} = event.extendedProps;
+                    if (googleEvent) setGoogleEvent(googleEvent);
+                    else if (manual) setManual(manual);
+                    else if (logs) setSelected(logs);
+                }} />
+        </div>
+        {!logs.isPending && !logs.error && !events.length && (!showGoogle || googleEvents.isSuccess) && <p className="muted">No events or time blocks for this {view}.</p>}
+        {showGoogle && googleEvent && <Modal title={googleEvent.title} close={() => setGoogleEvent(null)}>
+            <p>{googleEvent.calendar} · Google Calendar</p>
+            {googleEvent.allDay ? <p>All day</p> : <p>{new Date(googleEvent.start).toLocaleString()} – {new Date(googleEvent.end).toLocaleString()}</p>}
+        </Modal>}
         {manual && <Modal title={manual.running ? "Running timer" : "Manual time"} close={() => setManual(null)}><dl className="log-details">
             {([["Title", manual.title || "Untitled session"], ["Category", manual.project_name || "Uncategorized"], ["Start", new Date(manual.start_time * 1000).toLocaleString()], ["End", manual.running ? "Running" : new Date(manual.end_time * 1000).toLocaleString()], ["Duration", duration(manual.end_time - manual.start_time)], ["Status", manual.running ? "Recording" : manual.synced ? "Synced" : "Saved on phone / Waiting to sync"]] as const).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
         </dl></Modal>}
@@ -498,11 +586,43 @@ function SettingsScreen(props: ScreenProps & {openSync: () => void}) {
     const fields: [keyof Settings, string][] = [["day_start_hour", "Day starts at hour (0–23)"], ["min_app_duration", "Minimum app duration (seconds)"], ["min_log_duration", "Minimum log duration (seconds)"], ["max_attach_distance", "Maximum attach distance (seconds)"], ["lookahead_window", "Lookahead window (seconds)"], ["min_timeblock_duration", "Minimum time block (seconds)"]];
     const missingPermissions = (["usage", "browser", "media"] as const).filter(kind => !state.permissions[kind]);
     return <><button onClick={props.openSync}>Sync</button>{missingPermissions.length > 0 && <Card><h2>Tracking access</h2>{missingPermissions.map(kind => <div className="permission row" key={kind}><div><strong>{kind === "usage" ? "App usage" : kind === "browser" ? "Browser activity" : "Media playback"}</strong><small>{kind === "usage" ? "Required for tracking" : "Optional"}</small></div><button disabled={busy} onClick={() => void act(() => request("permission", {kind}))}>Enable</button></div>)}</Card>}
+        <GoogleCalendarSettings {...props} />
         <Card className="settings-card"><h2>Display and time blocks</h2><form onSubmit={event => { event.preventDefault(); void act(() => request("settings.save", settings), "Settings saved"); }}><label className="check"><input type="checkbox" checked={settings.notes_enabled} onChange={event => setSettings({...settings, notes_enabled: event.target.checked})} />Show Notes</label><label className="check"><input type="checkbox" checked={settings.use_bar_usage_chart} onChange={event => setSettings({...settings, use_bar_usage_chart: event.target.checked})} />Use bar chart by default</label>{fields.map(([key, label]) => <label className="settings-field" key={key}>{label}<input type="number" min={0} max={key === "day_start_hour" ? 23 : 86400} required value={String(settings[key])} onChange={event => setSettings({...settings, [key]: event.target.value === "" ? "" : Number(event.target.value)})} /></label>)}<button className="primary" disabled={busy}>Save settings</button></form></Card>
         <button onClick={() => setSkipped(true)}>Manage skipped apps</button><p className="muted">Time Tracker {state.version}</p>
         {skipped && <SkippedApps {...props} close={() => setSkipped(false)} />}
     </>;
 }
+
+function GoogleCalendarSettings({state, act, busy}: ScreenProps) {
+    const google = state.googleCalendar;
+    const sources = useQuery({
+        queryKey: ["mobile-data", "google-sources"],
+        queryFn: () => request("calendar.sources"),
+        enabled: !!google?.allowed,
+        gcTime: 0,
+        refetchInterval: 15000,
+    });
+    return <Card className="settings-card">
+        <h2>Google Calendar import</h2>
+        {!google?.allowed ? <>
+            <p>Allow read-only access to choose Google calendars synced to this phone.</p>
+            <button disabled={busy} onClick={() => void act(() => request("calendar.permission"))}>Allow calendar access</button>
+        </> : <>
+            {sources.isPending && <p role="status">Loading calendars…</p>}
+            {sources.error && <p role="alert">Could not load Google calendars. <button onClick={() => void sources.refetch()}>Retry</button></p>}
+            {sources.isSuccess && sources.data.length === 0 && <p>No Google calendars found. Enable Calendar sync for your Google account in Android Settings.</p>}
+            {sources.data?.map(source => <label key={source.key} className="check calendar-source">
+                <input type="checkbox" checked={google.selected.includes(source.key)} disabled={busy}
+                    onChange={event => {
+                        const selected = event.target.checked;
+                        void act(() => request("calendar.select", {key: source.key, selected}));
+                    }} />
+                <span>{source.name}<small>{source.account}</small></span>
+            </label>)}
+        </>}
+    </Card>;
+}
+
 function SkippedApps({close, act, busy}: ScreenProps & {close: () => void}) {
     const [pattern, setPattern] = useState("");
     const [confirm, setConfirm] = useState<{kind: "add" | "remove" | "clear"; id?: number; count?: number} | null>(null);

@@ -17,8 +17,10 @@ export type MobileDevice = {
     has_local_logs: boolean;
 };
 export type Timer = {session_id: string; title: string; project_name: string | null; start_time: number};
+export type GoogleCalendarEvent = {id: string; title: string; start: string; end: string; allDay: boolean; calendar: string};
 export type MobileState = {
     permissions: {usage: boolean; browser: boolean; media: boolean}; settings: Settings;
+    googleCalendar?: {allowed: boolean; selected: string[]};
     sync: {server: string | null; registered: boolean; active: boolean; uuid: string | null; name: string; nextSyncSeconds: number | null};
     devices?: MobileDevice[];
     manualEntries: (Timer & {end_time: number; synced: boolean})[];
@@ -39,6 +41,10 @@ type Requests = {
     usage: [{startMs: number; endMs: number; browserOnly?: boolean; scope?: "stats" | "all"; deviceUuid?: string}, Usage];
     import: [undefined, null];
     permission: [{kind: "usage" | "browser" | "media"}, null];
+    "calendar.permission": [undefined, null];
+    "calendar.sources": [undefined, {key: string; name: string; account: string}[]];
+    "calendar.select": [{key: string; selected: boolean}, null];
+    "calendar.events": [{startMs: number; endMs: number; firstDay: string; endDay: string}, GoogleCalendarEvent[]];
     "settings.save": [Partial<Settings>, null];
     "skipped.list": [undefined, {id: number; pattern: string}[]];
     "skipped.count": [{pattern: string}, number];

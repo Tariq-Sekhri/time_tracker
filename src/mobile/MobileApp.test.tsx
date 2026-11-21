@@ -45,10 +45,11 @@ beforeAll(() => {
 afterEach(() => {
     cleanup();
     invokeMock.mockReset();
+    localStorage.removeItem("time-tracker.mobile.calendar-position");
     window.history.replaceState(null, "", "#usage");
 });
 
-function createHarness() {
+function createHarness(googleCalendar?: NonNullable<MobileState["googleCalendar"]>) {
     const now = Date.now();
     const devices: MobileDevice[] = [
         {
@@ -120,6 +121,7 @@ function createHarness() {
 
     const currentState = (): MobileState => ({
         permissions: {usage: true, browser: true, media: true},
+        googleCalendar: googleCalendar && {...googleCalendar},
         settings: {
             day_start_hour: 0,
             min_app_duration: 0,
@@ -156,6 +158,20 @@ function createHarness() {
                 return currentState();
             case "import":
                 return null;
+            case "calendar.permission":
+                googleCalendar!.allowed = true;
+                return null;
+            case "calendar.sources":
+                return [{key: "personal", name: "Personal", account: "calendar@example.test"}];
+            case "calendar.select":
+                googleCalendar!.selected = payload.selected ? [String(payload.key)] : [];
+                return null;
+            case "calendar.events": {
+                const start = String(payload.firstDay);
+                const end = new Date(`${start}T00:00:00Z`);
+                end.setUTCDate(end.getUTCDate() + 1);
+                return [{id: "event", title: "Team planning", start, end: end.toISOString().slice(0, 10), allDay: true, calendar: "Personal"}];
+            }
             case "timer.save":
                 timer = {
                     session_id: timer?.session_id ?? "session-1",
@@ -236,6 +252,46 @@ function createHarness() {
     const queryClient = new QueryClient({defaultOptions: {queries: {retry: false}}});
     return {devices, calls, queryClient};
 }
+
+it("shows imported events in a Monday-start week and restores the view after visiting Settings", async () => {
+    const user = userEvent.setup();
+    const {calls, queryClient} = createHarness({allowed: false, selected: []});
+    render(<QueryClientProvider client={queryClient}><ToastProvider><MobileApp /></ToastProvider></QueryClientProvider>);
+    const nav = await screen.findByRole("navigation", {name: "Main navigation"});
+    await user.click(within(nav).getByRole("button", {name: "Settings"}));
+    await user.click(screen.getByRole("button", {name: "Allow calendar access"}));
+    const source = (await screen.findByRole("checkbox", {name: /Personal/})) as HTMLInputElement;
+    await user.click(source);
+    await waitFor(() => expect(source.checked).toBe(true));
+
+    const openCalendar = () => user.click(within(nav).getByRole("button", {name: "Calendar"}));
+    await openCalendar();
+    await user.click(screen.getByRole("button", {name: "Week"}));
+    const previousWeek = screen.getByRole("button", {name: "Previous week"});
+    await user.click(previousWeek);
+    await waitFor(() => {
+        const weekRequest = [...calls].reverse().find(call => call.operation === "calendar.events")!;
+        const start = new Date(`${weekRequest.payload.firstDay}T00:00:00Z`);
+        const end = new Date(`${weekRequest.payload.endDay}T00:00:00Z`);
+        expect(start.getUTCDay()).toBe(1);
+        expect(+end - +start).toBe(7 * 86_400_000);
+    });
+    const selectedDate = (screen.getByLabelText("Selected day") as HTMLInputElement).value;
+    await user.click(await screen.findByText("Team planning"));
+    const event = screen.getByRole("dialog", {name: "Team planning"});
+    expect(within(event).getByText("All day")).toBeTruthy();
+    await user.click(within(event).getByRole("button", {name: "Close dialog"}));
+
+    await user.click(within(nav).getByRole("button", {name: "Settings"}));
+    const selectedSource = (await screen.findByRole("checkbox", {name: /Personal/})) as HTMLInputElement;
+    await user.click(selectedSource);
+    await waitFor(() => expect(selectedSource.checked).toBe(false));
+    await openCalendar();
+    expect(screen.getByRole("button", {name: "Week"}).getAttribute("aria-pressed")).toBe("true");
+    expect((screen.getByLabelText("Selected day") as HTMLInputElement).value).toBe(selectedDate);
+    expect(screen.queryByText("Team planning")).toBeNull();
+    queryClient.clear();
+});
 
 describe("MobileApp remote device log sync", () => {
     it("supports subscribing, toggling visibility, removing old device logs, and filtering usage/logs/calendar", async () => {

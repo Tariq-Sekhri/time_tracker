@@ -139,6 +139,13 @@ dialog::backdrop { background: #000b; }
 .startup { padding: 40px 24px; }
 .error { background: #4d2633; padding: 12px; border-radius: 10px; color: #ffd3da; }
 .calendar-toolbar button { min-height: 38px; padding: 6px 12px; font-size: 14px; }
+.calendar-toolbar { flex-wrap: wrap; }
+.calendar-views { display: inline-flex; gap: 2px; padding: 2px; background: #1c202a; border: 1px solid #3b4252; border-radius: 10px; }
+.calendar-views button { min-height: 34px; padding: 4px 10px; background: transparent; border: 0; border-radius: 8px; }
+.calendar-views button[aria-pressed="true"] { color: #eadcff; background: #493469; }
+.calendar-source input { flex: none; }
+.calendar-source span { min-width: 0; overflow-wrap: anywhere; padding: 5px 0; }
+.calendar-source small { margin-top: 2px; }
 .zoom-controls { display: inline-flex; align-items: center; gap: 2px; background: #1c202a; border: 1px solid #3b4252; border-radius: 10px; padding: 2px; }
 .zoom-controls button { min-height: 34px; min-width: 36px; padding: 4px 10px; border: 0; border-radius: 8px; background: transparent; font-size: 16px; line-height: 1; }
 .zoom-controls button.zoom-level { min-width: 50px; padding: 4px 6px; font-size: 12px; font-variant-numeric: tabular-nums; color: #c6ccda; }
@@ -152,6 +159,12 @@ dialog::backdrop { background: #000b; }
 .mobile-calendar .fc { font-size: 12px; }
 .mobile-calendar .fc-event { border-radius: 5px; }
 .mobile-calendar .fc-event-title { font-weight: 600; }
+.mobile-calendar .fc-timegrid-event { cursor: pointer; }
+.mobile-calendar .calendar-day-heading { display: grid; justify-items: center; align-content: center; gap: 3px; width: 100%; min-height: 42px; padding: 2px 0; border: 0; border-radius: 0; background: transparent; font-size: 11px; line-height: 1.2; }
+.mobile-calendar .calendar-day-heading strong { font-size: 13px; }
+.mobile-calendar .fc-col-header-cell-cushion:has(.calendar-day-heading) { display: block; padding: 0; }
+.mobile-calendar .fc-timeGridWeek-view .fc-event-main { overflow: hidden; }
+.mobile-calendar .fc-timeGridWeek-view .fc-event-time { display: none; }
 .mobile-calendar .fc-event.manual-event { border-width: 0 0 0 4px; border-style: solid; box-shadow: 0 0 0 1px #111318; }
 .notes-page { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
 .notes-page > .mobile-card { margin: 12px; }
