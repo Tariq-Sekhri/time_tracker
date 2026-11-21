@@ -34,7 +34,10 @@ const INCLUDE_GOOGLE_IN_STATS_KEY = "time-tracker:include-google-in-stats";
 const MANUAL_TIME_IN_CAL_KEY = "time-tracker:manual-time-in-calendar";
 const MANUAL_TIME_IN_STATS_KEY = "time-tracker:manual-time-in-stats";
 
-export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View) => void }) {
+export default function Calendar({setCurrentView, trayOpenCount}: {
+    setCurrentView: (view: View) => void;
+    trayOpenCount: number;
+}) {
     const [rightSideBarView, setRightSideBarView] = useState<SideBarView>("Week")
     const {date, setDate} = useDateStore();
     const {calendarStartHour, timeBlockSettings} = useBackendSettings();
@@ -905,13 +908,23 @@ export default function Calendar({setCurrentView}: { setCurrentView: (arg0: View
         setSelectedCategory(null);
     };
 
-    const goToToday = () => {
+    const goToToday = useCallback(() => {
         setDate(adjustInstantToCalendarDayBoundary(new Date(), calendarStartHour));
         setSelectedEvent(null);
         setSelectedEventLogs([]);
         setSelectedDate(null);
         setSelectedCategory(null);
-    };
+    }, [calendarStartHour, setDate]);
+
+    const handledTrayOpenCount = useRef(0);
+    useEffect(() => {
+        if (handledTrayOpenCount.current === trayOpenCount) return;
+        handledTrayOpenCount.current = trayOpenCount;
+        if (!isCurrentWeek(useDateStore.getState().date, calendarStartHour)) {
+            goToToday();
+            setRightSideBarView("Week");
+        }
+    }, [calendarStartHour, goToToday, trayOpenCount]);
 
     const jumpToPrevAppWeek = () => {
         if (!calendarAppFilterActive || !appFilterPrevWeek) {

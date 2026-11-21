@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.13.7] - 2026-11-21
+
+- Install Windows updates in the background and restart automatically after you choose Update now.
+- Open the current calendar week when you return from the system tray.
+- Use the stable desktop release channel now that the beta channel has been retired.
+
 ## [1.13.6] - 2026-11-16
 
 - Cancel manual tracking without recording time.

@@ -44,6 +44,14 @@ function AppInner() {
     const syncTimer = useSyncTimer();
     const {data: notesState} = useQuery({queryKey: ["notes"], queryFn: getNotesState});
     const [currentView, setCurrentView] = useState<View>("calendar");
+    const [trayOpenCount, setTrayOpenCount] = useState(0);
+    useEffect(() => {
+        const unlisten = listen("tray-opened", () => {
+            setTrayOpenCount((count) => count + 1);
+            setCurrentView("calendar");
+        });
+        return () => { void unlisten.then((stop) => stop()); };
+    }, []);
     const requestedRegexId = useRegexNavigation((state) => state.targetId);
     useEffect(() => {if (requestedRegexId !== null) setCurrentView("regex");}, [requestedRegexId]);
     // Manual timers started, edited, or stopped on other devices arrive from the sync server.
@@ -374,7 +382,7 @@ function AppInner() {
                         : "flex-1 min-h-0 overflow-auto nice-scrollbar"
                 }
             >
-                {currentView === "calendar" && <Calendar setCurrentView={setCurrentView}/>}
+                {currentView === "calendar" && <Calendar setCurrentView={setCurrentView} trayOpenCount={trayOpenCount}/>}
                 {currentView === "categories" && <CategoriesView/>}
                 {currentView === "regex" && <CategoryRegexView/>}
                 {currentView === "appGroups" && <AppGroupsView/>}
