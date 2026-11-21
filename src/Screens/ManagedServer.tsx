@@ -28,7 +28,10 @@ const input = "w-full rounded border border-gray-700 bg-gray-900 px-3 py-2 text-
 const statusKey = ["sync", "managedServer"];
 const devicesKey = ["sync", "managedDevices"];
 
-export function ManagedServer({onConnect}: {onConnect: (address: string) => void}) {
+export function ManagedServer({hasServerConnection, onConnect}: {
+    hasServerConnection: boolean;
+    onConnect: (address: string) => void;
+}) {
     const queryClient = useQueryClient();
     const [editing, setEditing] = useState(false);
     const [showAdmin, setShowAdmin] = useState(false);
@@ -74,7 +77,7 @@ export function ManagedServer({onConnect}: {onConnect: (address: string) => void
     if (status.isError && !server) {
         return <p role="alert" className="text-sm text-rose-300">{toErrorString(status.error)}</p>;
     }
-    if (!server?.supported) return null;
+    if (!server?.supported || (hasServerConnection && !server.installed)) return null;
     const busy = manage.isPending || admin.isPending;
     const error = manage.error ?? admin.error;
     const editAddress = () => {

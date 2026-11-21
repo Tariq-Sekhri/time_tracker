@@ -327,7 +327,7 @@ function SyncControls({syncTimer}: {syncTimer: ReturnType<typeof useSyncTimer>})
                 <h1 className="text-2xl font-bold">Sync</h1>
                 {isDemo && <p className="text-sm text-amber-200 bg-amber-900/20 border border-amber-800 rounded-lg p-4">Simulated sync: these devices and their activity are fictional. Try subscriptions and Sync Now. Changes last until you reload; no server is contacted.</p>}
 
-                {!isDemo && <ManagedServer onConnect={(address) => {
+                {!isDemo && <ManagedServer hasServerConnection={!!serverIp} onConnect={(address) => {
                     setServerError(null);
                     setIpInput(address);
                     setIsChangingServer(true);
