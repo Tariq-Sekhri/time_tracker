@@ -13,8 +13,37 @@ pub enum DeviceState {
     Remote { is_tracking: bool },
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeviceRole {
+    #[default]
+    Logger,
+    Consumer,
+    Integration,
+}
+
+impl DeviceRole {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Logger => "logger",
+            Self::Consumer => "consumer",
+            Self::Integration => "integration",
+        }
+    }
+
+    fn from_str(role: &str) -> Self {
+        match role {
+            "logger" => Self::Logger,
+            "consumer" => Self::Consumer,
+            _ => Self::Integration,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Device {
+    #[serde(default)]
+    pub role: DeviceRole,
     pub uuid: String,
     pub name: String,
     pub(crate) state: DeviceState,
@@ -33,6 +62,7 @@ impl Device {
         Self {
             uuid,
             name,
+            role: DeviceRole::Logger,
             state: DeviceState::Remote { is_tracking: false },
             last_sync_id: 0,
             is_active: true,
@@ -49,6 +79,7 @@ struct RowDevice {
     uuid: String,
     name: String,
     kind: String,
+    role: String,
     token: Option<String>,
     is_tracking: bool,
     last_sync_id: i64,
@@ -78,6 +109,7 @@ impl TryFrom<RowDevice> for Device {
         Ok(Device {
             uuid: row.uuid,
             name: row.name,
+            role: DeviceRole::from_str(&row.role),
             state,
             last_sync_id: row.last_sync_id,
             is_active: row.is_active,
@@ -95,6 +127,7 @@ impl From<&Device> for RowDevice {
             DeviceState::Local { token } => RowDevice {
                 uuid: device.uuid.clone(),
                 name: device.name.clone(),
+                role: device.role.as_str().to_owned(),
                 kind: KIND_LOCAL.to_string(),
                 token: Some(token.clone()),
                 is_tracking: false,
@@ -106,6 +139,7 @@ impl From<&Device> for RowDevice {
             DeviceState::Remote { is_tracking } => RowDevice {
                 uuid: device.uuid.clone(),
                 name: device.name.clone(),
+                role: device.role.as_str().to_owned(),
                 kind: KIND_REMOTE.to_string(),
                 token: None,
                 is_tracking: *is_tracking,
@@ -124,6 +158,7 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             uuid TEXT NOT NULL UNIQUE,
             name TEXT NOT NULL,
             kind TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'logger',
             token TEXT,
             is_tracking INTEGER NOT NULL DEFAULT 0,
             last_sync_id INTEGER NOT NULL DEFAULT 0,
@@ -185,11 +220,17 @@ pub async fn update_device(update: UpdateDevice) -> Result<(), Error> {
 pub async fn set_is_tracking(new: bool, uuid: String) -> Result<(), Error> {
     let pool = get_pool().await?;
     let mut tx = pool.begin().await?;
-    sqlx::query("UPDATE devices SET is_tracking = ?1 WHERE uuid = ?2")
+    let updated = sqlx::query(
+        "UPDATE devices SET is_tracking = ?1
+         WHERE uuid = ?2 AND kind = 'remote' AND (NOT ?1 OR role = 'logger')",
+    )
         .bind(new)
         .bind(&uuid)
         .execute(&mut *tx)
         .await?;
+    if new && updated.rows_affected() == 0 {
+        return Err(anyhow::anyhow!("Only logger devices can be subscribed to").into());
+    }
     if new {
         sqlx::query("UPDATE devices SET in_cal = 1, in_stats = 1 WHERE uuid = ?1")
             .bind(&uuid)
@@ -235,28 +276,14 @@ pub async fn untrack_remote_devices_not_on_server(server_uuids: &[String]) -> Re
     Ok(())
 }
 
-pub async fn update_remote_device_names(server_devices: &[(String, String)]) -> Result<(), Error> {
-    let pool = get_pool().await?;
-    let mut tx = pool.begin().await?;
-    for (uuid, name) in server_devices {
-        sqlx::query("UPDATE devices SET name = ?1 WHERE uuid = ?2 AND kind = 'remote'")
-            .bind(name)
-            .bind(uuid)
-            .execute(&mut *tx)
-            .await?;
-    }
-    tx.commit().await?;
-    Ok(())
-}
-
 pub(crate) async fn insert_device<'e, E>(executor: E, device: &Device) -> Result<(), sqlx::Error>
 where
     E: Executor<'e, Database = Sqlite>,
 {
     let row = RowDevice::from(device);
     sqlx::query(
-        "INSERT OR IGNORE INTO devices (uuid, name, kind, token, is_tracking, last_sync_id, is_active, in_cal, in_stats)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        "INSERT OR IGNORE INTO devices (uuid, name, kind, token, is_tracking, last_sync_id, is_active, in_cal, in_stats, role)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
     )
     .bind(&row.uuid)
     .bind(&row.name)
@@ -267,6 +294,7 @@ where
     .bind(row.is_active)
     .bind(row.in_cal)
     .bind(row.in_stats)
+    .bind(row.role)
     .execute(executor)
     .await?;
     Ok(())
@@ -276,6 +304,8 @@ pub async fn register_local_device(device: Device) -> Result<()> {
     let pool = get_pool().await?;
     let mut tx = pool.begin().await?;
     insert_device(&mut *tx, &device).await?;
+    sqlx::query("INSERT OR REPLACE INTO app_metadata(key, value) VALUES ('sync_device_role', ?)")
+        .bind(device.role.as_str()).execute(&mut *tx).await?;
     set_local_device_uuid_with_tx(&mut tx, &device.uuid).await?;
     sqlx::query("UPDATE afk_intervals SET device_uuid=?1 WHERE device_uuid=?2")
         .bind(&device.uuid).bind(PENDING_LOCAL_DEVICE_UUID).execute(&mut *tx).await?;
@@ -294,11 +324,18 @@ async fn invalidate_local_device_registration_with_pool(
     uuid: &str,
 ) -> Result<(), sqlx::Error> {
     let mut tx = pool.begin().await?;
+    release_local_device(&mut tx, uuid).await?;
+    tx.commit().await?;
+    Ok(())
+}
 
+pub(crate) async fn release_local_device(
+    tx: &mut sqlx::Transaction<'_, Sqlite>, uuid: &str,
+) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE logs SET device_uuid = ?1 WHERE device_uuid = ?2")
         .bind(PENDING_LOCAL_DEVICE_UUID)
         .bind(uuid)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
 
     sqlx::query(
@@ -307,16 +344,15 @@ async fn invalidate_local_device_registration_with_pool(
          WHERE uuid = ?1 AND kind = 'local'",
     )
     .bind(uuid)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await?;
 
     sqlx::query("UPDATE afk_intervals SET device_uuid=?1 WHERE device_uuid=?2
         AND NOT EXISTS(SELECT 1 FROM afk_remote_intervals r WHERE r.interval_id=afk_intervals.id)")
-        .bind(PENDING_LOCAL_DEVICE_UUID).bind(uuid).execute(&mut *tx).await?;
+        .bind(PENDING_LOCAL_DEVICE_UUID).bind(uuid).execute(&mut **tx).await?;
     sqlx::query("DELETE FROM afk_sync_cursors WHERE device_uuid=?")
-        .bind(uuid).execute(&mut *tx).await?;
+        .bind(uuid).execute(&mut **tx).await?;
 
-    tx.commit().await?;
     Ok(())
 }
 

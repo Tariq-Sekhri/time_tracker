@@ -35,7 +35,7 @@ pub static IS_SUSPENDED: AtomicBool = AtomicBool::new(false);
 
 #[tauri::command]
 pub fn get_tracking_status() -> bool {
-    !cfg!(debug_assertions) && !IS_SUSPENDED.load(Ordering::Relaxed)
+    !cfg!(debug_assertions) && !crate::sync::is_consumer() && !IS_SUSPENDED.load(Ordering::Relaxed)
 }
 
 #[tauri::command]
@@ -155,7 +155,7 @@ async fn background_process() -> Result<(), Error> {
     loop {
         tokio::time::sleep(Duration::from_secs(1)).await;
 
-        if IS_SUSPENDED.load(Ordering::Relaxed) {
+        if !get_tracking_status() {
             continue;
         }
         let new_log = generate_log().await?;
@@ -199,7 +199,7 @@ async fn background_process() -> Result<(), Error> {
     let mut last_media_error: Option<(String, Instant)> = None;
     loop {
         tokio::time::sleep(Duration::from_secs(1)).await;
-        if IS_SUSPENDED.load(Ordering::Relaxed) {
+        if !get_tracking_status() {
             segments.clear(&crate::db::get_pool().await?).await?;
             selector.clear();
             continue;
@@ -213,7 +213,7 @@ async fn background_process() -> Result<(), Error> {
         .map_err(|error| anyhow::anyhow!("Windows media worker failed: {error}"))?;
         collector = returned_collector;
         // A pause requested while Windows was answering must prevent every subsequent write.
-        if IS_SUSPENDED.load(Ordering::Relaxed) {
+        if !get_tracking_status() {
             segments.clear(&crate::db::get_pool().await?).await?;
             selector.clear();
             continue;

@@ -248,6 +248,12 @@ fn start_collector() {
             let mut engine = Engine::default();
             let mut previous = AfkSettings::default();
             loop {
+                if crate::sync::is_consumer() {
+                    engine = Engine::default();
+                    *latest().lock().unwrap_or_else(|e| e.into_inner()) = None;
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    continue;
+                }
                 let settings = config().lock().unwrap_or_else(|e| e.into_inner()).clone();
                 if settings != previous {
                     engine = Engine::default();
@@ -307,7 +313,7 @@ pub async fn get_afk_status() -> Result<Option<AfkStatus>, Error> {
     start_collector();
     let mut status = latest().lock().unwrap_or_else(|e| e.into_inner()).clone();
     if let Some(s) = &mut status {
-        s.recording = !cfg!(debug_assertions);
+        s.recording = !cfg!(debug_assertions) && !crate::sync::is_consumer();
         s.storage_error = storage::last_error();
     }
     Ok(status)
@@ -324,6 +330,10 @@ pub async fn recorder() {
     let mut writer = storage::Writer::default();
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        if crate::sync::is_consumer() {
+            writer = storage::Writer::default();
+            continue;
+        }
         let status = latest().lock().unwrap_or_else(|e| e.into_inner()).clone();
         if let Some(status) = status {
             // Failure is isolated: the activity supervisor never depends on this task.

@@ -9,6 +9,7 @@ mod google_oauth;
 mod instance;
 mod logger;
 mod manual_sync;
+mod managed_server;
 mod perf;
 mod sync;
 mod notes_sync;
@@ -209,7 +210,9 @@ pub fn run() {
                 let _ = window.hide();
             }
 
+            tauri::async_runtime::block_on(sync::load_device_role()).map_err(|error| error.0)?;
             tray::setup_tray(app.handle())?;
+            tauri::async_runtime::spawn(managed_server::restore(app.handle().clone()));
             Log::info("System tray ready");
             let app_handle = app.handle().clone();
 
@@ -500,8 +503,16 @@ pub fn run() {
                     get_sync_countdown,
                     get_devices,
                     device_logs,
+                    sync::sync_device_role,
                     get_server_ip,
                     set_server_ip,
+                    managed_server::managed_server_status,
+                    managed_server::managed_server_setup,
+                    managed_server::managed_server_running,
+                    managed_server::managed_server_devices,
+                    managed_server::managed_server_approve,
+                    managed_server::managed_server_backup,
+                    managed_server::managed_server_allow_lan,
                     data_transfer::get_export_filter_options,
                     data_transfer::export_dataset,
                     data_transfer::import_dataset,

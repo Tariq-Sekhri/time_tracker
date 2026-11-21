@@ -1,10 +1,10 @@
 use crate::db;
-use crate::db::tables::app_metadata_kv::get_server_ip;
+use crate::db::tables::app_metadata_kv::{get_server_ip, metadata_get, SERVER_IP};
 use crate::db::tables::device::{
     device_has_logs, get_devices as get_devices_from_db, get_local_device, get_local_device_uuid,
     insert_devices, invalidate_local_device_registration, register_local_device, set_last_sync_id,
     set_local_device_active, unsubscribe_remote_device, untrack_remote_devices_not_on_server,
-    update_remote_device_names, Device, DeviceState,
+    release_local_device, Device, DeviceRole, DeviceState,
 };
 use crate::db::tables::log::{
     consolidate_local_logs_for_reupload, delete_local_deleted_logs,
@@ -17,13 +17,32 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{Mutex as AsyncMutex, Notify};
 
 pub const SYNC_INTERVAL_SECS: u64 = 60;
+
+const SERVER_ID: &str = "sync_server_id";
+static IS_CONSUMER: AtomicBool = AtomicBool::new(false);
+
+pub(crate) fn is_consumer() -> bool {
+    IS_CONSUMER.load(Ordering::Acquire)
+}
+
+#[tauri::command]
+pub fn sync_device_role() -> DeviceRole {
+    if is_consumer() { DeviceRole::Consumer } else { DeviceRole::Logger }
+}
+
+pub(crate) async fn load_device_role() -> Result<(), Error> {
+    let pool = db::get_pool().await?;
+    let role = metadata_get(&pool, "sync_device_role").await?;
+    IS_CONSUMER.store(role.as_deref() == Some("consumer"), Ordering::Release);
+    Ok(())
+}
 
 static SYNC_COUNTDOWN_RESET: OnceLock<Arc<Notify>> = OnceLock::new();
 static SYNC_COUNTDOWN_REMAINING: AtomicI64 = AtomicI64::new(-1);
@@ -41,6 +60,7 @@ pub(crate) fn sync_http_client() -> Result<&'static reqwest::Client, Error> {
     ensure_sync_enabled()?;
     Ok(SYNC_HTTP_CLIENT.get_or_init(|| {
         reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(30))
             .build()
@@ -75,36 +95,100 @@ pub fn request_sync_countdown_reset() {
     sync_countdown_reset_notify().notify_waiters();
 }
 
-fn normalize_server_ip(server_ip: &str) -> String {
-    let mut ip = server_ip.trim();
-    if let Some(rest) = ip.strip_prefix("http://") {
-        ip = rest;
-    } else if let Some(rest) = ip.strip_prefix("https://") {
-        ip = rest;
+fn normalize_server_address(address: &str) -> Result<url::Url> {
+    let address = address.trim();
+    anyhow::ensure!(
+        !address.is_empty() && !address.contains(['\\', '@']),
+        "Enter a server address without credentials"
+    );
+    let has_scheme = address.contains("://");
+    let candidate = if has_scheme { address.to_owned() } else { format!("http://{address}") };
+    let mut url = url::Url::parse(&candidate)?;
+    anyhow::ensure!(
+        matches!(url.scheme(), "http" | "https")
+            && url.host().is_some()
+            && url.username().is_empty()
+            && url.password().is_none()
+            && url.query().is_none()
+            && url.fragment().is_none()
+            && url.path() == "/",
+        "Enter an HTTP or HTTPS server address, optionally with a port"
+    );
+    let authority = address.trim_end_matches('/');
+    let bare_host = !has_scheme && if authority.starts_with('[') {
+        authority.ends_with(']')
+    } else {
+        !authority.contains(':')
+    };
+    if bare_host {
+        url.set_port(Some(8765)).map_err(|_| anyhow!("Invalid server port"))?;
     }
-    if let Some((host, _)) = ip.split_once('/') {
-        ip = host;
-    }
-    if let Some((host, _)) = ip.split_once(':') {
-        ip = host;
-    }
-    ip.to_string()
+    Ok(url)
 }
 
-pub(crate) fn sync_server_url(server_ip: &str, path: &str) -> String {
-    let ip = normalize_server_ip(server_ip);
-    let path = path.trim_start_matches('/');
-    format!("http://{ip}:8765/v1/{path}")
+pub(crate) fn sync_server_url(server: &str, path: &str) -> Result<String, Error> {
+    let base = normalize_server_address(server)?;
+    Ok(format!("{}v1/{}", base, path.trim_start_matches('/')))
+}
+
+#[derive(Deserialize)]
+struct ServerInfo {
+    id: String,
+    device_roles: bool,
+}
+
+async fn server_info(server: &str) -> Result<Option<ServerInfo>, Error> {
+    let response = sync_http_client()?.get(sync_server_url(server, "info")?).send().await?;
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+    Ok(Some(response.error_for_status()?.json().await?))
+}
+
+pub(crate) async fn connect_server(address: &str) -> Result<(), Error> {
+    let _lock = sync_cycle_lock().lock().await;
+    let address = check(address.to_owned()).await?;
+    let info = server_info(&address).await?;
+    let pool = db::get_pool().await?;
+    let old_address = metadata_get(&pool, SERVER_IP).await?
+        .and_then(|old| normalize_server_address(&old).ok())
+        .map(|url| url.to_string());
+    let old_id = metadata_get(&pool, SERVER_ID).await?;
+    let new_id = info.map(|info| info.id);
+    let same_server = match (&old_id, &new_id) {
+        (Some(old), Some(new)) => old == new,
+        (None, _) | (_, None) => old_address.as_deref() == Some(address.as_str()),
+    };
+    let local = get_local_device().await?;
+    let mut tx = pool.begin().await?;
+    if !same_server {
+        if let Some(device) = local {
+            release_local_device(&mut tx, &device.uuid).await?;
+        }
+        sqlx::query("UPDATE devices SET is_tracking = 0 WHERE kind = 'remote'")
+            .execute(&mut *tx).await?;
+        sqlx::query("DELETE FROM app_metadata WHERE key = 'manual_entries_cursor_v1'")
+            .execute(&mut *tx).await?;
+    }
+    sqlx::query("INSERT OR REPLACE INTO app_metadata(key,value) VALUES (?,?)")
+        .bind(SERVER_IP).bind(&address).execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM app_metadata WHERE key = ?")
+        .bind(SERVER_ID).execute(&mut *tx).await?;
+    if let Some(id) = new_id {
+        sqlx::query("INSERT INTO app_metadata(key,value) VALUES (?,?)")
+            .bind(SERVER_ID).bind(id).execute(&mut *tx).await?;
+    }
+    tx.commit().await?;
+    crate::manual_sync::connection_changed();
+    request_sync_countdown_reset();
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn check(ip: String) -> Result<String, Error> {
     ensure_sync_enabled()?;
-    let normalized_ip = normalize_server_ip(&ip);
-    if normalized_ip.is_empty() {
-        return Err(Error::new(anyhow!("Server IP cannot be empty")));
-    }
-    let url = sync_server_url(&normalized_ip, "check");
+    let normalized_ip = normalize_server_address(&ip)?.to_string();
+    let url = sync_server_url(&normalized_ip, "check")?;
     let res = sync_http_client()?
         .get(&url)
         .send()
@@ -145,33 +229,52 @@ struct RegisterResponse {
     uuid: String,
     token: String,
     is_active: bool,
+    #[serde(default)]
+    role: DeviceRole,
 }
 #[tauri::command]
-pub async fn register(name: String) -> Result<(), Error> {
+pub async fn register(name: String, role: Option<DeviceRole>) -> Result<(), Error> {
     ensure_sync_enabled()?;
-    let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
-    check(server_ip.clone()).await?;
+    let _lock = sync_cycle_lock().lock().await;
+    let server_ip = get_server_ip().await?.ok_or(anyhow!("Server address not set"))?;
+    if get_local_device().await?.is_some() {
+        return Err(anyhow!("This device is already registered").into());
+    }
+    let role = role.unwrap_or(if is_consumer() { DeviceRole::Consumer } else { DeviceRole::Logger });
+    if role == DeviceRole::Integration {
+        return Err(anyhow!("Choose a logger or consumer device").into());
+    }
+    if role == DeviceRole::Consumer
+        && !server_info(&server_ip).await?.is_some_and(|info| info.device_roles)
+    {
+        return Err(anyhow!("Update the sync server before connecting a consumer device").into());
+    }
     let name = name.trim().to_string();
     if name.is_empty() {
         return Err(Error::new(anyhow!("Device name cannot be empty")));
     }
     let body = json!({
-        "name": name
+        "name": name,
+        "role": role
     });
 
     let res = sync_http_client()?
-        .post(sync_server_url(&server_ip, "register"))
+        .post(sync_server_url(&server_ip, "register")?)
         .json(&body)
         .send()
         .await?
         .error_for_status()?
         .json::<RegisterResponse>()
         .await?;
+    if res.role != role {
+        return Err(anyhow!("The server did not assign the requested device role").into());
+    }
     let device = Device {
         name,
+        role,
         uuid: res.uuid.clone(),
         state: DeviceState::Local { token: res.token },
-        last_sync_id: -1,
+        last_sync_id: if role == DeviceRole::Consumer { 0 } else { -1 },
         is_active: res.is_active,
         in_cal: true,
         in_stats: true,
@@ -179,6 +282,7 @@ pub async fn register(name: String) -> Result<(), Error> {
         has_local_logs: false,
     };
     register_local_device(device).await?;
+    IS_CONSUMER.store(role == DeviceRole::Consumer, Ordering::Release);
     Ok(())
 }
 
@@ -198,7 +302,7 @@ async fn post_logs_to_server(
         "logs": logs,
     });
     let res = sync_http_client()?
-        .post(sync_server_url(&server_ip, "upload_all_logs"))
+        .post(sync_server_url(&server_ip, "upload_all_logs")?)
         .json(&body)
         .send()
         .await?;
@@ -219,7 +323,7 @@ async fn upload_afk_evidence(device: &str, token: &str, server_ip: &str, all: bo
     loop {
         let page = crate::afk::sync::upload_page(&pool, device, cursor, through).await?;
         let Some(last) = page.last().map(|e| e.id) else { break; };
-        let response = sync_http_client()?.post(sync_server_url(server_ip, "afk"))
+        let response = sync_http_client()?.post(sync_server_url(server_ip, "afk")?)
             .bearer_auth(token).json(&page).send().await?;
         require_afk_success(response, device).await?;
         crate::afk::sync::acknowledge_upload(&pool, device, last).await?;
@@ -241,7 +345,7 @@ async fn download_afk_evidence(device: &str, local: &str, token: &str, server_ip
     let pool = db::get_pool().await?;
     let mut cursor = crate::afk::sync::download_cursor(&pool, device).await?;
     loop {
-        let response = sync_http_client()?.get(sync_server_url(server_ip, &format!("afk/{device}")))
+        let response = sync_http_client()?.get(sync_server_url(server_ip, &format!("afk/{device}"))?)
             .bearer_auth(token).query(&[("after",cursor)]).send().await?;
         let page: Vec<crate::afk::sync::Evidence> = require_afk_success(response, local).await?.json().await?;
         if page.is_empty() { break; }
@@ -258,7 +362,11 @@ async fn download_afk_evidence(device: &str, local: &str, token: &str, server_ip
 
 #[tauri::command]
 pub async fn upload_all_logs() -> Result<usize, Error> {
+    let _lock = sync_cycle_lock().lock().await;
     ensure_sync_enabled()?;
+    if is_consumer() {
+        return Err(anyhow!("Consumer devices cannot upload activity").into());
+    }
     crate::logger::Log::info("Initial sync upload started");
     let mut perf = crate::perf::Perf::new("upload_all_logs");
     let device = get_local_device()
@@ -287,7 +395,11 @@ pub async fn upload_all_logs() -> Result<usize, Error> {
 
 #[tauri::command]
 pub async fn reupload_all_logs() -> Result<usize, Error> {
+    let _lock = sync_cycle_lock().lock().await;
     ensure_sync_enabled()?;
+    if is_consumer() {
+        return Err(anyhow!("Consumer devices cannot upload activity").into());
+    }
     crate::logger::Log::info("Full sync reupload started");
     let mut perf = crate::perf::Perf::new("reupload_all_logs");
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
@@ -340,6 +452,7 @@ struct DeviceStatusResponse {
 
 #[tauri::command]
 pub async fn check_device_activation() -> Result<bool, Error> {
+    let _lock = sync_cycle_lock().lock().await;
     ensure_sync_enabled()?;
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
     let device = get_local_device()
@@ -352,7 +465,7 @@ pub async fn check_device_activation() -> Result<bool, Error> {
         }
     };
     let response = sync_http_client()?
-        .post(sync_server_url(&server_ip, "status"))
+        .post(sync_server_url(&server_ip, "status")?)
         .json(&json!({ "token": token }))
         .send()
         .await?;
@@ -407,7 +520,7 @@ pub async fn run_auto_sync_cycle() -> AutoSyncResult {
         errors.push(format!("sync: {}", e));
     }
     perf.stage("upload");
-    match device_logs(None).await {
+    match device_logs_impl(None).await {
         Ok(pulled) => perf.note("pulled", pulled),
         Err(e) => errors.push(format!("pull logs: {}", e)),
     }
@@ -473,9 +586,6 @@ async fn sync_impl() -> Result<(), Error> {
     }
     let mut perf = crate::perf::Perf::new("sync_upload");
     let server_ip = get_server_ip().await?.ok_or(anyhow!("Server IP not set"))?;
-    let logs = get_logs_for_sync().await?;
-    perf.stage("load_logs");
-    perf.note("logs", logs.len());
     let device = get_local_device()
         .await?
         .ok_or(anyhow!("Local device not found"))?;
@@ -488,6 +598,12 @@ async fn sync_impl() -> Result<(), Error> {
             return Err(Error::from(anyhow!("somehow got remote device?")));
         }
     };
+    if device.role == DeviceRole::Consumer {
+        return crate::notes_sync::sync(&device.uuid, &token, &server_ip).await;
+    }
+    let logs = get_logs_for_sync().await?;
+    perf.stage("load_logs");
+    perf.note("logs", logs.len());
     let deleted_ids: Vec<i64> = get_local_deleted_logs()
         .await?
         .into_iter()
@@ -502,7 +618,7 @@ async fn sync_impl() -> Result<(), Error> {
         "deleted_log_ids": deleted_ids,
     });
     let res = sync_http_client()?
-        .post(sync_server_url(&server_ip, "sync"))
+        .post(sync_server_url(&server_ip, "sync")?)
         .json(&body)
         .send()
         .await?;
@@ -522,6 +638,8 @@ async fn sync_impl() -> Result<(), Error> {
 
 #[derive(Debug, Deserialize, Serialize)]
 struct ServerDevice {
+    #[serde(default)]
+    role: DeviceRole,
     name: String,
     uuid: String,
     last_sync_id: i64,
@@ -567,7 +685,7 @@ async fn sync_devices_with_server() -> Result<HashSet<String>, Error> {
         }
     };
     let response = sync_http_client()?
-        .get(sync_server_url(&server_ip, "devices"))
+        .get(sync_server_url(&server_ip, "devices")?)
         .bearer_auth(token)
         .send()
         .await?;
@@ -589,15 +707,24 @@ async fn sync_devices_with_server() -> Result<HashSet<String>, Error> {
     let to_insert: Vec<Device> = server_devices
         .iter()
         .filter(|d| local_uuid.as_ref() != Some(&d.uuid))
-        .map(|d| Device::new(d.uuid.clone(), d.name.clone()))
+        .map(|d| {
+            let mut device = Device::new(d.uuid.clone(), d.name.clone());
+            device.role = d.role;
+            device
+        })
         .collect();
     insert_devices(to_insert).await?;
 
-    let name_updates: Vec<(String, String)> = server_devices
-        .iter()
-        .map(|d| (d.uuid.clone(), d.name.clone()))
-        .collect();
-    update_remote_device_names(&name_updates).await?;
+    let pool = db::get_pool().await?;
+    let mut tx = pool.begin().await?;
+    for device in &server_devices {
+        sqlx::query("UPDATE devices SET name = ?, role = ?,
+                     is_tracking = CASE WHEN ? = 'logger' THEN is_tracking ELSE 0 END
+                     WHERE uuid = ? AND kind = 'remote'")
+            .bind(&device.name).bind(device.role.as_str()).bind(device.role.as_str())
+            .bind(&device.uuid).execute(&mut *tx).await?;
+    }
+    tx.commit().await?;
     untrack_remote_devices_not_on_server(&server_uuids.iter().cloned().collect::<Vec<_>>()).await?;
 
     Ok(server_uuids)
@@ -642,6 +769,7 @@ pub async fn unsubscribe_device(uuid: String) -> Result<(), Error> {
 
 #[tauri::command]
 pub async fn get_devices(app_handle: tauri::AppHandle) -> Result<Vec<Device>, Error> {
+    let _lock = sync_cycle_lock().lock().await;
     let mut perf = crate::perf::Perf::new("get_devices");
     if !crate::instance::SYNC_ENABLED {
         perf.done();
@@ -682,6 +810,11 @@ pub async fn get_devices(app_handle: tauri::AppHandle) -> Result<Vec<Device>, Er
 }
 #[tauri::command]
 pub async fn device_logs(device_uuid: Option<String>) -> Result<usize, Error> {
+    let _lock = sync_cycle_lock().lock().await;
+    device_logs_impl(device_uuid).await
+}
+
+async fn device_logs_impl(device_uuid: Option<String>) -> Result<usize, Error> {
     ensure_sync_enabled()?;
     crate::logger::Log::debug("Sync download phase started");
     if device_uuid.is_none() && !is_registered_for_sync().await? {
@@ -710,7 +843,7 @@ pub async fn device_logs(device_uuid: Option<String>) -> Result<usize, Error> {
         .into_iter()
         .filter(|device| match device.state {
             DeviceState::Local { .. } => false,
-            DeviceState::Remote { is_tracking } => is_tracking,
+            DeviceState::Remote { is_tracking } => is_tracking && device.role == DeviceRole::Logger,
         })
         .collect();
 
@@ -727,13 +860,14 @@ pub async fn device_logs(device_uuid: Option<String>) -> Result<usize, Error> {
         .iter()
         .map(|device| ServerDevice {
             name: device.name.clone(),
+            role: device.role,
             uuid: device.uuid.clone(),
             last_sync_id: device.last_sync_id,
             is_active: true,
         })
         .collect::<Vec<ServerDevice>>();
     let res = sync_http_client()?
-        .get(sync_server_url(&server_ip, "devices/"))
+        .get(sync_server_url(&server_ip, "devices/")?)
         .bearer_auth(&token)
         .json(&de)
         .send()
@@ -786,4 +920,26 @@ pub async fn device_logs(device_uuid: Option<String>) -> Result<usize, Error> {
 
     if !afk_errors.is_empty() { return Err(anyhow!(afk_errors.join("; ")).into()); }
     Ok(count)
+}
+
+
+#[cfg(test)]
+mod address_tests {
+    use super::*;
+
+    #[test]
+    fn preserves_user_ports_and_https_and_migrates_bare_hosts() {
+        for (input, expected) in [
+            ("WORKSTATION", "http://workstation:8765/v1/check"),
+            ("host.local:8080", "http://host.local:8080/v1/check"),
+            ("https://host.local", "https://host.local/v1/check"),
+            ("https://host.local:8443/", "https://host.local:8443/v1/check"),
+            ("[::1]", "http://[::1]:8765/v1/check"),
+        ] {
+            assert_eq!(sync_server_url(input, "check").unwrap(), expected);
+        }
+        for input in ["", "http://user@host.local", "http://host.local/path", "http://host.local/?token=x", "ftp://host.local"] {
+            assert!(normalize_server_address(input).is_err(), "{input}");
+        }
+    }
 }

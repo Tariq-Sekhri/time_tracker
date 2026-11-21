@@ -15,7 +15,9 @@ import {
     syncNow,
     unsubscribeDevice,
     type Device,
+    type DeviceRole,
 } from "../api/sync.ts";
+import {ManagedServer} from "./ManagedServer.tsx";
 import {useToast} from "../Componants/Toast.tsx";
 import {toErrorString} from "../types/common.ts";
 import type {useSyncTimer} from "../hooks/useSyncTimer.ts";
@@ -50,6 +52,13 @@ function SyncControls({syncTimer}: {syncTimer: ReturnType<typeof useSyncTimer>})
     const [unsubscribeConfirm, setUnsubscribeConfirm] = useState<{ uuid: string; name: string } | null>(
         null,
     );
+    const [selectedRole, setRole] = useState<DeviceRole>();
+    const {data: savedRole} = useQuery({
+        queryKey: ["sync", "role"],
+        queryFn: () => invokeOrThrow<DeviceRole>("sync_device_role"),
+        enabled: !isDemo,
+    });
+    const role = selectedRole ?? savedRole ?? "logger";
     const [deviceNameInput, setDeviceNameInput] = useState("");
     const [deviceNameInitialized, setDeviceNameInitialized] = useState(false);
     const [isChangingServer, setIsChangingServer] = useState(false);
@@ -62,10 +71,15 @@ function SyncControls({syncTimer}: {syncTimer: ReturnType<typeof useSyncTimer>})
     });
 
     const checkMutation = useMutation({
-        mutationFn: checkSyncServer,
-        onSuccess: async (normalizedIp) => {
-            await persistServerIp(normalizedIp);
-            await queryClient.invalidateQueries({queryKey: ["sync", "serverIp"]});
+        mutationFn: async (address: string) => {
+            // The demo keeps its own simulated connection checks.
+            await persistServerIp(isDemo ? await checkSyncServer(address) : address);
+        },
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({queryKey: ["sync", "serverIp"]}),
+                queryClient.invalidateQueries({queryKey: ["sync", "devices"]}),
+            ]);
             setServerError(null);
             setIpInput("");
             setIsChangingServer(false);
@@ -114,12 +128,13 @@ function SyncControls({syncTimer}: {syncTimer: ReturnType<typeof useSyncTimer>})
 
     const registerMutation = useMutation({
         mutationFn: async (name: string) => {
-            await registerDevice(name);
+            await registerDevice(name, role);
         },
         onSuccess: async () => {
             await queryClient.invalidateQueries({queryKey: ["sync", "devices"]});
             setRegisterError(null);
             setShowRegisterConfirm(false);
+            void queryClient.invalidateQueries({queryKey: ["sync", "role"]});
             showToast("Registered. Waiting for admin approval.", "success");
         },
         onError: (e: unknown) => {
@@ -129,19 +144,10 @@ function SyncControls({syncTimer}: {syncTimer: ReturnType<typeof useSyncTimer>})
     });
 
     const activationMutation = useMutation({
-        mutationFn: async () => {
-            const active = await checkDeviceActivation();
-            if (!active) return {active, count: 0};
-            const count = await reuploadAllLogs();
-            return {active, count};
-        },
-        onSuccess: async ({active, count}) => {
+        mutationFn: checkDeviceActivation,
+        onSuccess: async (active) => {
             await queryClient.invalidateQueries({queryKey: ["sync", "devices"]});
-            if (active) {
-                showToast(`Approved and uploaded ${count} logs`, "success");
-            } else {
-                showToast("Still waiting for admin approval", "info");
-            }
+            showToast(active ? "Device approved" : "Still waiting for admin approval", active ? "success" : "info");
         },
         onError: (e: unknown) => {
             void queryClient.invalidateQueries({queryKey: ["sync", "devices"]});
@@ -218,6 +224,10 @@ function SyncControls({syncTimer}: {syncTimer: ReturnType<typeof useSyncTimer>})
         });
     }, [devicesQuery.data]);
 
+    useEffect(() => {
+        initialUploadAttemptedRef.current = false;
+    }, [localDevice?.uuid]);
+
     const isRegistered = !!localDevice;
     const isActive = !!localDevice?.is_active;
     const needsInitialUpload = isRegistered && isActive && localDevice.last_sync_id === -1;
@@ -258,7 +268,7 @@ function SyncControls({syncTimer}: {syncTimer: ReturnType<typeof useSyncTimer>})
     const onCheck = () => {
         const ip = ipInput.trim();
         if (!ip) {
-            setServerError("Enter a server IP");
+            setServerError("Enter a server address");
             return;
         }
         setServerError(null);
@@ -317,12 +327,17 @@ function SyncControls({syncTimer}: {syncTimer: ReturnType<typeof useSyncTimer>})
                 <h1 className="text-2xl font-bold">Sync</h1>
                 {isDemo && <p className="text-sm text-amber-200 bg-amber-900/20 border border-amber-800 rounded-lg p-4">Simulated sync: these devices and their activity are fictional. Try subscriptions and Sync Now. Changes last until you reload; no server is contacted.</p>}
 
+                {!isDemo && <ManagedServer onConnect={(address) => {
+                    setServerError(null);
+                    setIpInput(address);
+                    setIsChangingServer(true);
+                }} />}
                 {!showServerConfig ? (
                     <section className="bg-gray-900 rounded-lg border border-gray-800 p-5 space-y-4">
                         <div>
                             <h2 className="text-lg font-semibold">Connect to server</h2>
                             <p className="text-sm text-gray-400 mt-1">
-                                {isDemo ? "The demo server address is fixed. You can try the form, then cancel to return." : "Enter your sync server IP to upload logs and pull from other devices."}
+                                {isDemo ? "The demo server address is fixed. You can try the form, then cancel to return." : "Enter the address shown on the computer hosting your sync server."}
                             </p>
                         </div>
                         <div className="flex gap-2">
@@ -330,7 +345,7 @@ function SyncControls({syncTimer}: {syncTimer: ReturnType<typeof useSyncTimer>})
                                 type="text"
                                 value={ipInput}
                                 onChange={(e) => setIpInput(e.target.value)}
-                                placeholder="Server IP"
+                                placeholder={isDemo ? "Server IP" : "Server address"}
                                 className="flex-1 px-3 py-2 rounded bg-gray-800 border border-gray-700 text-white"
                             />
                             <button
@@ -341,7 +356,7 @@ function SyncControls({syncTimer}: {syncTimer: ReturnType<typeof useSyncTimer>})
                             >
                                 {isChecking ? "Checking..." : "Connect"}
                             </button>
-                            {isDemo && serverIp && <button type="button" onClick={() => {setIsChangingServer(false); setServerError(null); setIpInput("");}} className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600">Cancel</button>}
+                            {serverIp && <button type="button" onClick={() => {setIsChangingServer(false); setServerError(null); setIpInput("");}} className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600">Cancel</button>}
                         </div>
                     </section>
                 ) : (
@@ -420,7 +435,7 @@ function SyncControls({syncTimer}: {syncTimer: ReturnType<typeof useSyncTimer>})
                                             <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
                                                 Device name
                                             </dt>
-                                            <dd className="mt-0.5 font-medium">{localDevice?.name}</dd>
+                                            <dd className="mt-0.5 font-medium">{localDevice?.name} <span className="text-sm text-gray-400">· {localDevice?.role === "consumer" ? "Consumer" : "Logger"}</span></dd>
                                         </div>
                                         {localDevice ? (
                                             <div>
@@ -452,6 +467,14 @@ function SyncControls({syncTimer}: {syncTimer: ReturnType<typeof useSyncTimer>})
                                                 className="w-full px-3 py-2 rounded bg-gray-800 border border-gray-700 text-white disabled:opacity-60"
                                             />
                                         </div>
+                                        {!isDemo && <label className="block space-y-1 text-sm">
+                                            <span>Device role</span>
+                                            <select value={role} onChange={event => setRole(event.target.value as DeviceRole)}
+                                                className="block rounded border border-gray-700 bg-gray-800 px-3 py-2 text-white">
+                                                <option value="logger">Logger · record and share activity</option>
+                                                <option value="consumer">Consumer · view other devices’ activity</option>
+                                            </select>
+                                        </label>}
                                         <button
                                             type="button"
                                             onClick={onOpenRegisterConfirm}
@@ -502,7 +525,7 @@ function SyncControls({syncTimer}: {syncTimer: ReturnType<typeof useSyncTimer>})
                                 <div>
                                     <h2 className="text-lg font-semibold">Other devices</h2>
                                     <p className="text-sm text-gray-400 mt-0.5">
-                                        Subscribe to pull logs from other machines on the server.
+                                        Subscribe to a logger to download its activity.
                                     </p>
                                 </div>
                                 <button
@@ -529,10 +552,11 @@ function SyncControls({syncTimer}: {syncTimer: ReturnType<typeof useSyncTimer>})
                                                 "Remote" in device.state
                                                     ? device.state.Remote.is_tracking
                                                     : false;
-                                            const canSubscribe = device.available_on_server && !isTracking;
+                                            const isLogger = !device.role || device.role === "logger";
+                                            const canSubscribe = isLogger && device.available_on_server && !isTracking;
                                             const canUnsubscribe =
                                                 isTracking ||
-                                                (!device.available_on_server && device.has_local_logs);
+                                                ((!device.available_on_server || !isLogger) && device.has_local_logs);
                                             const isPendingForDevice = pendingDeviceUuids.has(device.uuid);
                                             return (
                                                 <li
@@ -540,7 +564,9 @@ function SyncControls({syncTimer}: {syncTimer: ReturnType<typeof useSyncTimer>})
                                                     className="flex items-center justify-between gap-4 bg-gray-800/40 px-4 py-3"
                                                 >
                                                     <div className="min-w-0">
-                                                        <div className="font-medium truncate">{device.name}</div>
+                                                        <div className="font-medium truncate">{device.name} <span className="text-sm font-normal text-gray-400">
+                                                            · {isLogger ? "Logger" : device.role === "consumer" ? "Consumer" : "Integration"}
+                                                        </span></div>
                                                         <div className="text-xs text-gray-500 font-mono truncate mt-0.5">
                                                             {device.uuid}
                                                         </div>
@@ -638,7 +664,7 @@ function SyncControls({syncTimer}: {syncTimer: ReturnType<typeof useSyncTimer>})
                     <div className="bg-gray-900 p-6 rounded-lg max-w-md w-full mx-4 border border-gray-700">
                         <h3 className="text-xl font-bold mb-4 text-white">Register this device?</h3>
                         <p className="text-gray-300 mb-4">
-                            Registering means uploading your logs to the server as{" "}
+                            {role === "consumer" ? "View activity from other devices as " : "Upload this device’s activity as "}
                             <span className="font-medium text-white">{deviceNameInput.trim()}</span>.
                         </p>
                         <div className="flex gap-3 justify-end">

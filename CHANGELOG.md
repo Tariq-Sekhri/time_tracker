@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Download, start, and manage a sync server from the Desktop Sync screen.
+- Connect to your own sync server by hostname or IP address, including custom ports and HTTPS.
+- Pair devices as loggers or consumers, and subscribe to loggers for activity history.
+
 ## [1.13.7] - 2026-11-21
 
 - Install Windows updates in the background and restart automatically after you choose Update now.

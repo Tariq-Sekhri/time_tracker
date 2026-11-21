@@ -4,7 +4,10 @@ export type DeviceState =
     | { Local: { token: string } }
     | { Remote: { is_tracking: boolean } };
 
+export type DeviceRole = "logger" | "consumer";
+
 export type Device = {
+    role?: DeviceRole | "integration";
     uuid: string;
     name: string;
     state: DeviceState;
@@ -38,8 +41,8 @@ export async function getLocalDeviceName(): Promise<string> {
     return invokeOrThrow<string>("get_local_device_name");
 }
 
-export async function registerDevice(name: string): Promise<void> {
-    await invokeOrThrow("register", { name });
+export async function registerDevice(name: string, role: DeviceRole): Promise<void> {
+    await invokeOrThrow("register", { name, role });
 }
 
 export async function checkDeviceActivation(): Promise<boolean> {

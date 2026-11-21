@@ -72,6 +72,12 @@ fn get_expected_tables() -> Vec<ExpectedTable> {
             name: "devices",
             columns: vec![
                 ExpectedColumn {
+                    name: "role",
+                    sql_type: "TEXT",
+                    not_null: true,
+                    default_value: Some("'logger'"),
+                },
+                ExpectedColumn {
                     name: "uuid",
                     sql_type: "TEXT",
                     not_null: true,
@@ -695,7 +701,6 @@ async fn add_column_safe(
 async fn ensure_default_data(pool: &SqlitePool) -> Result<(), Error> {
     crate::db::tables::cat_regex::ensure_default_regexes(pool).await?;
     crate::db::tables::settings::seed_defaults(pool).await?;
-    crate::db::tables::app_metadata_kv::ensure_default_server_ip(pool).await?;
     Ok(())
 }
 

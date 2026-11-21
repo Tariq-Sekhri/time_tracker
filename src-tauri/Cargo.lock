@@ -5516,6 +5516,7 @@ dependencies = [
  "anyhow",
  "atspi",
  "axum",
+ "base64 0.22.1",
  "chrono",
  "core-foundation 0.10.1",
  "core-graphics 0.25.0",
@@ -5523,6 +5524,7 @@ dependencies = [
  "dotenv",
  "futures-util",
  "log",
+ "minisign-verify",
  "oauth2",
  "objc2-app-kit",
  "regex",
@@ -5632,7 +5634,11 @@ checksum = "17a073bfed563fa236697a068031408a93cd9522e08abf9933ead3e73411bd71"
 dependencies = [
  "futures-util",
  "log",
+ "rustls",
+ "rustls-native-certs",
+ "rustls-pki-types",
  "tokio",
+ "tokio-rustls",
  "tungstenite",
 ]
 
@@ -5874,6 +5880,8 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.10.3",
+ "rustls",
+ "rustls-pki-types",
  "sha1",
  "thiserror 2.0.18",
 ]

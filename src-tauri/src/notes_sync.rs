@@ -127,7 +127,7 @@ async fn sync_with_pool(
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
-    let url = sync_server_url(server, "notes");
+    let url = sync_server_url(server, "notes")?;
     let request = if dirty {
         sync_http_client()?.post(url).bearer_auth(token).json(&serde_json::json!({"base_revision":state.revision,"operation_id":state.operation_id,"text":text}))
     } else {

@@ -1,0 +1,1 @@
+ALTER TABLE devices ADD COLUMN role TEXT NOT NULL DEFAULT 'logger';

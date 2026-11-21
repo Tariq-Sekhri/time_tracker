@@ -4,8 +4,7 @@
 //! works offline. When sync is ready, local edits are pushed to the server and
 //! a WebSocket applies timers started, edited, or stopped on other devices.
 
-use crate::db::tables::app_metadata_kv::{get_server_ip, metadata_get, metadata_set};
-use crate::db::tables::device::{get_local_device, DeviceState};
+use crate::db::tables::app_metadata_kv::{metadata_get, metadata_set, SERVER_IP};
 use crate::db::tables::manual_time_block::{RunningManualTimer, RUNNING_TIMER_KEY};
 use crate::db::{self, Error};
 use crate::logger::Log;
@@ -17,7 +16,7 @@ use sqlx::SqlitePool;
 use std::sync::OnceLock;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
-use tokio::sync::Mutex;
+use tokio::sync::{watch, Mutex};
 use tokio_tungstenite::tungstenite::{client::IntoClientRequest, http::header, Message};
 
 const CANCELLED_TIMER_PREFIX: &str = "cancelled_manual_timer_v1:";
@@ -70,19 +69,34 @@ enum Event {
     Other,
 }
 
+static CONNECTION_CHANGED: OnceLock<watch::Sender<()>> = OnceLock::new();
+
+fn connection_change() -> &'static watch::Sender<()> {
+    CONNECTION_CHANGED.get_or_init(|| watch::channel(()).0)
+}
+
+pub fn connection_changed() {
+    connection_change().send_replace(());
+}
+
 struct Connection {
     server_ip: String,
     token: String,
+    device_uuid: String,
 }
 
 async fn connection() -> Result<Option<Connection>, Error> {
-    if !crate::instance::SYNC_ENABLED || !crate::sync::is_sync_ready().await? {
+    if !crate::instance::SYNC_ENABLED {
         return Ok(None);
     }
-    let Some(device) = get_local_device().await? else { return Ok(None) };
-    let DeviceState::Local { token } = device.state else { return Ok(None) };
-    let Some(server_ip) = get_server_ip().await? else { return Ok(None) };
-    Ok(Some(Connection { server_ip, token }))
+    let pool = db::get_pool().await?;
+    let saved: Option<(String, String, String)> = sqlx::query_as(
+        "SELECT app_metadata.value, devices.token, devices.uuid
+         FROM app_metadata CROSS JOIN devices
+         WHERE app_metadata.key = ? AND devices.kind = 'local'
+           AND devices.token IS NOT NULL AND devices.is_active = 1 AND devices.last_sync_id != -1",
+    ).bind(SERVER_IP).fetch_optional(&pool).await?;
+    Ok(saved.map(|(server_ip, token, device_uuid)| Connection { server_ip, token, device_uuid }))
 }
 
 /// Servers from before manual sync answer its endpoints with 404/405. The
@@ -170,20 +184,19 @@ async fn cancel_timer_in_pool(pool: &SqlitePool) -> Result<(), Error> {
 
 async fn upload_cancellations_locked(conn: &Connection) -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    let device = get_local_device().await?.ok_or(anyhow!("Local device not found"))?;
     let keys: Vec<String> = sqlx::query_scalar(
         "SELECT key FROM app_metadata WHERE key LIKE ?1 AND value = 'pending'")
         .bind(format!("{CANCELLED_TIMER_PREFIX}%")).fetch_all(&pool).await?;
     for key in keys {
         let session = &key[CANCELLED_TIMER_PREFIX.len()..];
         let response = sync_http_client()?
-            .delete(sync_server_url(&conn.server_ip, "manual/timer"))
+            .delete(sync_server_url(&conn.server_ip, "manual/timer")?)
             .bearer_auth(&conn.token)
             .json(&serde_json::json!({"session_id": session}))
             .send().await?;
         // Preserve pending cancellations until the server supports them.
         if old_server(response.status()) { return Ok(()) }
-        require_authenticated_success(response, &device.uuid).await?;
+        require_authenticated_success(response, &conn.device_uuid).await?;
         metadata_set(&pool, &key, "confirmed").await?;
     }
     Ok(())
@@ -282,12 +295,11 @@ async fn push_timer_locked() -> Result<(), Error> {
         version: 0,
     };
     let response = sync_http_client()?
-        .put(sync_server_url(&conn.server_ip, "manual/timer"))
+        .put(sync_server_url(&conn.server_ip, "manual/timer")?)
         .bearer_auth(&conn.token)
         .json(&body)
         .send()
         .await?;
-    let device = get_local_device().await?.ok_or(anyhow!("Local device not found"))?;
     // Re-read: the user may have edited the timer while the request was in flight.
     let current = read_timer(&pool).await?;
     let same_session = |t: &RunningManualTimer| t.session_id.as_deref() == Some(session_id.as_str());
@@ -310,7 +322,7 @@ async fn push_timer_locked() -> Result<(), Error> {
             pull_entries_locked(&conn).await?;
         }
         _ => {
-            let saved: ServerTimer = require_authenticated_success(response, &device.uuid)
+            let saved: ServerTimer = require_authenticated_success(response, &conn.device_uuid)
                 .await?
                 .json()
                 .await?;
@@ -384,7 +396,6 @@ async fn upload_pending() -> Result<(), Error> {
 
 async fn upload_pending_locked(conn: &Connection) -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    let device = get_local_device().await?.ok_or(anyhow!("Local device not found"))?;
     let pending: Vec<(i64, String, String, Option<i64>, i64, i64)> = sqlx::query_as(
         "SELECT id, session_id, title, project_id, start_time, end_time
          FROM manual_time_blocks
@@ -396,7 +407,7 @@ async fn upload_pending_locked(conn: &Connection) -> Result<(), Error> {
         let project_name = project_name(&pool, project_id).await?;
         let entry = ServerEntry { id: 0, session_id, title, project_name, start_time, end_time };
         let response = sync_http_client()?
-            .post(sync_server_url(&conn.server_ip, "manual/entries"))
+            .post(sync_server_url(&conn.server_ip, "manual/entries")?)
             .bearer_auth(&conn.token)
             .json(&entry)
             .send()
@@ -404,7 +415,7 @@ async fn upload_pending_locked(conn: &Connection) -> Result<(), Error> {
         if old_server(response.status()) {
             return Ok(());
         }
-        require_authenticated_success(response, &device.uuid).await?;
+        require_authenticated_success(response, &conn.device_uuid).await?;
         sqlx::query("UPDATE manual_time_blocks SET pending_upload = 0 WHERE id = ?1")
             .bind(id)
             .execute(&pool)
@@ -422,7 +433,6 @@ async fn pull_entries(conn: &Connection) -> Result<(), Error> {
 /// itself are recognised by session ID and skipped.
 async fn pull_entries_locked(conn: &Connection) -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    let device = get_local_device().await?.ok_or(anyhow!("Local device not found"))?;
     let mut cursor: i64 = metadata_get(&pool, ENTRIES_CURSOR_KEY)
         .await?
         .and_then(|value| value.parse().ok())
@@ -430,7 +440,7 @@ async fn pull_entries_locked(conn: &Connection) -> Result<(), Error> {
     let mut imported = 0;
     loop {
         let response = sync_http_client()?
-            .get(sync_server_url(&conn.server_ip, "manual/entries"))
+            .get(sync_server_url(&conn.server_ip, "manual/entries")?)
             .bearer_auth(&conn.token)
             .query(&[("after", cursor)])
             .send()
@@ -438,7 +448,7 @@ async fn pull_entries_locked(conn: &Connection) -> Result<(), Error> {
         if old_server(response.status()) {
             return Ok(());
         }
-        let page: Vec<ServerEntry> = require_authenticated_success(response, &device.uuid)
+        let page: Vec<ServerEntry> = require_authenticated_success(response, &conn.device_uuid)
             .await?
             .json()
             .await?;
@@ -481,7 +491,6 @@ async fn push_projects() -> Result<(), Error> {
 
 async fn push_projects_with(conn: &Connection) -> Result<(), Error> {
     let pool = db::get_pool().await?;
-    let device = get_local_device().await?.ok_or(anyhow!("Local device not found"))?;
     let categories = crate::db::tables::manual_project::categories_for_pool(&pool).await?;
     let projects: Vec<ServerProject> = categories
         .iter()
@@ -498,7 +507,7 @@ async fn push_projects_with(conn: &Connection) -> Result<(), Error> {
         })
         .collect();
     let response = sync_http_client()?
-        .put(sync_server_url(&conn.server_ip, "manual/projects"))
+        .put(sync_server_url(&conn.server_ip, "manual/projects")?)
         .bearer_auth(&conn.token)
         .json(&projects)
         .send()
@@ -506,7 +515,7 @@ async fn push_projects_with(conn: &Connection) -> Result<(), Error> {
     if old_server(response.status()) {
         return Ok(());
     }
-    require_authenticated_success(response, &device.uuid).await?;
+    require_authenticated_success(response, &conn.device_uuid).await?;
     Ok(())
 }
 
@@ -523,7 +532,12 @@ async fn catch_up(conn: &Connection) -> Result<(), Error> {
 }
 
 async fn listen(conn: Connection) -> Result<(), Error> {
-    let url = sync_server_url(&conn.server_ip, "ws").replacen("http://", "ws://", 1);
+    let url = sync_server_url(&conn.server_ip, "ws")?;
+    let url = if let Some(secure) = url.strip_prefix("https://") {
+        format!("wss://{secure}")
+    } else {
+        url.replacen("http://", "ws://", 1)
+    };
     let mut request = url.as_str().into_client_request().map_err(anyhow::Error::new)?;
     request.headers_mut().insert(
         header::AUTHORIZATION,
@@ -582,22 +596,32 @@ pub async fn run(app: AppHandle) {
         Log::info("Manual timer live sync disabled in dev and beta builds");
         return;
     }
+    let mut changed = connection_change().subscribe();
     loop {
         let delay = match connection().await {
-            Ok(Some(conn)) => match listen(conn).await {
-                Ok(()) => RECONNECT_DELAY,
-                Err(error) if error.0.is::<OldServer>() => {
-                    Log::info(format!("Manual timer stays on this device: {error}"));
-                    RECONNECT_DELAY_OLD_SERVER
+            Ok(Some(conn)) => {
+                let result = tokio::select! {
+                    result = listen(conn) => result,
+                    _ = changed.changed() => continue,
+                };
+                match result {
+                    Ok(()) => RECONNECT_DELAY,
+                    Err(error) if error.0.is::<OldServer>() => {
+                        Log::info(format!("Manual timer stays on this device: {error}"));
+                        RECONNECT_DELAY_OLD_SERVER
+                    }
+                    Err(error) => {
+                        Log::warn(format!("Manual timer live sync disconnected: {error}"));
+                        RECONNECT_DELAY_AFTER_FAILURE
+                    }
                 }
-                Err(error) => {
-                    Log::warn(format!("Manual timer live sync disconnected: {error}"));
-                    RECONNECT_DELAY_AFTER_FAILURE
-                }
-            },
+            }
             _ => RECONNECT_DELAY,
         };
-        tokio::time::sleep(delay).await;
+        tokio::select! {
+            _ = tokio::time::sleep(delay) => {},
+            _ = changed.changed() => {},
+        }
     }
 }
 

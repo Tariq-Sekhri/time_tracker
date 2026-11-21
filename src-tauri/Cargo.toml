@@ -37,11 +37,13 @@ reqwest = { version = "0.13.4", features = ["json", "query", "form"] }
 oauth2 = "5.0.0"
 axum = "0.8.9"
 url = "2.5"
+base64 = "0.22"
+minisign-verify = "0.2"
 urlencoding = "2.1"
 dotenv = "0.15"
 dirs = "6"
 uuid = { version = "1", features = ["v4"] }
-tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["connect", "handshake"] }
+tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["connect", "handshake", "rustls-tls-native-roots"] }
 futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
 tauri-plugin-dialog = "2"
 

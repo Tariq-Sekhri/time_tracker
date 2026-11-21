@@ -5,7 +5,10 @@ export type Settings = {
     max_attach_distance: number; lookahead_window: number; min_timeblock_duration: number;
     notes_enabled: boolean; use_bar_usage_chart: boolean;
 };
+export type DeviceRole = "logger" | "consumer";
+
 export type MobileDevice = {
+    role?: DeviceRole | "integration";
     uuid: string;
     name: string;
     is_local: boolean;
@@ -21,7 +24,7 @@ export type GoogleCalendarEvent = {id: string; title: string; start: string; end
 export type MobileState = {
     permissions: {usage: boolean; browser: boolean; media: boolean}; settings: Settings;
     googleCalendar?: {allowed: boolean; selected: string[]};
-    sync: {server: string | null; registered: boolean; active: boolean; uuid: string | null; name: string; nextSyncSeconds: number | null};
+    sync: {server: string | null; role?: DeviceRole; registered: boolean; active: boolean; uuid: string | null; name: string; nextSyncSeconds: number | null};
     devices?: MobileDevice[];
     manualEntries: (Timer & {end_time: number; synced: boolean})[];
     timer: Timer | null; timerStatus: string; projects: {name: string; color: string}[];
@@ -54,7 +57,7 @@ type Requests = {
     "log.delete": [{id: number; device_uuid?: string | null; is_remote?: boolean}, null];
     "sync.check": [{server: string}, string];
     "sync.change": [undefined, null];
-    "sync.register": [{name: string}, string];
+    "sync.register": [{name: string; role: DeviceRole}, string];
     "sync.approval": [undefined, string];
     "sync.now": [undefined, string];
     "sync.reupload": [undefined, string];

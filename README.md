@@ -34,7 +34,16 @@ Manual time tracking is tedious and inconsistent. Time Tracker runs in the backg
   - **Windows**: `%APPDATA%/time-tracker/app.db`
   - **Linux**: `~/.local/share/time-tracker/app.db` (XDG data directory)
 - No cloud, no telemetry, no third‑party services
-- Offline by design. The app does not make network requests
+- Activity is stored on your device by default. Optional sync sends it to a server you choose.
+
+## Sync across devices
+
+Open **Sync** to connect to an existing server or choose **Set up a sync server**
+to host one from Desktop. Copy its address to the devices you want to connect
+and approve them under **Manage server** on the hosting computer.
+
+Choose **Logger** to record and share a device's activity. Choose **Consumer**
+to view activity from subscribed loggers with local capture turned off.
 
 ## Support logs
 

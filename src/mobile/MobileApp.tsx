@@ -116,7 +116,7 @@ export default function MobileApp() {
         }, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 240);
     };
     return <div className="mobile-shell">
-        <header className="app-header"><div><small>TIME TRACKER</small><h1>{page === "Usage" ? "Home" : page}</h1></div><span className={`status ${state.data.permissions.usage ? "active" : ""}`}>{state.data.permissions.usage ? "Tracking" : "Setup needed"}</span></header>
+        <header className="app-header"><div><small>TIME TRACKER</small><h1>{page === "Usage" ? "Home" : page}</h1></div><span className={`status ${state.data.permissions.usage && state.data.sync.role !== "consumer" ? "active" : ""}`}>{state.data.sync.role === "consumer" ? "Consumer" : state.data.permissions.usage ? "Tracking" : "Setup needed"}</span></header>
         {state.error && <div className="error" role="alert">Could not refresh app status. <button onClick={() => void state.refetch()}>Retry</button></div>}
         <div ref={viewport} className="page-viewport"
             onTouchStart={event => {
@@ -155,7 +155,7 @@ export default function MobileApp() {
                 return <main key={item} className={`swipe-page ${item === "Notes" ? "notes-page" : "page-content"}`}
                     aria-hidden={item !== page} inert={item !== page}
                     style={{transform: `translateX(calc(${side}% + ${drag.offset}px))`, transition: drag.settling ? "transform 240ms cubic-bezier(0.22, 1, 0.36, 1)" : "none"}}>
-            {!state.data.permissions.usage && item !== "Settings" && <Card><h2>Enable app usage tracking</h2><p>Allow Usage Access to record app activity. Browser and media tracking are optional.</p><button className="primary" disabled={busy} onClick={() => void act(() => request("permission", {kind: "usage"}))}>Open Usage Access</button></Card>}
+            {state.data.sync.role !== "consumer" && !state.data.permissions.usage && item !== "Settings" && <Card><h2>Enable app usage tracking</h2><p>Allow Usage Access to record app activity. Browser and media tracking are optional.</p><button className="primary" disabled={busy} onClick={() => void act(() => request("permission", {kind: "usage"}))}>Open Usage Access</button></Card>}
             {item === "Usage" && <UsageScreen {...shared} />}
             {item === "Logs" && <><button onClick={() => history.back()}>Back to calendar</button><LogsScreen {...shared} /></>}
             {item === "Calendar" && <CalendarScreen {...shared} openLogs={() => navigate("Logs")} />}
@@ -520,8 +520,10 @@ function CalendarScreen(props: ScreenProps & {openLogs: () => void}) {
 function SyncScreen({state, act, busy}: ScreenProps) {
     const {showToast} = useToast();
     const [server, setServer] = useState(state.sync.server ?? "");
+    const [editingServer, setEditingServer] = useState(false);
+    const [role, setRole] = useState(state.sync.role ?? "logger");
     const [name, setName] = useState(state.sync.name);
-    const [confirm, setConfirm] = useState<"register" | "change" | "reupload" | null>(null);
+    const [confirm, setConfirm] = useState<"register" | "reupload" | null>(null);
     const [pendingUuids, setPendingUuids] = useState<Set<string>>(() => new Set());
     const [unsubscribeTarget, setUnsubscribeTarget] = useState<MobileDevice | null>(null);
     const devices = useQuery({queryKey: ["mobile-data", "devices"], queryFn: () => request("sync.devices"), enabled: state.sync.active});
@@ -529,7 +531,7 @@ function SyncScreen({state, act, busy}: ScreenProps) {
     const localDevice = allDevices.find(device => device.is_local) ?? null;
     const remoteDevices = allDevices.filter(device => !device.is_local && (device.available_on_server || device.is_tracking || device.has_local_logs));
     const showVisibilityToggles = remoteDevices.some(device => device.is_tracking || device.has_local_logs);
-    const action = () => confirm === "register" ? request("sync.register", {name}) : confirm === "change" ? request("sync.change") : request("sync.reupload");
+    const action = () => confirm === "register" ? request("sync.register", {name, role}) : request("sync.reupload");
     const subscribe = async (device: MobileDevice) => {
         setPendingUuids(prev => new Set(prev).add(device.uuid));
         try {
@@ -551,15 +553,70 @@ function SyncScreen({state, act, busy}: ScreenProps) {
         }
     };
     return <>
-        <Card><h2>Sync server</h2>{!state.sync.server ? <form onSubmit={event => { event.preventDefault(); void act(() => request("sync.check", {server}), "Server connected"); }}><label>Server address<input required autoCapitalize="none" autoCorrect="off" placeholder="192.168.1.10" value={server} onChange={event => setServer(event.target.value)} /></label><button className="primary" disabled={busy}>Connect</button></form> : <><div className="row"><code>{state.sync.server}</code><button disabled={busy} onClick={() => setConfirm("change")}>Change server</button></div><p>Upload this phone’s logs, download logs from subscribed devices, and sync shared notes and timers.</p>{state.sync.active && <div className="row"><span>Next sync: {state.sync.nextSyncSeconds == null ? "Scheduled" : duration(state.sync.nextSyncSeconds)}</span><button className="primary" disabled={busy} onClick={() => void act(async () => { const message = await request("sync.now"); showToast(message || "Sync complete", "success"); })}>Sync now</button></div>}</>}</Card>
-        {state.sync.server && <Card><div className="row"><h2>This device</h2><span className="status">{state.sync.active ? "Active" : state.sync.registered ? "Waiting for approval" : "Unregistered"}</span></div>{!state.sync.registered ? <><label>Device name<input value={name} onChange={event => setName(event.target.value)} /></label><button className="primary" disabled={busy || !name.trim()} onClick={() => setConfirm("register")}>Register this device</button></> : <><p className="uuid">{state.sync.uuid}</p>{state.sync.active && showVisibilityToggles && localDevice && <div className="device-toggles"><label className="check compact-check"><input type="checkbox" checked={localDevice.in_cal} disabled={busy} onChange={event => void act(() => request("device.update", {uuid: localDevice.uuid, in_cal: event.target.checked}))} />Calendar</label><label className="check compact-check"><input type="checkbox" checked={localDevice.in_stats} disabled={busy} onChange={event => void act(() => request("device.update", {uuid: localDevice.uuid, in_stats: event.target.checked}))} />Stats</label></div>}{!state.sync.active ? <button disabled={busy} onClick={() => void act(() => request("sync.approval"), "Approval checked")}>Check approval</button> : <button disabled={busy} onClick={() => setConfirm("reupload")}>Reupload all logs…</button>}</>}</Card>}
-        {state.sync.active && <Card><div className="row"><h2>Other devices</h2><button disabled={devices.isFetching} onClick={() => void devices.refetch()}>{devices.isFetching ? "Refreshing…" : "Refresh"}</button></div><p>Subscribe to pull logs from other devices on the server.</p>{devices.error ? <p role="alert">Could not load devices.</p> : devices.isPending ? <Empty>Loading devices…</Empty> : remoteDevices.map(device => {
-            const canSubscribe = device.available_on_server && !device.is_tracking;
-            const canUnsubscribe = device.is_tracking || (!device.available_on_server && device.has_local_logs);
+        <Card>
+            <h2>Sync server</h2>
+            {!state.sync.server || editingServer ? <form onSubmit={event => {
+                event.preventDefault();
+                void act(() => request("sync.check", {server}), "Server connected").then(ok => {
+                    if (ok) setEditingServer(false);
+                });
+            }}>
+                <label>Server address<input required autoCapitalize="none" autoCorrect="off"
+                    value={server} onChange={event => setServer(event.target.value)} /></label>
+                <div className="actions">
+                    <button className="primary" disabled={busy}>Connect</button>
+                    {state.sync.server && <button type="button" disabled={busy} onClick={() => setEditingServer(false)}>Cancel</button>}
+                </div>
+            </form> : <>
+                <div className="row">
+                    <code>{state.sync.server}</code>
+                    <button disabled={busy} onClick={() => {
+                        setServer(state.sync.server ?? "");
+                        setEditingServer(true);
+                    }}>Change server</button>
+                </div>
+                {state.sync.active && <div className="row">
+                    <span>Next sync {state.sync.nextSyncSeconds == null ? "Scheduled" : duration(state.sync.nextSyncSeconds)}</span>
+                    <button className="primary" disabled={busy} onClick={() => void act(async () => {
+                        const message = await request("sync.now");
+                        showToast(message || "Sync complete", "success");
+                    })}>Sync now</button>
+                </div>}
+            </>}
+        </Card>
+        {state.sync.server && !editingServer && <Card>
+            <div className="row"><h2>This device</h2><span className="status">
+                {state.sync.active ? "Active" : state.sync.registered ? "Waiting for approval" : "Unregistered"}
+            </span></div>
+            {!state.sync.registered ? <>
+                <label>Device name<input value={name} onChange={event => setName(event.target.value)} /></label>
+                <label>Device role<select value={role} onChange={event => setRole(event.target.value === "consumer" ? "consumer" : "logger")}>
+                    <option value="logger">Logger · record and share activity</option>
+                    <option value="consumer">Consumer · view other devices’ activity</option>
+                </select></label>
+                <button className="primary" disabled={busy || !name.trim()} onClick={() => setConfirm("register")}>Register this device</button>
+            </> : <>
+                <p>{state.sync.role === "consumer" ? "Consumer · local tracking is off" : "Logger"}</p>
+                <p className="uuid">{state.sync.uuid}</p>
+                {state.sync.active && showVisibilityToggles && localDevice && <div className="device-toggles">
+                    <label className="check compact-check"><input type="checkbox" checked={localDevice.in_cal} disabled={busy}
+                        onChange={event => void act(() => request("device.update", {uuid: localDevice.uuid, in_cal: event.target.checked}))} />Calendar</label>
+                    <label className="check compact-check"><input type="checkbox" checked={localDevice.in_stats} disabled={busy}
+                        onChange={event => void act(() => request("device.update", {uuid: localDevice.uuid, in_stats: event.target.checked}))} />Stats</label>
+                </div>}
+                {!state.sync.active
+                    ? <button disabled={busy} onClick={() => void act(() => request("sync.approval"), "Approval checked")}>Check approval</button>
+                    : state.sync.role !== "consumer" && <button disabled={busy} onClick={() => setConfirm("reupload")}>Reupload all logs…</button>}
+            </>}
+        </Card>}
+        {state.sync.active && !editingServer && <Card><div className="row"><h2>Other devices</h2><button disabled={devices.isFetching} onClick={() => void devices.refetch()}>{devices.isFetching ? "Refreshing…" : "Refresh"}</button></div><p>Subscribe to a logger to download its activity.</p>{devices.error ? <p role="alert">Could not load devices.</p> : devices.isPending ? <Empty>Loading devices…</Empty> : remoteDevices.map(device => {
+            const isLogger = !device.role || device.role === "logger";
+            const canSubscribe = isLogger && device.available_on_server && !device.is_tracking;
+            const canUnsubscribe = device.is_tracking || ((!device.available_on_server || !isLogger) && device.has_local_logs);
             const pending = pendingUuids.has(device.uuid);
             return <div className="device" key={device.uuid}>
                 <div className="device-row">
-                    <div className="device-meta"><strong>{device.name}</strong><small>{device.uuid}</small>
+                    <div className="device-meta"><strong>{device.name}</strong><small>{isLogger ? "Logger" : device.role === "consumer" ? "Consumer" : "Integration"}</small>
                         {!device.available_on_server && device.is_tracking && <small className="device-warning">No longer on server — tracking paused</small>}
                         {!device.available_on_server && !device.is_tracking && device.has_local_logs && <small className="device-warning">No longer on server — downloaded logs kept locally</small>}
                     </div>
@@ -574,7 +631,15 @@ function SyncScreen({state, act, busy}: ScreenProps) {
                 </div>}
             </div>;
         })}{!devices.isPending && !devices.error && remoteDevices.length === 0 && <Empty>No other devices on the server yet.</Empty>}</Card>}
-        {confirm && <Modal title={confirm === "register" ? "Register this device?" : confirm === "change" ? "Change sync server?" : "Reupload all logs?"} close={() => setConfirm(null)}><p>{confirm === "register" ? "Registering enables this phone to upload its logs after server approval." : confirm === "change" ? "This disconnects the current registration. Your local logs and notes remain saved." : "Send all local logs to your configured server again."}</p><div className="actions"><button disabled={busy} onClick={() => void act(action, "Done").then(ok => { if (ok) setConfirm(null); })}>Continue</button><button onClick={() => setConfirm(null)}>Cancel</button></div></Modal>}
+        {confirm && <Modal title={confirm === "register" ? "Register this device?" : "Reupload all logs?"} close={() => setConfirm(null)}>
+            <p>{confirm === "reupload" ? "Send all local logs to your configured server again."
+                : role === "consumer" ? "After approval, this phone can view activity from other devices. Local tracking will be off."
+                : "After approval, this phone can upload its activity."}</p>
+            <div className="actions">
+                <button disabled={busy} onClick={() => void act(action, "Done").then(ok => { if (ok) setConfirm(null); })}>Continue</button>
+                <button onClick={() => setConfirm(null)}>Cancel</button>
+            </div>
+        </Modal>}
         {unsubscribeTarget && <Modal title={unsubscribeTarget.is_tracking ? "Unsubscribe from device?" : "Remove downloaded logs?"} close={() => setUnsubscribeTarget(null)}><p>{unsubscribeTarget.is_tracking ? `This will stop syncing from ${unsubscribeTarget.name} and delete all of its downloaded logs stored on this phone.` : `Remove all downloaded logs for ${unsubscribeTarget.name} stored on this phone?`}</p><div className="actions"><button className="danger" disabled={busy || pendingUuids.has(unsubscribeTarget.uuid)} onClick={() => void unsubscribe(unsubscribeTarget)}>{pendingUuids.has(unsubscribeTarget.uuid) ? "Removing…" : unsubscribeTarget.is_tracking ? "Unsubscribe" : "Remove logs"}</button><button onClick={() => setUnsubscribeTarget(null)}>Cancel</button></div></Modal>}
     </>;
 }
@@ -585,7 +650,7 @@ function SettingsScreen(props: ScreenProps & {openSync: () => void}) {
     const [skipped, setSkipped] = useState(false);
     const fields: [keyof Settings, string][] = [["day_start_hour", "Day starts at hour (0–23)"], ["min_app_duration", "Minimum app duration (seconds)"], ["min_log_duration", "Minimum log duration (seconds)"], ["max_attach_distance", "Maximum attach distance (seconds)"], ["lookahead_window", "Lookahead window (seconds)"], ["min_timeblock_duration", "Minimum time block (seconds)"]];
     const missingPermissions = (["usage", "browser", "media"] as const).filter(kind => !state.permissions[kind]);
-    return <><button onClick={props.openSync}>Sync</button>{missingPermissions.length > 0 && <Card><h2>Tracking access</h2>{missingPermissions.map(kind => <div className="permission row" key={kind}><div><strong>{kind === "usage" ? "App usage" : kind === "browser" ? "Browser activity" : "Media playback"}</strong><small>{kind === "usage" ? "Required for tracking" : "Optional"}</small></div><button disabled={busy} onClick={() => void act(() => request("permission", {kind}))}>Enable</button></div>)}</Card>}
+    return <><button onClick={props.openSync}>Sync</button>{state.sync.role !== "consumer" && missingPermissions.length > 0 && <Card><h2>Tracking access</h2>{missingPermissions.map(kind => <div className="permission row" key={kind}><div><strong>{kind === "usage" ? "App usage" : kind === "browser" ? "Browser activity" : "Media playback"}</strong><small>{kind === "usage" ? "Required for tracking" : "Optional"}</small></div><button disabled={busy} onClick={() => void act(() => request("permission", {kind}))}>Enable</button></div>)}</Card>}
         <GoogleCalendarSettings {...props} />
         <Card className="settings-card"><h2>Display and time blocks</h2><form onSubmit={event => { event.preventDefault(); void act(() => request("settings.save", settings), "Settings saved"); }}><label className="check"><input type="checkbox" checked={settings.notes_enabled} onChange={event => setSettings({...settings, notes_enabled: event.target.checked})} />Show Notes</label><label className="check"><input type="checkbox" checked={settings.use_bar_usage_chart} onChange={event => setSettings({...settings, use_bar_usage_chart: event.target.checked})} />Use bar chart by default</label>{fields.map(([key, label]) => <label className="settings-field" key={key}>{label}<input type="number" min={0} max={key === "day_start_hour" ? 23 : 86400} required value={String(settings[key])} onChange={event => setSettings({...settings, [key]: event.target.value === "" ? "" : Number(event.target.value)})} /></label>)}<button className="primary" disabled={busy}>Save settings</button></form></Card>
         <button onClick={() => setSkipped(true)}>Manage skipped apps</button><p className="muted">Time Tracker {state.version}</p>

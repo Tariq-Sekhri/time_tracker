@@ -1,3 +1,4 @@
+import {useQuery} from "@tanstack/react-query";
 import {invokeOrThrow as invoke} from "../utils.ts";
 import {useEffect, useState} from "react";
 import {listen} from "@tauri-apps/api/event";
@@ -13,6 +14,15 @@ export default function Header({currentView, setCurrentView, notesEnabled, stati
     onStatisticsTabChange: (tab: StatisticsTab) => void,
 }) {
     const [isTracking, setIsTracking] = useState(true);
+    const {data: role} = useQuery({
+        queryKey: ["sync", "role"],
+        queryFn: () => invoke<"logger" | "consumer">("sync_device_role"),
+        enabled: import.meta.env.VITE_DEMO !== "true",
+    });
+    const consumer = role === "consumer";
+    useEffect(() => {
+        if (!consumer) void invoke<boolean>("get_tracking_status").then(setIsTracking);
+    }, [consumer]);
     const [appVersion, setAppVersion] = useState<string | null>(null);
     const isDev = appVersion?.endsWith("-dev") ?? false;
     const [updateStatus, setUpdateStatus] = useState<"idle" | "checking" | "upToDate" | "available" | "error" | "applying">("idle");
@@ -28,10 +38,6 @@ export default function Header({currentView, setCurrentView, notesEnabled, stati
         {tab: "total", label: "Total"},
         {tab: "trend", label: "Trend"},
     ];
-    useEffect(() => {
-        invoke<boolean>("get_tracking_status").then(setIsTracking);
-    }, []);
-
     useEffect(() => {
         invoke<string>("get_app_version").then(setAppVersion).catch(() => setAppVersion(null));
     }, []);
@@ -193,10 +199,10 @@ export default function Header({currentView, setCurrentView, notesEnabled, stati
                         </button>
                     </div>
                 )}
-                <span className={`text-sm ${isTracking ? 'text-green-400' : 'text-gray-500'}`}>
-                    {isDev ? 'Tracking disabled (dev)' : isTracking ? 'Tracking' : 'Paused'}
+                <span className={`text-sm ${isTracking && !consumer ? 'text-green-400' : 'text-gray-500'}`}>
+                    {isDev ? 'Tracking disabled (dev)' : consumer ? 'Consumer' : isTracking ? 'Tracking' : 'Paused'}
                 </span>
-                <button
+                {!consumer && <button
                     onClick={toggleTracking}
                     disabled={isDev}
                     title={isDev ? 'Activity tracking is disabled in dev mode' : undefined}
@@ -208,7 +214,7 @@ export default function Header({currentView, setCurrentView, notesEnabled, stati
                         className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isTracking ? 'translate-x-6' : 'translate-x-1'
                         }`}
                     />
-                </button>
+                </button>}
             </div>
           </div>
           {currentView === "detailed" && (

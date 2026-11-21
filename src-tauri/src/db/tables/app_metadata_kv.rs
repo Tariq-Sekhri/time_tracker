@@ -7,7 +7,6 @@ pub const META_GOOGLE_CLIENT_SECRET: &str = "google_oauth_client_secret";
 pub const META_CALENDAR_VIEW_PREFS: &str = "calendar_view_prefs_v1";
 pub const META_LOCAL_DEVICE_UUID: &str = "local_device_uuid_v1";
 pub const SERVER_IP: &str = "server_ip";
-pub const DEFAULT_SERVER_IP: &str = "100.75.95.90";
 pub const META_NOTES_ENABLED: &str = "notes_enabled";
 pub const META_NOTES_TEXT: &str = "notes_text";
 
@@ -23,13 +22,6 @@ pub async fn metadata_get(pool: &SqlitePool, key: &str) -> Result<Option<String>
         .fetch_optional(pool)
         .await
 }
-pub async fn ensure_default_server_ip(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    if metadata_get(pool, SERVER_IP).await?.is_none() {
-        metadata_set(pool, SERVER_IP, DEFAULT_SERVER_IP).await?;
-    }
-    Ok(())
-}
-
 pub async fn metadata_set(pool: &SqlitePool, key: &str, value: &str) -> Result<(), sqlx::Error> {
     sqlx::query("INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?1, ?2)")
         .bind(key)
@@ -47,9 +39,7 @@ pub async fn get_server_ip() -> Result<Option<String>, Error> {
 
 #[tauri::command]
 pub async fn set_server_ip(server_ip: String) -> Result<(), Error> {
-    let pool = get_pool().await?;
-    metadata_set(&pool, SERVER_IP, &server_ip).await?;
-    Ok(())
+    crate::sync::connect_server(&server_ip).await
 }
 
 #[tauri::command]
