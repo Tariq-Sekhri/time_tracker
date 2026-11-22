@@ -11,8 +11,38 @@ on:
   release:
     types: [published]
 
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
+
 jobs:
+  release-eligibility:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      publish: ${{ steps.version.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check desktop version
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT_NAME" == push ]]; then
+            version=$(node -p 'require("./package.json").version')
+            tag=$(git ls-remote --tags origin "refs/tags/app-v$version")
+            if [[ -n "$tag" ]]; then
+              echo "Desktop version $version already has a release tag. Skipping automatic release."
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
   rust-lib-tests:
+    needs: release-eligibility
+    if: needs.release-eligibility.outputs.publish == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -35,7 +65,8 @@ jobs:
         run: cargo test --lib
 
   build:
-    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    needs: release-eligibility
+    if: needs.release-eligibility.outputs.publish == 'true'
     permissions:
       contents: write
     strategy:
