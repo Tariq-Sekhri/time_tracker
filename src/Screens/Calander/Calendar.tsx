@@ -112,6 +112,7 @@ export default function Calendar({setCurrentView, trayOpenCount}: {
         }
         return names;
     }, [categories, isolation.category, isolation.showTracked]);
+    const statsCategoryFilter = useMemo(() => [...statsCategoryNames].sort(), [statsCategoryNames]);
 
     const {data: serverIp} = useQuery({
         queryKey: ["sync", "serverIp"],
@@ -1112,7 +1113,7 @@ export default function Calendar({setCurrentView, trayOpenCount}: {
                               isLoadingCategory={isLoadingCategory}
                               includeGoogleInStats={isolation.showGoogle && (isolation.calendar !== null || includeGoogleInStats)}
                               googleCalendars={isolation.calendar !== null ? displayCalendars.map(c => ({...c, in_stats: c.id === isolation.calendar})) : displayCalendars}
-                              statsCategoryFilter={isolation.active ? [...statsCategoryNames].sort() : null}
+                              statsCategoryFilter={statsCategoryFilter}
                               statsCategoryNames={statsCategoryNames}
                               statsDeviceUuids={statsDeviceUuids}
                               isManualTimeInStats={isManualTimeInStats}
