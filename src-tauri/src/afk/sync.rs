@@ -28,6 +28,19 @@ pub async fn upload_cursor(pool: &SqlitePool, device: &str) -> Result<i64, Error
     )
 }
 
+const LATEST_LOCAL_ID_SQL: &str = "SELECT COALESCE((
+    SELECT a.id FROM afk_intervals a
+    WHERE a.device_uuid=?
+    AND NOT EXISTS(SELECT 1 FROM afk_remote_intervals r WHERE r.interval_id=a.id)
+    ORDER BY a.id DESC LIMIT 1
+), 0)";
+
+const UPLOAD_PAGE_SQL: &str = "SELECT a.id,a.start_time,a.end_time,a.state,a.known_mask,a.active_mask,c.settings_json,0 AS revision
+    FROM afk_intervals a JOIN afk_configurations c ON c.id=a.settings_id
+    WHERE a.device_uuid=? AND a.id>=? AND a.id<=?
+    AND NOT EXISTS(SELECT 1 FROM afk_remote_intervals r WHERE r.interval_id=a.id)
+    ORDER BY a.id LIMIT ?";
+
 pub async fn download_cursor(pool: &SqlitePool, device: &str) -> Result<i64, Error> {
     Ok(
         sqlx::query_scalar("SELECT download_revision FROM afk_sync_cursors WHERE device_uuid=?")
@@ -38,6 +51,14 @@ pub async fn download_cursor(pool: &SqlitePool, device: &str) -> Result<i64, Err
     )
 }
 
+/// Returns the highest local-only AFK interval ID for `device`, or `0` if none exist.
+pub async fn latest_local_id(pool: &SqlitePool, device: &str) -> Result<i64, Error> {
+    Ok(sqlx::query_scalar(LATEST_LOCAL_ID_SQL)
+        .bind(device)
+        .fetch_one(pool)
+        .await?)
+}
+
 pub async fn upload_page(
     pool: &SqlitePool,
     device: &str,
@@ -45,11 +66,7 @@ pub async fn upload_page(
     through: i64,
 ) -> Result<Vec<Evidence>, Error> {
     // Include the last acknowledged ID: the recorder may still be extending it.
-    Ok(sqlx::query_as("SELECT a.id,a.start_time,a.end_time,a.state,a.known_mask,a.active_mask,c.settings_json,0 AS revision
-        FROM afk_intervals a JOIN afk_configurations c ON c.id=a.settings_id
-        WHERE a.device_uuid=? AND a.id>=? AND a.id<=?
-        AND NOT EXISTS(SELECT 1 FROM afk_remote_intervals r WHERE r.interval_id=a.id)
-        ORDER BY a.id LIMIT ?")
+    Ok(sqlx::query_as(UPLOAD_PAGE_SQL)
         .bind(device).bind(after).bind(through).bind(PAGE_SIZE as i64).fetch_all(pool).await?)
 }
 
@@ -138,6 +155,10 @@ mod tests {
             .await
             .unwrap();
         sqlx::raw_sql(include_str!("../../migrations/0015_afk_sync.sql"))
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::raw_sql(include_str!("../../migrations/0018_afk_sync_indexes.sql"))
             .execute(&pool)
             .await
             .unwrap();
@@ -259,5 +280,89 @@ mod tests {
         assert_eq!((next[0].id, next[0].end_time), (1, 200));
         acknowledge_upload(&pool, "desktop", 0).await.unwrap();
         assert_eq!(upload_cursor(&pool, "desktop").await.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn afk_sync_queries_use_indexes_without_scanning_remote_intervals() {
+        let pool = pool().await;
+        assert_eq!(latest_local_id(&pool, "desktop").await.unwrap(), 0);
+
+        sqlx::query("INSERT INTO afk_configurations(settings_json) VALUES ('{}')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO afk_intervals(device_uuid,start_time,end_time,state,known_mask,active_mask,settings_id)
+             VALUES ('desktop',100,150,1,1,1,1), ('desktop',150,200,2,1,0,1), ('desktop',200,250,2,1,0,1)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert_eq!(latest_local_id(&pool, "desktop").await.unwrap(), 3);
+
+        // Even if an imported remote row shares the same device_uuid with a higher id, ignore it.
+        sqlx::query(
+            "INSERT INTO afk_remote_intervals(device_uuid,source_id,interval_id,revision)
+             VALUES ('laptop',10,3,1)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert_eq!(latest_local_id(&pool, "desktop").await.unwrap(), 2);
+
+        let explain = |rows: Vec<(i64, i64, i64, String)>| -> String {
+            rows.into_iter()
+                .map(|(_, _, _, detail)| detail)
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+
+        let latest_plan = explain(
+            sqlx::query_as(sqlx::AssertSqlSafe(format!(
+                "EXPLAIN QUERY PLAN {LATEST_LOCAL_ID_SQL}"
+            )))
+            .bind("desktop")
+            .fetch_all(&pool)
+            .await
+            .unwrap(),
+        );
+        assert!(latest_plan.contains("idx_afk_device_id"), "{latest_plan}");
+        assert!(latest_plan.contains("idx_afk_remote_interval_id"), "{latest_plan}");
+        assert!(!latest_plan.contains("SCAN r"), "{latest_plan}");
+        assert!(!latest_plan.contains("USE TEMP B-TREE FOR ORDER BY"), "{latest_plan}");
+
+        let upload_plan = explain(
+            sqlx::query_as(sqlx::AssertSqlSafe(format!(
+                "EXPLAIN QUERY PLAN {UPLOAD_PAGE_SQL}"
+            )))
+            .bind("desktop")
+            .bind(0_i64)
+            .bind(100_i64)
+            .bind(PAGE_SIZE as i64)
+            .fetch_all(&pool)
+            .await
+            .unwrap(),
+        );
+        assert!(upload_plan.contains("idx_afk_device_id"), "{upload_plan}");
+        assert!(upload_plan.contains("idx_afk_remote_interval_id"), "{upload_plan}");
+        assert!(!upload_plan.contains("SCAN r"), "{upload_plan}");
+        assert!(!upload_plan.contains("USE TEMP B-TREE FOR ORDER BY"), "{upload_plan}");
+
+        let release_plan = explain(
+            sqlx::query_as(
+                "EXPLAIN QUERY PLAN UPDATE afk_intervals SET device_uuid=?1 WHERE device_uuid=?2
+                 AND NOT EXISTS(SELECT 1 FROM afk_remote_intervals r WHERE r.interval_id=afk_intervals.id)",
+            )
+            .bind("pending")
+            .bind("desktop")
+            .fetch_all(&pool)
+            .await
+            .unwrap(),
+        );
+        assert!(release_plan.contains("idx_afk_device_id"), "{release_plan}");
+        assert!(release_plan.contains("idx_afk_remote_interval_id"), "{release_plan}");
+        assert!(!release_plan.contains("SCAN r"), "{release_plan}");
+
+        pool.close().await;
     }
 }

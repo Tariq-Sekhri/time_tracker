@@ -316,9 +316,7 @@ async fn post_logs_to_server(
 async fn upload_afk_evidence(device: &str, token: &str, server_ip: &str, all: bool) -> Result<(), Error> {
     ensure_sync_enabled()?;
     let pool = db::get_pool().await?;
-    let through: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(a.id),0) FROM afk_intervals a WHERE a.device_uuid=?
-        AND NOT EXISTS(SELECT 1 FROM afk_remote_intervals r WHERE r.interval_id=a.id)")
-        .bind(device).fetch_one(&pool).await?;
+    let through = crate::afk::sync::latest_local_id(&pool, device).await?;
     let mut cursor = if all { 0 } else { crate::afk::sync::upload_cursor(&pool, device).await? };
     loop {
         let page = crate::afk::sync::upload_page(&pool, device, cursor, through).await?;
