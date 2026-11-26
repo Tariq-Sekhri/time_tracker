@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.14.1] - 2026-11-26
+
+- Fix high background CPU usage during automatic sync when AFK history is synced across devices.
+
 ## [1.14.0] - 2026-11-24
 
 - Download, start, and manage a sync server from the Desktop Sync screen.
